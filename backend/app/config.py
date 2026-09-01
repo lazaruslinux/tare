@@ -36,6 +36,22 @@ class Settings(BaseSettings):
     secret_key: str = ""
     session_hours: int = 720
 
+    # Whether the session cookie is marked Secure. Off by default because the
+    # first thing anyone does is open http://127.0.0.1, and a Secure cookie is
+    # dropped on the way there, which reads as sign-in silently failing. Any
+    # install served over TLS turns this on.
+    cookie_secure: bool = False
+
+    # Where this instance answers, used to build the links that go out by mail.
+    # Only mail needs it, so an install that sends none can leave it empty.
+    site_url: str = ""
+
+    # How many reverse proxies of your own stand in front of this. The stack
+    # ships with one (the web container), and the rate limiter reads that many
+    # entries in from the right of X-Forwarded-For; see throttle.client_address
+    # for why the direction matters.
+    trusted_proxy_hops: int = 1
+
     # Named TARE_TZ rather than TZ: containers already use TZ for the system
     # clock, and this is the zone the app renders in.
     tz: str = Field(default="UTC", validation_alias="TARE_TZ")

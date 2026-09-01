@@ -5,9 +5,11 @@ from __future__ import annotations
 from fastapi import FastAPI, Request
 from fastapi.exceptions import RequestValidationError
 from fastapi.responses import JSONResponse
+from starlette.exceptions import HTTPException as StarletteHTTPException
 from starlette.types import ASGIApp, Message, Receive, Scope, Send
 
 from app.config import VERSION, check_deploy_config
+from app.routers import account, auth, invites
 
 # Nothing here accepts a file yet, and a JSON body that needs more than this is
 # a mistake or an attack. The reverse proxy caps /api/ at the same figure; this
@@ -100,6 +102,27 @@ async def _validation_error(request: Request, exc: Exception) -> JSONResponse:
     return JSONResponse(status_code=400, content={"detail": "Request body is missing or malformed."})
 
 
+# The refusals nobody raises by hand, and what they say instead. The framework
+# words these as bare labels rather than sentences, and a client should never
+# have to read two kinds of error text.
+_FRAMEWORK_DETAIL = {
+    "Not Found": "There is nothing at this address.",
+    "Method Not Allowed": "That is not something this address accepts.",
+}
+
+
+async def _http_error(request: Request, exc: Exception) -> JSONResponse:
+    """Every refusal in one shape: a detail, and one sentence in it."""
+    assert isinstance(exc, StarletteHTTPException)
+    detail = exc.detail if isinstance(exc.detail, str) else ""
+    detail = _FRAMEWORK_DETAIL.get(detail, detail) or "Something went wrong."
+    # The headers ride along: a 405 carries the Allow header, and dropping it
+    # would leave the answer incomplete.
+    return JSONResponse(
+        status_code=exc.status_code, content={"detail": detail}, headers=exc.headers
+    )
+
+
 def create_app() -> FastAPI:
     # Before an engine, a route, or a port. A refusal here stops the process
     # rather than letting a misconfigured install answer a single request.
@@ -117,10 +140,17 @@ def create_app() -> FastAPI:
     )
     app.add_middleware(BodySizeLimitMiddleware)
     app.add_exception_handler(RequestValidationError, _validation_error)
+    app.add_exception_handler(StarletteHTTPException, _http_error)
 
     @app.get("/api/version")
     def read_version() -> dict[str, str]:
         return {"version": VERSION}
+
+    # Every route lives under /api, which is the prefix the web container
+    # forwards and the only one the browser ever calls.
+    app.include_router(auth.router, prefix="/api")
+    app.include_router(invites.router, prefix="/api")
+    app.include_router(account.router, prefix="/api")
 
     return app
 

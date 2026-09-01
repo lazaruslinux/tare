@@ -1,0 +1,31 @@
+// What address the app was opened on, read once on the way in.
+//
+// There is no router here and there does not need to be: the app is one screen
+// with tabs, and exactly two addresses arrive from outside it, both by email or
+// by a link somebody was sent. Reading them at import rather than in a
+// component means it happens once whatever React does with renders.
+
+export type Entry =
+  | { kind: 'app' }
+  | { kind: 'welcome'; code: string }
+  | { kind: 'verify'; token: string }
+
+function read(): Entry {
+  const path = window.location.pathname
+  const welcome = /^\/welcome\/([^/]+)\/?$/.exec(path)
+  if (welcome) return { kind: 'welcome', code: decodeURIComponent(welcome[1]) }
+  if (path === '/verify-email') {
+    return { kind: 'verify', token: new URLSearchParams(window.location.search).get('token') ?? '' }
+  }
+  return { kind: 'app' }
+}
+
+export const entry: Entry = read()
+
+if (entry.kind !== 'app') {
+  // Put the address back to the root now that it has been read. A reload
+  // should land on the app rather than replay a link that has been spent, and
+  // a verification token has no business sitting in the address bar to be
+  // copied out of it.
+  window.history.replaceState(null, '', '/')
+}
