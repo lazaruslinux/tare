@@ -4,6 +4,7 @@ import { useEffect, useState } from 'react'
 import { api, type Me } from './api'
 import { FoodPicker } from './components/FoodPicker'
 import { PlusSheet } from './components/PlusSheet'
+import { ScanFlow } from './components/ScanFlow'
 import { SideRail } from './components/SideRail'
 import { TabBar, type Page } from './components/TabBar'
 import { entry } from './entry'
@@ -30,6 +31,10 @@ export default function App() {
   const [page, setPage] = useState<Page>('dashboard')
   const [adding, setAdding] = useState(false)
   const [picking, setPicking] = useState(false)
+  const [scanning, setScanning] = useState(false)
+  // Which part of the Food tab to open on. Only ever set by the More page's
+  // shortcut into it, and handed back to 'list' the moment the tab has read it.
+  const [foodView, setFoodView] = useState<'list' | 'submissions'>('list')
   // Bumped whenever something is logged from the centre control. The tab
   // underneath stays mounted while that sheet is open, so it is told to read
   // the day again rather than being left showing the day before the meal.
@@ -104,9 +109,17 @@ export default function App() {
                 transition={{ duration: 0.18 }}
               >
                 {page === 'more' ? (
-                  <Settings me={me} onChange={setMe} onSignedOut={leave} />
+                  <Settings
+                    me={me}
+                    onChange={setMe}
+                    onSignedOut={leave}
+                    onOpenSubmissions={() => {
+                      setFoodView('submissions')
+                      select('food')
+                    }}
+                  />
                 ) : page === 'food' ? (
-                  <FoodTab me={me} />
+                  <FoodTab me={me} start={foodView} onStarted={() => setFoodView('list')} />
                 ) : page === 'journal' ? (
                   <Journal me={me} refresh={logged} />
                 ) : (
@@ -127,11 +140,25 @@ export default function App() {
       <PlusSheet
         open={adding}
         onClose={() => setAdding(false)}
+        onScan={() => {
+          setAdding(false)
+          setScanning(true)
+        }}
         onAddFood={() => {
           setAdding(false)
           setPicking(true)
         }}
       />
+      {scanning && (
+        <ScanFlow
+          me={me}
+          onClose={() => setScanning(false)}
+          onLogged={() => {
+            setScanning(false)
+            setLogged(logged + 1)
+          }}
+        />
+      )}
       {picking && (
         <FoodPicker
           me={me}

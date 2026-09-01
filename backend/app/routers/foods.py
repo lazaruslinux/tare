@@ -101,16 +101,22 @@ def food_detail(db: Session, food: models.Food, user: models.User) -> dict[str, 
 def visible(user: models.User) -> Select[tuple[models.Food]]:
     """Every food this account may read, as a query to narrow further."""
     return select(models.Food).where(
+        models.Food.status != "cache",
         or_(
             models.Food.status == "approved",
             models.Food.owner_id == user.id,
-        )
+        ),
     )
 
 
 def readable_food(db: Session, user: models.User, food_id: int) -> models.Food:
     food = db.get(models.Food, food_id)
     if food is None:
+        raise HTTPException(status.HTTP_404_NOT_FOUND, MISSING_FOOD)
+    # A cache row is a lookup this instance wrote down, not a food anybody has.
+    # It belongs to nobody and it is not in the shared database, so it reads as
+    # absent everywhere, an administrator included.
+    if food.status == "cache":
         raise HTTPException(status.HTTP_404_NOT_FOUND, MISSING_FOOD)
     if food.status == "approved" or food.owner_id == user.id or user.is_admin:
         return food

@@ -49,10 +49,14 @@ function startingServings(food: Food | null): ServingDraft[] {
 
 export function FoodForm({
   food,
+  notice,
   onSaved,
   onCancel,
 }: {
   food: Food | null
+  // Why somebody was sent here, when something else sent them. Said at the top
+  // and the panel opened underneath it, so the box it is about is on screen.
+  notice?: string
   onSaved: (food: Food) => void
   onCancel: () => void
 }) {
@@ -64,7 +68,7 @@ export function FoodForm({
     food === null || food.density_g_per_ml === null ? '' : String(food.density_g_per_ml)
   )
   const [servings, setServings] = useState<ServingDraft[]>(() => startingServings(food))
-  const [more, setMore] = useState(false)
+  const [more, setMore] = useState(Boolean(notice))
   const [densityWrong, setDensityWrong] = useState(false)
   const [error, setError] = useState('')
   const [saving, setSaving] = useState(false)
@@ -125,6 +129,7 @@ export function FoodForm({
       <p className="mb-3 text-xl font-semibold tracking-tight">
         {food ? 'Edit food' : 'New food'}
       </p>
+      {notice && <p className="t-card mb-3 text-sm text-muted">{notice}</p>}
 
       <form onSubmit={submit}>
         <div className="t-card mb-3">

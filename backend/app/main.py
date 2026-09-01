@@ -9,12 +9,19 @@ from starlette.exceptions import HTTPException as StarletteHTTPException
 from starlette.types import ASGIApp, Message, Receive, Scope, Send
 
 from app.config import VERSION, check_deploy_config
-from app.routers import account, auth, diary, foods, invites
+from app.routers import account, admin, auth, barcode, diary, foods, invites, photos, submissions
 
-# Nothing here accepts a file yet, and a JSON body that needs more than this is
-# a mistake or an attack. The reverse proxy caps /api/ at the same figure; this
-# is the cap that holds when the proxy is not in front.
+# A JSON body that needs more than this is a mistake or an attack. The reverse
+# proxy caps /api/ at the same figure; this is the cap that holds when the proxy
+# is not in front.
 MAX_BODY_BYTES = 64 * 1024
+
+# The one address that takes a file, and the ceiling it takes one under. A
+# little above the ten megabytes the photo route itself allows, so an upload
+# that is merely too big is refused by that route's own sentence rather than by
+# a body cut off mid-stream.
+UPLOAD_PATH = "/api/photos"
+MAX_UPLOAD_BYTES = 11 * 1024 * 1024
 
 _TOO_LARGE = b'{"detail":"Request body is too large."}'
 
@@ -51,10 +58,15 @@ class BodySizeLimitMiddleware:
             await self.app(scope, receive, send)
             return
 
+        # Which ceiling this address is held to. Only the upload route gets the
+        # larger one, and it is chosen by exact path so nothing underneath it
+        # inherits the allowance.
+        ceiling = MAX_UPLOAD_BYTES if scope.get("path") == UPLOAD_PATH else MAX_BODY_BYTES
+
         declared = dict(scope.get("headers") or []).get(b"content-length")
         if declared is not None:
             try:
-                if int(declared) > MAX_BODY_BYTES:
+                if int(declared) > ceiling:
                     await _refuse(send)
                     return
             except ValueError:
@@ -70,7 +82,7 @@ class BodySizeLimitMiddleware:
             message = await receive()
             if message.get("type") == "http.request":
                 counted += len(message.get("body", b""))
-                if counted > MAX_BODY_BYTES:
+                if counted > ceiling:
                     # The stream is ended rather than raised out of: an
                     # exception here would surface as a 500 from inside the
                     # handler. A truncated body fails to parse instead, and the
@@ -153,6 +165,10 @@ def create_app() -> FastAPI:
     app.include_router(account.router, prefix="/api")
     app.include_router(foods.router, prefix="/api")
     app.include_router(diary.router, prefix="/api")
+    app.include_router(barcode.router, prefix="/api")
+    app.include_router(photos.router, prefix="/api")
+    app.include_router(submissions.router, prefix="/api")
+    app.include_router(admin.router, prefix="/api")
 
     return app
 

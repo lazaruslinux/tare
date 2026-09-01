@@ -1,0 +1,181 @@
+"""Resolving a scanned barcode, which is the one thing here that goes online.
+
+The order matters more than anything else in this module. A code is answered
+from the shared database if it is there, then from the caller's own foods, then
+from what this instance already fetched, and only then from somebody else's
+server. So a product that has been through the queue once is never looked up
+again: the second scan of an approved food never leaves the machine.
+
+What comes back from a lookup is kept as a food row with status 'cache'. That is
+a note this instance made, not a food: it belongs to nobody, it is never
+searched, and it never appears in a list. It exists so that two people scanning
+the same shelf do not make the same request twice, and so that a form can be
+filled in from it.
+"""
+
+from __future__ import annotations
+
+import datetime as dt
+import re
+
+from fastapi import APIRouter, Depends, HTTPException, status
+from sqlalchemy import select
+from sqlalchemy.orm import Session
+
+from app import foods_api, models
+from app.config import settings
+from app.db import get_db
+from app.deps import require_user
+from app.models import NUTRIENTS, now_utc
+from app.routers.foods import MAX_SERVING_NAME, OWNED, food_detail
+
+router = APIRouter(prefix="/barcode", tags=["barcode"])
+
+# Every retail code printed on food: EAN-8 at the short end, GTIN-14 at the
+# long. Anything else is not a barcode this app has any use for.
+BARCODE_PATTERN = re.compile(r"^[0-9]{8,14}$")
+BAD_BARCODE = "That is not a barcode."
+
+# How long a fetched reading is trusted before it is asked for again. A label
+# changes rarely and a month is far longer than anybody's shopping cycle, so in
+# practice this only matters for a product that was reformulated.
+CACHE_DAYS = 30
+
+# What the screen says a reading came from. The internal names are short
+# because they live in a column; these are what a person reads.
+SOURCE_NAMES = {
+    "off": "Open Food Facts",
+    "usda": "USDA FoodData Central",
+}
+
+# A record with no product name at all is still worth prefilling from: every
+# other number on it is good, and naming it is the first thing the form asks.
+UNNAMED = "Unnamed product"
+
+
+def prefill(food: models.Food) -> dict[str, object]:
+    """A cached reading as the form reads it: a suggestion, not a food.
+
+    Deliberately not shaped like a food. It has no id, because there is nothing
+    to log or to pin, and calling it a food is how a cache row ends up somewhere
+    a cache row must never be.
+    """
+    serving = food.servings[0] if food.servings else None
+    payload: dict[str, object] = {
+        "barcode": food.barcode,
+        "name": food.name,
+        "brand": food.brand,
+        "base_unit": food.base_unit,
+        "density_g_per_ml": food.density_g_per_ml,
+        "ingredients_text": food.ingredients_text,
+        "source": SOURCE_NAMES.get(food.source, food.source),
+        "serving": None
+        if serving is None
+        else {"name": serving.name, "base_amount": serving.base_amount},
+    }
+    for field in NUTRIENTS:
+        payload[field] = getattr(food, field)
+    return payload
+
+
+def remember(db: Session, code: str, result: foods_api.FoodResult) -> models.Food:
+    """Write a fetched reading down, replacing any older one for this barcode.
+
+    Updated in place rather than inserted beside, so scanning the same code
+    twice leaves one row however many times it happens.
+    """
+    row = db.execute(
+        select(models.Food).where(models.Food.status == "cache", models.Food.barcode == code)
+    ).scalars().first()
+    if row is None:
+        row = models.Food(status="cache", barcode=code)
+        db.add(row)
+
+    row.owner_id = None
+    row.created_by_id = None
+    row.source = result.source
+    row.source_id = result.source_id
+    row.name = result.name or UNNAMED
+    row.brand = result.brand
+    row.base_unit = result.base_unit
+    row.density_g_per_ml = result.density_g_per_ml
+    row.ingredients_text = result.ingredients_text
+    for field in NUTRIENTS:
+        setattr(row, field, getattr(result, field))
+    row.fetched_at = now_utc()
+
+    # The label's own serving, when the source gave one that can be multiplied.
+    # A phrase with no size behind it is not a serving anything can be weighed
+    # against, so it is dropped rather than stored as a name with no number.
+    if result.serving_amount:
+        name = (result.serving.strip() or "1 serving")[:MAX_SERVING_NAME]
+        row.servings = [models.FoodServing(name=name, base_amount=result.serving_amount)]
+    else:
+        row.servings = []
+    db.commit()
+    return row
+
+
+@router.get("/{code}")
+def resolve_barcode(
+    code: str,
+    db: Session = Depends(get_db),
+    user: models.User = Depends(require_user),
+) -> dict[str, object]:
+    """What this instance knows about one scanned code.
+
+    Four answers, and the client does something different with each. 'approved'
+    and 'mine' are a food to log. 'prefill' is a form to correct and send.
+    'blank' is a form with nothing in it but the number.
+
+    A plain synchronous route on purpose: FastAPI runs one in a worker thread,
+    so the seconds this may spend waiting on somebody else's server are spent
+    off the event loop without any of it being written out by hand here.
+    """
+    if not BARCODE_PATTERN.match(code):
+        raise HTTPException(status.HTTP_400_BAD_REQUEST, BAD_BARCODE)
+
+    shared = db.execute(
+        select(models.Food).where(models.Food.status == "approved", models.Food.barcode == code)
+    ).scalars().first()
+    if shared is not None:
+        return {"state": "approved", "food": food_detail(db, shared, user)}
+
+    # Their own copy, whether it is private or waiting on the queue. Somebody
+    # else's is not consulted: a private food is private, and a pending one is
+    # only theirs until it is approved.
+    own = db.execute(
+        select(models.Food)
+        .where(
+            models.Food.owner_id == user.id,
+            models.Food.barcode == code,
+            models.Food.status.in_(OWNED),
+        )
+        .order_by(models.Food.id)
+    ).scalars().first()
+    if own is not None:
+        return {"state": "mine", "food": food_detail(db, own, user)}
+
+    cached = db.execute(
+        select(models.Food).where(models.Food.status == "cache", models.Food.barcode == code)
+    ).scalars().first()
+    if cached is not None and cached.fetched_at is not None:
+        if cached.fetched_at > now_utc() - dt.timedelta(days=CACHE_DAYS):
+            return {"state": "prefill", "prefill": prefill(cached)}
+
+    try:
+        result = foods_api.lookup(code, settings.usda_api_key)
+    except foods_api.FoodApiError as failure:
+        # A reading this instance already has beats an error about a network.
+        # It is out of date rather than wrong, and the person is standing in
+        # front of the product either way.
+        if cached is not None:
+            return {"state": "prefill", "prefill": prefill(cached)}
+        raise HTTPException(status.HTTP_502_BAD_GATEWAY, str(failure)) from None
+
+    if result is None:
+        # Nothing out there. An old reading is still better than an empty form.
+        if cached is not None:
+            return {"state": "prefill", "prefill": prefill(cached)}
+        return {"state": "blank", "barcode": code}
+    return {"state": "prefill", "prefill": prefill(remember(db, code, result))}

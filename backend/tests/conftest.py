@@ -20,6 +20,7 @@ from sqlalchemy.orm import sessionmaker  # noqa: E402
 from sqlalchemy.pool import StaticPool  # noqa: E402
 
 from app import models, security, throttle  # noqa: E402
+from app.config import settings  # noqa: E402
 from app.db import Base, get_db  # noqa: E402
 from app.main import create_app  # noqa: E402
 from app.models import now_utc  # noqa: E402
@@ -27,6 +28,20 @@ from app.models import now_utc  # noqa: E402
 # What the registration and sign-in cases use throughout. Long enough to clear
 # the minimum, and the same everywhere so a failing case is never about typing.
 PASSWORD = "correct-horse-9"
+
+
+@pytest.fixture(autouse=True)
+def media_dir(tmp_path):
+    """Every case writes its files where it can throw them away.
+
+    Autouse and unconditional: the configured directory is a real path on a
+    deployment, and a test suite that can reach it is a test suite that can
+    delete somebody's photos.
+    """
+    was = settings.media_dir
+    settings.media_dir = str(tmp_path / "media")
+    yield tmp_path / "media"
+    settings.media_dir = was
 
 
 @pytest.fixture(autouse=True)

@@ -1,0 +1,315 @@
+"""Offering a food to the shared database.
+
+Two rules do most of the work here. A food offered to everybody has to carry the
+whole label, because the person filling it in is holding the packet and nobody
+after them will be. And a food that has been offered is still private until
+somebody decides otherwise: the submitter can log it today, and nobody else can
+see it at all.
+"""
+
+import io
+import os
+
+import httpx
+from PIL import Image
+
+from app import foods_api, models, photos
+from tests.conftest import PASSWORD
+
+CODE = "034000002405"
+
+# A whole label, which is what a submission has to carry.
+FULL = {
+    "calories": 535,
+    "protein_g": 7,
+    "carbs_g": 58.1,
+    "fat_g": 32.6,
+    "saturated_fat_g": 18.6,
+    "trans_fat_g": 0,
+    "cholesterol_mg": 23,
+    "sodium_mg": 81,
+    "fiber_g": 2.3,
+    "sugar_g": 51.2,
+}
+
+SERVINGS = [{"name": "1 bar", "base_amount": 43, "position": 0}]
+
+
+def body(**overrides):
+    sent = {
+        "barcode": CODE,
+        "name": "Milk chocolate bar",
+        "brand": "Hershey's",
+        "base_unit": "g",
+        "servings": SERVINGS,
+        **FULL,
+    }
+    sent.update(overrides)
+    return sent
+
+
+def offer(client, **overrides):
+    return client.post("/api/submissions/food", json=body(**overrides))
+
+
+def sign_in(client, username):
+    response = client.post("/api/auth/login", json={"username": username, "password": PASSWORD})
+    assert response.status_code == 200
+
+
+def a_photo(client):
+    out = io.BytesIO()
+    Image.new("RGB", (160, 120), (200, 180, 120)).save(out, format="JPEG")
+    response = client.post(
+        "/api/photos", files={"file": ("label.jpg", out.getvalue(), "image/jpeg")}
+    )
+    assert response.status_code == 201
+    return response.json()["photo_id"]
+
+
+# ---- What a submission has to carry ----
+
+
+def test_every_number_on_the_label_is_needed(client, signed_in):
+    for field, label in (
+        ("calories", "Calories"),
+        ("saturated_fat_g", "Saturated fat"),
+        ("cholesterol_mg", "Cholesterol"),
+        ("fiber_g", "Fibre"),
+        ("sugar_g", "Sugar"),
+    ):
+        response = offer(client, **{field: None})
+        assert response.status_code == 400
+        assert response.json() == {
+            "detail": f"{label} is needed before this can be shared."
+        }
+
+
+def test_the_first_thing_missing_is_the_one_named(client, signed_in):
+    response = offer(client, protein_g=None, sodium_mg=None)
+    assert response.json() == {"detail": "Protein is needed before this can be shared."}
+
+
+def test_nought_is_an_answer_and_an_empty_box_is_not(client, signed_in):
+    assert offer(client, fiber_g=0, sugar_g=0).status_code == 201
+
+
+def test_a_serving_is_needed(client, signed_in):
+    response = offer(client, servings=[])
+    assert response.status_code == 400
+    assert response.json() == {"detail": "A serving is needed before this can be shared."}
+
+
+# ---- What a submission does ----
+
+
+def test_an_offered_food_is_pending_and_still_the_submitter_s(client, db_session, signed_in):
+    response = offer(client, note="The wrapper is a bit faded.")
+    assert response.status_code == 201
+    made = response.json()["food"]
+    assert made["status"] == "pending"
+    assert made["mine"] is True
+
+    food = db_session.get(models.Food, made["id"])
+    assert (food.owner_id, food.created_by_id, food.barcode) == (signed_in.id, signed_in.id, CODE)
+
+    submission = db_session.get(models.FoodSubmission, response.json()["submission_id"])
+    assert (submission.kind, submission.status) == ("new", "pending")
+    assert submission.note == "The wrapper is a bit faded."
+    assert submission.decided_at is None
+
+
+def test_an_offered_food_can_be_logged_the_moment_it_is_offered(client, signed_in):
+    food_id = offer(client).json()["food"]["id"]
+    logged = client.post(
+        "/api/diary",
+        json={"date": "2026-09-01", "slot": "snack", "food_id": food_id, "amount": 1, "unit": "g"},
+    )
+    assert logged.status_code == 201
+    assert logged.json()["name"] == "Milk chocolate bar"
+
+
+def test_nobody_else_can_see_a_food_that_is_only_offered(
+    client, make_user, signed_in, monkeypatch
+):
+    food_id = offer(client).json()["food"]["id"]
+
+    make_user("stranger")
+    sign_in(client, "stranger")
+
+    missing = client.get(f"/api/foods/{food_id}")
+    assert missing.status_code == 404
+    assert missing.json() == {"detail": "There is no such food."}
+    assert client.get("/api/foods/search?q=chocolate").json() == []
+
+    # And the barcode resolves for them as though nothing were there at all.
+    monkeypatch.setattr(
+        foods_api,
+        "session",
+        lambda: httpx.Client(
+            transport=httpx.MockTransport(lambda request: httpx.Response(200, json={"status": 0}))
+        ),
+    )
+    assert client.get(f"/api/barcode/{CODE}").json() == {"state": "blank", "barcode": CODE}
+
+
+def test_a_barcode_you_already_hold_is_said_plainly(client, signed_in):
+    assert offer(client).status_code == 201
+    again = offer(client)
+    assert again.status_code == 400
+    assert again.json() == {"detail": "You already have a food with this barcode."}
+
+
+def test_a_barcode_already_in_the_shared_database_is_a_conflict(
+    client, db_session, signed_in
+):
+    db_session.add(
+        models.Food(status="approved", barcode=CODE, name="Milk chocolate bar", base_unit="g")
+    )
+    db_session.commit()
+
+    response = offer(client)
+    assert response.status_code == 409
+    assert response.json() == {"detail": "This barcode is already in the shared database."}
+
+
+def test_something_that_is_not_a_barcode_is_refused(client, signed_in):
+    response = offer(client, barcode="not-a-code")
+    assert response.status_code == 400
+    assert response.json() == {"detail": "That is not a barcode."}
+
+
+def test_a_food_offered_without_a_barcode_is_fine(client, signed_in):
+    assert offer(client, barcode=None).status_code == 201
+
+
+# ---- Offering one you already keep ----
+
+
+def test_a_food_you_already_keep_can_be_offered_as_it_stands(client, db_session, signed_in):
+    made = client.post(
+        "/api/foods",
+        json={"name": "Grandma's fudge", "base_unit": "g", "servings": SERVINGS, **FULL},
+    ).json()
+
+    response = client.post(f"/api/foods/{made['id']}/submit", json={"note": "Home made."})
+    assert response.status_code == 201
+    assert response.json()["food"]["status"] == "pending"
+    assert db_session.get(models.Food, made["id"]).status == "pending"
+
+
+def test_offering_one_you_keep_is_held_to_the_same_whole_label(client, signed_in):
+    made = client.post(
+        "/api/foods",
+        json={"name": "Half a label", "base_unit": "g", "calories": 100, "protein_g": 1,
+              "carbs_g": 2, "fat_g": 3, "servings": SERVINGS},
+    ).json()
+
+    response = client.post(f"/api/foods/{made['id']}/submit", json={})
+    assert response.status_code == 400
+    assert response.json() == {"detail": "Saturated fat is needed before this can be shared."}
+
+
+def test_somebody_else_s_food_cannot_be_offered(client, db_session, make_user, signed_in):
+    stranger = make_user("stranger")
+    theirs = models.Food(
+        status="custom", owner_id=stranger.id, name="Their food", base_unit="g", **FULL
+    )
+    db_session.add(theirs)
+    db_session.commit()
+
+    response = client.post(f"/api/foods/{theirs.id}/submit", json={})
+    assert response.status_code == 404
+
+
+def test_one_food_cannot_be_waiting_twice(client, signed_in):
+    made = client.post(
+        "/api/foods",
+        json={"name": "Grandma's fudge", "base_unit": "g", "servings": SERVINGS, **FULL},
+    ).json()
+    assert client.post(f"/api/foods/{made['id']}/submit", json={}).status_code == 201
+
+    again = client.post(f"/api/foods/{made['id']}/submit", json={})
+    assert again.status_code in (403, 409)
+
+
+# ---- Photos ----
+
+
+def test_a_photo_goes_with_the_food_it_was_offered_for(client, db_session, signed_in):
+    photo_id = a_photo(client)
+    response = offer(client, photo_id=photo_id)
+    assert response.status_code == 201
+
+    photo = db_session.get(models.FoodPhoto, photo_id)
+    assert photo.food_id == response.json()["food"]["id"]
+    assert photo.status == "pending"
+
+
+def test_somebody_else_s_photo_cannot_be_attached(client, make_user, signed_in):
+    photo_id = a_photo(client)
+    make_user("stranger")
+    sign_in(client, "stranger")
+
+    response = offer(client, photo_id=photo_id)
+    assert response.status_code == 400
+    assert response.json() == {"detail": "That photo is not there to attach."}
+
+
+# ---- Withdrawing ----
+
+
+def test_the_list_of_what_you_offered_is_newest_first(client, signed_in):
+    offer(client, barcode=None, name="First")
+    offer(client, barcode=None, name="Second")
+
+    rows = client.get("/api/submissions/mine").json()
+    assert [row["name"] for row in rows] == ["Second", "First"]
+    assert rows[0]["status"] == "pending"
+    assert rows[0]["decision_note"] == ""
+    assert rows[0]["decided_at"] is None
+
+
+def test_the_list_is_only_your_own(client, make_user, signed_in):
+    offer(client, barcode=None)
+    make_user("stranger")
+    sign_in(client, "stranger")
+    assert client.get("/api/submissions/mine").json() == []
+
+
+def test_taking_an_offer_back_leaves_the_food_privately_yours(
+    client, db_session, signed_in
+):
+    made = offer(client)
+    submission_id = made.json()["submission_id"]
+    food_id = made.json()["food"]["id"]
+
+    assert client.delete(f"/api/submissions/{submission_id}").status_code == 204
+    assert db_session.get(models.FoodSubmission, submission_id) is None
+    assert db_session.get(models.Food, food_id).status == "custom"
+    assert client.get("/api/submissions/mine").json() == []
+
+
+def test_taking_an_offer_back_takes_the_photo_with_it(client, db_session, signed_in):
+    photo_id = a_photo(client)
+    name = db_session.get(models.FoodPhoto, photo_id).path
+    submission_id = offer(client, photo_id=photo_id).json()["submission_id"]
+
+    assert client.delete(f"/api/submissions/{submission_id}").status_code == 204
+    assert db_session.get(models.FoodPhoto, photo_id) is None
+    assert not os.path.isfile(photos.path_for(name))
+
+
+def test_somebody_else_s_offer_cannot_be_taken_back(client, make_user, signed_in):
+    submission_id = offer(client).json()["submission_id"]
+    make_user("stranger")
+    sign_in(client, "stranger")
+
+    response = client.delete(f"/api/submissions/{submission_id}")
+    assert response.status_code == 404
+    assert response.json() == {"detail": "There is no such submission."}
+
+
+def test_offering_needs_a_session(client):
+    assert offer(client).status_code == 401
+    assert client.get("/api/submissions/mine").status_code == 401

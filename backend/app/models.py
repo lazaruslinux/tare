@@ -250,6 +250,112 @@ class FoodServing(Base):
     position: Mapped[int] = mapped_column(Integer, nullable=False, default=0)
 
 
+# What a picture of a label is: waiting on a decision, or published with the
+# food it belongs to. A rejected photo is not a state, it is a deleted row and
+# a deleted file.
+PHOTO_STATUSES = ("pending", "approved")
+
+# What somebody is asking for. Only 'new' is written this round; the other two
+# are the kinds a shared database needs, named here so the column is ready and
+# a later round adds behaviour rather than another migration on this table.
+#   new     a food that is not in the shared database yet
+#   edit    a correction to one that is
+#   photo   a picture for one that has none
+SUBMISSION_KINDS = ("new", "edit", "photo")
+
+# Where a submission has got to. Withdrawing one deletes it rather than adding
+# a fourth state: nobody has judged it, so there is nothing to keep.
+SUBMISSION_STATUSES = ("pending", "approved", "rejected")
+
+
+class FoodPhoto(Base):
+    """A picture of a label, uploaded before there is a food to attach it to.
+
+    Held as its own row rather than a column on the food because the upload
+    happens first: somebody chooses a photo while filling the form in, and the
+    form may never be sent. Those are the rows the purge in the photos router
+    sweeps up.
+    """
+
+    __tablename__ = "food_photos"
+    __table_args__ = (
+        # One published picture per food. Partial, like the barcode index above:
+        # a food may collect several pending photos while people offer them, and
+        # only one of those ever becomes the one everybody sees.
+        Index(
+            "uq_food_photos_food_approved",
+            "food_id",
+            unique=True,
+            postgresql_where=text("status = 'approved'"),
+            sqlite_where=text("status = 'approved'"),
+        ),
+    )
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True)
+    # Null until the submission that carries it is sent, and SET NULL rather
+    # than CASCADE after: a food going away leaves a file to be tidied, not a
+    # row that vanishes out from under the sweep.
+    food_id: Mapped[int | None] = mapped_column(
+        ForeignKey("foods.id", ondelete="SET NULL"), nullable=True, index=True
+    )
+    uploaded_by_id: Mapped[int | None] = mapped_column(
+        ForeignKey("users.id", ondelete="SET NULL"), nullable=True
+    )
+    # The file's name and nothing else: the server chooses it, and no part of it
+    # comes from the upload. A path from a client is a path traversal.
+    path: Mapped[str] = mapped_column(String(128), nullable=False)
+    status: Mapped[str] = mapped_column(String(10), nullable=False, default="pending")
+    created_at: Mapped[dt.datetime] = mapped_column(UtcDateTime, nullable=False, default=now_utc)
+
+
+class FoodSubmission(Base):
+    """Somebody offering a food to the shared database, and what came of it."""
+
+    __tablename__ = "food_submissions"
+    __table_args__ = (
+        # One open submission per food. A person may offer a food, have it
+        # turned down, correct it and offer it again; they may not have two
+        # requests about the same food waiting at once.
+        Index(
+            "uq_food_submissions_open",
+            "food_id",
+            unique=True,
+            postgresql_where=text("status = 'pending'"),
+            sqlite_where=text("status = 'pending'"),
+        ),
+    )
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True)
+    kind: Mapped[str] = mapped_column(String(8), nullable=False, default="new")
+    # The food being offered. SET NULL so a submission that has been decided
+    # still reads as history after its food is deleted.
+    food_id: Mapped[int | None] = mapped_column(
+        ForeignKey("foods.id", ondelete="SET NULL"), nullable=True
+    )
+    # For the kinds that change something already shared: the row in the shared
+    # database this is about. CASCADE, because a correction to a food that is
+    # gone is not a request anybody can answer.
+    target_food_id: Mapped[int | None] = mapped_column(
+        ForeignKey("foods.id", ondelete="CASCADE"), nullable=True
+    )
+    photo_id: Mapped[int | None] = mapped_column(
+        ForeignKey("food_photos.id", ondelete="SET NULL"), nullable=True
+    )
+    submitted_by_id: Mapped[int | None] = mapped_column(
+        ForeignKey("users.id", ondelete="SET NULL"), nullable=True, index=True
+    )
+    # What the person wanted the reviewer to know, and what the reviewer said
+    # back. Both plain text and both optional.
+    note: Mapped[str] = mapped_column(String(500), nullable=False, default="")
+    status: Mapped[str] = mapped_column(String(10), nullable=False, default="pending")
+    decided_by_id: Mapped[int | None] = mapped_column(
+        ForeignKey("users.id", ondelete="SET NULL"), nullable=True
+    )
+    decided_at: Mapped[dt.datetime | None] = mapped_column(UtcDateTime, nullable=True)
+    decision_note: Mapped[str] = mapped_column(String(500), nullable=False, default="")
+    created_at: Mapped[dt.datetime] = mapped_column(UtcDateTime, nullable=False, default=now_utc)
+
+
 # The four parts of a day, in the order they are eaten. Non-native for the same
 # reason the food statuses are: a list that may gain a value should change by
 # editing a tuple, not by altering a type in the database.

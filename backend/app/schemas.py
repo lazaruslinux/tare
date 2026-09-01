@@ -62,6 +62,45 @@ class FoodIn(BaseModel):
     servings: list[ServingIn] | None = Field(default=None, max_length=MAX_SERVINGS)
 
 
+# Enough for a paragraph either way, and no more. A reviewer reads these in a
+# list, and a note nobody finishes reading is a note nobody reads.
+MAX_NOTE = 500
+
+
+class SubmissionIn(FoodIn):
+    """A food offered to the shared database.
+
+    The same form as a private food, with the three things only a shared one
+    has: the barcode it was scanned from, the picture of the label somebody
+    took, and a word for whoever reviews it. Which of the nutrients are needed
+    is the route's rule and a stricter one than a private food's, because
+    everybody eats out of what this becomes.
+    """
+
+    barcode: str | None = None
+    photo_id: int | None = None
+    note: str = Field(default="", max_length=MAX_NOTE)
+
+
+class SubmitIn(BaseModel):
+    """One food already kept privately, offered as it stands."""
+
+    photo_id: int | None = None
+    note: str = Field(default="", max_length=MAX_NOTE)
+
+
+class ApproveIn(BaseModel):
+    """Publishing a submission. The photo is kept unless it is said otherwise."""
+
+    keep_photo: bool = True
+
+
+class RejectIn(BaseModel):
+    """Turning one down, and what the submitter is told about why."""
+
+    note: str = Field(default="", max_length=MAX_NOTE)
+
+
 # Long enough for "serving:" and an id, and short enough that nothing else
 # arrives in the field at all.
 MAX_UNIT = 24

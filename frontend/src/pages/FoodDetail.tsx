@@ -4,7 +4,15 @@ import { useEffect, useState } from 'react'
 import { api, errorText, type Food, type Me } from '../api'
 import { NutritionLabel } from '../components/NutritionLabel'
 import { PortionSheet } from '../components/PortionSheet'
+import { SHARED_FACTS, missingSentence, type Values } from '../lib/community'
 import { slotByTime, today } from '../lib/day'
+
+// What a food carries, in the shape the sharing rule reads.
+function panelOf(food: Food): Values {
+  const values = {} as Values
+  for (const fact of SHARED_FACTS) values[fact.key] = food[fact.key]
+  return values
+}
 
 export function FoodDetail({
   id,
@@ -12,16 +20,21 @@ export function FoodDetail({
   onBack,
   onEdit,
   onDelete,
+  onSubmitted,
 }: {
   id: number
   me: Me
   onBack: () => void
-  onEdit: (food: Food) => void
+  // The notice is why somebody was sent to the form: a food that was short of
+  // what sharing needs opens the form saying which box is empty.
+  onEdit: (food: Food, notice?: string) => void
   onDelete: (food: Food) => void
+  onSubmitted: () => void
 }) {
   const [food, setFood] = useState<Food | null>(null)
   const [error, setError] = useState('')
   const [logging, setLogging] = useState(false)
+  const [sending, setSending] = useState(false)
 
   useEffect(() => {
     let alive = true
@@ -45,6 +58,29 @@ export function FoodDetail({
     }
   }
 
+  const offer = async (current: Food) => {
+    // Checked here first, so somebody short of half a label lands in the form
+    // with the reason rather than on a refusal they have to go back from.
+    const missing = missingSentence(panelOf(current), current.servings.length)
+    if (missing !== null) {
+      onEdit(current, missing)
+      return
+    }
+    setSending(true)
+    setError('')
+    try {
+      const answer = await api<{ food: Food }>(`/foods/${current.id}/submit`, {
+        method: 'POST',
+        body: {},
+      })
+      setFood(answer.food)
+      onSubmitted()
+    } catch (failure) {
+      setError(errorText(failure))
+    }
+    setSending(false)
+  }
+
   return (
     <>
       <button type="button" className="t-micro mb-2 flex items-center gap-1" onClick={onBack}>
@@ -55,8 +91,13 @@ export function FoodDetail({
       {error && <p className="t-error">{error}</p>}
       {food && (
         <>
-          <p className="text-xl font-semibold tracking-tight">{food.name}</p>
-          <p className="mb-3 text-sm text-muted">{food.brand || 'No brand'}</p>
+          <div className="flex items-start justify-between gap-3">
+            <div className="min-w-0">
+              <p className="text-xl font-semibold tracking-tight">{food.name}</p>
+              <p className="mb-3 text-sm text-muted">{food.brand || 'No brand'}</p>
+            </div>
+            {food.status === 'pending' && <span className="t-chip shrink-0">pending</span>}
+          </div>
 
           <NutritionLabel food={food} />
 
@@ -92,6 +133,28 @@ export function FoodDetail({
                 Delete
               </button>
             </div>
+          )}
+
+          {food.mine && food.status === 'custom' && (
+            <div className="t-card mb-3">
+              <button
+                className="t-btn w-full"
+                type="button"
+                disabled={sending}
+                onClick={() => offer(food)}
+              >
+                Submit to community
+              </button>
+              <p className="mt-2 text-xs text-muted">
+                It stays yours until an administrator approves it. Then everyone has it.
+              </p>
+            </div>
+          )}
+
+          {food.mine && food.status === 'pending' && (
+            <p className="mb-3 text-sm text-muted">
+              This is waiting for approval. It is still yours to log in the meantime.
+            </p>
           )}
 
           {logging && (

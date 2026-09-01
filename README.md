@@ -10,7 +10,7 @@ tare is built with Claude Code.
 
 ## Status
 
-Early development. What runs today: invite-only accounts, private custom foods with unit and density conversion, and the food journal. The shared database, barcode scanning, health sync, and the feed are not built yet.
+Early development. What runs today: invite-only accounts, private custom foods with unit and density conversion, the food journal, and the shared database with barcode scanning and an approval queue. Health sync and the feed are not built yet.
 
 ## Running it
 

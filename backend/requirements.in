@@ -7,3 +7,4 @@ alembic
 argon2-cffi
 httpx
 Pillow
+python-multipart

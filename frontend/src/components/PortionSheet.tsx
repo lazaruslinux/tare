@@ -180,6 +180,10 @@ export function PortionSheet({
       <p className="t-micro mb-1">{entry ? 'Edit' : 'Log'}</p>
       <p className="text-base font-semibold tracking-tight">{name}</p>
       {brand && <p className="text-xs text-muted">{brand}</p>}
+      {food?.status === 'pending' && (
+        // Theirs to log today, and not anybody else's until it is approved.
+        <span className="t-chip mt-2">Waiting for approval</span>
+      )}
 
       {needsAmount && (
         <div className="mt-3 mb-3 flex gap-2">

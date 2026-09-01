@@ -1,7 +1,9 @@
-import { useState, type FormEvent } from 'react'
+import { ChevronRight } from 'lucide-react'
+import { useEffect, useState, type FormEvent } from 'react'
 
-import { api, errorText, type Me, type Units } from '../api'
+import { api, errorText, type Me, type QueueItem, type Units } from '../api'
 import { applyTheme, rememberTheme, useTheme, type Theme } from '../theme'
+import { AdminQueue } from './AdminQueue'
 
 // Short enough to sit in the row without the select clipping it, and the
 // system is named so the abbreviations are not the only clue.
@@ -33,12 +35,32 @@ export function Settings({
   me,
   onChange,
   onSignedOut,
+  onOpenSubmissions,
 }: {
   me: Me
   onChange: (me: Me) => void
   onSignedOut: () => void
+  // What this account has offered lives on the Food tab beside the foods it
+  // is about, so this row goes there rather than building a second screen for
+  // the same list.
+  onOpenSubmissions: () => void
 }) {
   const theme = useTheme()
+  const [reviewing, setReviewing] = useState(false)
+  // How many are waiting, so the row says whether it is worth opening. Only
+  // ever read by an administrator, because nobody else has the route.
+  const [waiting, setWaiting] = useState(0)
+
+  useEffect(() => {
+    if (!me.is_admin) return
+    let alive = true
+    api<QueueItem[]>('/admin/queue')
+      .then((rows) => alive && setWaiting(rows.length))
+      .catch(() => {})
+    return () => {
+      alive = false
+    }
+  }, [me.is_admin, reviewing])
 
   const [displayName, setDisplayName] = useState(me.display_name ?? '')
   const [units, setUnits] = useState<Units>(me.units)
@@ -109,9 +131,29 @@ export function Settings({
     onSignedOut()
   }
 
+  if (reviewing) return <AdminQueue onBack={() => setReviewing(false)} />
+
   return (
     <>
       <p className="t-micro mb-2">Settings</p>
+
+      <div className="t-card mb-3">
+        {me.is_admin && (
+          <button
+            type="button"
+            className="t-row w-full text-left"
+            onClick={() => setReviewing(true)}
+          >
+            <span className="flex-1 text-sm">Review queue</span>
+            {waiting > 0 && <span className="t-chip t-nums">{waiting}</span>}
+            <ChevronRight className="h-4 w-4 text-muted" strokeWidth={2} />
+          </button>
+        )}
+        <button type="button" className="t-row w-full text-left" onClick={onOpenSubmissions}>
+          <span className="flex-1 text-sm">My submissions</span>
+          <ChevronRight className="h-4 w-4 text-muted" strokeWidth={2} />
+        </button>
+      </div>
 
       <form className="t-card mb-3" onSubmit={saveAccount}>
         <div className="t-row">

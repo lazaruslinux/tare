@@ -11,11 +11,16 @@ import type { ReactNode } from 'react'
 export function Sheet({
   open,
   label,
+  tall,
   onClose,
   children,
 }: {
   open: boolean
   label: string
+  // For the one sheet that is a whole form rather than a choice. It takes as
+  // much of the screen as it can and stays a sheet, because what opened it was
+  // a scan and going back to it is one gesture.
+  tall?: boolean
   onClose: () => void
   children: ReactNode
 }) {
@@ -36,7 +41,9 @@ export function Sheet({
             aria-label={label}
             // Capped and scrollable: a long list inside must not push the
             // controls at the bottom off the screen.
-            className="max-h-[86svh] w-full max-w-md overflow-y-auto rounded-t-2xl border-t border-line bg-surface px-4 pt-4 pb-[calc(1rem+env(safe-area-inset-bottom))] min-[900px]:max-w-sm min-[900px]:rounded-2xl min-[900px]:border min-[900px]:pb-4"
+            className={`w-full max-w-md overflow-y-auto rounded-t-2xl border-t border-line bg-surface px-4 pt-4 pb-[calc(1rem+env(safe-area-inset-bottom))] min-[900px]:rounded-2xl min-[900px]:border min-[900px]:pb-4 ${
+              tall ? 'max-h-[94svh] min-[900px]:max-w-md' : 'max-h-[86svh] min-[900px]:max-w-sm'
+            }`}
             initial={{ y: reduced ? 0 : 24, opacity: 0 }}
             animate={{ y: 0, opacity: 1 }}
             exit={{ y: reduced ? 0 : 24, opacity: 0 }}
