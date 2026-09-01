@@ -1,0 +1,48 @@
+services:
+  db:
+    # Digest-pinned so a rebuild cannot pick up a different image behind the
+    # same tag. The tag rides here for humans: postgres:16
+    image: postgres:16@sha256:f1c3376c26f2609ab9f29f71f824103fe2fcd8ee0346485cb6122a4f93df6f94
+    restart: unless-stopped
+    # Written out one at a time rather than pulled in with env_file, so the
+    # database container never sees SECRET_KEY, the SMTP password, or anything
+    # else that belongs to the application alone.
+    environment:
+      POSTGRES_USER: ${POSTGRES_USER:-tare}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:?set POSTGRES_PASSWORD in .env}
+      POSTGRES_DB: ${POSTGRES_DB:-tare}
+    # No published ports: only the api talks to this, over the compose network.
+    volumes:
+      - db-data:/var/lib/postgresql/data
+    healthcheck:
+      test: ['CMD-SHELL', 'pg_isready -U ${POSTGRES_USER:-tare} -d ${POSTGRES_DB:-tare}']
+      interval: 10s
+      timeout: 5s
+      retries: 5
+      start_period: 20s
+
+  api:
+    build: ./backend
+    restart: unless-stopped
+    env_file: .env
+    depends_on:
+      db:
+        condition: service_healthy
+    # Loopback only. Anything reaching this from outside the host comes through
+    # a reverse proxy that terminates TLS.
+    ports:
+      - '127.0.0.1:8200:8000'
+    volumes:
+      - api-data:/data
+
+  web:
+    build: ./frontend
+    restart: unless-stopped
+    depends_on:
+      - api
+    ports:
+      - '127.0.0.1:8210:80'
+
+volumes:
+  db-data:
+  api-data:

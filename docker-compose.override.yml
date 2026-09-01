@@ -1,0 +1,8 @@
+# Development only. Compose reads this file automatically, so a deployment
+# should delete or rename it rather than rely on remembering not to use it.
+services:
+  db:
+    # A port for psql and migration work from the host. Loopback, and an
+    # unusual number, so it cannot collide with a Postgres already installed.
+    ports:
+      - '127.0.0.1:55434:5432'

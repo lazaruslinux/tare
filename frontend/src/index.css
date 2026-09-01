@@ -1,0 +1,332 @@
+@import 'tailwindcss';
+
+/* Theming follows data-theme on the root element, never the operating system.
+   Do not use Tailwind's dark: variant anywhere in this project: it keys off
+   prefers-color-scheme, so it would ignore the in-app choice and split the
+   palette in two places that disagree. */
+
+/* LOOK AND TUNE: the starting palette. These twelve values decide what the app
+   feels like, and they are meant to be argued with once there are real screens
+   to judge them against. */
+:root {
+  color-scheme: dark;
+  --bg: #101312;
+  --surface: #171b19;
+  --surface-2: #1d2220;
+  --line: rgba(214, 228, 219, 0.08);
+  --line-strong: rgba(214, 228, 219, 0.16);
+  --text: #dbe7dd;
+  --muted: #94a89b;
+  --accent: #8fc7a0;
+  --accent-strong: #a9dcb8;
+  --danger: #d98b83;
+  --ring: rgba(143, 199, 160, 0.35);
+}
+
+[data-theme='light'] {
+  color-scheme: light;
+  --bg: #f7f4ec;
+  --surface: #fffdf7;
+  --surface-2: #f1ede2;
+  --line: rgba(46, 79, 63, 0.12);
+  --line-strong: rgba(46, 79, 63, 0.24);
+  --text: #2e4f3f;
+  --muted: #5e7a6b;
+  --accent: #35684f;
+  --accent-strong: #24503b;
+  --danger: #b3554b;
+  --ring: rgba(53, 104, 79, 0.3);
+}
+
+/* Bridged rather than redeclared, so bg-surface and text-muted resolve to the
+   same custom properties the blocks above rewrite. inline, so a utility emits
+   var(--surface) directly and re-themes at runtime instead of freezing the
+   value it had at build time. */
+@theme inline {
+  --color-bg: var(--bg);
+  --color-surface: var(--surface);
+  --color-surface-2: var(--surface-2);
+  --color-line: var(--line);
+  --color-line-strong: var(--line-strong);
+  --color-text: var(--text);
+  --color-muted: var(--muted);
+  --color-accent: var(--accent);
+  --color-accent-strong: var(--accent-strong);
+  --color-danger: var(--danger);
+  --color-ring: var(--ring);
+  --font-sans: 'Inter Variable', ui-sans-serif, system-ui, sans-serif;
+}
+
+@layer base {
+  body {
+    background: var(--bg);
+    color: var(--text);
+    font-family: 'Inter Variable', ui-sans-serif, system-ui, sans-serif;
+    -webkit-font-smoothing: antialiased;
+  }
+
+  :focus-visible {
+    outline: 2px solid var(--accent);
+    outline-offset: 2px;
+  }
+}
+
+/* Density and component classes. Declared inside @layer components so a
+   Tailwind utility on the same element still wins. */
+@layer components {
+  /* A list row at the reading density the app is built on: 48px tall, hairline
+     between neighbours, nothing under the last one. */
+  .t-row {
+    display: flex;
+    align-items: center;
+    gap: 0.75rem;
+    min-height: 48px;
+    padding: 0.5rem 0;
+    border-bottom: 1px solid var(--line);
+  }
+  .t-row:last-child {
+    border-bottom: 0;
+  }
+
+  /* The quiet label above a group. Upper case with letter spacing rather than
+     font-variant-caps, which several families here render unevenly. */
+  .t-micro {
+    font-size: 11px;
+    font-weight: 600;
+    line-height: 1.45;
+    letter-spacing: 0.08em;
+    text-transform: uppercase;
+    color: var(--muted);
+  }
+
+  .t-chip {
+    display: inline-flex;
+    align-items: center;
+    gap: 0.375rem;
+    min-height: 28px;
+    padding: 0 0.625rem;
+    border: 1px solid var(--line);
+    border-radius: 999px;
+    background: var(--surface-2);
+    color: var(--muted);
+    font-size: 12px;
+    font-weight: 600;
+  }
+
+  .t-card {
+    padding: 1rem;
+    border: 1px solid var(--line);
+    border-radius: 0.875rem;
+    background: var(--surface);
+  }
+
+  .t-hair {
+    border: 1px solid var(--line);
+  }
+
+  /* Grows a small control's touch target to 44px without moving anything
+     around it: the slop is an invisible box laid over the element's centre. */
+  .t-tap44 {
+    position: relative;
+  }
+  .t-tap44::before {
+    content: '';
+    position: absolute;
+    top: 50%;
+    left: 50%;
+    width: max(100%, 44px);
+    height: max(100%, 44px);
+    transform: translate(-50%, -50%);
+  }
+
+  .t-nums {
+    font-variant-numeric: tabular-nums;
+  }
+
+  /* ---- The responsive shell.
+     < 900px    bottom tab bar
+     >= 900px   left rail instead of the bar
+     >= 1200px  room for a right column beside the content well ---- */
+  .t-shell {
+    display: flex;
+    min-height: 100svh;
+  }
+
+  /* Wraps the main column and the right column. Inert until there is room for
+     the second one; from there it becomes the centred group, so the reading
+     column stops drifting left as the window grows. */
+  .t-withrail {
+    display: flex;
+    min-width: 0;
+    flex: 1;
+  }
+
+  /* min-width: 0 on the column and its children is load-bearing: without it a
+     wide scroller deep inside a page pushes its min-content width up the tree
+     and pans the whole page sideways. */
+  .t-main {
+    display: flex;
+    min-width: 0;
+    flex: 1;
+    flex-direction: column;
+  }
+  .t-content {
+    display: flex;
+    width: 100%;
+    max-width: 44rem;
+    flex: 1;
+    flex-direction: column;
+    margin: 0 auto;
+    padding: 1.25rem 1rem 0;
+  }
+  .t-content > * {
+    min-width: 0;
+  }
+
+  /* Sticky at the end of the column's flow, not fixed: iOS Safari freezes a
+     fixed bar into the page once the keyboard has opened, and a sticky bar
+     pins to the viewport bottom without that failure. translateZ promotes it
+     to its own layer, which keeps it honest when the document height changes
+     under a scrolled page. */
+  .t-tabbar {
+    position: sticky;
+    bottom: 0;
+    z-index: 30;
+    margin-top: auto;
+    border-top: 1px solid var(--line);
+    background: var(--surface);
+    padding-bottom: env(safe-area-inset-bottom);
+    transform: translateZ(0);
+  }
+
+  .t-tabitem {
+    position: relative;
+    display: flex;
+    flex: 1;
+    flex-direction: column;
+    align-items: center;
+    gap: 0.125rem;
+    min-height: 48px;
+    padding: 0.5rem 0;
+    border-radius: 0.75rem;
+    font-size: 11px;
+    font-weight: 600;
+    color: var(--muted);
+  }
+  .t-tabitem[aria-current='page'] {
+    color: var(--text);
+  }
+
+  /* The raised centre control. It overhangs the bar's top edge, and the
+     negative margin gives that overhang back so the bar keeps its own height. */
+  .t-plus {
+    display: flex;
+    width: 56px;
+    height: 56px;
+    flex: none;
+    align-items: center;
+    justify-content: center;
+    border-radius: 999px;
+    background: var(--accent);
+    /* The ground reads as ink on either theme's accent. */
+    color: var(--bg);
+    box-shadow: 0 6px 16px var(--ring);
+    transform: translateY(-14px);
+    margin-bottom: -14px;
+  }
+
+  .t-rail {
+    display: none;
+  }
+  .t-navitem {
+    display: flex;
+    align-items: center;
+    gap: 0.6875rem;
+    min-height: 44px;
+    padding: 0 0.75rem;
+    border: 1px solid transparent;
+    border-radius: 0.625rem;
+    font-size: 0.9rem;
+    font-weight: 600;
+    color: var(--muted);
+  }
+  .t-navitem:hover {
+    background: var(--surface-2);
+    color: var(--text);
+  }
+  .t-navitem[aria-current='page'] {
+    border-color: var(--line-strong);
+    background: var(--surface);
+    color: var(--text);
+  }
+
+  .t-aside {
+    display: none;
+  }
+
+  @media (min-width: 900px) {
+    .t-rail {
+      position: sticky;
+      top: 0;
+      display: flex;
+      width: 14.5rem;
+      height: 100svh;
+      flex: none;
+      flex-direction: column;
+      gap: 0.25rem;
+      border-right: 1px solid var(--line);
+      padding: 1.25rem 0.75rem;
+      /* A short desktop window must still reach the last nav item. */
+      overflow-y: auto;
+    }
+    /* The closing gap is the shell's own now: there is no bar at this width. */
+    .t-content {
+      padding: 1.375rem 1.75rem 2rem;
+    }
+    .t-tabbar {
+      display: none;
+    }
+  }
+
+  /* Room for the right column. The two columns now travel as one centred
+     group, and the content well drops its own cap so it fills its share of
+     that group instead of leaving a gutter inside it. */
+  @media (min-width: 1200px) {
+    .t-withrail {
+      width: 100%;
+      max-width: 68rem;
+      margin: 0 auto;
+    }
+    .t-content {
+      max-width: none;
+      margin: 0;
+    }
+    .t-aside {
+      position: sticky;
+      top: 0;
+      display: flex;
+      width: 20rem;
+      height: 100svh;
+      flex: none;
+      flex-direction: column;
+      gap: 0.875rem;
+      padding: 1.375rem 1.5rem 2rem 0;
+      overflow-y: auto;
+    }
+  }
+}
+
+/* Motion is substituted, not deleted. Someone who asks for less of it still
+   needs to see that something changed, so transforms stop and opacity keeps
+   carrying the feedback. */
+@media (prefers-reduced-motion: reduce) {
+  *,
+  *::before,
+  *::after {
+    animation-duration: 0.2s !important;
+    animation-iteration-count: 1 !important;
+    transition-property: opacity, color, background-color, border-color !important;
+    transition-duration: 0.2s !important;
+    scroll-behavior: auto !important;
+  }
+}
