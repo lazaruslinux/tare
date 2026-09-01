@@ -2,6 +2,8 @@
 // so the session cookie, the JSON headers, and the shape of a failure are
 // decided once instead of at each call site.
 
+import type { BaseUnit } from './lib/units'
+
 export type Units = 'imperial' | 'metric'
 
 export type Me = {
@@ -13,6 +15,42 @@ export type Me = {
   is_admin: boolean
   units: Units
   timezone: string
+}
+
+// A food as a list reads it: enough to pick it out and nothing else.
+export type FoodRow = {
+  id: number
+  name: string
+  brand: string
+  calories: number | null
+  base_unit: BaseUnit
+  status: string
+}
+
+export type FoodServing = {
+  id: number
+  name: string
+  base_amount: number
+  position: number
+}
+
+// The whole food. Every nutrient is per 100 of base_unit, and null is what a
+// label never said rather than none of it.
+export type Food = FoodRow & {
+  density_g_per_ml: number | null
+  ingredients_text: string
+  // Whether this account is the one that may change it.
+  mine: boolean
+  servings: FoodServing[]
+  protein_g: number | null
+  carbs_g: number | null
+  fat_g: number | null
+  saturated_fat_g: number | null
+  trans_fat_g: number | null
+  cholesterol_mg: number | null
+  sodium_mg: number | null
+  fiber_g: number | null
+  sugar_g: number | null
 }
 
 // Every refusal from the API is a status and one sentence, so that is what a

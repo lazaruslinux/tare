@@ -10,7 +10,7 @@ export function PlusSheet({ open, onClose }: { open: boolean; onClose: () => voi
     <AnimatePresence>
       {open && (
         <motion.div
-          className="fixed inset-0 z-40 flex items-end justify-center bg-black/50"
+          className="fixed inset-0 z-40 flex items-end justify-center bg-black/50 min-[900px]:items-center"
           initial={{ opacity: 0 }}
           animate={{ opacity: 1 }}
           exit={{ opacity: 0 }}
@@ -20,7 +20,7 @@ export function PlusSheet({ open, onClose }: { open: boolean; onClose: () => voi
           <motion.div
             role="dialog"
             aria-label="Add"
-            className="w-full max-w-md rounded-t-2xl border-t border-line bg-surface px-4 pt-4 pb-[calc(1rem+env(safe-area-inset-bottom))]"
+            className="w-full max-w-md rounded-t-2xl border-t border-line bg-surface px-4 pt-4 pb-[calc(1rem+env(safe-area-inset-bottom))] min-[900px]:max-w-sm min-[900px]:rounded-2xl min-[900px]:border min-[900px]:pb-4"
             initial={{ y: reduced ? 0 : 24, opacity: 0 }}
             animate={{ y: 0, opacity: 1 }}
             exit={{ y: reduced ? 0 : 24, opacity: 0 }}

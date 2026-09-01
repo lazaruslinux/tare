@@ -9,15 +9,15 @@ import { TabBar, type Page } from './components/TabBar'
 import { entry } from './entry'
 import { useWideLayout } from './hooks/useWideLayout'
 import { FirstRun } from './pages/FirstRun'
+import { FoodTab } from './pages/Food'
 import { Login } from './pages/Login'
 import { Settings } from './pages/Settings'
 import { VerifyEmail } from './pages/VerifyEmail'
 import { Welcome } from './pages/Welcome'
 
-const PAGES: Record<Exclude<Page, 'more'>, { title: string; note: string }> = {
+const PAGES: Record<Exclude<Page, 'more' | 'food'>, { title: string; note: string }> = {
   dashboard: { title: 'Dashboard', note: 'The day at a glance will be shown here.' },
   journal: { title: 'Journal', note: 'What you ate today will be listed here.' },
-  food: { title: 'Food', note: 'The shared food database will be searched from here.' },
 }
 
 // Which screen the whole app is on. Everything except 'signedin' is a single
@@ -102,6 +102,8 @@ export default function App() {
               >
                 {page === 'more' ? (
                   <Settings me={me} onChange={setMe} onSignedOut={leave} />
+                ) : page === 'food' ? (
+                  <FoodTab />
                 ) : (
                   <PlaceholderPage title={PAGES[page].title} note={PAGES[page].note} />
                 )}

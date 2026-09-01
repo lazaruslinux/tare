@@ -7,6 +7,7 @@ from alembic.config import Config
 BACKEND = Path(__file__).resolve().parents[1]
 
 IDENTITY_TABLES = {"users", "sessions", "email_tokens", "invites", "ingest_tokens"}
+FOOD_TABLES = {"foods", "food_servings"}
 
 
 def test_upgrade_head_builds_the_identity_schema(tmp_path):
@@ -19,7 +20,13 @@ def test_upgrade_head_builds_the_identity_schema(tmp_path):
 
     engine = sa.create_engine(f"sqlite:///{database}")
     try:
-        tables = set(sa.inspect(engine).get_table_names())
+        inspector = sa.inspect(engine)
+        tables = set(inspector.get_table_names())
+        food_indexes = {index["name"] for index in inspector.get_indexes("foods")}
     finally:
         engine.dispose()
     assert IDENTITY_TABLES <= tables
+    assert FOOD_TABLES <= tables
+    # The partial index is the one thing here a plain column cannot express,
+    # so it is worth seeing that the migration really emitted it.
+    assert "uq_foods_barcode_approved" in food_indexes

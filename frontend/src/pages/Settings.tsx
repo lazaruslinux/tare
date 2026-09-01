@@ -191,9 +191,7 @@ export function Settings({
             ))}
           </div>
         </div>
-        <p className="mt-2 text-xs text-muted">
-          Kept on this device. A phone at night and a desk by a window are not the same room.
-        </p>
+        <p className="mt-2 text-xs text-muted">Kept on this device.</p>
       </div>
 
       <form className="t-card mb-3" onSubmit={savePassword}>

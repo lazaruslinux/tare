@@ -6,15 +6,15 @@ def patch(client, **fields):
 
 
 def test_the_display_name_is_trimmed(client, db_session, signed_in):
-    response = patch(client, display_name="  Justin  ")
+    response = patch(client, display_name="  Casey  ")
     assert response.status_code == 200
-    assert response.json()["display_name"] == "Justin"
+    assert response.json()["display_name"] == "Casey"
     db_session.refresh(signed_in)
-    assert signed_in.display_name == "Justin"
+    assert signed_in.display_name == "Casey"
 
 
 def test_a_blank_display_name_clears_it(client, db_session, signed_in):
-    patch(client, display_name="Justin")
+    patch(client, display_name="Casey")
     assert patch(client, display_name="   ").json()["display_name"] is None
     assert patch(client, display_name=None).json()["display_name"] is None
     db_session.refresh(signed_in)
@@ -62,10 +62,10 @@ def test_the_birthdate_is_stored_and_can_be_cleared(client, db_session, signed_i
 
 
 def test_a_field_left_out_is_left_alone(client, db_session, signed_in):
-    patch(client, display_name="Justin", units="metric")
+    patch(client, display_name="Casey", units="metric")
     patch(client, timezone="America/Phoenix")
     db_session.refresh(signed_in)
-    assert (signed_in.display_name, signed_in.units) == ("Justin", "metric")
+    assert (signed_in.display_name, signed_in.units) == ("Casey", "metric")
 
 
 def test_settings_need_a_session(client):

@@ -1,4 +1,4 @@
-"""Identity tables: accounts, sessions, and the tokens that let someone in."""
+"""The tables: accounts, the tokens that let someone in, and the foods."""
 
 from __future__ import annotations
 
@@ -11,13 +11,16 @@ from sqlalchemy import (
     Date,
     DateTime,
     Dialect,
+    Enum,
+    Float,
     ForeignKey,
     Index,
     Integer,
     String,
+    Text,
     text,
 )
-from sqlalchemy.orm import Mapped, mapped_column
+from sqlalchemy.orm import Mapped, mapped_column, relationship
 from sqlalchemy.types import TypeDecorator
 
 from app.db import Base
@@ -128,3 +131,118 @@ class IngestToken(Base):
     token_hash: Mapped[str] = mapped_column(String(64), unique=True, nullable=False)
     created_at: Mapped[dt.datetime] = mapped_column(UtcDateTime, nullable=False, default=now_utc)
     last_used_at: Mapped[dt.datetime | None] = mapped_column(UtcDateTime, nullable=True)
+
+
+# What a food row is, and who may see it. Only 'custom' is written this round;
+# the rest are the states a shared database needs, declared now so a later
+# round adds behaviour rather than another migration on this table.
+#   cache     looked up from elsewhere and kept, belonging to nobody
+#   custom    somebody's own, private to them
+#   pending   their own, offered to the shared database and not judged yet
+#   shadow    their own copy of something shared, edited for themselves
+#   approved  in the shared database, visible to everyone
+FOOD_STATUSES = ("cache", "custom", "pending", "shadow", "approved")
+
+# The nutrition panel, stored per 100 of the food's base unit. The order is the
+# order it reads in, and the routes and the screens both follow it.
+NUTRIENTS = (
+    "calories",
+    "protein_g",
+    "carbs_g",
+    "fat_g",
+    "saturated_fat_g",
+    "trans_fat_g",
+    "cholesterol_mg",
+    "sodium_mg",
+    "fiber_g",
+    "sugar_g",
+)
+
+
+class Food(Base):
+    """One food, and its nutrition per 100 of whatever it is measured in."""
+
+    __tablename__ = "foods"
+    __table_args__ = (
+        # Only the shared database holds one row per barcode. A private custom
+        # food may carry the same barcode as somebody else's, and as the
+        # approved row it was copied from, so the uniqueness is partial rather
+        # than a plain unique column.
+        Index(
+            "uq_foods_barcode_approved",
+            "barcode",
+            unique=True,
+            postgresql_where=text("status = 'approved'"),
+            sqlite_where=text("status = 'approved'"),
+        ),
+    )
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True)
+    # Non-native: a database enum type has to be altered to gain a value, and
+    # this list will gain values. A string column with the set written down
+    # here reads the same and changes by editing one tuple.
+    status: Mapped[str] = mapped_column(
+        Enum(*FOOD_STATUSES, name="food_status", native_enum=False),
+        nullable=False,
+        default="custom",
+    )
+    # Both accounts are SET NULL rather than CASCADE: a food in the shared
+    # database outlives whoever submitted it, and closing an account should not
+    # quietly take away rows other people are eating out of.
+    owner_id: Mapped[int | None] = mapped_column(
+        ForeignKey("users.id", ondelete="SET NULL"), nullable=True, index=True
+    )
+    created_by_id: Mapped[int | None] = mapped_column(
+        ForeignKey("users.id", ondelete="SET NULL"), nullable=True
+    )
+    barcode: Mapped[str | None] = mapped_column(String(32), nullable=True, index=True)
+    # Where the row came from: typed in here, or fetched from somewhere that
+    # names its own rows, in which case source_id is that name.
+    source: Mapped[str] = mapped_column(String(8), nullable=False, default="user")
+    source_id: Mapped[str | None] = mapped_column(String(64), nullable=True)
+
+    name: Mapped[str] = mapped_column(String(200), nullable=False)
+    brand: Mapped[str] = mapped_column(String(120), nullable=False, default="")
+    # 'g' or 'ml'. Every number below is per 100 of this.
+    base_unit: Mapped[str] = mapped_column(String(2), nullable=False, default="g")
+    # What one millilitre of it weighs, when the label gave enough to work it
+    # out. Null is not zero: it is the reason a screen says water was assumed.
+    density_g_per_ml: Mapped[float | None] = mapped_column(Float, nullable=True)
+
+    calories: Mapped[float | None] = mapped_column(Float, nullable=True)
+    protein_g: Mapped[float | None] = mapped_column(Float, nullable=True)
+    carbs_g: Mapped[float | None] = mapped_column(Float, nullable=True)
+    fat_g: Mapped[float | None] = mapped_column(Float, nullable=True)
+    saturated_fat_g: Mapped[float | None] = mapped_column(Float, nullable=True)
+    trans_fat_g: Mapped[float | None] = mapped_column(Float, nullable=True)
+    cholesterol_mg: Mapped[float | None] = mapped_column(Float, nullable=True)
+    sodium_mg: Mapped[float | None] = mapped_column(Float, nullable=True)
+    fiber_g: Mapped[float | None] = mapped_column(Float, nullable=True)
+    sugar_g: Mapped[float | None] = mapped_column(Float, nullable=True)
+
+    ingredients_text: Mapped[str] = mapped_column(Text, nullable=False, default="")
+    fetched_at: Mapped[dt.datetime | None] = mapped_column(UtcDateTime, nullable=True)
+    created_at: Mapped[dt.datetime] = mapped_column(UtcDateTime, nullable=False, default=now_utc)
+
+    # delete-orphan as well as the database's ON DELETE CASCADE: the constraint
+    # is what holds when rows go in SQL, and this is what holds when they go
+    # through a session.
+    servings: Mapped[list["FoodServing"]] = relationship(
+        cascade="all, delete-orphan", order_by="FoodServing.position"
+    )
+
+
+class FoodServing(Base):
+    """A named amount of one food: "1 slice", "1 cup, chopped"."""
+
+    __tablename__ = "food_servings"
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True)
+    food_id: Mapped[int] = mapped_column(
+        ForeignKey("foods.id", ondelete="CASCADE"), nullable=False, index=True
+    )
+    name: Mapped[str] = mapped_column(String(60), nullable=False)
+    # In the food's own base unit, never in the unit the label printed: a
+    # serving is the one measurement that never has to be converted.
+    base_amount: Mapped[float] = mapped_column(Float, nullable=False)
+    position: Mapped[int] = mapped_column(Integer, nullable=False, default=0)
