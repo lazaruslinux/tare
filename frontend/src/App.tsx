@@ -2,23 +2,21 @@ import { AnimatePresence, motion, useReducedMotion } from 'framer-motion'
 import { useEffect, useState } from 'react'
 
 import { api, type Me } from './api'
-import { PlaceholderPage } from './components/PlaceholderPage'
+import { FoodPicker } from './components/FoodPicker'
 import { PlusSheet } from './components/PlusSheet'
 import { SideRail } from './components/SideRail'
 import { TabBar, type Page } from './components/TabBar'
 import { entry } from './entry'
 import { useWideLayout } from './hooks/useWideLayout'
+import { slotByTime, today } from './lib/day'
+import { Dashboard } from './pages/Dashboard'
 import { FirstRun } from './pages/FirstRun'
 import { FoodTab } from './pages/Food'
+import { Journal } from './pages/Journal'
 import { Login } from './pages/Login'
 import { Settings } from './pages/Settings'
 import { VerifyEmail } from './pages/VerifyEmail'
 import { Welcome } from './pages/Welcome'
-
-const PAGES: Record<Exclude<Page, 'more' | 'food'>, { title: string; note: string }> = {
-  dashboard: { title: 'Dashboard', note: 'The day at a glance will be shown here.' },
-  journal: { title: 'Journal', note: 'What you ate today will be listed here.' },
-}
 
 // Which screen the whole app is on. Everything except 'signedin' is a single
 // centred card, so the shell below is only ever built for somebody who is in.
@@ -31,6 +29,11 @@ export default function App() {
   const [phase, setPhase] = useState<Phase>(entry.kind === 'app' ? 'loading' : entry.kind)
   const [page, setPage] = useState<Page>('dashboard')
   const [adding, setAdding] = useState(false)
+  const [picking, setPicking] = useState(false)
+  // Bumped whenever something is logged from the centre control. The tab
+  // underneath stays mounted while that sheet is open, so it is told to read
+  // the day again rather than being left showing the day before the meal.
+  const [logged, setLogged] = useState(0)
   const wide = useWideLayout()
   const reduced = useReducedMotion()
 
@@ -103,9 +106,11 @@ export default function App() {
                 {page === 'more' ? (
                   <Settings me={me} onChange={setMe} onSignedOut={leave} />
                 ) : page === 'food' ? (
-                  <FoodTab />
+                  <FoodTab me={me} />
+                ) : page === 'journal' ? (
+                  <Journal me={me} refresh={logged} />
                 ) : (
-                  <PlaceholderPage title={PAGES[page].title} note={PAGES[page].note} />
+                  <Dashboard me={me} refresh={logged} />
                 )}
               </motion.div>
             </AnimatePresence>
@@ -119,7 +124,26 @@ export default function App() {
           </aside>
         )}
       </div>
-      <PlusSheet open={adding} onClose={() => setAdding(false)} />
+      <PlusSheet
+        open={adding}
+        onClose={() => setAdding(false)}
+        onAddFood={() => {
+          setAdding(false)
+          setPicking(true)
+        }}
+      />
+      {picking && (
+        <FoodPicker
+          me={me}
+          date={today(me.timezone)}
+          slot={slotByTime(me.timezone)}
+          onClose={() => setPicking(false)}
+          onLogged={() => {
+            setPicking(false)
+            setLogged(logged + 1)
+          }}
+        />
+      )}
     </div>
   )
 }

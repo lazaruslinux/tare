@@ -94,3 +94,16 @@ export const scale = (per100: number | null, baseAmount: number): number | null 
   per100 === null ? null : (per100 * baseAmount) / 100
 
 export const round1 = (value: number): number => Math.round(value * 10) / 10
+
+// How a logged portion reads back: the words somebody chose to measure with,
+// not the base amount it came to. A quick add has no portion at all.
+export function portionText(portion: {
+  amount: number | null
+  unit: string | null
+  serving_label: string | null
+}): string {
+  const { amount, unit, serving_label: label } = portion
+  if (amount === null || unit === null) return ''
+  if (label !== null) return amount === 1 ? label : `${round1(amount)} × ${label}`
+  return `${round1(amount)} ${UNIT_LABEL[unit as Unit] ?? unit}`
+}

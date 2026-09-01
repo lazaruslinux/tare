@@ -1,4 +1,4 @@
-"""The shapes the food routes accept.
+"""The shapes the food and diary routes accept.
 
 Everything a type can settle is settled here, so a body that cannot possibly be
 a food is refused before a route sees it. What is left over is the rules a type
@@ -7,6 +7,7 @@ cannot express, and those live in the route with a sentence each.
 
 from __future__ import annotations
 
+import datetime as dt
 from typing import Literal
 
 from pydantic import BaseModel, Field
@@ -59,3 +60,47 @@ class FoodIn(BaseModel):
     # None means the list was left out, which on an edit leaves the servings
     # alone. An empty list is a value: it means this food has none.
     servings: list[ServingIn] | None = Field(default=None, max_length=MAX_SERVINGS)
+
+
+# Long enough for "serving:" and an id, and short enough that nothing else
+# arrives in the field at all.
+MAX_UNIT = 24
+
+
+class DiaryIn(BaseModel):
+    """One thing eaten: either a food measured out, or a name and its calories.
+
+    Which of the two it is comes down to whether food_id is there. The route
+    holds each shape to what it needs, because a type cannot say "these four
+    together or those two, and not a mixture".
+    """
+
+    # Left out means today, wherever the account says it is.
+    date: dt.date | None = None
+    slot: str
+    food_id: int | None = None
+    # A unit from a measure family, or "serving:<id>" for one of the food's own.
+    amount: float | None = Field(default=None, gt=0)
+    unit: str | None = Field(default=None, max_length=MAX_UNIT)
+
+    # The quick add. What was eaten, and what it was worth.
+    name: str = ""
+    calories: float | None = Field(default=None, ge=0)
+    protein_g: float | None = Field(default=None, ge=0)
+    carbs_g: float | None = Field(default=None, ge=0)
+    fat_g: float | None = Field(default=None, ge=0)
+
+
+class DiaryPatch(BaseModel):
+    """A change to one entry. A field left out is left alone."""
+
+    date: dt.date | None = None
+    slot: str | None = None
+    amount: float | None = Field(default=None, gt=0)
+    unit: str | None = Field(default=None, max_length=MAX_UNIT)
+
+    name: str | None = None
+    calories: float | None = Field(default=None, ge=0)
+    protein_g: float | None = Field(default=None, ge=0)
+    carbs_g: float | None = Field(default=None, ge=0)
+    fat_g: float | None = Field(default=None, ge=0)

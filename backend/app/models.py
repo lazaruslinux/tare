@@ -1,4 +1,5 @@
-"""The tables: accounts, the tokens that let someone in, and the foods."""
+"""The tables: accounts, the tokens that let someone in, the foods, and the
+diary those foods are eaten into."""
 
 from __future__ import annotations
 
@@ -18,6 +19,7 @@ from sqlalchemy import (
     Integer,
     String,
     Text,
+    UniqueConstraint,
     text,
 )
 from sqlalchemy.orm import Mapped, mapped_column, relationship
@@ -246,3 +248,82 @@ class FoodServing(Base):
     # serving is the one measurement that never has to be converted.
     base_amount: Mapped[float] = mapped_column(Float, nullable=False)
     position: Mapped[int] = mapped_column(Integer, nullable=False, default=0)
+
+
+# The four parts of a day, in the order they are eaten. Non-native for the same
+# reason the food statuses are: a list that may gain a value should change by
+# editing a tuple, not by altering a type in the database.
+DIARY_SLOTS = ("breakfast", "lunch", "dinner", "snack")
+
+# What the unit column holds when the amount was counted in the food's own
+# named servings rather than measured. The name of the serving goes in
+# serving_label beside it, and neither depends on the food still existing.
+SERVING_UNIT = "serving"
+
+
+class DiaryEntry(Base):
+    """One thing eaten, on one day, with its numbers already worked out.
+
+    The panel here is not per 100 of anything: it is what was actually eaten,
+    copied at the moment of logging. Correcting a food afterwards corrects the
+    food, and deleting one leaves every meal it was part of standing, which is
+    why the name and the brand are copied rather than looked up.
+    """
+
+    __tablename__ = "diary_entries"
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True)
+    user_id: Mapped[int] = mapped_column(
+        ForeignKey("users.id", ondelete="CASCADE"), nullable=False, index=True
+    )
+    # The day it counts against, in the account's own zone. A date rather than a
+    # timestamp: somebody eating at midnight decides which day that was.
+    date_for: Mapped[dt.date] = mapped_column(Date, nullable=False, index=True)
+    slot: Mapped[str] = mapped_column(
+        Enum(*DIARY_SLOTS, name="diary_slot", native_enum=False), nullable=False
+    )
+
+    name: Mapped[str] = mapped_column(String(200), nullable=False)
+    brand: Mapped[str] = mapped_column(String(120), nullable=False, default="")
+    # SET NULL: deleting a food unlinks what was eaten rather than erasing it.
+    food_id: Mapped[int | None] = mapped_column(
+        ForeignKey("foods.id", ondelete="SET NULL"), nullable=True, index=True
+    )
+    # How it was measured out, kept so the row can say "2 tbsp" rather than the
+    # millilitres that came of it. Null on a quick add, which is a number and a
+    # name and no portion at all.
+    amount: Mapped[float | None] = mapped_column(Float, nullable=True)
+    unit: Mapped[str | None] = mapped_column(String(8), nullable=True)
+    serving_label: Mapped[str | None] = mapped_column(String(60), nullable=True)
+
+    # For the amount served, not per 100 of anything.
+    calories: Mapped[float | None] = mapped_column(Float, nullable=True)
+    protein_g: Mapped[float | None] = mapped_column(Float, nullable=True)
+    carbs_g: Mapped[float | None] = mapped_column(Float, nullable=True)
+    fat_g: Mapped[float | None] = mapped_column(Float, nullable=True)
+    saturated_fat_g: Mapped[float | None] = mapped_column(Float, nullable=True)
+    trans_fat_g: Mapped[float | None] = mapped_column(Float, nullable=True)
+    cholesterol_mg: Mapped[float | None] = mapped_column(Float, nullable=True)
+    sodium_mg: Mapped[float | None] = mapped_column(Float, nullable=True)
+    fiber_g: Mapped[float | None] = mapped_column(Float, nullable=True)
+    sugar_g: Mapped[float | None] = mapped_column(Float, nullable=True)
+
+    created_at: Mapped[dt.datetime] = mapped_column(UtcDateTime, nullable=False, default=now_utc)
+
+
+class SavedFood(Base):
+    """A food somebody keeps to hand, so it is offered before it is searched for."""
+
+    __tablename__ = "saved_foods"
+    __table_args__ = (UniqueConstraint("user_id", "food_id", name="uq_saved_foods_user_food"),)
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True)
+    user_id: Mapped[int] = mapped_column(
+        ForeignKey("users.id", ondelete="CASCADE"), nullable=False, index=True
+    )
+    # CASCADE rather than SET NULL: a pin is a shortcut to a food, and a
+    # shortcut to a food that is gone is nothing at all.
+    food_id: Mapped[int] = mapped_column(
+        ForeignKey("foods.id", ondelete="CASCADE"), nullable=False
+    )
+    created_at: Mapped[dt.datetime] = mapped_column(UtcDateTime, nullable=False, default=now_utc)

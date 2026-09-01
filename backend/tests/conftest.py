@@ -72,7 +72,15 @@ def make_user(db_session):
     everything that only needs somebody signed in builds them here.
     """
 
-    def build(username="member", *, admin=False, verified=True, email=None, password=PASSWORD):
+    def build(
+        username="member",
+        *,
+        admin=False,
+        verified=True,
+        email=None,
+        password=PASSWORD,
+        timezone="UTC",
+    ):
         user = models.User(
             username=username,
             password_hash=security.hash_password(password),
@@ -80,7 +88,7 @@ def make_user(db_session):
             email_verified=verified,
             is_admin=admin,
             units="imperial",
-            timezone="UTC",
+            timezone=timezone,
             feed_hidden=[],
             created_at=now_utc(),
         )

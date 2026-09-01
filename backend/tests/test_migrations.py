@@ -8,6 +8,7 @@ BACKEND = Path(__file__).resolve().parents[1]
 
 IDENTITY_TABLES = {"users", "sessions", "email_tokens", "invites", "ingest_tokens"}
 FOOD_TABLES = {"foods", "food_servings"}
+DIARY_TABLES = {"diary_entries", "saved_foods"}
 
 
 def test_upgrade_head_builds_the_identity_schema(tmp_path):
@@ -23,10 +24,16 @@ def test_upgrade_head_builds_the_identity_schema(tmp_path):
         inspector = sa.inspect(engine)
         tables = set(inspector.get_table_names())
         food_indexes = {index["name"] for index in inspector.get_indexes("foods")}
+        saved_unique = {
+            constraint["name"] for constraint in inspector.get_unique_constraints("saved_foods")
+        }
     finally:
         engine.dispose()
     assert IDENTITY_TABLES <= tables
     assert FOOD_TABLES <= tables
+    assert DIARY_TABLES <= tables
     # The partial index is the one thing here a plain column cannot express,
     # so it is worth seeing that the migration really emitted it.
     assert "uq_foods_barcode_approved" in food_indexes
+    # And the pair that stops one food being pinned twice.
+    assert "uq_saved_foods_user_food" in saved_unique

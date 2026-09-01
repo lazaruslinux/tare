@@ -1,130 +1,27 @@
-import { ChevronLeft } from 'lucide-react'
+import { ChevronLeft, Pin, PinOff } from 'lucide-react'
 import { useEffect, useState } from 'react'
 
-import { api, errorText, type Food } from '../api'
-import { HEADLINE, NutritionLabel, factText } from '../components/NutritionLabel'
-import {
-  UNIT_GROUPS,
-  UNIT_LABEL,
-  WATER_HINT,
-  crossesFamily,
-  pickToBase,
-  round1,
-  type Pick,
-  type Unit,
-} from '../lib/units'
-
-// The select holds units and the food's own servings in one list, so there is
-// only ever one answer to what is being measured. A serving is written down as
-// its place in the list rather than its name, which somebody may rename.
-const asPick = (choice: string): Pick =>
-  choice.startsWith('serving:')
-    ? { kind: 'serving', index: Number(choice.slice('serving:'.length)) }
-    : { kind: 'unit', unit: choice as Unit }
-
-function Portions({ food }: { food: Food }) {
-  const serving = food.servings[0]
-  const [amount, setAmount] = useState(serving ? '1' : '100')
-  const [choice, setChoice] = useState(serving ? 'serving:0' : food.base_unit)
-
-  const pick = asPick(choice)
-  const typed = Number(amount.trim())
-  const baseAmount = Number.isFinite(typed) ? pickToBase(food, food.servings, typed, pick) : 0
-  // The one case where a number on screen rests on something the label never
-  // said. It is marked, and then it is explained.
-  const assumesWater =
-    pick.kind === 'unit' && crossesFamily(food, pick.unit) && !food.density_g_per_ml
-
-  return (
-    <div className="t-card mb-3">
-      <p className="t-micro mb-2">How much</p>
-
-      <div className="mb-3 flex gap-2">
-        <input
-          className="t-input t-nums w-24 text-right"
-          inputMode="decimal"
-          aria-label="Amount"
-          value={amount}
-          onChange={(event) => setAmount(event.target.value)}
-        />
-        <select
-          className="t-input min-w-0 flex-1"
-          aria-label="Unit"
-          value={choice}
-          onChange={(event) => setChoice(event.target.value)}
-        >
-          {food.servings.length > 0 && (
-            <optgroup label="Servings">
-              {food.servings.map((row, index) => (
-                <option key={row.id} value={`serving:${index}`}>
-                  {row.name}
-                </option>
-              ))}
-            </optgroup>
-          )}
-          {UNIT_GROUPS.map((group) => (
-            <optgroup key={group.label} label={group.label}>
-              {group.units.map((unit) => (
-                <option key={unit} value={unit}>
-                  {UNIT_LABEL[unit]}
-                </option>
-              ))}
-            </optgroup>
-          ))}
-        </select>
-      </div>
-
-      {food.servings.length > 0 && (
-        <div className="mb-3 flex flex-wrap gap-2">
-          {food.servings.map((row, index) => (
-            <button
-              key={row.id}
-              type="button"
-              aria-pressed={choice === `serving:${index}`}
-              className="t-chip aria-pressed:border-accent aria-pressed:text-text"
-              onClick={() => setChoice(`serving:${index}`)}
-            >
-              {row.name}
-            </button>
-          ))}
-        </div>
-      )}
-
-      <div className="grid grid-cols-4 gap-2">
-        {HEADLINE.map((fact) => (
-          <div key={fact.key}>
-            <span className="t-nums block text-lg font-semibold">
-              {assumesWater && '≈'}
-              {factText(food, fact.key, baseAmount)}
-              {fact.unit && <span className="text-sm font-normal text-muted">{fact.unit}</span>}
-            </span>
-            <span className="block text-xs text-muted">{fact.label}</span>
-          </div>
-        ))}
-      </div>
-
-      <p className="mt-2 text-xs text-muted">
-        {assumesWater && '≈ '}
-        {round1(baseAmount)} {food.base_unit}
-        {assumesWater && `. ${WATER_HINT}`}
-      </p>
-    </div>
-  )
-}
+import { api, errorText, type Food, type Me } from '../api'
+import { NutritionLabel } from '../components/NutritionLabel'
+import { PortionSheet } from '../components/PortionSheet'
+import { slotByTime, today } from '../lib/day'
 
 export function FoodDetail({
   id,
+  me,
   onBack,
   onEdit,
   onDelete,
 }: {
   id: number
+  me: Me
   onBack: () => void
   onEdit: (food: Food) => void
   onDelete: (food: Food) => void
 }) {
   const [food, setFood] = useState<Food | null>(null)
   const [error, setError] = useState('')
+  const [logging, setLogging] = useState(false)
 
   useEffect(() => {
     let alive = true
@@ -135,6 +32,18 @@ export function FoodDetail({
       alive = false
     }
   }, [id])
+
+  const togglePin = async (current: Food) => {
+    // Shown as done before it is: pinning is idempotent both ways, so a request
+    // that fails leaves nothing to reconcile beyond the next read.
+    setFood({ ...current, pinned: !current.pinned })
+    try {
+      await api(`/foods/${current.id}/pin`, { method: current.pinned ? 'DELETE' : 'POST' })
+    } catch (failure) {
+      setFood(current)
+      setError(errorText(failure))
+    }
+  }
 
   return (
     <>
@@ -150,21 +59,50 @@ export function FoodDetail({
           <p className="mb-3 text-sm text-muted">{food.brand || 'No brand'}</p>
 
           <NutritionLabel food={food} />
-          <Portions food={food} />
+
+          <div className="mb-3 flex gap-3">
+            <button
+              className="t-btn t-btn-primary flex-1"
+              type="button"
+              onClick={() => setLogging(true)}
+            >
+              Log
+            </button>
+            <button
+              className="t-btn"
+              type="button"
+              aria-pressed={food.pinned}
+              onClick={() => togglePin(food)}
+            >
+              {food.pinned ? (
+                <PinOff className="h-4 w-4" strokeWidth={2} />
+              ) : (
+                <Pin className="h-4 w-4" strokeWidth={2} />
+              )}
+              {food.pinned ? 'Unpin' : 'Pin'}
+            </button>
+          </div>
 
           {food.mine && (
             <div className="mb-3 flex gap-3">
               <button className="t-btn flex-1" type="button" onClick={() => onEdit(food)}>
                 Edit
               </button>
-              <button
-                className="t-btn text-danger"
-                type="button"
-                onClick={() => onDelete(food)}
-              >
+              <button className="t-btn text-danger" type="button" onClick={() => onDelete(food)}>
                 Delete
               </button>
             </div>
+          )}
+
+          {logging && (
+            <PortionSheet
+              food={food}
+              date={today(me.timezone)}
+              slot={slotByTime(me.timezone)}
+              units={me.units}
+              onClose={() => setLogging(false)}
+              onDone={() => setLogging(false)}
+            />
           )}
         </>
       )}

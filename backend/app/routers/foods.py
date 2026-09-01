@@ -9,7 +9,7 @@ used answers, so this cannot be walked to find out what other people eat.
 from __future__ import annotations
 
 from fastapi import APIRouter, Depends, HTTPException, status
-from sqlalchemy import Select, case, func, or_, select
+from sqlalchemy import Select, case, delete, func, or_, select, update
 from sqlalchemy.orm import Session
 
 from app import models, schemas
@@ -33,6 +33,12 @@ MAX_SERVING_NAME = 60
 # and tells nobody anything.
 MIN_QUERY = 2
 SEARCH_LIMIT = 25
+
+# How many recently eaten foods the repeat list offers under the pinned ones,
+# and how far back it looks for them. Distinct foods, not entries, so a week of
+# the same breakfast is one row.
+RECENT_LIMIT = 10
+RECENT_SCANNED = 50
 
 # What a private food has to carry to be worth logging. The other six are on
 # the label or they are not, and a food is not useless without them.
@@ -59,7 +65,14 @@ def food_row(food: models.Food) -> dict[str, object]:
     }
 
 
-def food_detail(food: models.Food, user: models.User) -> dict[str, object]:
+def is_pinned(db: Session, user: models.User, food_id: int) -> bool:
+    query = select(models.SavedFood.id).where(
+        models.SavedFood.user_id == user.id, models.SavedFood.food_id == food_id
+    )
+    return db.execute(query).first() is not None
+
+
+def food_detail(db: Session, food: models.Food, user: models.User) -> dict[str, object]:
     """The whole food, its panel per 100 of its base unit, and its servings."""
     detail: dict[str, object] = {
         **food_row(food),
@@ -69,6 +82,7 @@ def food_detail(food: models.Food, user: models.User) -> dict[str, object]:
         # owner's id is not sent: the answer is what the screen needs, and the
         # id is somebody's account.
         "mine": food.owner_id == user.id,
+        "pinned": is_pinned(db, user, food.id),
         "servings": [
             {
                 "id": serving.id,
@@ -238,13 +252,91 @@ def list_my_foods(
     return [food_row(food) for food in db.execute(query).scalars()]
 
 
+@router.get("/repeat")
+def repeat_foods(
+    db: Session = Depends(get_db), user: models.User = Depends(require_user)
+) -> list[dict[str, object]]:
+    """What to offer before anybody searches: the kept, then the recent.
+
+    Pinned foods first, newest pin at the top, because a pin is somebody saying
+    outright what they eat. Under them, the foods they have actually been
+    logging, which is the same answer arrived at without being asked for.
+    """
+    pinned = list(
+        db.execute(
+            select(models.Food)
+            .join(models.SavedFood, models.SavedFood.food_id == models.Food.id)
+            .where(models.SavedFood.user_id == user.id)
+            .order_by(models.SavedFood.created_at.desc(), models.SavedFood.id.desc())
+        ).scalars()
+    )
+    rows = [{**food_row(food), "pinned": True} for food in pinned]
+    kept = {food.id for food in pinned}
+
+    # Ordered by the newest entry each food appears in, which is what "recent"
+    # means here: when it was last eaten, not how often.
+    logged = db.execute(
+        select(models.DiaryEntry.food_id, func.max(models.DiaryEntry.id).label("last"))
+        .where(models.DiaryEntry.user_id == user.id, models.DiaryEntry.food_id.is_not(None))
+        .group_by(models.DiaryEntry.food_id)
+        .order_by(func.max(models.DiaryEntry.id).desc())
+        .limit(RECENT_SCANNED)
+    ).all()
+    wanted = [row.food_id for row in logged if row.food_id not in kept]
+    if not wanted:
+        return rows
+
+    # One query for the lot, then put back in the order they were eaten in. A
+    # food somebody may no longer read is simply not offered.
+    found = {
+        food.id: food
+        for food in db.execute(visible(user).where(models.Food.id.in_(wanted))).scalars()
+    }
+    for food_id in wanted:
+        food = found.get(food_id)
+        if food is None:
+            continue
+        rows.append({**food_row(food), "pinned": False})
+        if len(rows) - len(kept) == RECENT_LIMIT:
+            break
+    return rows
+
+
 @router.get("/{food_id}")
 def read_food(
     food_id: int,
     db: Session = Depends(get_db),
     user: models.User = Depends(require_user),
 ) -> dict[str, object]:
-    return food_detail(readable_food(db, user, food_id), user)
+    return food_detail(db, readable_food(db, user, food_id), user)
+
+
+@router.post("/{food_id}/pin", status_code=status.HTTP_204_NO_CONTENT)
+def pin_food(
+    food_id: int,
+    db: Session = Depends(get_db),
+    user: models.User = Depends(require_user),
+) -> None:
+    """Keep a food to hand. Pinning one that is already pinned changes nothing."""
+    food = readable_food(db, user, food_id)
+    if not is_pinned(db, user, food.id):
+        db.add(models.SavedFood(user_id=user.id, food_id=food.id))
+        db.commit()
+
+
+@router.delete("/{food_id}/pin", status_code=status.HTTP_204_NO_CONTENT)
+def unpin_food(
+    food_id: int,
+    db: Session = Depends(get_db),
+    user: models.User = Depends(require_user),
+) -> None:
+    food = readable_food(db, user, food_id)
+    db.execute(
+        delete(models.SavedFood).where(
+            models.SavedFood.user_id == user.id, models.SavedFood.food_id == food.id
+        )
+    )
+    db.commit()
 
 
 @router.post("", status_code=status.HTTP_201_CREATED)
@@ -258,7 +350,7 @@ def create_food(
     apply_body(food, body)
     db.add(food)
     db.commit()
-    return food_detail(food, user)
+    return food_detail(db, food, user)
 
 
 @router.patch("/{food_id}")
@@ -271,7 +363,7 @@ def update_food(
     food = changeable_food(db, user, food_id, OWNER_MAY_EDIT)
     apply_body(food, body)
     db.commit()
-    return food_detail(food, user)
+    return food_detail(db, food, user)
 
 
 @router.delete("/{food_id}", status_code=status.HTTP_204_NO_CONTENT)
@@ -281,6 +373,15 @@ def delete_food(
     user: models.User = Depends(require_user),
 ) -> None:
     food = changeable_food(db, user, food_id, OWNER_MAY_DELETE)
+    # What the foreign keys already say, said again here. The constraints hold
+    # on Postgres; stating it in the session keeps SQLite and the rows this
+    # process is already holding in step with them.
+    db.execute(
+        update(models.DiaryEntry)
+        .where(models.DiaryEntry.food_id == food.id)
+        .values(food_id=None)
+    )
+    db.execute(delete(models.SavedFood).where(models.SavedFood.food_id == food.id))
     # Through the session rather than in SQL, so the servings go with it on
     # SQLite too, where the foreign key is only enforced when it is asked for.
     db.delete(food)

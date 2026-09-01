@@ -1,7 +1,7 @@
 import { ChevronDown } from 'lucide-react'
 import { useState } from 'react'
 
-import type { Food } from '../api'
+import type { Food, Headline } from '../api'
 import { round1, scale } from '../lib/units'
 
 // The panel, as it is stored and as it reads. The form fills in the same list,
@@ -22,7 +22,9 @@ export type Nutrient =
 
 export type Fact = { key: Nutrient; label: string; unit: string }
 
-export const HEADLINE: Fact[] = [
+// Narrowed to the four, because these are also the four an entry carries and
+// the four a day is totalled by.
+export const HEADLINE: { key: Headline; label: string; unit: string }[] = [
   { key: 'calories', label: 'Calories', unit: '' },
   { key: 'protein_g', label: 'Protein', unit: 'g' },
   { key: 'carbs_g', label: 'Carbs', unit: 'g' },
@@ -46,11 +48,15 @@ export function amountText(food: Food, baseAmount: number): string {
   return `${round1(baseAmount)} ${food.base_unit}`
 }
 
-export function factText(food: Food, key: Nutrient, baseAmount: number): string {
-  const value = scale(food[key], baseAmount)
+// A nutrient as it reads anywhere: a whole number for calories, because a tenth
+// of one is noise, and a tenth for everything else.
+export function nutrientText(key: Nutrient, value: number | null): string {
   if (value === null) return NOTHING
-  // Calories are read as a whole number; a tenth of one is noise.
   return String(key === 'calories' ? Math.round(value) : round1(value))
+}
+
+export function factText(food: Food, key: Nutrient, baseAmount: number): string {
+  return nutrientText(key, scale(food[key], baseAmount))
 }
 
 export function NutritionLabel({ food }: { food: Food }) {

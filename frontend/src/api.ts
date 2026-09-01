@@ -2,9 +2,14 @@
 // so the session cookie, the JSON headers, and the shape of a failure are
 // decided once instead of at each call site.
 
+import type { Slot } from './lib/day'
 import type { BaseUnit } from './lib/units'
 
 export type Units = 'imperial' | 'metric'
+
+// The four numbers a food is read by. The other six are on the label or they
+// are not, and nothing outside the label itself carries them.
+export type Headline = 'calories' | 'protein_g' | 'carbs_g' | 'fat_g'
 
 export type Me = {
   id: number
@@ -41,6 +46,8 @@ export type Food = FoodRow & {
   ingredients_text: string
   // Whether this account is the one that may change it.
   mine: boolean
+  // Whether this account keeps it to hand.
+  pinned: boolean
   servings: FoodServing[]
   protein_g: number | null
   carbs_g: number | null
@@ -51,6 +58,35 @@ export type Food = FoodRow & {
   sodium_mg: number | null
   fiber_g: number | null
   sugar_g: number | null
+}
+
+// A food offered before anybody searches: kept on purpose, or eaten lately.
+export type RepeatRow = FoodRow & { pinned: boolean }
+
+// One thing eaten. The numbers are for the amount served, not per 100 of
+// anything, and they were worked out when it was logged. food_id is null once
+// the food it came from is gone, and the row still reads.
+export type DiaryEntry = {
+  id: number
+  name: string
+  brand: string
+  amount: number | null
+  unit: string | null
+  serving_label: string | null
+  food_id: number | null
+  calories: number | null
+  protein_g: number | null
+  carbs_g: number | null
+  fat_g: number | null
+}
+
+// Null is a nutrient no entry on the day carried, which is not none of it.
+export type Totals = Record<string, number | null>
+
+export type DiaryDay = {
+  date: string
+  totals: Totals
+  slots: Record<Slot, { entries: DiaryEntry[]; subtotal_calories: number | null }>
 }
 
 // Every refusal from the API is a status and one sentence, so that is what a

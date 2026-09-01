@@ -10,7 +10,7 @@ tare is built with Claude Code.
 
 ## Status
 
-This repository is at the scaffold stage. What runs today is the application shell, the schema for accounts and sessions, and the container setup. None of the features described above are implemented yet.
+Early development. What runs today: invite-only accounts, private custom foods with unit and density conversion, and the food journal. The shared database, barcode scanning, health sync, and the feed are not built yet.
 
 ## Running it
 

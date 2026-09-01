@@ -1,7 +1,7 @@
 import { Plus } from 'lucide-react'
 import { useEffect, useRef, useState } from 'react'
 
-import { api, errorText, type Food as FoodItem, type FoodRow } from '../api'
+import { api, errorText, type Food as FoodItem, type FoodRow, type Me } from '../api'
 import { FoodForm } from '../components/FoodForm'
 import { FoodDetail } from './FoodDetail'
 
@@ -41,7 +41,7 @@ function Row({ row, onOpen }: { row: FoodRow; onOpen: () => void }) {
   )
 }
 
-export function FoodTab() {
+export function FoodTab({ me }: { me: Me }) {
   const [view, setView] = useState<View>({ at: 'list' })
   const [foods, setFoods] = useState<FoodRow[]>([])
   const [error, setError] = useState('')
@@ -130,6 +130,7 @@ export function FoodTab() {
     return (
       <FoodDetail
         id={view.id}
+        me={me}
         onBack={() => setView({ at: 'list' })}
         onEdit={(food) => setView({ at: 'form', food })}
         onDelete={remove}
