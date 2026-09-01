@@ -1,15 +1,19 @@
-"""Foods: finding one, reading one, and keeping your own.
+"""Foods: finding one, reading one, browsing them, and keeping your own.
 
-Everything here is private this round. A food is either in the shared database,
-which nothing puts rows into yet, or it belongs to one account. Somebody else's
-food is not refused, it is absent: it answers exactly what an id that was never
-used answers, so this cannot be walked to find out what other people eat.
+A food is either in the shared database, where everybody can read it, or it
+belongs to one account. Somebody else's food is not refused, it is absent: it
+answers exactly what an id that was never used answers, so this cannot be
+walked to find out what other people eat.
 """
 
 from __future__ import annotations
 
+import base64
+import binascii
+from collections.abc import Sequence
+
 from fastapi import APIRouter, Depends, HTTPException, status
-from sqlalchemy import Select, case, delete, func, or_, select, update
+from sqlalchemy import Select, and_, case, delete, func, or_, select, update
 from sqlalchemy.orm import Session
 
 from app import models, schemas
@@ -44,16 +48,68 @@ RECENT_SCANNED = 50
 # the label or they are not, and a food is not useless without them.
 REQUIRED = ("calories", "protein_g", "carbs_g", "fat_g")
 
-# What an owner may hold. 'pending' and 'shadow' are unreachable this round and
-# named here anyway, so the rule stays in one place when they arrive.
+# What an owner may hold.
 OWNED = ("custom", "pending", "shadow")
+# Of those, the ones that belong in a list of somebody's own foods. A shadow is
+# a correction waiting on a decision rather than a food anybody keeps, so it is
+# only ever reached by opening it.
+LISTED = ("custom", "pending")
 # Of those, the ones an owner may edit and the ones an owner may delete. Only
 # a food that is nobody else's business can simply go.
 OWNER_MAY_EDIT = OWNED
 OWNER_MAY_DELETE = ("custom",)
+# And what an administrator may do, which is the shared database plus the
+# corrections waiting on it: a reviewer fixing a typo in a proposal is doing
+# the same job as approving it.
+ADMIN_MAY_EDIT = ("approved", "shadow")
+ADMIN_MAY_DELETE = ("approved",)
+
+# How many foods one page of the browse list holds.
+BROWSE_PAGE = 40
+BAD_CURSOR = "That page marker is not one of ours."
 
 
-def food_row(food: models.Food) -> dict[str, object]:
+def photo_url(photo_id: int) -> str:
+    return f"/api/photos/{photo_id}.webp"
+
+
+def write_cursor(has_photo: int, food_id: int) -> str:
+    """Where a page of the browse list stopped, as one opaque word.
+
+    Encoded rather than sent as two numbers because it is a place in a listing
+    and nothing else: a client that reads it as a row id will one day be given
+    a marker that is not one.
+    """
+    return base64.urlsafe_b64encode(f"{has_photo}.{food_id}".encode()).decode().rstrip("=")
+
+
+def read_cursor(cursor: str) -> tuple[int, int]:
+    try:
+        padded = cursor + "=" * (-len(cursor) % 4)
+        has_photo, food_id = base64.urlsafe_b64decode(padded).decode().split(".")
+        return int(has_photo), int(food_id)
+    except (ValueError, binascii.Error, UnicodeDecodeError):
+        raise HTTPException(status.HTTP_400_BAD_REQUEST, BAD_CURSOR) from None
+
+
+def photo_urls(db: Session, food_ids: Sequence[int]) -> dict[int, str]:
+    """The published picture of each of these foods, where there is one.
+
+    One query for the lot: every list here would otherwise ask the same
+    question once per row.
+    """
+    if not food_ids:
+        return {}
+    rows = db.execute(
+        select(models.FoodPhoto.food_id, models.FoodPhoto.id).where(
+            models.FoodPhoto.food_id.in_(food_ids),
+            models.FoodPhoto.status == "approved",
+        )
+    ).all()
+    return {food_id: photo_url(photo_id) for food_id, photo_id in rows if food_id is not None}
+
+
+def food_row(food: models.Food, picture: str | None = None) -> dict[str, object]:
     """A food as it reads in a list: enough to pick it out, nothing else."""
     return {
         "id": food.id,
@@ -62,7 +118,13 @@ def food_row(food: models.Food) -> dict[str, object]:
         "calories": food.calories,
         "base_unit": food.base_unit,
         "status": food.status,
+        "photo_url": picture,
     }
+
+
+def food_rows(db: Session, foods: Sequence[models.Food]) -> list[dict[str, object]]:
+    pictures = photo_urls(db, [food.id for food in foods])
+    return [food_row(food, pictures.get(food.id)) for food in foods]
 
 
 def is_pinned(db: Session, user: models.User, food_id: int) -> bool:
@@ -75,7 +137,7 @@ def is_pinned(db: Session, user: models.User, food_id: int) -> bool:
 def food_detail(db: Session, food: models.Food, user: models.User) -> dict[str, object]:
     """The whole food, its panel per 100 of its base unit, and its servings."""
     detail: dict[str, object] = {
-        **food_row(food),
+        **food_row(food, photo_urls(db, [food.id]).get(food.id)),
         "density_g_per_ml": food.density_g_per_ml,
         "ingredients_text": food.ingredients_text,
         # Whether the account reading it is the one who may change it. The
@@ -99,9 +161,14 @@ def food_detail(db: Session, food: models.Food, user: models.User) -> dict[str, 
 
 
 def visible(user: models.User) -> Select[tuple[models.Food]]:
-    """Every food this account may read, as a query to narrow further."""
+    """Every food this account may see listed, as a query to narrow further.
+
+    Narrower than what it may read. A cache row is a lookup rather than a food,
+    and a shadow is a correction somebody has offered: both are reachable by
+    their own address and neither belongs in a list of foods.
+    """
     return select(models.Food).where(
-        models.Food.status != "cache",
+        models.Food.status.not_in(("cache", "shadow")),
         or_(
             models.Food.status == "approved",
             models.Food.owner_id == user.id,
@@ -124,18 +191,22 @@ def readable_food(db: Session, user: models.User, food_id: int) -> models.Food:
 
 
 def changeable_food(
-    db: Session, user: models.User, food_id: int, owner_may: tuple[str, ...]
+    db: Session,
+    user: models.User,
+    food_id: int,
+    owner_may: tuple[str, ...],
+    admin_may: tuple[str, ...],
 ) -> models.Food:
     """A food this account may write to, or the refusal saying it may not.
 
-    An administrator's reach is the shared database and only that: the rows
-    everyone eats out of are theirs to fix, and somebody's private food is not,
-    however plainly they can see it.
+    An administrator's reach is the shared database and what is queued to
+    change it: the rows everyone eats out of are theirs to fix, and somebody's
+    private food is not, however plainly they can see it.
     """
     food = readable_food(db, user, food_id)
     if food.owner_id == user.id and food.status in owner_may:
         return food
-    if user.is_admin and food.status == "approved":
+    if user.is_admin and food.status in admin_may:
         return food
     raise HTTPException(status.HTTP_403_FORBIDDEN, NOT_YOURS)
 
@@ -238,7 +309,7 @@ def search_foods(
         .order_by(rank, func.length(models.Food.name), models.Food.id)
         .limit(SEARCH_LIMIT)
     )
-    return [food_row(food) for food in db.execute(query).scalars()]
+    return food_rows(db, list(db.execute(query).scalars()))
 
 
 @router.get("/mine")
@@ -248,14 +319,14 @@ def list_my_foods(
     """This account's own foods, newest first."""
     query = (
         select(models.Food)
-        .where(models.Food.owner_id == user.id, models.Food.status.in_(OWNED))
+        .where(models.Food.owner_id == user.id, models.Food.status.in_(LISTED))
         .order_by(models.Food.created_at.desc(), models.Food.id.desc())
         # A ceiling rather than paging: this is one person's own list, and a
         # screen that scrolls past two hundred of them needs a different shape
         # than a longer response.
         .limit(200)
     )
-    return [food_row(food) for food in db.execute(query).scalars()]
+    return food_rows(db, list(db.execute(query).scalars()))
 
 
 @router.get("/repeat")
@@ -276,7 +347,9 @@ def repeat_foods(
             .order_by(models.SavedFood.created_at.desc(), models.SavedFood.id.desc())
         ).scalars()
     )
-    rows = [{**food_row(food), "pinned": True} for food in pinned]
+    rows: list[dict[str, object]] = [
+        {**row, "pinned": True} for row in food_rows(db, pinned)
+    ]
     kept = {food.id for food in pinned}
 
     # Ordered by the newest entry each food appears in, which is what "recent"
@@ -298,14 +371,73 @@ def repeat_foods(
         food.id: food
         for food in db.execute(visible(user).where(models.Food.id.in_(wanted))).scalars()
     }
+    pictures = photo_urls(db, list(found))
     for food_id in wanted:
         food = found.get(food_id)
         if food is None:
             continue
-        rows.append({**food_row(food), "pinned": False})
+        rows.append({**food_row(food, pictures.get(food.id)), "pinned": False})
         if len(rows) - len(kept) == RECENT_LIMIT:
             break
     return rows
+
+
+@router.get("/browse")
+def browse_foods(
+    cursor: str = "",
+    db: Session = Depends(get_db),
+    user: models.User = Depends(require_user),
+) -> dict[str, object]:
+    """The shared database, a page at a time, the photographed ones first.
+
+    Paged by where the last page stopped rather than by an offset. A food
+    approved while somebody is scrolling shifts every offset after it, which
+    shows one row twice and hides another; a marker naming the last row read
+    cannot do either.
+    """
+    # One row per food, so a food is not repeated when it has been photographed
+    # more than once. The lowest id is the published one, and the partial index
+    # allows only one of those anyway.
+    published = (
+        select(
+            models.FoodPhoto.food_id.label("food_id"),
+            func.min(models.FoodPhoto.id).label("photo_id"),
+        )
+        .where(models.FoodPhoto.status == "approved", models.FoodPhoto.food_id.is_not(None))
+        .group_by(models.FoodPhoto.food_id)
+        .subquery()
+    )
+    has_photo = case((published.c.photo_id.is_not(None), 1), else_=0)
+
+    query = (
+        select(models.Food, published.c.photo_id, has_photo.label("has_photo"))
+        .outerjoin(published, published.c.food_id == models.Food.id)
+        .where(models.Food.status == "approved")
+        .order_by(has_photo.desc(), models.Food.id)
+        # One more than a page, which is how the answer knows whether there is
+        # another one without counting the whole table.
+        .limit(BROWSE_PAGE + 1)
+    )
+    if cursor:
+        seen_photo, seen_id = read_cursor(cursor)
+        query = query.where(
+            or_(
+                has_photo < seen_photo,
+                and_(has_photo == seen_photo, models.Food.id > seen_id),
+            )
+        )
+
+    rows = db.execute(query).all()
+    page = rows[:BROWSE_PAGE]
+    items = [
+        food_row(food, None if photo_id is None else photo_url(photo_id))
+        for food, photo_id, _ in page
+    ]
+    more = len(rows) > BROWSE_PAGE
+    return {
+        "items": items,
+        "next_cursor": write_cursor(page[-1][2], page[-1][0].id) if more and page else None,
+    }
 
 
 @router.get("/{food_id}")
@@ -366,7 +498,7 @@ def update_food(
     db: Session = Depends(get_db),
     user: models.User = Depends(require_user),
 ) -> dict[str, object]:
-    food = changeable_food(db, user, food_id, OWNER_MAY_EDIT)
+    food = changeable_food(db, user, food_id, OWNER_MAY_EDIT, ADMIN_MAY_EDIT)
     apply_body(food, body)
     db.commit()
     return food_detail(db, food, user)
@@ -378,7 +510,7 @@ def delete_food(
     db: Session = Depends(get_db),
     user: models.User = Depends(require_user),
 ) -> None:
-    food = changeable_food(db, user, food_id, OWNER_MAY_DELETE)
+    food = changeable_food(db, user, food_id, OWNER_MAY_DELETE, ADMIN_MAY_DELETE)
     # What the foreign keys already say, said again here. The constraints hold
     # on Postgres; stating it in the session keeps SQLite and the rows this
     # process is already holding in step with them.

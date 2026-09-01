@@ -45,6 +45,8 @@ def test_a_food_is_created_with_the_minimum_panel(client, db_session, signed_in)
     assert made["status"] == "custom"
     assert made["mine"] is True
     assert made["saturated_fat_g"] is None
+    # No published picture, which is what a food nobody has photographed says.
+    assert made["photo_url"] is None
 
     kept = db_session.get(models.Food, made["id"])
     assert (kept.owner_id, kept.created_by_id, kept.source) == (signed_in.id, signed_in.id, "user")

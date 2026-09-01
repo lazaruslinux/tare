@@ -89,6 +89,27 @@ class SubmitIn(BaseModel):
     note: str = Field(default="", max_length=MAX_NOTE)
 
 
+class EditIn(BaseModel):
+    """A correction to a food that is already shared.
+
+    The proposal is a whole food rather than the fields that changed. A
+    reviewer decides by reading two panels side by side, and half a panel
+    cannot be read against a whole one.
+    """
+
+    target_food_id: int
+    proposed: FoodIn
+    note: str = Field(default="", max_length=MAX_NOTE)
+
+
+class PhotoIn(BaseModel):
+    """A picture offered for a food that is already shared."""
+
+    target_food_id: int
+    photo_id: int
+    note: str = Field(default="", max_length=MAX_NOTE)
+
+
 class ApproveIn(BaseModel):
     """Publishing a submission. The photo is kept unless it is said otherwise."""
 

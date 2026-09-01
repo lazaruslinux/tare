@@ -49,6 +49,20 @@ def readable_photo(db: Session, user: models.User, photo_id: int) -> models.Food
     raise HTTPException(status.HTTP_404_NOT_FOUND, MISSING_PHOTO)
 
 
+def published(db: Session, food_id: int) -> models.FoodPhoto | None:
+    """The one picture a food shows, if it has been given one.
+
+    Partial-unique in the database, so this is the row rather than the first of
+    several: everything else attached to that food is still waiting.
+    """
+    return db.execute(
+        select(models.FoodPhoto).where(
+            models.FoodPhoto.food_id == food_id,
+            models.FoodPhoto.status == "approved",
+        )
+    ).scalars().first()
+
+
 def discard(db: Session, photo: models.FoodPhoto) -> None:
     """Take a photo out of the database and off the disk.
 

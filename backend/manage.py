@@ -10,8 +10,6 @@ is no mail server to answer.
 from __future__ import annotations
 
 import argparse
-import datetime as dt
-import secrets
 import sys
 from getpass import getpass
 
@@ -21,6 +19,7 @@ from app import models, security
 from app.config import check_deploy_config
 from app.db import SessionLocal
 from app.models import now_utc
+from app.routers import invites
 
 
 def create_admin(args: argparse.Namespace) -> int:
@@ -99,20 +98,12 @@ def create_invite(args: argparse.Namespace) -> int:
             print("There is no administrator yet. Run create-admin first.", file=sys.stderr)
             return 1
 
-        code = secrets.token_urlsafe(16)
-        expires = now_utc() + dt.timedelta(days=args.days) if args.days else None
-        db.add(
-            models.Invite(
-                code=code,
-                created_by=admin.id,
-                created_at=now_utc(),
-                expires_at=expires,
-            )
-        )
+        invite = invites.mint(db, admin, args.days)
+        code, expires = invite.code, invite.expires_at
         db.commit()
 
     print(f"Code:  {code}")
-    print(f"Path:  /welcome/{code}")
+    print(f"Path:  {invites.invite_path(code)}")
     if expires is None:
         print("Expires: never, until it is claimed.")
     else:

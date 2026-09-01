@@ -1,9 +1,11 @@
 import { ImagePlus, X } from 'lucide-react'
 import { useRef, useState, type ChangeEvent, type FormEvent } from 'react'
 
-import { api, errorText, upload, type Food, type Prefill } from '../api'
+import { ApiError, api, errorText, upload, type Food, type Prefill } from '../api'
 import {
   MACRO_WARNING,
+  MAX_PHOTO_BYTES,
+  PHOTO_TOO_LARGE,
   SHARED_FACTS,
   macroDoubt,
   missingSentence,
@@ -18,11 +20,6 @@ import { Sheet } from './Sheet'
 // the only person who will ever be holding the packet is the one filling it in.
 // So the panel is not folded, every box is asked for, and the sheet says out
 // loud what happens next.
-
-// The same ceiling the server holds an upload to. Checked here so a photo that
-// is never going to be accepted is not sent up a phone connection first.
-const MAX_PHOTO_BYTES = 10 * 1024 * 1024
-const PHOTO_TOO_LARGE = 'A photo must be at most 10 MB.'
 
 const BASES: { value: BaseUnit; title: string }[] = [
   { value: 'g', title: 'Grams' },
@@ -80,6 +77,7 @@ export function SubmitFoodSheet({
   const [warning, setWarning] = useState('')
   const [error, setError] = useState('')
   const [saving, setSaving] = useState(false)
+  const [conflicted, setConflicted] = useState(false)
   const [sent, setSent] = useState<Food | null>(null)
   const boxes = useRef<Record<string, HTMLInputElement | null>>({})
 
@@ -148,6 +146,7 @@ export function SubmitFoodSheet({
 
     setSaving(true)
     setError('')
+    setConflicted(false)
     try {
       const answer = await api<{ food: Food }>('/submissions/food', {
         method: 'POST',
@@ -171,11 +170,12 @@ export function SubmitFoodSheet({
       setSent(answer.food)
     } catch (failure) {
       setError(errorText(failure))
+      // The barcode was claimed while this was open. Read off the status
+      // rather than the sentence: the wording is the server's to change.
+      setConflicted(failure instanceof ApiError && failure.status === 409)
       setSaving(false)
     }
   }
-
-  const conflicted = error === 'This barcode is already in the shared database.'
 
   if (sent !== null) {
     return (

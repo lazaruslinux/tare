@@ -27,7 +27,7 @@ from app.config import settings
 from app.db import get_db
 from app.deps import require_user
 from app.models import NUTRIENTS, now_utc
-from app.routers.foods import MAX_SERVING_NAME, OWNED, food_detail
+from app.routers.foods import LISTED, MAX_SERVING_NAME, food_detail
 
 router = APIRouter(prefix="/barcode", tags=["barcode"])
 
@@ -143,13 +143,14 @@ def resolve_barcode(
 
     # Their own copy, whether it is private or waiting on the queue. Somebody
     # else's is not consulted: a private food is private, and a pending one is
-    # only theirs until it is approved.
+    # only theirs until it is approved. A correction they have offered is not a
+    # food at all, so it is not one a scan can land on either.
     own = db.execute(
         select(models.Food)
         .where(
             models.Food.owner_id == user.id,
             models.Food.barcode == code,
-            models.Food.status.in_(OWNED),
+            models.Food.status.in_(LISTED),
         )
         .order_by(models.Food.id)
     ).scalars().first()

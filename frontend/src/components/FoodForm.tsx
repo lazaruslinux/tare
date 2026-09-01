@@ -2,6 +2,7 @@ import { ChevronDown, ChevronLeft, Plus, X } from 'lucide-react'
 import { useState, type FormEvent } from 'react'
 
 import { api, errorText, type Food } from '../api'
+import { SHARED_FACTS, missingSentence, type Values } from '../lib/community'
 import type { BaseUnit } from '../lib/units'
 import { HEADLINE, MORE_FACTS, type Nutrient } from './NutritionLabel'
 
@@ -50,6 +51,9 @@ function startingServings(food: Food | null): ServingDraft[] {
 export function FoodForm({
   food,
   notice,
+  title,
+  sharing,
+  onSubmit,
   onSaved,
   onCancel,
 }: {
@@ -57,6 +61,14 @@ export function FoodForm({
   // Why somebody was sent here, when something else sent them. Said at the top
   // and the panel opened underneath it, so the box it is about is on screen.
   notice?: string
+  title?: string
+  // Held to what the shared database needs rather than what a private food
+  // needs: the whole panel, a serving, and room to say something to whoever
+  // reads it.
+  sharing?: boolean
+  // Where the filled-in form goes. Left out, it writes the food itself, which
+  // is what every screen that keeps one of your own wants.
+  onSubmit?: (payload: Record<string, unknown>) => Promise<Food>
   onSaved: (food: Food) => void
   onCancel: () => void
 }) {
@@ -68,7 +80,10 @@ export function FoodForm({
     food === null || food.density_g_per_ml === null ? '' : String(food.density_g_per_ml)
   )
   const [servings, setServings] = useState<ServingDraft[]>(() => startingServings(food))
-  const [more, setMore] = useState(Boolean(notice))
+  const [note, setNote] = useState('')
+  // Opened when every box is going to be asked for anyway, so nothing that is
+  // needed is behind a fold.
+  const [more, setMore] = useState(Boolean(notice) || Boolean(sharing))
   const [densityWrong, setDensityWrong] = useState(false)
   const [error, setError] = useState('')
   const [saving, setSaving] = useState(false)
@@ -89,6 +104,22 @@ export function FoodForm({
       return
     }
 
+    // A row somebody added and left alone is not a serving.
+    const rows = servings.filter((row) => row.name.trim() || row.amount.trim())
+    const read = {} as Values
+    for (const fact of SHARED_FACTS) read[fact.key] = num(panel[fact.key])
+
+    if (sharing) {
+      // Checked here in the server's own words, so a half-filled panel is said
+      // while somebody is still looking at the boxes.
+      const missing = missingSentence(read, rows.length)
+      if (missing !== null) {
+        setError(missing)
+        setMore(true)
+        return
+      }
+    }
+
     setSaving(true)
     setError('')
     const body: Record<string, unknown> = {
@@ -96,24 +127,25 @@ export function FoodForm({
       brand,
       base_unit: baseUnit,
       density_g_per_ml: weight,
-      servings: servings
-        // A row somebody added and left alone is not a serving.
-        .filter((row) => row.name.trim() || row.amount.trim())
-        .map((row, position) => ({
-          name: row.name,
-          base_amount: num(row.amount) ?? 0,
-          position,
-        })),
+      servings: rows.map((row, position) => ({
+        name: row.name,
+        base_amount: num(row.amount) ?? 0,
+        position,
+      })),
+      ...read,
     }
-    for (const fact of [...HEADLINE, ...MORE_FACTS]) body[fact.key] = num(panel[fact.key])
+    if (sharing) body.note = note
+
+    const write =
+      onSubmit ??
+      ((payload: Record<string, unknown>) =>
+        api<Food>(food ? `/foods/${food.id}` : '/foods', {
+          method: food ? 'PATCH' : 'POST',
+          body: payload,
+        }))
 
     try {
-      onSaved(
-        await api<Food>(food ? `/foods/${food.id}` : '/foods', {
-          method: food ? 'PATCH' : 'POST',
-          body,
-        })
-      )
+      onSaved(await write(body))
     } catch (failure) {
       setError(errorText(failure))
       setSaving(false)
@@ -127,7 +159,7 @@ export function FoodForm({
         Food
       </button>
       <p className="mb-3 text-xl font-semibold tracking-tight">
-        {food ? 'Edit food' : 'New food'}
+        {title ?? (food ? 'Edit food' : 'New food')}
       </p>
       {notice && <p className="t-card mb-3 text-sm text-muted">{notice}</p>}
 
@@ -284,11 +316,30 @@ export function FoodForm({
           </p>
         </div>
 
+        {sharing && (
+          <div className="t-card mb-3">
+            <label className="t-label" htmlFor="food-note">
+              Anything the reviewer should know (optional)
+            </label>
+            <input
+              id="food-note"
+              className="t-input"
+              maxLength={500}
+              value={note}
+              onChange={(event) => setNote(event.target.value)}
+            />
+            <p className="mt-2 text-xs text-muted">
+              All ten numbers are needed. A food with none of something is a nought, not an
+              empty box.
+            </p>
+          </div>
+        )}
+
         {error && <p className="t-error mb-3">{error}</p>}
 
         <div className="mb-3 flex gap-3">
           <button className="t-btn t-btn-primary flex-1" type="submit" disabled={saving}>
-            Save
+            {sharing ? 'Send' : 'Save'}
           </button>
           <button className="t-btn" type="button" onClick={onCancel}>
             Cancel

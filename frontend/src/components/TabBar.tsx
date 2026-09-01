@@ -26,7 +26,7 @@ export function TabBar({
 }) {
   return (
     <nav aria-label="Main" className="t-tabbar">
-      <div className="mx-auto flex w-full max-w-md items-end justify-around px-3 pt-1.5">
+      <div className="mx-auto flex w-full max-w-md items-end justify-around pt-1.5">
         {TABS.map(({ id, label, Icon }) => {
           if (id === 'plus') {
             return (

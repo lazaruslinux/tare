@@ -1,11 +1,22 @@
-import { ChevronLeft, Pin, PinOff } from 'lucide-react'
-import { useEffect, useState } from 'react'
+import { ChevronLeft, ImagePlus, Pencil, Pin, PinOff } from 'lucide-react'
+import { useEffect, useState, type ChangeEvent } from 'react'
 
-import { api, errorText, type Food, type Me } from '../api'
+import { api, errorText, upload, type Food, type Me } from '../api'
+import { FoodForm } from '../components/FoodForm'
 import { NutritionLabel } from '../components/NutritionLabel'
 import { PortionSheet } from '../components/PortionSheet'
-import { SHARED_FACTS, missingSentence, type Values } from '../lib/community'
+import {
+  MAX_PHOTO_BYTES,
+  PHOTO_TOO_LARGE,
+  SENT_FOR_REVIEW,
+  SHARED_FACTS,
+  missingSentence,
+  type Values,
+} from '../lib/community'
 import { slotByTime, today } from '../lib/day'
+
+// How long the line saying something was sent stays up.
+const NOTICE = 4000
 
 // What a food carries, in the shape the sharing rule reads.
 function panelOf(food: Food): Values {
@@ -35,6 +46,10 @@ export function FoodDetail({
   const [error, setError] = useState('')
   const [logging, setLogging] = useState(false)
   const [sending, setSending] = useState(false)
+  // The correction form, open over this screen rather than in place of it, so
+  // going back lands on the food it is about.
+  const [suggesting, setSuggesting] = useState(false)
+  const [notice, setNotice] = useState('')
 
   useEffect(() => {
     let alive = true
@@ -45,6 +60,12 @@ export function FoodDetail({
       alive = false
     }
   }, [id])
+
+  useEffect(() => {
+    if (!notice) return
+    const timer = window.setTimeout(() => setNotice(''), NOTICE)
+    return () => window.clearTimeout(timer)
+  }, [notice])
 
   const togglePin = async (current: Food) => {
     // Shown as done before it is: pinning is idempotent both ways, so a request
@@ -81,6 +102,57 @@ export function FoodDetail({
     setSending(false)
   }
 
+  const offerPhoto = async (event: ChangeEvent<HTMLInputElement>, current: Food) => {
+    const file = event.target.files?.[0]
+    // Cleared either way, so choosing the same file twice still fires.
+    event.target.value = ''
+    if (!file) return
+    setError('')
+    if (file.size > MAX_PHOTO_BYTES) {
+      setError(PHOTO_TOO_LARGE)
+      return
+    }
+    setSending(true)
+    try {
+      const { photo_id } = await upload<{ photo_id: number }>('/photos', file)
+      await api('/submissions/photo', {
+        method: 'POST',
+        body: { target_food_id: current.id, photo_id },
+      })
+      setNotice(SENT_FOR_REVIEW)
+      onSubmitted()
+    } catch (failure) {
+      setError(errorText(failure))
+    }
+    setSending(false)
+  }
+
+  if (suggesting && food !== null) {
+    return (
+      <FoodForm
+        food={food}
+        title="Suggest edit"
+        sharing
+        onSubmit={async (payload) => {
+          const { note, ...proposed } = payload
+          const answer = await api<{ food: Food }>('/submissions/edit', {
+            method: 'POST',
+            body: { target_food_id: food.id, proposed, note },
+          })
+          return answer.food
+        }}
+        onSaved={() => {
+          setSuggesting(false)
+          setNotice(SENT_FOR_REVIEW)
+          onSubmitted()
+        }}
+        onCancel={() => setSuggesting(false)}
+      />
+    )
+  }
+
+  const shared = food !== null && food.status === 'approved'
+
   return (
     <>
       <button type="button" className="t-micro mb-2 flex items-center gap-1" onClick={onBack}>
@@ -98,6 +170,14 @@ export function FoodDetail({
             </div>
             {food.status === 'pending' && <span className="t-chip shrink-0">pending</span>}
           </div>
+
+          {food.photo_url && (
+            <img
+              src={food.photo_url}
+              alt={`The label for ${food.name}`}
+              className="mb-3 max-h-72 w-full rounded-xl border border-line object-cover"
+            />
+          )}
 
           <NutritionLabel food={food} />
 
@@ -124,14 +204,53 @@ export function FoodDetail({
             </button>
           </div>
 
-          {food.mine && (
+          {(food.mine || (me.is_admin && shared)) && (
             <div className="mb-3 flex gap-3">
               <button className="t-btn flex-1" type="button" onClick={() => onEdit(food)}>
+                <Pencil className="h-4 w-4" strokeWidth={2} />
                 Edit
               </button>
-              <button className="t-btn text-danger" type="button" onClick={() => onDelete(food)}>
-                Delete
-              </button>
+              {food.mine && (
+                <button
+                  className="t-btn text-danger"
+                  type="button"
+                  onClick={() => onDelete(food)}
+                >
+                  Delete
+                </button>
+              )}
+            </div>
+          )}
+
+          {shared && (
+            <div className="t-card mb-3">
+              <p className="t-micro mb-2">Something wrong with it</p>
+              <div className="flex gap-3">
+                <button
+                  className="t-btn flex-1"
+                  type="button"
+                  disabled={sending}
+                  onClick={() => setSuggesting(true)}
+                >
+                  Suggest edit
+                </button>
+                <label className="t-btn flex-1" htmlFor="detail-photo">
+                  <ImagePlus className="h-4 w-4" strokeWidth={2} />
+                  Submit photo
+                </label>
+                <input
+                  id="detail-photo"
+                  className="sr-only"
+                  type="file"
+                  accept="image/*"
+                  capture="environment"
+                  disabled={sending}
+                  onChange={(event) => offerPhoto(event, food)}
+                />
+              </div>
+              <p className="mt-2 text-xs text-muted">
+                Both go to an administrator. Nothing changes here until one is approved.
+              </p>
             </div>
           )}
 
@@ -155,6 +274,14 @@ export function FoodDetail({
             <p className="mb-3 text-sm text-muted">
               This is waiting for approval. It is still yours to log in the meantime.
             </p>
+          )}
+
+          {notice && (
+            <div className="pointer-events-none fixed inset-x-0 bottom-24 z-30 px-4">
+              <div className="mx-auto w-full max-w-md rounded-xl border border-line bg-surface-2 px-4 py-3 text-sm">
+                {notice}
+              </div>
+            </div>
           )}
 
           {logging && (

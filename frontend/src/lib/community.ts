@@ -21,6 +21,15 @@ export const BARCODE = /^[0-9]{8,14}$/
 
 export type Values = Record<Nutrient, number | null>
 
+// The same ceiling the server holds an upload to, and its sentence. Checked on
+// this side so a photo that is never going to be accepted is not sent up a
+// phone connection first.
+export const MAX_PHOTO_BYTES = 10 * 1024 * 1024
+export const PHOTO_TOO_LARGE = 'A photo must be at most 10 MB.'
+
+// What every screen says when something has gone to the review queue.
+export const SENT_FOR_REVIEW = 'Sent for review'
+
 export const needed = (label: string): string =>
   `${label} is needed before this can be shared.`
 

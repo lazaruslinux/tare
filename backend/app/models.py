@@ -323,6 +323,20 @@ class FoodSubmission(Base):
             postgresql_where=text("status = 'pending'"),
             sqlite_where=text("status = 'pending'"),
         ),
+        # And one open request of each kind per person per shared food. A
+        # correction and a picture for the same food are two requests; two
+        # corrections from the same person are one request sent twice. Only the
+        # kinds that point at something already shared are held to this, which
+        # is what the target being there stands for.
+        Index(
+            "uq_food_submissions_open_target",
+            "submitted_by_id",
+            "target_food_id",
+            "kind",
+            unique=True,
+            postgresql_where=text("status = 'pending' AND target_food_id IS NOT NULL"),
+            sqlite_where=text("status = 'pending' AND target_food_id IS NOT NULL"),
+        ),
     )
 
     id: Mapped[int] = mapped_column(Integer, primary_key=True)

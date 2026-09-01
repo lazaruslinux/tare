@@ -3,7 +3,13 @@ import { useEffect, useState, type FormEvent } from 'react'
 
 import { api, errorText, type Me, type QueueItem, type Units } from '../api'
 import { applyTheme, rememberTheme, useTheme, type Theme } from '../theme'
+import { AdminInvites } from './AdminInvites'
 import { AdminQueue } from './AdminQueue'
+import { AdminUsers } from './AdminUsers'
+
+// The screens only an administrator has any use for. Reached from here rather
+// than from the navigation, which is the same for everybody.
+type AdminScreen = 'queue' | 'invites' | 'users' | null
 
 // Short enough to sit in the row without the select clipping it, and the
 // system is named so the abbreviations are not the only clue.
@@ -46,7 +52,7 @@ export function Settings({
   onOpenSubmissions: () => void
 }) {
   const theme = useTheme()
-  const [reviewing, setReviewing] = useState(false)
+  const [screen, setScreen] = useState<AdminScreen>(null)
   // How many are waiting, so the row says whether it is worth opening. Only
   // ever read by an administrator, because nobody else has the route.
   const [waiting, setWaiting] = useState(0)
@@ -60,7 +66,7 @@ export function Settings({
     return () => {
       alive = false
     }
-  }, [me.is_admin, reviewing])
+  }, [me.is_admin, screen])
 
   const [displayName, setDisplayName] = useState(me.display_name ?? '')
   const [units, setUnits] = useState<Units>(me.units)
@@ -131,7 +137,10 @@ export function Settings({
     onSignedOut()
   }
 
-  if (reviewing) return <AdminQueue onBack={() => setReviewing(false)} />
+  const leaveAdmin = () => setScreen(null)
+  if (screen === 'queue') return <AdminQueue onBack={leaveAdmin} />
+  if (screen === 'invites') return <AdminInvites onBack={leaveAdmin} />
+  if (screen === 'users') return <AdminUsers onBack={leaveAdmin} />
 
   return (
     <>
@@ -139,15 +148,33 @@ export function Settings({
 
       <div className="t-card mb-3">
         {me.is_admin && (
-          <button
-            type="button"
-            className="t-row w-full text-left"
-            onClick={() => setReviewing(true)}
-          >
-            <span className="flex-1 text-sm">Review queue</span>
-            {waiting > 0 && <span className="t-chip t-nums">{waiting}</span>}
-            <ChevronRight className="h-4 w-4 text-muted" strokeWidth={2} />
-          </button>
+          <>
+            <button
+              type="button"
+              className="t-row w-full text-left"
+              onClick={() => setScreen('queue')}
+            >
+              <span className="flex-1 text-sm">Review queue</span>
+              {waiting > 0 && <span className="t-chip t-nums">{waiting}</span>}
+              <ChevronRight className="h-4 w-4 text-muted" strokeWidth={2} />
+            </button>
+            <button
+              type="button"
+              className="t-row w-full text-left"
+              onClick={() => setScreen('invites')}
+            >
+              <span className="flex-1 text-sm">Invites</span>
+              <ChevronRight className="h-4 w-4 text-muted" strokeWidth={2} />
+            </button>
+            <button
+              type="button"
+              className="t-row w-full text-left"
+              onClick={() => setScreen('users')}
+            >
+              <span className="flex-1 text-sm">Members</span>
+              <ChevronRight className="h-4 w-4 text-muted" strokeWidth={2} />
+            </button>
+          </>
         )}
         <button type="button" className="t-row w-full text-left" onClick={onOpenSubmissions}>
           <span className="flex-1 text-sm">My submissions</span>

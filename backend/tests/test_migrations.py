@@ -43,5 +43,8 @@ def test_upgrade_head_builds_the_identity_schema(tmp_path):
     assert "uq_foods_barcode_approved" in food_indexes
     assert "uq_food_photos_food_approved" in photo_indexes
     assert "uq_food_submissions_open" in submission_indexes
+    # And the one that holds a person to a single open request of each kind
+    # about a food that is already shared.
+    assert "uq_food_submissions_open_target" in submission_indexes
     # And the pair that stops one food being pinned twice.
     assert "uq_saved_foods_user_food" in saved_unique

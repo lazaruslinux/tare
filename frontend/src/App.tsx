@@ -119,7 +119,12 @@ export default function App() {
                     }}
                   />
                 ) : page === 'food' ? (
-                  <FoodTab me={me} start={foodView} onStarted={() => setFoodView('list')} />
+                  <FoodTab
+                    me={me}
+                    start={foodView}
+                    onStarted={() => setFoodView('list')}
+                    onScan={() => setScanning(true)}
+                  />
                 ) : page === 'journal' ? (
                   <Journal me={me} refresh={logged} />
                 ) : (

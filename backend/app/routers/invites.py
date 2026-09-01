@@ -7,6 +7,9 @@ because a link that no longer works has no business going on to say why.
 
 from __future__ import annotations
 
+import datetime as dt
+import secrets
+
 from fastapi import APIRouter, Depends, HTTPException, Request, status
 from sqlalchemy import select
 from sqlalchemy.orm import Session
@@ -21,6 +24,37 @@ router = APIRouter(prefix="/invites", tags=["invites"])
 # Registration answers with the same sentence, so the two doors into an invite
 # cannot be played off against each other.
 DEAD_INVITE = "This invite link is no longer valid."
+
+# How much randomness a code carries. Sixteen bytes is not guessable by anybody
+# who is not already inside the machine that made it.
+CODE_BYTES = 16
+# How long one minted from the review screens lasts. The command line still
+# mints one with no expiry when it is not asked for a date.
+INVITE_DAYS = 7
+
+
+def mint(db: Session, admin: models.User, days: int = INVITE_DAYS) -> models.Invite:
+    """A fresh code and the row behind it, added but not committed.
+
+    Shared by the command line and the administration screens, so a link minted
+    either way is the same link with the same lifetime rules.
+    """
+    invite = models.Invite(
+        code=secrets.token_urlsafe(CODE_BYTES),
+        created_by=admin.id,
+        created_at=now_utc(),
+        # Zero days means it never expires, which is what the command line
+        # mints unless it is asked for a date.
+        expires_at=now_utc() + dt.timedelta(days=days) if days else None,
+    )
+    db.add(invite)
+    return invite
+
+
+def invite_path(code: str) -> str:
+    """Where a code is opened. The host is the browser's own, never this
+    server's guess at what somebody typed to reach it."""
+    return f"/welcome/{code}"
 
 
 def live_invite(db: Session, code: str) -> models.Invite | None:

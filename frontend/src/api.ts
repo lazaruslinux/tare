@@ -30,7 +30,14 @@ export type FoodRow = {
   calories: number | null
   base_unit: BaseUnit
   status: string
+  // The picture the shared database publishes for it, when it has one. Null is
+  // a food nobody has photographed, not a picture that failed to load.
+  photo_url: string | null
 }
+
+// One page of the shared database. The marker is opaque: it says where the
+// page stopped and nothing else, and it is only ever handed back as it came.
+export type BrowsePage = { items: FoodRow[]; next_cursor: string | null }
 
 export type FoodServing = {
   id: number
@@ -106,6 +113,8 @@ export type MySubmission = {
   status: 'pending' | 'approved' | 'rejected'
   // Null once the food it was about has been deleted.
   name: string | null
+  // What a correction or a picture was about. Null for a new food.
+  target_name: string | null
   note: string
   decision_note: string
   decided_at: string | null
@@ -124,14 +133,45 @@ export type Proposed = Panel & {
   servings: { name: string; base_amount: number }[]
 }
 
+// The shared food a request is about, named well enough to recognise.
+export type QueueTarget = { id: number; name: string; brand: string }
+
 export type QueueItem = {
   id: number
   kind: string
   note: string
   created_at: string
   submitted_by: string | null
+  // The picture being offered. Null unless one came with the request.
   photo_url: string | null
-  food: Proposed
+  // The food being proposed. Null on a picture, which proposes no food.
+  food: Proposed | null
+  // What a correction or a picture is about, and what it would replace.
+  target: QueueTarget | null
+  current: Proposed | null
+  current_photo_url: string | null
+}
+
+// One invite link, as the screen that hands them out reads it. The path is
+// joined to this browser's own origin: the server does not know what somebody
+// typed to reach it.
+export type AdminInvite = {
+  code: string
+  path: string
+  created_at: string
+  expires_at: string | null
+  // Null while it is still a way in; a name once somebody came through it.
+  used_by: string | null
+}
+
+export type AdminUser = {
+  id: number
+  username: string
+  display_name: string | null
+  is_admin: boolean
+  email_verified: boolean
+  created_at: string
+  submissions: { pending: number; approved: number; rejected: number }
 }
 
 // One thing eaten. The numbers are for the amount served, not per 100 of
