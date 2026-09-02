@@ -6,6 +6,7 @@ from fastapi.testclient import TestClient
 from app import mail, models, security
 from app.routers.auth import (
     BAD_CREDENTIALS,
+    EMAIL_REQUIRED,
     FUTURE_BIRTHDATE,
     IMPOSSIBLE_BIRTHDATE,
     UNDER_AGE,
@@ -62,6 +63,20 @@ def test_register_with_mail_waits_for_the_link(client, db_session, invite, with_
     assert user.email_verified is False
     assert user.email == "newcomer@example.com"
     assert db_session.query(models.EmailToken).filter_by(user_id=user.id).count() == 1
+
+
+def test_an_instance_with_mail_will_not_make_an_account_with_nowhere_to_write(
+    client, invite, with_mail
+):
+    refused = signup(client, invite)
+    assert refused.status_code == 400
+    assert refused.json() == {"detail": EMAIL_REQUIRED}
+
+
+def test_an_instance_without_mail_leaves_the_address_optional(client, db_session, invite):
+    assert signup(client, invite).status_code == 200
+    user = db_session.query(models.User).filter_by(username="newcomer").one()
+    assert user.email is None
 
 
 def test_an_unknown_timezone_falls_back_rather_than_refusing(client, db_session, invite):

@@ -8,6 +8,7 @@ from fastapi.responses import JSONResponse
 from starlette.exceptions import HTTPException as StarletteHTTPException
 from starlette.types import ASGIApp, Message, Receive, Scope, Send
 
+from app import mail
 from app.config import VERSION, check_deploy_config
 from app.routers import (
     account,
@@ -168,8 +169,11 @@ def create_app() -> FastAPI:
     app.add_exception_handler(StarletteHTTPException, _http_error)
 
     @app.get("/api/version")
-    def read_version() -> dict[str, str]:
-        return {"version": VERSION}
+    def read_version() -> dict[str, object]:
+        # Whether this instance can send mail, which is the one thing the
+        # sign-in screen has to know before it can offer a reset link it may
+        # have nowhere to send.
+        return {"version": VERSION, "mail": mail.configured()}
 
     # Every route lives under /api, which is the prefix the web container
     # forwards and the only one the browser ever calls.

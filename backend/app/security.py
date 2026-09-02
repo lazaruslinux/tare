@@ -46,6 +46,11 @@ MAX_EMAIL_LENGTH = 255
 # inbox is not a standing key to the account.
 VERIFY_TOKEN_HOURS = 24
 
+# How long a password reset link stays usable. Far shorter than a verification
+# link: this one sets a password without knowing the old one, so it is the most
+# valuable thing this instance ever puts in an inbox.
+RESET_TOKEN_HOURS = 1
+
 # A real hash of a value nobody can log in with, verified against whenever the
 # username does not exist. Without it a missing user answers in microseconds
 # and a real one pays the full Argon2 cost, which is a timing oracle that
@@ -116,7 +121,9 @@ def create_session(db: Session, user_id: int) -> str:
     return token
 
 
-def create_email_token(db: Session, user_id: int, purpose: str = "verify") -> str:
+def create_email_token(
+    db: Session, user_id: int, purpose: str = "verify", hours: int = VERIFY_TOKEN_HOURS
+) -> str:
     """Issue an emailed token and return the plaintext, which is never stored.
 
     Any earlier token for the same account goes first. Otherwise every resend
@@ -132,7 +139,7 @@ def create_email_token(db: Session, user_id: int, purpose: str = "verify") -> st
             user_id=user_id,
             purpose=purpose,
             created_at=now,
-            expires_at=now + dt.timedelta(hours=VERIFY_TOKEN_HOURS),
+            expires_at=now + dt.timedelta(hours=hours),
         )
     )
     return token

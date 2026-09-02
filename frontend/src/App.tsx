@@ -22,6 +22,7 @@ import { FoodTab } from './pages/Food'
 import { Journal } from './pages/Journal'
 import { Login } from './pages/Login'
 import { More, type Screen } from './pages/More'
+import { ResetPassword } from './pages/ResetPassword'
 import { VerifyEmail } from './pages/VerifyEmail'
 import { Welcome } from './pages/Welcome'
 
@@ -31,6 +32,7 @@ type Phase =
   | 'loading'
   | 'welcome'
   | 'verify'
+  | 'reset'
   | 'anon'
   | 'firstrun'
   | 'birthdate'
@@ -38,8 +40,8 @@ type Phase =
 
 export default function App() {
   const [me, setMe] = useState<Me | null>(null)
-  // An invite or a verification link is answered before anything asks who is
-  // signed in: both are opened by somebody who is not.
+  // An invite, a verification link or a reset link is answered before anything
+  // asks who is signed in: all three are opened by somebody who is not.
   const [phase, setPhase] = useState<Phase>(entry.kind === 'app' ? 'loading' : entry.kind)
   const [page, setPage] = useState<Page>('dashboard')
   const [adding, setAdding] = useState(false)
@@ -136,6 +138,11 @@ export default function App() {
   }
   if (phase === 'verify' && entry.kind === 'verify') {
     return <VerifyEmail token={entry.token} onSignIn={() => setPhase('anon')} />
+  }
+  if (phase === 'reset' && entry.kind === 'reset') {
+    // Spending the link signs the browser in, so this lands where a sign-in
+    // does, birthdate question included.
+    return <ResetPassword token={entry.token} onSignedIn={enter} />
   }
   if (phase === 'anon' || me === null) return <Login onSignedIn={enter} />
   if (phase === 'birthdate') return <Birthdate onDone={enter} />

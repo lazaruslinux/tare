@@ -43,6 +43,17 @@ MAX_AGE = 120
 IMPOSSIBLE_BIRTHDATE = "That birthdate is too far back to be right."
 CLEARED_BIRTHDATE = "tare needs your birthdate."
 
+# What a signup is refused with when the instance has a mail server and the
+# address was left blank.
+EMAIL_REQUIRED = "This tare needs an email address to sign up."
+
+# The one answer a reset request ever gets. The same words for an address with
+# an account, an address without one, and an instance that cannot send mail at
+# all: whether somebody is a member here is exactly what a person probing this
+# form is after, and any second wording would tell them.
+RESET_SENT = "If that address has an account, a link is on its way."
+STALE_RESET = "That link has expired or was already used."
+
 
 def checked_birthdate(birthdate: dt.date, today: dt.date) -> dt.date:
     """The one age rule, in the one place both the front door and the settings
@@ -82,6 +93,15 @@ class VerifyBody(BaseModel):
 class PasswordBody(BaseModel):
     current_password: str
     new_password: str
+
+
+class ForgotBody(BaseModel):
+    email: str
+
+
+class ResetBody(BaseModel):
+    token: str
+    password: str
 
 
 def me_payload(user: models.User) -> dict[str, object]:
@@ -139,6 +159,21 @@ def clean_email(raw: str) -> str:
     return cleaned
 
 
+def signup_email(raw: str) -> str | None:
+    """The address a new account is made with, and the one rule about needing one.
+
+    An instance that verifies by mail cannot make an account with nowhere to
+    send the link: it would be created unable to sign in and unable to ask for
+    another one. An instance with no mail server has nothing to send anyway, so
+    the field stays optional there.
+    """
+    if raw.strip():
+        return clean_email(raw)
+    if mail.configured():
+        raise HTTPException(status.HTTP_400_BAD_REQUEST, EMAIL_REQUIRED)
+    return None
+
+
 @router.post("/register")
 def register(
     body: RegisterBody,
@@ -172,15 +207,7 @@ def register(
     # UTC. Being a day out on an eighteenth birthday is the honest edge of a
     # date-only field.
     birthdate = checked_birthdate(body.birthdate, now_utc().date())
-    email = clean_email(body.email) if body.email.strip() else None
-    if email is None and mail.configured():
-        # An instance that verifies by mail cannot make an account with nowhere
-        # to send the link: it would be created unable to sign in and unable to
-        # ask for another one.
-        raise HTTPException(
-            status.HTTP_400_BAD_REQUEST,
-            "This instance verifies accounts by email, so an address is required.",
-        )
+    email = signup_email(body.email)
     display_name = body.display_name.strip()[:60] or None
     # A browser sends whatever zone it is set to, and an unknown one is not
     # worth refusing a signup over. UTC is the same fallback the column carries.
@@ -361,6 +388,92 @@ def resend_verification(
 
     response.status_code = status.HTTP_204_NO_CONTENT
     return response
+
+
+@router.post("/forgot")
+def forgot_password(
+    body: ForgotBody,
+    request: Request,
+    background: BackgroundTasks,
+    db: Session = Depends(get_db),
+) -> dict[str, str]:
+    """Send a reset link, or send nothing, and say the same thing either way.
+
+    Every ending is the same sentence with the same status. A different answer
+    for an address that has an account would turn this form into a way to find
+    out who is a member here, which is the first move against a small private
+    instance where the members are the point.
+    """
+    if throttle.forgot_limiter.hit(throttle.client_address(request)):
+        raise HTTPException(status.HTTP_429_TOO_MANY_REQUESTS, throttle.TOO_MANY)
+
+    address = body.email.strip().lower()
+    usable = len(address) <= security.MAX_EMAIL_LENGTH and bool(
+        security.EMAIL_PATTERN.match(address)
+    )
+    if mail.configured() and usable:
+        user = db.execute(
+            select(models.User).where(
+                func.lower(models.User.email) == address,
+                # An account that never answered its verification mail is no
+                # proof anybody holds that inbox, so a reset link sent there
+                # would be a way in through an address nobody ever claimed.
+                models.User.email_verified.is_(True),
+            )
+        ).scalar_one_or_none()
+        if user is not None:
+            token = security.create_email_token(
+                db, user.id, "reset", security.RESET_TOKEN_HOURS
+            )
+            db.commit()
+            # After the response, like the verification mail, so a slow relay
+            # is never something the person asking has to sit through.
+            background.add_task(mail.send_reset, address, token)
+
+    return {"detail": RESET_SENT}
+
+
+@router.post("/reset")
+def reset_password(
+    body: ResetBody, response: Response, db: Session = Depends(get_db)
+) -> dict[str, object]:
+    """Spend a reset link: a new password, no sessions, and signed in here."""
+    stale = HTTPException(status.HTTP_400_BAD_REQUEST, STALE_RESET)
+    row = db.execute(
+        select(models.EmailToken).where(
+            models.EmailToken.token_hash == security.hash_token(body.token.strip()),
+            # What the token authorises is stored with it rather than sent by
+            # the caller, so a verification link cannot be spent here.
+            models.EmailToken.purpose == "reset",
+        )
+    ).scalar_one_or_none()
+    if row is None or row.expires_at <= now_utc():
+        if row is not None:
+            db.delete(row)
+            db.commit()
+        raise stale
+
+    user = db.get(models.User, row.user_id)
+    if user is None:
+        db.delete(row)
+        db.commit()
+        raise stale
+
+    # After the token and before it is spent. A password the rule refuses is a
+    # typing mistake, and the link has to still work for the next try.
+    check_password_length(body.password)
+
+    user.password_hash = security.hash_password(body.password)
+    # The token goes, which is what makes the link single use.
+    db.delete(row)
+    # Every session, not all but this one. Somebody resetting a password may be
+    # doing it because another device is signed in that should not be, and
+    # there is no session of their own here to spare yet.
+    security.delete_sessions(db, user.id)
+    token = security.create_session(db, user.id)
+    db.commit()
+    security.set_session_cookie(response, token)
+    return me_payload(user)
 
 
 @router.post("/password", status_code=status.HTTP_204_NO_CONTENT)

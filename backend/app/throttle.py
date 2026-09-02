@@ -110,6 +110,10 @@ welcome_limiter = RateLimiter(20, 300, "welcome")
 # and a form that mails a stranger on demand is a way to use this server to
 # bother them.
 resend_limiter = RateLimiter(3, 900, "resend")
+# Asking for a password reset link. Shaped like the resend above, and a little
+# roomier because the address is typed in rather than read off the account: the
+# same person mistyping it twice should not be locked out of their own reset.
+forgot_limiter = RateLimiter(5, 900, "forgot")
 
 
 def reset_limiters() -> None:

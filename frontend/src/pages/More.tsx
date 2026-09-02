@@ -226,6 +226,14 @@ export function More({
   if (screen === 'account') {
     return (
       <>
+        <div className="t-card mb-3">
+          <p className="t-micro mb-2">Email</p>
+          <p className="text-sm">{me.email ?? 'Not set'}</p>
+          <p className="mt-2 text-xs text-muted">
+            Used to sign in and to reset your password. Never sold, never added to a list.
+          </p>
+        </div>
+
         <form className="t-card mb-3" onSubmit={saveAccount}>
           <div className="t-row">
             <label className="flex-1 text-sm" htmlFor="settings-display-name">
