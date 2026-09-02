@@ -1,7 +1,7 @@
 import { ChevronDown } from 'lucide-react'
 import { useState } from 'react'
 
-import type { Food, Headline } from '../api'
+import type { Food, Headline, Panel } from '../api'
 import { round1, scale } from '../lib/units'
 
 // The panel, as it is stored and as it reads. The form fills in the same list,
@@ -55,8 +55,61 @@ export function nutrientText(key: Nutrient, value: number | null): string {
   return String(key === 'calories' ? Math.round(value) : round1(value))
 }
 
-export function factText(food: Food, key: Nutrient, baseAmount: number): string {
-  return nutrientText(key, scale(food[key], baseAmount))
+// The figures themselves: the four anybody reads, the line saying what they
+// are for, and the six behind "More". Everything that shows a panel goes
+// through this, so a food and a recipe are read the same way.
+export function PanelFacts({ values, note }: { values: Panel; note: string }) {
+  const [more, setMore] = useState(false)
+
+  return (
+    <>
+      <div className="grid grid-cols-4 gap-2">
+        {HEADLINE.map((fact) => (
+          <div key={fact.key}>
+            <span className="t-nums block text-xl font-semibold">
+              {nutrientText(fact.key, values[fact.key])}
+              {fact.unit && <span className="text-sm font-normal text-muted">{fact.unit}</span>}
+            </span>
+            <span className="block text-xs text-muted">{fact.label}</span>
+          </div>
+        ))}
+      </div>
+
+      <p className="mt-2 text-xs text-muted">{note}</p>
+
+      <button
+        type="button"
+        className="t-micro mt-3 flex items-center gap-1"
+        aria-expanded={more}
+        onClick={() => setMore(!more)}
+      >
+        More
+        <ChevronDown className={`h-3.5 w-3.5 ${more ? 'rotate-180' : ''}`} strokeWidth={2.5} />
+      </button>
+
+      {more && (
+        <div className="mt-1">
+          {MORE_FACTS.map((fact) => (
+            <div key={fact.key} className="t-row min-h-9 text-sm">
+              <span className="flex-1 text-muted">{fact.label}</span>
+              <span className="t-nums">
+                {nutrientText(fact.key, values[fact.key])} {fact.unit}
+              </span>
+            </div>
+          ))}
+        </div>
+      )}
+    </>
+  )
+}
+
+// A food's panel at some amount of it, which is what the figures above read.
+function panelAt(food: Food, baseAmount: number): Panel {
+  const values = {} as Panel
+  for (const fact of [...HEADLINE, ...MORE_FACTS]) {
+    values[fact.key] = scale(food[fact.key], baseAmount)
+  }
+  return values
 }
 
 export function NutritionLabel({ food }: { food: Food }) {
@@ -64,7 +117,6 @@ export function NutritionLabel({ food }: { food: Food }) {
   // A food with a serving is read a serving at a time. One without has only the
   // per-100 figures it was stored with, so that is what opens.
   const [perServing, setPerServing] = useState(Boolean(serving))
-  const [more, setMore] = useState(false)
 
   const baseAmount = perServing && serving ? serving.base_amount : 100
 
@@ -91,46 +143,14 @@ export function NutritionLabel({ food }: { food: Food }) {
         </button>
       </div>
 
-      <div className="grid grid-cols-4 gap-2">
-        {HEADLINE.map((fact) => (
-          <div key={fact.key}>
-            <span className="t-nums block text-xl font-semibold">
-              {factText(food, fact.key, baseAmount)}
-              {fact.unit && <span className="text-sm font-normal text-muted">{fact.unit}</span>}
-            </span>
-            <span className="block text-xs text-muted">{fact.label}</span>
-          </div>
-        ))}
-      </div>
-
-      <p className="mt-2 text-xs text-muted">
-        {perServing && serving
-          ? `${serving.name}, ${amountText(food, serving.base_amount)}`
-          : `100 ${food.base_unit}`}
-      </p>
-
-      <button
-        type="button"
-        className="t-micro mt-3 flex items-center gap-1"
-        aria-expanded={more}
-        onClick={() => setMore(!more)}
-      >
-        More
-        <ChevronDown className={`h-3.5 w-3.5 ${more ? 'rotate-180' : ''}`} strokeWidth={2.5} />
-      </button>
-
-      {more && (
-        <div className="mt-1">
-          {MORE_FACTS.map((fact) => (
-            <div key={fact.key} className="t-row min-h-9 text-sm">
-              <span className="flex-1 text-muted">{fact.label}</span>
-              <span className="t-nums">
-                {factText(food, fact.key, baseAmount)} {fact.unit}
-              </span>
-            </div>
-          ))}
-        </div>
-      )}
+      <PanelFacts
+        values={panelAt(food, baseAmount)}
+        note={
+          perServing && serving
+            ? `${serving.name}, ${amountText(food, serving.base_amount)}`
+            : `100 ${food.base_unit}`
+        }
+      />
     </div>
   )
 }

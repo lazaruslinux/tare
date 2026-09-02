@@ -11,11 +11,12 @@ import {
   type Me,
 } from '../api'
 import { FoodPicker } from '../components/FoodPicker'
+import { LogSheet } from '../components/LogSheet'
 import { HEADLINE, nutrientText } from '../components/NutritionLabel'
 import { PortionSheet } from '../components/PortionSheet'
 import { useTopBar } from '../hooks/useTopBar'
 import { SLOTS, SLOT_LABEL, dayLabel, shiftDay, slotByTime, today, type Slot } from '../lib/day'
-import { portionText } from '../lib/units'
+import { portionText, servingsText } from '../lib/units'
 
 // How long a deleted entry can be brought back. Short enough that nobody is
 // waiting on it, long enough to notice the mistake.
@@ -46,8 +47,12 @@ function without(day: DiaryDay, gone: DiaryEntry): DiaryDay {
   return { ...day, totals, slots }
 }
 
-// The brand and the portion, whichever of them there is.
-const under = (entry: DiaryEntry) => [entry.brand, portionText(entry)].filter(Boolean).join(' · ')
+// The brand and the portion, whichever of them there is. A recipe is counted in
+// servings of itself rather than measured in anything.
+const under = (entry: DiaryEntry) =>
+  entry.recipe_id !== null && entry.amount !== null
+    ? servingsText(entry.amount)
+    : [entry.brand, portionText(entry)].filter(Boolean).join(' · ')
 
 type Editing = { entry: DiaryEntry; food: Food | null; slot: Slot }
 
@@ -59,6 +64,11 @@ export function Journal({ me, refresh }: { me: Me; refresh: number }) {
   const [again, setAgain] = useState(0)
   const [picking, setPicking] = useState<Slot | null>(null)
   const [editing, setEditing] = useState<Editing | null>(null)
+  // A logged recipe is edited by the serving, which is the only thing about it
+  // that can change.
+  const [servings, setServings] = useState<{ entry: DiaryEntry; slot: Slot } | null>(null)
+  const [saving, setSaving] = useState(false)
+  const [refusal, setRefusal] = useState('')
 
   // The bar says which day is being read, not just which tab this is.
   useTopBar({ title: dayLabel(date, todayIso) })
@@ -106,10 +116,16 @@ export function Journal({ me, refresh }: { me: Me; refresh: number }) {
   const reload = () => {
     setPicking(null)
     setEditing(null)
+    setServings(null)
     setAgain(again + 1)
   }
 
   const openEntry = async (entry: DiaryEntry, slot: Slot) => {
+    if (entry.recipe_id !== null) {
+      setRefusal('')
+      setServings({ entry, slot })
+      return
+    }
     let food: Food | null = null
     if (entry.food_id !== null) {
       // A food that has since gone leaves the entry standing, and it is edited
@@ -119,8 +135,22 @@ export function Journal({ me, refresh }: { me: Me; refresh: number }) {
     setEditing({ entry, food, slot })
   }
 
+  const changeServings = async (amount: number | null, slot: Slot) => {
+    if (servings === null || amount === null) return
+    setSaving(true)
+    setRefusal('')
+    try {
+      await api(`/diary/${servings.entry.id}`, { method: 'PATCH', body: { amount, slot } })
+      reload()
+    } catch (failure) {
+      setRefusal(errorText(failure))
+    }
+    setSaving(false)
+  }
+
   const remove = (entry: DiaryEntry) => {
     setEditing(null)
+    setServings(null)
     setDay((current) => (current === null ? current : without(current, entry)))
     pendingRef.current = entry
     setPending(entry)
@@ -254,6 +284,21 @@ export function Journal({ me, refresh }: { me: Me; refresh: number }) {
           onClose={() => setEditing(null)}
           onDone={reload}
           onDelete={remove}
+        />
+      )}
+
+      {servings !== null && (
+        <LogSheet
+          title="Edit"
+          action="Save"
+          name={servings.entry.name}
+          servings={servings.entry.amount ?? 1}
+          slot={servings.slot}
+          error={refusal}
+          saving={saving}
+          onClose={() => setServings(null)}
+          onSubmit={(amount, slot) => void changeServings(amount, slot)}
+          onDelete={() => remove(servings.entry)}
         />
       )}
 

@@ -59,6 +59,11 @@ function keep(food: Food, choice: string) {
   }
 }
 
+// What the sheet is measuring in, as the server reads it: a unit from a measure
+// family, or one of the food's own servings by its id.
+const chosenUnit = (food: Food, pick: Pick): string =>
+  pick.kind === 'serving' ? `${SERVING}${food.servings[pick.index].id}` : pick.unit
+
 // What an entry was measured in, as a choice the control understands. A serving
 // is found again by the name the entry kept of it.
 function entryChoice(food: Food, entry: DiaryEntry): string | null {
@@ -92,6 +97,7 @@ export function PortionSheet({
   onClose,
   onDone,
   onDelete,
+  onPick,
 }: {
   // Null when the food an entry came from has been deleted. What is left is a
   // portion and a set of numbers, and only the amount can still change.
@@ -103,6 +109,10 @@ export function PortionSheet({
   onClose: () => void
   onDone: () => void
   onDelete?: (entry: DiaryEntry) => void
+  // Given instead when the portion is being chosen for something else, which
+  // is how a recipe and a kept meal are filled in. Nothing is logged: the
+  // measurement is handed back and the sheet closes.
+  onPick?: (food: Food, amount: number, unit: string) => void
 }) {
   const [start] = useState(() => opening(food, entry))
   const [amount, setAmount] = useState(start.amount)
@@ -145,10 +155,12 @@ export function PortionSheet({
 
   const needsAmount = food !== null || entry?.amount != null
 
+  // Choosing a portion for something else rather than logging one.
+  const picking = onPick !== undefined && food !== null && pick !== null
+
   const body = () => {
     if (food !== null && pick !== null) {
-      const unit =
-        pick.kind === 'serving' ? `${SERVING}${food.servings[pick.index].id}` : pick.unit
+      const unit = chosenUnit(food, pick)
       return entry
         ? { slot: meal, amount: typed, unit }
         : { date, slot: meal, food_id: food.id, amount: typed, unit }
@@ -157,6 +169,11 @@ export function PortionSheet({
   }
 
   const save = async () => {
+    if (picking && food !== null && pick !== null && onPick) {
+      keep(food, choice)
+      onPick(food, typed, chosenUnit(food, pick))
+      return
+    }
     setSaving(true)
     setError('')
     try {
@@ -176,8 +193,12 @@ export function PortionSheet({
   const brand = food?.brand ?? entry?.brand ?? ''
 
   return (
-    <Sheet open label={entry ? 'Edit entry' : 'Log food'} onClose={onClose}>
-      <p className="t-micro mb-1">{entry ? 'Edit' : 'Log'}</p>
+    <Sheet
+      open
+      label={picking ? 'Choose a portion' : entry ? 'Edit entry' : 'Log food'}
+      onClose={onClose}
+    >
+      <p className="t-micro mb-1">{picking ? 'How much' : entry ? 'Edit' : 'Log'}</p>
       <p className="text-base font-semibold tracking-tight">{name}</p>
       {brand && <p className="text-xs text-muted">{brand}</p>}
       {food?.status === 'pending' && (
@@ -279,20 +300,24 @@ export function PortionSheet({
         </p>
       )}
 
-      <p className="t-micro mt-3 mb-2">Meal</p>
-      <div className="flex flex-wrap gap-2">
-        {SLOTS.map((option) => (
-          <button
-            key={option}
-            type="button"
-            aria-pressed={meal === option}
-            className="t-chip aria-pressed:border-accent aria-pressed:text-text"
-            onClick={() => setMeal(option)}
-          >
-            {SLOT_LABEL[option]}
-          </button>
-        ))}
-      </div>
+      {!picking && (
+        <>
+          <p className="t-micro mt-3 mb-2">Meal</p>
+          <div className="flex flex-wrap gap-2">
+            {SLOTS.map((option) => (
+              <button
+                key={option}
+                type="button"
+                aria-pressed={meal === option}
+                className="t-chip aria-pressed:border-accent aria-pressed:text-text"
+                onClick={() => setMeal(option)}
+              >
+                {SLOT_LABEL[option]}
+              </button>
+            ))}
+          </div>
+        </>
+      )}
 
       {error && <p className="t-error mt-3">{error}</p>}
 
@@ -303,7 +328,7 @@ export function PortionSheet({
           disabled={saving || (needsAmount && !valid)}
           onClick={save}
         >
-          {entry ? 'Save' : 'Log'}
+          {picking ? 'Add' : entry ? 'Save' : 'Log'}
         </button>
         {entry && onDelete ? (
           <button type="button" className="t-btn text-danger" onClick={() => onDelete(entry)}>

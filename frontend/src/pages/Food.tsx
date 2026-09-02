@@ -1,4 +1,4 @@
-import { Plus } from 'lucide-react'
+import { Pin, Plus } from 'lucide-react'
 import { useEffect, useRef, useState } from 'react'
 
 import {
@@ -6,13 +6,25 @@ import {
   errorText,
   type Food as FoodItem,
   type FoodRow,
+  type Meal,
+  type MealRow,
   type Me,
   type MySubmission,
+  type Recipe,
+  type RecipeRow,
+  type RepeatRow,
 } from '../api'
 import { FoodForm } from '../components/FoodForm'
+import { PortionSheet } from '../components/PortionSheet'
+import { nutrientText } from '../components/NutritionLabel'
 import { useTopBar } from '../hooks/useTopBar'
+import { slotByTime, today } from '../lib/day'
+import { servingsText } from '../lib/units'
 import { Browse } from './Browse'
 import { FoodDetail } from './FoodDetail'
+import { MealDetail } from './MealDetail'
+import { PartsForm } from './PartsForm'
+import { RecipeDetail } from './RecipeDetail'
 import { KIND_LABEL } from '../lib/community'
 
 // How many of your own foods the card shows before it offers the rest.
@@ -22,14 +34,6 @@ const DEBOUNCE = 250
 // How long something taken back can be put back. Short enough that nobody is
 // waiting on it, long enough to notice the mistake.
 const UNDO = 6000
-
-// The rest of what this tab will hold. Each says what it is for and waits for
-// the feature behind it; none of them pretends to be a button yet.
-const LATER: { title: string; note: string }[] = [
-  { title: 'Custom Meals', note: 'Groups of foods you eat together will be kept here.' },
-  { title: 'Custom Recipes', note: 'Things you cook, with the numbers worked out, will be kept here.' },
-  { title: 'Repeat Items', note: 'The foods you log again and again will collect here.' },
-]
 
 const STATUS_LABEL: Record<MySubmission['status'], string> = {
   pending: 'Waiting',
@@ -45,6 +49,11 @@ type View =
   // Where going back from a food lands, because it is opened from two places.
   | { at: 'detail'; id: number; from: 'list' | 'browse' }
   | { at: 'form'; food: FoodItem | null; notice?: string }
+  | { at: 'recipe'; id: number }
+  | { at: 'meal'; id: number }
+  // The editors are given what they are changing, or nothing for a new one.
+  | { at: 'recipeForm'; recipe: Recipe | null }
+  | { at: 'mealForm'; meal: Meal | null }
 
 // Something taken off the screen that has not been sent yet. The request goes
 // when the window closes, so undoing is not a second write to put back what a
@@ -87,6 +96,11 @@ export function FoodTab({
 }) {
   const [view, setView] = useState<View>({ at: 'list' })
   const [foods, setFoods] = useState<FoodRow[]>([])
+  const [recipes, setRecipes] = useState<RecipeRow[]>([])
+  const [meals, setMeals] = useState<MealRow[]>([])
+  const [repeat, setRepeat] = useState<RepeatRow[]>([])
+  // The food a repeat row is being logged at, which is the picker's own sheet.
+  const [logging, setLogging] = useState<FoodItem | null>(null)
   const [submissions, setSubmissions] = useState<MySubmission[]>([])
   const [error, setError] = useState('')
   const [expanded, setExpanded] = useState(false)
@@ -109,6 +123,10 @@ export function FoodTab({
   const loadSubmissions = () =>
     api<MySubmission[]>('/submissions/mine').then(setSubmissions, () => setSubmissions([]))
 
+  const loadRecipes = () => api<RecipeRow[]>('/recipes').then(setRecipes, () => setRecipes([]))
+
+  const loadMeals = () => api<MealRow[]>('/meals').then(setMeals, () => setMeals([]))
+
   const settle = () => {
     const waiting = undoRef.current
     undoRef.current = null
@@ -122,6 +140,15 @@ export function FoodTab({
       .catch((failure) => alive && setError(errorText(failure)))
     api<MySubmission[]>('/submissions/mine')
       .then((rows) => alive && setSubmissions(rows))
+      .catch(() => {})
+    api<RecipeRow[]>('/recipes')
+      .then((rows) => alive && setRecipes(rows))
+      .catch(() => {})
+    api<MealRow[]>('/meals')
+      .then((rows) => alive && setMeals(rows))
+      .catch(() => {})
+    api<RepeatRow[]>('/foods/repeat')
+      .then((rows) => alive && setRepeat(rows))
       .catch(() => {})
     return () => {
       alive = false
@@ -195,11 +222,49 @@ export function FoodTab({
     setUndo(waiting)
   }
 
+  const removeRecipe = (recipe: Recipe) => {
+    setRecipes((rows) => rows.filter((row) => row.id !== recipe.id))
+    setView({ at: 'list' })
+    const waiting: Undo = {
+      message: `Deleted ${recipe.name}.`,
+      commit: () => {
+        api(`/recipes/${recipe.id}`, { method: 'DELETE' }).catch(() => {})
+      },
+    }
+    undoRef.current = waiting
+    setUndo(waiting)
+  }
+
+  const removeMeal = (meal: Meal) => {
+    setMeals((rows) => rows.filter((row) => row.id !== meal.id))
+    setView({ at: 'list' })
+    const waiting: Undo = {
+      message: `Deleted ${meal.name}.`,
+      commit: () => {
+        api(`/meals/${meal.id}`, { method: 'DELETE' }).catch(() => {})
+      },
+    }
+    undoRef.current = waiting
+    setUndo(waiting)
+  }
+
+  // A repeat row is logged the way the picker logs one, at the portion sheet.
+  const openRepeat = async (id: number) => {
+    setError('')
+    try {
+      setLogging(await api<FoodItem>(`/foods/${id}`))
+    } catch (failure) {
+      setError(errorText(failure))
+    }
+  }
+
   const putBack = () => {
     undoRef.current = null
     setUndo(null)
     void load()
     void loadSubmissions()
+    void loadRecipes()
+    void loadMeals()
     setAgain(again + 1)
   }
 
@@ -227,6 +292,66 @@ export function FoodTab({
           void load()
           void loadSubmissions()
         }}
+      />
+    )
+  }
+
+  if (view.at === 'recipe') {
+    return (
+      <RecipeDetail
+        id={view.id}
+        me={me}
+        onBack={() => setView({ at: 'list' })}
+        onEdit={(recipe) => setView({ at: 'recipeForm', recipe })}
+        onDelete={removeRecipe}
+      />
+    )
+  }
+
+  if (view.at === 'meal') {
+    return (
+      <MealDetail
+        id={view.id}
+        me={me}
+        onBack={() => setView({ at: 'list' })}
+        onEdit={(meal) => setView({ at: 'mealForm', meal })}
+        onDelete={removeMeal}
+      />
+    )
+  }
+
+  if (view.at === 'recipeForm') {
+    const editing = view.recipe
+    return (
+      <PartsForm
+        kind="recipe"
+        me={me}
+        recipe={editing}
+        onSaved={(id) => {
+          void loadRecipes()
+          setView({ at: 'recipe', id })
+        }}
+        onCancel={() =>
+          setView(editing === null ? { at: 'list' } : { at: 'recipe', id: editing.id })
+        }
+      />
+    )
+  }
+
+  if (view.at === 'mealForm') {
+    const editing = view.meal
+    return (
+      <PartsForm
+        kind="meal"
+        me={me}
+        meal={editing}
+        onSaved={(id) => {
+          void loadMeals()
+          setView({ at: 'meal', id })
+        }}
+        onCancel={() =>
+          setView(editing === null ? { at: 'list' } : { at: 'meal', id: editing.id })
+        }
       />
     )
   }
@@ -320,12 +445,115 @@ export function FoodTab({
             )}
           </div>
 
-          {LATER.map((card) => (
-            <div key={card.title} className="t-card mb-3">
-              <p className="t-micro mb-1">{card.title}</p>
-              <p className="text-sm text-muted">{card.note}</p>
+          <div className="t-card mb-3">
+            <div className="mb-1 flex items-center justify-between">
+              <p className="t-micro">Custom Meals</p>
+              <button
+                type="button"
+                className="t-tap44 text-accent"
+                aria-label="Add a meal"
+                onClick={() => setView({ at: 'mealForm', meal: null })}
+              >
+                <Plus className="h-5 w-5" strokeWidth={2.5} />
+              </button>
             </div>
-          ))}
+            {meals.length === 0 ? (
+              <p className="text-sm text-muted">
+                Foods you eat together go here, so you can log them in one tap.
+              </p>
+            ) : (
+              meals.map((row) => (
+                <button
+                  key={row.id}
+                  type="button"
+                  className="t-row w-full text-left"
+                  onClick={() => setView({ at: 'meal', id: row.id })}
+                >
+                  <span className="min-w-0 flex-1 truncate text-sm">{row.name}</span>
+                  <span className="shrink-0 text-xs text-muted">
+                    {row.items === 1 ? '1 food' : `${row.items} foods`}
+                  </span>
+                </button>
+              ))
+            )}
+          </div>
+
+          <div className="t-card mb-3">
+            <div className="mb-1 flex items-center justify-between">
+              <p className="t-micro">Custom Recipes</p>
+              <button
+                type="button"
+                className="t-tap44 text-accent"
+                aria-label="Add a recipe"
+                onClick={() => setView({ at: 'recipeForm', recipe: null })}
+              >
+                <Plus className="h-5 w-5" strokeWidth={2.5} />
+              </button>
+            </div>
+            {recipes.length === 0 ? (
+              <p className="text-sm text-muted">
+                Things you cook go here, with the numbers worked out per serving.
+              </p>
+            ) : (
+              recipes.map((row) => (
+                <button
+                  key={row.id}
+                  type="button"
+                  className="t-row w-full text-left"
+                  onClick={() => setView({ at: 'recipe', id: row.id })}
+                >
+                  <span className="min-w-0 flex-1">
+                    <span className="block truncate text-sm">{row.name}</span>
+                    <span className="block truncate text-xs text-muted">
+                      Makes {servingsText(row.yield_servings)}
+                    </span>
+                  </span>
+                  <span className="shrink-0 text-right">
+                    <span className="t-nums block text-sm">
+                      {nutrientText('calories', row.per_serving.calories)} cal
+                    </span>
+                    <span className="block text-xs text-muted">per serving</span>
+                  </span>
+                </button>
+              ))
+            )}
+          </div>
+
+          <div className="t-card mb-3">
+            <p className="t-micro mb-1">Repeat Items</p>
+            {repeat.length === 0 ? (
+              <p className="text-sm text-muted">
+                The foods you pin and the ones you log will be offered here.
+              </p>
+            ) : (
+              repeat.map((row) => (
+                <button
+                  key={row.id}
+                  type="button"
+                  className="t-row w-full text-left"
+                  onClick={() => openRepeat(row.id)}
+                >
+                  <span className="min-w-0 flex-1">
+                    <span className="flex items-center gap-1.5">
+                      {row.pinned && (
+                        <Pin className="h-3 w-3 shrink-0 text-accent" strokeWidth={2.5} />
+                      )}
+                      <span className="truncate text-sm">{row.name}</span>
+                    </span>
+                    {row.brand && (
+                      <span className="block truncate text-xs text-muted">{row.brand}</span>
+                    )}
+                  </span>
+                  <span className="shrink-0 text-right">
+                    <span className="t-nums block text-sm">
+                      {nutrientText('calories', row.calories)} cal
+                    </span>
+                    <span className="block text-xs text-muted">per 100 {row.base_unit}</span>
+                  </span>
+                </button>
+              ))
+            )}
+          </div>
 
           <div className="t-card mb-3" ref={submittedRef}>
             <p className="t-micro mb-1">Submitted</p>
@@ -373,6 +601,17 @@ export function FoodTab({
             <p className="text-sm text-muted">Everything the instance has shared so far.</p>
           </button>
         </>
+      )}
+
+      {logging !== null && (
+        <PortionSheet
+          food={logging}
+          date={today(me.timezone)}
+          slot={slotByTime(me.timezone)}
+          units={me.units}
+          onClose={() => setLogging(null)}
+          onDone={() => setLogging(null)}
+        />
       )}
 
       {undo !== null && (

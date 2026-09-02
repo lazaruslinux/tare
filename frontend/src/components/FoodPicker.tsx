@@ -2,7 +2,7 @@ import { ChevronLeft, Pin } from 'lucide-react'
 import { useEffect, useState, type FormEvent } from 'react'
 
 import { api, errorText, type Food, type FoodRow, type Me, type RepeatRow } from '../api'
-import type { Slot } from '../lib/day'
+import { slotByTime, today, type Slot } from '../lib/day'
 import { PortionSheet } from './PortionSheet'
 import { Sheet } from './Sheet'
 
@@ -148,13 +148,21 @@ export function FoodPicker({
   slot,
   onClose,
   onLogged,
+  onPick,
 }: {
   me: Me
-  date: string
-  slot: Slot
+  // The day and the meal a food is being logged into. Left out when nothing is
+  // being logged, which is what onPick means.
+  date?: string
+  slot?: Slot
   onClose: () => void
-  onLogged: () => void
+  onLogged?: () => void
+  // Given instead when a food is being chosen for a recipe or a kept meal. The
+  // portion is handed back and nothing is written to the diary.
+  onPick?: (food: Food, amount: number, unit: string) => void
 }) {
+  const day = date ?? today(me.timezone)
+  const meal = slot ?? slotByTime(me.timezone)
   const [query, setQuery] = useState('')
   // Null is not an empty result: it is a box nobody has typed two letters into.
   const [results, setResults] = useState<FoodRow[] | null>(null)
@@ -202,27 +210,28 @@ export function FoodPicker({
     return (
       <PortionSheet
         food={chosen}
-        date={date}
-        slot={slot}
+        date={day}
+        slot={meal}
         units={me.units}
         onClose={() => setChosen(null)}
-        onDone={onLogged}
+        onDone={() => onLogged?.()}
+        onPick={onPick}
       />
     )
   }
 
   return (
-    <Sheet open label="Add food" onClose={onClose}>
+    <Sheet open label={onPick ? 'Choose a food' : 'Add food'} onClose={onClose}>
       {quick ? (
         <QuickAdd
-          date={date}
-          slot={slot}
+          date={day}
+          slot={meal}
           onBack={() => setQuick(false)}
-          onLogged={onLogged}
+          onLogged={() => onLogged?.()}
         />
       ) : (
         <>
-          <p className="t-micro mb-2">Add food</p>
+          <p className="t-micro mb-2">{onPick ? 'Choose a food' : 'Add food'}</p>
           <input
             className="t-input mb-3"
             type="search"
@@ -253,13 +262,17 @@ export function FoodPicker({
             </>
           )}
 
-          <button
-            type="button"
-            className="t-row w-full text-left text-sm text-muted"
-            onClick={() => setQuick(true)}
-          >
-            Can&rsquo;t find it? Quick add
-          </button>
+          {/* A quick add is logged and forgotten, so there is nothing in it to
+              put in a recipe or a kept meal. */}
+          {!onPick && (
+            <button
+              type="button"
+              className="t-row w-full text-left text-sm text-muted"
+              onClick={() => setQuick(true)}
+            >
+              Can&rsquo;t find it? Quick add
+            </button>
+          )}
         </>
       )}
     </Sheet>

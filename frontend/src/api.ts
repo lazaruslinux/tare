@@ -174,6 +174,52 @@ export type AdminUser = {
   submissions: { pending: number; approved: number; rejected: number }
 }
 
+// One thing inside a recipe or a kept meal: which food it was, and how much of
+// it. food_id is null once that food is gone, and the name stays.
+export type Part = {
+  id: number
+  food_id: number | null
+  name: string
+  brand: string
+  amount: number
+  unit: string
+  serving_label: string | null
+}
+
+// An ingredient also carries what that much of the food came to, worked out
+// when the recipe was saved.
+export type RecipeIngredient = Part & Panel
+
+// A recipe as a list reads it: what one serving of it is worth.
+export type RecipeRow = {
+  id: number
+  name: string
+  yield_servings: number
+  per_serving: Record<Headline, number | null>
+}
+
+// The whole recipe. The totals are for all of it and the per-serving figures
+// are those shared out by what it makes.
+export type Recipe = {
+  id: number
+  name: string
+  yield_servings: number
+  ingredients: RecipeIngredient[]
+  totals: Panel
+  per_serving: Panel
+}
+
+// A kept meal as a list reads it, by how much is in it.
+export type MealRow = { id: number; name: string; items: number }
+
+// The whole meal. It has no numbers of its own: each item takes them from the
+// food as it stands when the meal is logged.
+export type Meal = { id: number; name: string; items: Part[] }
+
+// What logging a whole meal came to, and the names of anything left out
+// because the food behind it is gone.
+export type MealLogged = { entries: DiaryEntry[]; skipped: string[] }
+
 // One thing eaten. The numbers are for the amount served, not per 100 of
 // anything, and they were worked out when it was logged. food_id is null once
 // the food it came from is gone, and the row still reads.
@@ -185,6 +231,9 @@ export type DiaryEntry = {
   unit: string | null
   serving_label: string | null
   food_id: number | null
+  // Set instead of food_id when what was eaten was a recipe, in which case the
+  // amount is a number of its servings.
+  recipe_id: number | null
   calories: number | null
   protein_g: number | null
   carbs_g: number | null

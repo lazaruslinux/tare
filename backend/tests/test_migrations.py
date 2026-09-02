@@ -10,6 +10,7 @@ IDENTITY_TABLES = {"users", "sessions", "email_tokens", "invites", "ingest_token
 FOOD_TABLES = {"foods", "food_servings"}
 DIARY_TABLES = {"diary_entries", "saved_foods"}
 COMMUNITY_TABLES = {"food_photos", "food_submissions"}
+RECIPE_TABLES = {"recipes", "recipe_ingredients", "meal_templates", "meal_template_items"}
 
 
 def test_upgrade_head_builds_the_identity_schema(tmp_path):
@@ -38,6 +39,8 @@ def test_upgrade_head_builds_the_identity_schema(tmp_path):
     assert FOOD_TABLES <= tables
     assert DIARY_TABLES <= tables
     assert COMMUNITY_TABLES <= tables
+    assert RECIPE_TABLES <= tables
+    assert "recipe_id" in {column["name"] for column in inspector.get_columns("diary_entries")}
     # The partial indexes are the one thing here a plain column cannot express,
     # so it is worth seeing that the migrations really emitted them.
     assert "uq_foods_barcode_approved" in food_indexes

@@ -107,3 +107,8 @@ export function portionText(portion: {
   if (label !== null) return amount === 1 ? label : `${round1(amount)} × ${label}`
   return `${round1(amount)} ${UNIT_LABEL[unit as Unit] ?? unit}`
 }
+
+// How a recipe entry reads back. It is counted in servings of itself, which is
+// the one portion that is not measured in anything.
+export const servingsText = (amount: number): string =>
+  `${round1(amount)} ${amount === 1 ? 'serving' : 'servings'}`

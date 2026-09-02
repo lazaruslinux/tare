@@ -9,7 +9,19 @@ from starlette.exceptions import HTTPException as StarletteHTTPException
 from starlette.types import ASGIApp, Message, Receive, Scope, Send
 
 from app.config import VERSION, check_deploy_config
-from app.routers import account, admin, auth, barcode, diary, foods, invites, photos, submissions
+from app.routers import (
+    account,
+    admin,
+    auth,
+    barcode,
+    diary,
+    foods,
+    invites,
+    meals,
+    photos,
+    recipes,
+    submissions,
+)
 
 # A JSON body that needs more than this is a mistake or an attack. The reverse
 # proxy caps /api/ at the same figure; this is the cap that holds when the proxy
@@ -165,6 +177,8 @@ def create_app() -> FastAPI:
     app.include_router(account.router, prefix="/api")
     app.include_router(foods.router, prefix="/api")
     app.include_router(diary.router, prefix="/api")
+    app.include_router(recipes.router, prefix="/api")
+    app.include_router(meals.router, prefix="/api")
     app.include_router(barcode.router, prefix="/api")
     app.include_router(photos.router, prefix="/api")
     app.include_router(submissions.router, prefix="/api")

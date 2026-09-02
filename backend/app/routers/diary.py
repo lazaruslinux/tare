@@ -22,6 +22,7 @@ from app import clock, models, schemas, units
 from app.db import get_db
 from app.deps import require_user
 from app.models import DIARY_SLOTS, NUTRIENTS, SERVING_UNIT
+from app.recipes import own_recipe, per_serving
 from app.routers.foods import MAX_NAME, readable_food
 
 router = APIRouter(prefix="/diary", tags=["diary"])
@@ -40,6 +41,9 @@ UNLINKED_UNIT = "The food this came from is gone, so only the amount can change.
 UNLINKED_SERVING = "Say which unit to measure it in."
 NO_PORTION = "This entry has no amount to change."
 LINKED_NUTRIENTS = "The numbers on a logged food come from the food itself."
+RECIPE_NUTRIENTS = "The numbers on a logged recipe come from the recipe itself."
+RECIPE_SERVINGS = "A recipe is counted in servings."
+BOTH_KINDS = "Log a food or a recipe, not both."
 
 # How a serving is asked for, as against a unit from a measure family.
 SERVING_PREFIX = "serving:"
@@ -86,7 +90,9 @@ def measure(food: models.Food, amount: float, unit: str) -> tuple[float, str | N
     return units.to_base(food, amount, unit), None, unit
 
 
-def snapshot(entry: models.DiaryEntry, food: models.Food, base_amount: float) -> None:
+def snapshot(
+    entry: models.DiaryEntry | models.RecipeIngredient, food: models.Food, base_amount: float
+) -> None:
     """Copy the food's panel onto the entry, at the amount actually eaten.
 
     Null stays null the whole way down: a nutrient the label never gave is not
@@ -97,7 +103,74 @@ def snapshot(entry: models.DiaryEntry, food: models.Food, base_amount: float) ->
         setattr(entry, field, None if per_100 is None else per_100 * base_amount / 100)
 
 
-def stored_unit(entry: models.DiaryEntry, food: models.Food) -> str:
+def serve(entry: models.DiaryEntry, recipe: models.Recipe, servings: float) -> None:
+    """Copy what one serving of the recipe comes to onto the entry, that often.
+
+    The counterpart of snapshot() for the other thing that can be logged, and
+    null travels the same way: a nutrient one ingredient never gave is unknown
+    at any number of servings.
+    """
+    each = per_serving(recipe)
+    for field in NUTRIENTS:
+        value = each[field]
+        setattr(entry, field, None if value is None else value * servings)
+
+
+def log_food(
+    user: models.User,
+    day: dt.date,
+    slot: str,
+    food: models.Food,
+    amount: float,
+    unit: str,
+) -> models.DiaryEntry:
+    """One entry from a food measured out, with its numbers already worked out.
+
+    The one place a portion becomes a row, so a food logged by hand and a whole
+    meal logged in one go cannot come out different.
+    """
+    base_amount, label, kept_unit = measure(food, amount, unit)
+    entry = models.DiaryEntry(
+        user_id=user.id,
+        date_for=day,
+        slot=slot,
+        name=food.name,
+        brand=food.brand,
+        food_id=food.id,
+        amount=amount,
+        unit=kept_unit,
+        serving_label=label,
+    )
+    snapshot(entry, food, base_amount)
+    return entry
+
+
+def log_recipe(
+    user: models.User,
+    day: dt.date,
+    slot: str,
+    recipe: models.Recipe,
+    servings: float,
+) -> models.DiaryEntry:
+    """One entry from a recipe: that many servings of what it comes to."""
+    entry = models.DiaryEntry(
+        user_id=user.id,
+        date_for=day,
+        slot=slot,
+        name=recipe.name,
+        brand="",
+        recipe_id=recipe.id,
+        amount=servings,
+        unit=SERVING_UNIT,
+        serving_label=SERVING_UNIT,
+    )
+    serve(entry, recipe, servings)
+    return entry
+
+
+def stored_unit(
+    entry: models.DiaryEntry | models.MealTemplateItem, food: models.Food
+) -> str:
     """The measurement an entry already carries, as a unit measure() can read.
 
     Only needed when a change gives a new amount without saying what to measure
@@ -124,6 +197,8 @@ def entry_row(entry: models.DiaryEntry) -> dict[str, object]:
         # Null once the food is gone, which is the screen's cue that this row
         # can no longer be re-measured.
         "food_id": entry.food_id,
+        # Set instead, when what was eaten was a recipe.
+        "recipe_id": entry.recipe_id,
         "calories": entry.calories,
         "protein_g": entry.protein_g,
         "carbs_g": entry.carbs_g,
@@ -184,27 +259,25 @@ def add_entry(
     db: Session = Depends(get_db),
     user: models.User = Depends(require_user),
 ) -> dict[str, object]:
-    """Log something. Either a food measured out, or a name and its calories."""
-    entry = models.DiaryEntry(
-        user_id=user.id,
-        date_for=body.date or clock.user_today(user),
-        slot=checked_slot(body.slot),
-        brand="",
-    )
+    """Log something: a food measured out, a recipe by the serving, or a name
+    and its calories."""
+    day = body.date or clock.user_today(user)
+    slot = checked_slot(body.slot)
+    if body.food_id is not None and body.recipe_id is not None:
+        raise HTTPException(status.HTTP_400_BAD_REQUEST, BOTH_KINDS)
 
     if body.food_id is not None:
         food = readable_food(db, user, body.food_id)
         if body.amount is None or not body.unit:
             raise HTTPException(status.HTTP_400_BAD_REQUEST, NO_AMOUNT)
-        base_amount, label, kept_unit = measure(food, body.amount, body.unit)
-        entry.name = food.name
-        entry.brand = food.brand
-        entry.food_id = food.id
-        entry.amount = body.amount
-        entry.unit = kept_unit
-        entry.serving_label = label
-        snapshot(entry, food, base_amount)
+        entry = log_food(user, day, slot, food, body.amount, body.unit)
+    elif body.recipe_id is not None:
+        recipe = own_recipe(db, user, body.recipe_id)
+        if body.amount is None:
+            raise HTTPException(status.HTTP_400_BAD_REQUEST, NO_AMOUNT)
+        entry = log_recipe(user, day, slot, recipe, body.amount)
     else:
+        entry = models.DiaryEntry(user_id=user.id, date_for=day, slot=slot, brand="")
         name = body.name.strip()
         if not name or body.calories is None:
             raise HTTPException(status.HTTP_400_BAD_REQUEST, NO_QUICK_ADD)
@@ -242,12 +315,21 @@ def update_entry(
         entry.slot = checked_slot(body.slot)
 
     food = None if entry.food_id is None else db.get(models.Food, entry.food_id)
+    # The entry is this account's own, so the recipe under it is too.
+    recipe = None if entry.recipe_id is None else db.get(models.Recipe, entry.recipe_id)
 
     if "amount" in sent or "unit" in sent:
         amount = body.amount if body.amount is not None else entry.amount
         if amount is None or amount <= 0:
             raise HTTPException(status.HTTP_400_BAD_REQUEST, NO_AMOUNT)
-        if food is not None:
+        if recipe is not None:
+            if "unit" in sent:
+                raise HTTPException(status.HTTP_400_BAD_REQUEST, RECIPE_SERVINGS)
+            # Worked out again from the recipe as it stands now, for the same
+            # reason a logged food is: this row is being touched anyway.
+            entry.amount = amount
+            serve(entry, recipe, amount)
+        elif food is not None:
             # Worked out again from the food as it stands now, so an entry that
             # is being touched anyway picks up a correction to its food.
             unit = body.unit if "unit" in sent and body.unit else stored_unit(entry, food)
@@ -273,6 +355,8 @@ def update_entry(
             entry.amount = amount
 
     typed = [field for field in ("name", *QUICK) if field in sent]
+    if typed and recipe is not None:
+        raise HTTPException(status.HTTP_400_BAD_REQUEST, RECIPE_NUTRIENTS)
     if typed and food is not None:
         raise HTTPException(status.HTTP_400_BAD_REQUEST, LINKED_NUTRIENTS)
     for field in typed:

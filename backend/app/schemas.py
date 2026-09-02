@@ -139,6 +139,9 @@ class DiaryIn(BaseModel):
     date: dt.date | None = None
     slot: str
     food_id: int | None = None
+    # Set instead of food_id when a recipe is what was eaten, in which case the
+    # amount is a number of its servings. Both together is the route's refusal.
+    recipe_id: int | None = None
     # A unit from a measure family, or "serving:<id>" for one of the food's own.
     amount: float | None = Field(default=None, gt=0)
     unit: str | None = Field(default=None, max_length=MAX_UNIT)
@@ -164,3 +167,48 @@ class DiaryPatch(BaseModel):
     protein_g: float | None = Field(default=None, ge=0)
     carbs_g: float | None = Field(default=None, ge=0)
     fat_g: float | None = Field(default=None, ge=0)
+
+
+# How many things one recipe or one meal may hold. Enough for anything a
+# kitchen does, and few enough that saving one is a single screenful of work.
+MAX_PARTS = 50
+
+# The most servings a recipe may claim to make. A batch bigger than this is a
+# typed decimal point rather than a Sunday lunch.
+MAX_YIELD = 1000
+
+
+class PartIn(BaseModel):
+    """One food inside a recipe or a kept meal, and how much of it."""
+
+    food_id: int
+    amount: float = Field(gt=0)
+    # A unit from a measure family, or "serving:<id>" for one of the food's own.
+    unit: str = Field(max_length=MAX_UNIT)
+
+
+class RecipeIn(BaseModel):
+    """A recipe as the form sends it, whole.
+
+    The ingredient list is replaced rather than merged, the same way a food's
+    servings are: a row that did not arrive is a row somebody took out.
+    """
+
+    name: str
+    yield_servings: float = Field(gt=0, le=MAX_YIELD)
+    ingredients: list[PartIn] = Field(min_length=1, max_length=MAX_PARTS)
+
+
+class MealIn(BaseModel):
+    """A kept meal: a name, and the things it is a shortcut for."""
+
+    name: str
+    items: list[PartIn] = Field(min_length=1, max_length=MAX_PARTS)
+
+
+class MealLogIn(BaseModel):
+    """Logging a whole kept meal at once."""
+
+    # Left out means today, wherever the account says it is.
+    date: dt.date | None = None
+    slot: str

@@ -415,6 +415,12 @@ class DiaryEntry(Base):
     amount: Mapped[float | None] = mapped_column(Float, nullable=True)
     unit: Mapped[str | None] = mapped_column(String(8), nullable=True)
     serving_label: Mapped[str | None] = mapped_column(String(60), nullable=True)
+    # Set instead of food_id when what was eaten was a recipe. The amount is a
+    # number of servings of it, and SET NULL for the same reason: deleting the
+    # recipe leaves the meal standing with the numbers it was logged at.
+    recipe_id: Mapped[int | None] = mapped_column(
+        ForeignKey("recipes.id", ondelete="SET NULL"), nullable=True, index=True
+    )
 
     # For the amount served, not per 100 of anything.
     calories: Mapped[float | None] = mapped_column(Float, nullable=True)
@@ -429,6 +435,115 @@ class DiaryEntry(Base):
     sugar_g: Mapped[float | None] = mapped_column(Float, nullable=True)
 
     created_at: Mapped[dt.datetime] = mapped_column(UtcDateTime, nullable=False, default=now_utc)
+
+
+class Recipe(Base):
+    """Something cooked out of other foods, and how many servings it makes.
+
+    Its ingredients carry their own numbers, copied from the foods at the
+    moment the recipe was saved, for the reason a diary entry does: correcting
+    a food afterwards corrects the food, and the recipe still reads as what was
+    written down. Saving the recipe again is what works the numbers out afresh.
+    """
+
+    __tablename__ = "recipes"
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True)
+    user_id: Mapped[int] = mapped_column(
+        ForeignKey("users.id", ondelete="CASCADE"), nullable=False, index=True
+    )
+    name: Mapped[str] = mapped_column(String(200), nullable=False)
+    # How many servings the whole recipe makes, which is what every per-serving
+    # figure is divided by.
+    yield_servings: Mapped[float] = mapped_column(Float, nullable=False, default=1.0)
+    created_at: Mapped[dt.datetime] = mapped_column(UtcDateTime, nullable=False, default=now_utc)
+    updated_at: Mapped[dt.datetime] = mapped_column(UtcDateTime, nullable=False, default=now_utc)
+
+    ingredients: Mapped[list["RecipeIngredient"]] = relationship(
+        cascade="all, delete-orphan", order_by="RecipeIngredient.position"
+    )
+
+
+class RecipeIngredient(Base):
+    """One food in a recipe, with what that much of it came to."""
+
+    __tablename__ = "recipe_ingredients"
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True)
+    recipe_id: Mapped[int] = mapped_column(
+        ForeignKey("recipes.id", ondelete="CASCADE"), nullable=False
+    )
+    # SET NULL, like a diary entry's: deleting a food unlinks the ingredient
+    # rather than taking the recipe's numbers with it.
+    food_id: Mapped[int | None] = mapped_column(
+        ForeignKey("foods.id", ondelete="SET NULL"), nullable=True, index=True
+    )
+    name: Mapped[str] = mapped_column(String(200), nullable=False)
+    brand: Mapped[str] = mapped_column(String(120), nullable=False, default="")
+
+    # How it was measured out, kept so the row can say "2 tbsp" rather than the
+    # millilitres that came of it.
+    amount: Mapped[float] = mapped_column(Float, nullable=False)
+    unit: Mapped[str] = mapped_column(String(8), nullable=False)
+    serving_label: Mapped[str | None] = mapped_column(String(60), nullable=True)
+    # What that amount came to in the food's own base unit.
+    base_amount: Mapped[float] = mapped_column(Float, nullable=False)
+
+    # For the amount used, not per 100 of anything.
+    calories: Mapped[float | None] = mapped_column(Float, nullable=True)
+    protein_g: Mapped[float | None] = mapped_column(Float, nullable=True)
+    carbs_g: Mapped[float | None] = mapped_column(Float, nullable=True)
+    fat_g: Mapped[float | None] = mapped_column(Float, nullable=True)
+    saturated_fat_g: Mapped[float | None] = mapped_column(Float, nullable=True)
+    trans_fat_g: Mapped[float | None] = mapped_column(Float, nullable=True)
+    cholesterol_mg: Mapped[float | None] = mapped_column(Float, nullable=True)
+    sodium_mg: Mapped[float | None] = mapped_column(Float, nullable=True)
+    fiber_g: Mapped[float | None] = mapped_column(Float, nullable=True)
+    sugar_g: Mapped[float | None] = mapped_column(Float, nullable=True)
+
+    position: Mapped[int] = mapped_column(Integer, nullable=False, default=0)
+
+
+class MealTemplate(Base):
+    """Foods somebody eats together, kept so they can be logged in one go."""
+
+    __tablename__ = "meal_templates"
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True)
+    user_id: Mapped[int] = mapped_column(
+        ForeignKey("users.id", ondelete="CASCADE"), nullable=False, index=True
+    )
+    name: Mapped[str] = mapped_column(String(200), nullable=False)
+    created_at: Mapped[dt.datetime] = mapped_column(UtcDateTime, nullable=False, default=now_utc)
+    updated_at: Mapped[dt.datetime] = mapped_column(UtcDateTime, nullable=False, default=now_utc)
+
+    items: Mapped[list["MealTemplateItem"]] = relationship(
+        cascade="all, delete-orphan", order_by="MealTemplateItem.position"
+    )
+
+
+class MealTemplateItem(Base):
+    """One thing in a kept meal: a food and how much of it.
+
+    No panel of its own. A meal is a list of things to log, and each of them
+    takes its numbers from the food as it stands when the meal is logged.
+    """
+
+    __tablename__ = "meal_template_items"
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True)
+    meal_id: Mapped[int] = mapped_column(
+        ForeignKey("meal_templates.id", ondelete="CASCADE"), nullable=False
+    )
+    food_id: Mapped[int | None] = mapped_column(
+        ForeignKey("foods.id", ondelete="SET NULL"), nullable=True, index=True
+    )
+    name: Mapped[str] = mapped_column(String(200), nullable=False)
+    brand: Mapped[str] = mapped_column(String(120), nullable=False, default="")
+    amount: Mapped[float] = mapped_column(Float, nullable=False)
+    unit: Mapped[str] = mapped_column(String(8), nullable=False)
+    serving_label: Mapped[str | None] = mapped_column(String(60), nullable=True)
+    position: Mapped[int] = mapped_column(Integer, nullable=False, default=0)
 
 
 class SavedFood(Base):
