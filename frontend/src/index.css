@@ -172,7 +172,9 @@
     border-radius: 0.625rem;
     background: var(--surface-2);
     color: var(--text);
-    font-size: 0.9375rem;
+    /* Never under 16px: iOS Safari zooms the whole page when a smaller field
+       takes focus, and the page stays zoomed after it. */
+    font-size: 1rem;
   }
   .t-input::placeholder {
     color: var(--muted);

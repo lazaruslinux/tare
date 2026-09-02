@@ -139,7 +139,7 @@ export function Settings({
     setScreen(null)
     onReviewed()
   }
-  if (screen === 'queue') return <AdminQueue onBack={leaveAdmin} />
+  if (screen === 'queue') return <AdminQueue onBack={leaveAdmin} onDecided={onReviewed} />
   if (screen === 'invites') return <AdminInvites onBack={leaveAdmin} />
   if (screen === 'users') return <AdminUsers onBack={leaveAdmin} />
 

@@ -10,6 +10,7 @@ export function TopBar({
   waiting,
   onBack,
   onSettings,
+  onHome,
 }: {
   title: string
   // Null on a top-level screen, where the wordmark takes the slot instead.
@@ -18,14 +19,21 @@ export function TopBar({
   waiting: number
   onBack: () => void
   onSettings: () => void
+  // The wordmark is the way home: Dashboard, top of the page.
+  onHome: () => void
 }) {
   return (
     <header className="t-topbar">
       <div className="flex min-w-0 justify-start">
         {backLabel === null ? (
-          <span className="t-topbar-mark px-2 text-lg font-semibold tracking-tight lowercase">
+          <button
+            type="button"
+            className="t-topbar-mark t-tap44 px-2 text-lg font-semibold tracking-tight lowercase"
+            aria-label="Dashboard"
+            onClick={onHome}
+          >
             tare
-          </span>
+          </button>
         ) : (
           <button type="button" className="t-topbar-back" onClick={onBack}>
             <ChevronLeft className="h-5 w-5 shrink-0" strokeWidth={2.5} />

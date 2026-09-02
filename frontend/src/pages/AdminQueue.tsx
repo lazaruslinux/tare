@@ -136,7 +136,14 @@ function Comparison({
   )
 }
 
-export function AdminQueue({ onBack }: { onBack: () => void }) {
+export function AdminQueue({
+  onBack,
+  onDecided,
+}: {
+  onBack: () => void
+  // Each decision changes the waiting count the header shows, so it is told.
+  onDecided: () => void
+}) {
   const [queue, setQueue] = useState<QueueItem[] | null>(null)
   const [error, setError] = useState('')
   const [busy, setBusy] = useState(false)
@@ -184,6 +191,7 @@ export function AdminQueue({ onBack }: { onBack: () => void }) {
       setRejecting(null)
       setReason('')
       await load()
+      onDecided()
     } catch (failure) {
       const clash = path === 'approve' && failure instanceof ApiError && failure.status === 409
       setError(clash ? DUPLICATE : errorText(failure))

@@ -132,6 +132,10 @@ export default function App() {
               waiting={waiting}
               onBack={bar.goBack}
               onSettings={() => select('more')}
+              onHome={() => {
+                select('dashboard')
+                window.scrollTo({ top: 0 })
+              }}
             />
             <div className="t-content">
               <AnimatePresence mode="wait">
