@@ -183,7 +183,7 @@ export function Journal({ me, refresh }: { me: Me; refresh: number }) {
           <p className="text-sm text-muted">Nothing logged yet. Add your first food.</p>
           <button
             type="button"
-            className="t-btn t-btn-primary mt-3 w-full"
+            className="t-btn t-btn-primary mt-3"
             onClick={() => setPicking(slotByTime(me.timezone))}
           >
             Add food

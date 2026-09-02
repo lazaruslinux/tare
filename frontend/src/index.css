@@ -497,7 +497,7 @@
       flex: none;
       flex-direction: column;
       gap: 0.875rem;
-      padding: 1.375rem 1.5rem 2rem 0;
+      padding: calc(48px + 1.125rem) 1.5rem 2rem 1.5rem;
       overflow-y: auto;
     }
   }
