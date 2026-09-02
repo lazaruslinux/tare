@@ -20,7 +20,7 @@ from app.db import get_db
 from app.deps import require_user
 from app.models import now_utc
 from app.routers.diary import checked_slot, entry_row, log_food, measure, stored_unit
-from app.routers.foods import readable_food
+from app.routers.foods import MY_LIST_CAP, readable_food
 from app.routers.recipes import checked_name, part_food
 
 router = APIRouter(prefix="/meals", tags=["meals"])
@@ -90,15 +90,24 @@ def meal_detail(meal: models.MealTemplate) -> dict[str, object]:
 def list_meals(
     db: Session = Depends(get_db), user: models.User = Depends(require_user)
 ) -> list[dict[str, object]]:
-    """This account's kept meals, newest first."""
+    """This account's kept meals, newest first.
+
+    last_logged is always null here, and the ordering is by when each meal was
+    written down. Logging a meal writes one ordinary entry per food in it and
+    leaves no mark saying the meal was the reason, so there is nothing to read
+    a date off. The key is sent all the same, so the three lists on the Food
+    page read the same shape and this one starts answering the moment the diary
+    has somewhere to record it.
+    """
     query = (
         select(models.MealTemplate)
         .options(selectinload(models.MealTemplate.items))
         .where(models.MealTemplate.user_id == user.id)
         .order_by(models.MealTemplate.created_at.desc(), models.MealTemplate.id.desc())
+        .limit(MY_LIST_CAP)
     )
     return [
-        {"id": meal.id, "name": meal.name, "items": len(meal.items)}
+        {"id": meal.id, "name": meal.name, "items": len(meal.items), "last_logged": None}
         for meal in db.execute(query).scalars()
     ]
 

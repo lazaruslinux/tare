@@ -21,7 +21,7 @@ from app.deps import require_user
 from app.models import NUTRIENTS, now_utc
 from app.recipes import HEADLINE, own_recipe, per_serving, totals
 from app.routers.diary import measure, snapshot
-from app.routers.foods import MAX_NAME, readable_food
+from app.routers.foods import MAX_NAME, MY_LIST_CAP, last_logged_by, readable_food
 
 router = APIRouter(prefix="/recipes", tags=["recipes"])
 
@@ -114,15 +114,26 @@ def recipe_detail(recipe: models.Recipe) -> dict[str, object]:
 def list_recipes(
     db: Session = Depends(get_db), user: models.User = Depends(require_user)
 ) -> list[dict[str, object]]:
-    """This account's recipes, newest first, by what a serving is worth."""
+    """This account's recipes, by what a serving is worth.
+
+    Ordered by when each was last eaten, like the food list, and by when it was
+    written down for the ones nobody has logged yet.
+    """
+    logged = last_logged_by(models.DiaryEntry.recipe_id, user)
     query = (
-        select(models.Recipe)
+        select(models.Recipe, logged.c.last_logged)
         .options(selectinload(models.Recipe.ingredients))
+        .outerjoin(logged, logged.c.owner == models.Recipe.id)
         .where(models.Recipe.user_id == user.id)
-        .order_by(models.Recipe.created_at.desc(), models.Recipe.id.desc())
+        .order_by(
+            logged.c.last_logged.desc().nullslast(),
+            models.Recipe.created_at.desc(),
+            models.Recipe.id.desc(),
+        )
+        .limit(MY_LIST_CAP)
     )
     rows = []
-    for recipe in db.execute(query).scalars():
+    for recipe, stamp in db.execute(query).all():
         each = per_serving(recipe)
         rows.append(
             {
@@ -130,6 +141,7 @@ def list_recipes(
                 "name": recipe.name,
                 "yield_servings": recipe.yield_servings,
                 "per_serving": {field: each[field] for field in HEADLINE},
+                "last_logged": stamp,
             }
         )
     return rows

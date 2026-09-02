@@ -1,4 +1,5 @@
 import {
+  ChevronRight,
   CookingPot,
   Pin,
   Plus,
@@ -14,32 +15,34 @@ import { useEffect, useRef, useState } from 'react'
 import {
   api,
   errorText,
-  type Community,
   type Food as FoodItem,
-  type FoodRow,
   type Meal,
   type MealRow,
   type Me,
+  type MyFoodRow,
   type MySubmission,
   type Recipe,
   type RecipeRow,
   type RepeatRow,
 } from '../api'
 import { FoodForm } from '../components/FoodForm'
+import { FoodLine, MealLine, RecipeLine } from '../components/FoodRows'
 import { PortionSheet } from '../components/PortionSheet'
 import { nutrientText } from '../components/NutritionLabel'
 import { useTopBar } from '../hooks/useTopBar'
 import { slotByTime, today } from '../lib/day'
-import { servingsText } from '../lib/units'
 import { Browse } from './Browse'
 import { FoodDetail } from './FoodDetail'
 import { MealDetail } from './MealDetail'
+import { MyList, LIST_TITLE, type ListKind } from './MyList'
 import { PartsForm } from './PartsForm'
 import { RecipeDetail } from './RecipeDetail'
 import { KIND_LABEL } from '../lib/community'
 
-// How many of your own foods the card shows before it offers the rest.
-const SHOWN = 6
+// How many rows a card on this page shows before it stops being a card and
+// starts being a list. Five is what fits above the fold beside four other
+// cards; the rest are one tap away on a screen built to search them.
+const SHOWN = 5
 // How long something taken back can be put back. Short enough that nobody is
 // waiting on it, long enough to notice the mistake.
 const UNDO = 6000
@@ -52,14 +55,16 @@ const STATUS_LABEL: Record<MySubmission['status'], string> = {
 
 // What each kind of request is called where somebody reads their own list of
 // them, in the words they would use rather than the words the column stores.
+// Where going back from something lands, because a food is opened from the
+// page, from the shared database and from a list screen alike.
+type From = { at: 'list' } | { at: 'browse' } | { at: 'all'; kind: ListKind }
+
 type View =
-  | { at: 'list' }
-  | { at: 'browse' }
-  // Where going back from a food lands, because it is opened from two places.
-  | { at: 'detail'; id: number; from: 'list' | 'browse' }
+  | From
+  | { at: 'detail'; id: number; from: From }
   | { at: 'form'; food: FoodItem | null; notice?: string }
-  | { at: 'recipe'; id: number }
-  | { at: 'meal'; id: number }
+  | { at: 'recipe'; id: number; from: From }
+  | { at: 'meal'; id: number; from: From }
   // The editors are given what they are changing, or nothing for a new one.
   | { at: 'recipeForm'; recipe: Recipe | null }
   | { at: 'mealForm'; meal: Meal | null }
@@ -69,43 +74,16 @@ type View =
 // first one destroyed.
 type Undo = { message: string; commit: () => void; revert?: () => void }
 
-// Where a food stands with the shared database, as one dot before its name.
-// A word for each of these on every row would be a column of shouting; the
-// colour carries it and the label is there for anybody reading with their ears.
-const DOTS: Record<Community, { label: string; look: string }> = {
-  none: { label: 'Not submitted', look: 'border border-line-strong' },
-  pending: { label: 'Waiting for review', look: 'bg-pending' },
-  approved: { label: 'Approved', look: 'bg-accent' },
-  rejected: { label: 'Not approved', look: 'bg-danger' },
-}
-
-function Dot({ state }: { state: Community }) {
-  const dot = DOTS[state]
+// The way out of a card that holds more than it shows.
+function SeeAll({ count, onOpen }: { count: number; onOpen: () => void }) {
   return (
-    <span
-      className={`h-2 w-2 shrink-0 rounded-full ${dot.look}`}
-      role="img"
-      aria-label={dot.label}
-    />
-  )
-}
-
-function Row({ row, onOpen }: { row: FoodRow; onOpen: () => void }) {
-  return (
-    <button type="button" className="t-row w-full text-left" onClick={onOpen}>
-      <span className="min-w-0 flex-1">
-        <span className="flex items-center gap-2">
-          <Dot state={row.community} />
-          <span className="truncate text-sm">{row.name}</span>
-        </span>
-        {row.brand && <span className="block truncate text-xs text-muted">{row.brand}</span>}
-      </span>
-      <span className="shrink-0 text-right">
-        <span className="t-nums block text-sm">
-          {row.calories === null ? '-' : Math.round(row.calories)} cal
-        </span>
-        <span className="block text-xs text-muted">per 100 {row.base_unit}</span>
-      </span>
+    <button
+      type="button"
+      className="t-row w-full text-left text-sm text-muted"
+      onClick={onOpen}
+    >
+      <span className="flex-1">See all {count}</span>
+      <ChevronRight className="h-4 w-4 shrink-0" strokeWidth={2.5} />
     </button>
   )
 }
@@ -125,7 +103,7 @@ export function FoodTab({
   onScan: () => void
 }) {
   const [view, setView] = useState<View>({ at: 'list' })
-  const [foods, setFoods] = useState<FoodRow[]>([])
+  const [foods, setFoods] = useState<MyFoodRow[]>([])
   const [recipes, setRecipes] = useState<RecipeRow[]>([])
   const [meals, setMeals] = useState<MealRow[]>([])
   const [repeat, setRepeat] = useState<RepeatRow[]>([])
@@ -133,7 +111,6 @@ export function FoodTab({
   const [logging, setLogging] = useState<FoodItem | null>(null)
   const [submissions, setSubmissions] = useState<MySubmission[]>([])
   const [error, setError] = useState('')
-  const [expanded, setExpanded] = useState(false)
 
   // The list is the tab's root, and its header carries the way to a new food.
   // Every other view names itself, so the bar is left to whichever of them is
@@ -153,7 +130,7 @@ export function FoodTab({
   const submittedRef = useRef<HTMLDivElement>(null)
 
   const load = () =>
-    api<FoodRow[]>('/foods/mine').then(setFoods, (failure) => setError(errorText(failure)))
+    api<MyFoodRow[]>('/foods/mine').then(setFoods, (failure) => setError(errorText(failure)))
 
   const loadSubmissions = () =>
     api<MySubmission[]>('/submissions/mine').then(setSubmissions, () => setSubmissions([]))
@@ -180,7 +157,7 @@ export function FoodTab({
 
   useEffect(() => {
     let alive = true
-    api<FoodRow[]>('/foods/mine')
+    api<MyFoodRow[]>('/foods/mine')
       .then((rows) => alive && setFoods(rows))
       .catch((failure) => alive && setError(errorText(failure)))
     api<MySubmission[]>('/submissions/mine')
@@ -308,11 +285,55 @@ export function FoodTab({
     void loadRepeat()
   }
 
+  // What the screen behind a detail is called, for the control that goes back
+  // to it.
+  const nameOf = (from: From) =>
+    from.at === 'browse'
+      ? 'Browse tare database'
+      : from.at === 'all'
+        ? LIST_TITLE[from.kind]
+        : 'Food'
+
+  if (view.at === 'all') {
+    const kind = view.kind
+    const back = () => setView({ at: 'list' })
+    return (
+      <MyList
+        listed={
+          kind === 'foods'
+            ? { kind, rows: foods }
+            : kind === 'meals'
+              ? { kind, rows: meals }
+              : { kind, rows: recipes }
+        }
+        onBack={back}
+        onOpen={(id) =>
+          setView(
+            kind === 'foods'
+              ? { at: 'detail', id, from: { at: 'all', kind } }
+              : kind === 'meals'
+                ? { at: 'meal', id, from: { at: 'all', kind } }
+                : { at: 'recipe', id, from: { at: 'all', kind } }
+          )
+        }
+        onAdd={() =>
+          setView(
+            kind === 'foods'
+              ? { at: 'form', food: null }
+              : kind === 'meals'
+                ? { at: 'mealForm', meal: null }
+                : { at: 'recipeForm', recipe: null }
+          )
+        }
+      />
+    )
+  }
+
   if (view.at === 'browse') {
     return (
       <Browse
         onBack={() => setView({ at: 'list' })}
-        onOpen={(id) => setView({ at: 'detail', id, from: 'browse' })}
+        onOpen={(id) => setView({ at: 'detail', id, from: { at: 'browse' } })}
         onScan={onScan}
       />
     )
@@ -324,8 +345,8 @@ export function FoodTab({
       <FoodDetail
         id={view.id}
         me={me}
-        backLabel={from === 'browse' ? 'Browse tare database' : 'Food'}
-        onBack={() => setView(from === 'browse' ? { at: 'browse' } : { at: 'list' })}
+        backLabel={nameOf(from)}
+        onBack={() => setView(from)}
         onEdit={(food, notice) => setView({ at: 'form', food, notice })}
         onDelete={remove}
         onSubmitted={() => {
@@ -338,11 +359,13 @@ export function FoodTab({
   }
 
   if (view.at === 'recipe') {
+    const from = view.from
     return (
       <RecipeDetail
         id={view.id}
         me={me}
-        onBack={() => setView({ at: 'list' })}
+        backLabel={nameOf(from)}
+        onBack={() => setView(from)}
         onEdit={(recipe) => setView({ at: 'recipeForm', recipe })}
         onDelete={removeRecipe}
       />
@@ -350,11 +373,13 @@ export function FoodTab({
   }
 
   if (view.at === 'meal') {
+    const from = view.from
     return (
       <MealDetail
         id={view.id}
         me={me}
-        onBack={() => setView({ at: 'list' })}
+        backLabel={nameOf(from)}
+        onBack={() => setView(from)}
         onEdit={(meal) => setView({ at: 'mealForm', meal })}
         onDelete={removeMeal}
       />
@@ -370,10 +395,14 @@ export function FoodTab({
         recipe={editing}
         onSaved={(id) => {
           void loadRecipes()
-          setView({ at: 'recipe', id })
+          setView({ at: 'recipe', id, from: { at: 'list' } })
         }}
         onCancel={() =>
-          setView(editing === null ? { at: 'list' } : { at: 'recipe', id: editing.id })
+          setView(
+            editing === null
+              ? { at: 'list' }
+              : { at: 'recipe', id: editing.id, from: { at: 'list' } }
+          )
         }
       />
     )
@@ -388,10 +417,14 @@ export function FoodTab({
         meal={editing}
         onSaved={(id) => {
           void loadMeals()
-          setView({ at: 'meal', id })
+          setView({ at: 'meal', id, from: { at: 'list' } })
         }}
         onCancel={() =>
-          setView(editing === null ? { at: 'list' } : { at: 'meal', id: editing.id })
+          setView(
+            editing === null
+              ? { at: 'list' }
+              : { at: 'meal', id: editing.id, from: { at: 'list' } }
+          )
         }
       />
     )
@@ -404,14 +437,16 @@ export function FoodTab({
         food={editing}
         notice={view.notice}
         backLabel={editing === null ? 'Food' : editing.name}
-        onOpenFood={(id) => setView({ at: 'detail', id, from: 'list' })}
+        onOpenFood={(id) => setView({ at: 'detail', id, from: { at: 'list' } })}
         onSaved={(saved) => {
           void load()
-          setView({ at: 'detail', id: saved.id, from: 'list' })
+          setView({ at: 'detail', id: saved.id, from: { at: 'list' } })
         }}
         onCancel={() =>
           setView(
-            editing === null ? { at: 'list' } : { at: 'detail', id: editing.id, from: 'list' }
+            editing === null
+              ? { at: 'list' }
+              : { at: 'detail', id: editing.id, from: { at: 'list' } }
           )
         }
       />
@@ -467,21 +502,18 @@ export function FoodTab({
           </>
         ) : (
           <>
-            {(expanded ? foods : foods.slice(0, SHOWN)).map((row) => (
-              <Row
+            {foods.slice(0, SHOWN).map((row) => (
+              <FoodLine
                 key={row.id}
                 row={row}
-                onOpen={() => setView({ at: 'detail', id: row.id, from: 'list' })}
+                onOpen={() => setView({ at: 'detail', id: row.id, from: { at: 'list' } })}
               />
             ))}
             {foods.length > SHOWN && (
-              <button
-                type="button"
-                className="t-row w-full text-left text-sm text-muted"
-                onClick={() => setExpanded(!expanded)}
-              >
-                {expanded ? 'Show fewer' : `See all ${foods.length}`}
-              </button>
+              <SeeAll
+                count={foods.length}
+                onOpen={() => setView({ at: 'all', kind: 'foods' })}
+              />
             )}
           </>
         )}
@@ -517,19 +549,21 @@ export function FoodTab({
             </button>
           </>
         ) : (
-          meals.map((row) => (
-            <button
-              key={row.id}
-              type="button"
-              className="t-row w-full text-left"
-              onClick={() => setView({ at: 'meal', id: row.id })}
-            >
-              <span className="min-w-0 flex-1 truncate text-sm">{row.name}</span>
-              <span className="shrink-0 text-xs text-muted">
-                {row.items === 1 ? '1 food' : `${row.items} foods`}
-              </span>
-            </button>
-          ))
+          <>
+            {meals.slice(0, SHOWN).map((row) => (
+              <MealLine
+                key={row.id}
+                row={row}
+                onOpen={() => setView({ at: 'meal', id: row.id, from: { at: 'list' } })}
+              />
+            ))}
+            {meals.length > SHOWN && (
+              <SeeAll
+                count={meals.length}
+                onOpen={() => setView({ at: 'all', kind: 'meals' })}
+              />
+            )}
+          </>
         )}
       </div>
 
@@ -563,27 +597,21 @@ export function FoodTab({
             </button>
           </>
         ) : (
-          recipes.map((row) => (
-            <button
-              key={row.id}
-              type="button"
-              className="t-row w-full text-left"
-              onClick={() => setView({ at: 'recipe', id: row.id })}
-            >
-              <span className="min-w-0 flex-1">
-                <span className="block truncate text-sm">{row.name}</span>
-                <span className="block truncate text-xs text-muted">
-                  Makes {servingsText(row.yield_servings)}
-                </span>
-              </span>
-              <span className="shrink-0 text-right">
-                <span className="t-nums block text-sm">
-                  {nutrientText('calories', row.per_serving.calories)} cal
-                </span>
-                <span className="block text-xs text-muted">per serving</span>
-              </span>
-            </button>
-          ))
+          <>
+            {recipes.slice(0, SHOWN).map((row) => (
+              <RecipeLine
+                key={row.id}
+                row={row}
+                onOpen={() => setView({ at: 'recipe', id: row.id, from: { at: 'list' } })}
+              />
+            ))}
+            {recipes.length > SHOWN && (
+              <SeeAll
+                count={recipes.length}
+                onOpen={() => setView({ at: 'all', kind: 'recipes' })}
+              />
+            )}
+          </>
         )}
       </div>
 

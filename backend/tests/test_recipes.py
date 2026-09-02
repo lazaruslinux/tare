@@ -144,6 +144,30 @@ def test_the_list_reads_by_what_a_serving_is_worth(client, porridge):
     assert set(rows[0]["per_serving"]) == {"calories", "protein_g", "carbs_g", "fat_g"}
 
 
+def test_the_recipe_list_leads_with_what_was_eaten_last(client, porridge, oats, milk):
+    second = client.post(
+        "/api/recipes",
+        json={
+            "name": "Overnight oats",
+            "yield_servings": 2,
+            "ingredients": [{"food_id": oats["id"], "amount": 1, "unit": "cup"}],
+        },
+    ).json()
+
+    # The newer recipe leads while neither has been eaten.
+    assert [row["name"] for row in client.get("/api/recipes").json()] == [
+        "Overnight oats",
+        "Porridge",
+    ]
+    assert [row["last_logged"] for row in client.get("/api/recipes").json()] == [None, None]
+
+    assert log_recipe(client, porridge).status_code == 201
+    rows = client.get("/api/recipes").json()
+    assert [row["name"] for row in rows] == ["Porridge", "Overnight oats"]
+    assert [row["last_logged"] for row in rows] == [TODAY, None]
+    assert second["id"] == rows[1]["id"]
+
+
 def test_editing_the_recipe_leaves_what_was_already_eaten_alone(client, porridge, oats, milk):
     log_recipe(client, porridge, 1.5)
     before = only_entry(client)

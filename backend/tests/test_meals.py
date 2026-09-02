@@ -89,7 +89,16 @@ def test_a_meal_is_a_list_of_things_to_log(client, breakfast):
     assert (second["name"], second["brand"], second["unit"]) == ("Flat white", "Cafe", "ml")
 
     listed = client.get("/api/meals").json()
-    assert listed == [{"id": breakfast["id"], "name": "Usual breakfast", "items": 2}]
+    assert listed == [
+        {
+            "id": breakfast["id"],
+            "name": "Usual breakfast",
+            "items": 2,
+            # Nothing in the diary says a meal was the reason for an entry, so
+            # this list has no date to read. The key is sent all the same.
+            "last_logged": None,
+        }
+    ]
 
 
 def test_logging_a_meal_makes_one_entry_for_each_thing_in_it(client, breakfast):

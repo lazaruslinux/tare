@@ -14,12 +14,16 @@ const NOTICE = 5000
 export function MealDetail({
   id,
   me,
+  backLabel,
   onBack,
   onEdit,
   onDelete,
 }: {
   id: number
   me: Me
+  // What the screen behind this one is called: the Food page, or the list
+  // screen it was opened from.
+  backLabel: string
   onBack: () => void
   onEdit: (meal: Meal) => void
   onDelete: (meal: Meal) => void
@@ -32,7 +36,7 @@ export function MealDetail({
   const [notice, setNotice] = useState('')
   const [left, setLeft] = useState('')
 
-  useTopBar({ title: meal?.name ?? 'Meal', back: { label: 'Food', onBack } })
+  useTopBar({ title: meal?.name ?? 'Meal', back: { label: backLabel, onBack } })
 
   useEffect(() => {
     let alive = true

@@ -214,6 +214,11 @@ export type FoodRow = {
   photo_url: string | null
 }
 
+// A row in one of the member's own lists. The day it was last eaten is what
+// those lists are ordered by, so the thing somebody had yesterday is near the
+// top of a list of hundreds. Null is a food nobody has logged.
+export type MyFoodRow = FoodRow & { last_logged: string | null }
+
 // One page of the shared database. The marker is opaque: it says where the
 // page stopped and nothing else, and it is only ever handed back as it came.
 export type BrowsePage = { items: FoodRow[]; next_cursor: string | null }
@@ -378,6 +383,7 @@ export type RecipeRow = {
   name: string
   yield_servings: number
   per_serving: Record<Headline, number | null>
+  last_logged: string | null
 }
 
 // The whole recipe. The totals are for all of it and the per-serving figures
@@ -392,7 +398,9 @@ export type Recipe = {
 }
 
 // A kept meal as a list reads it, by how much is in it.
-export type MealRow = { id: number; name: string; items: number }
+// last_logged is always null on a meal: logging one writes an ordinary entry
+// per food in it and leaves nothing saying the meal was the reason.
+export type MealRow = { id: number; name: string; items: number; last_logged: string | null }
 
 // The whole meal. It has no numbers of its own: each item takes them from the
 // food as it stands when the meal is logged.

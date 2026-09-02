@@ -14,8 +14,8 @@ import re
 from collections.abc import Sequence
 
 from fastapi import APIRouter, Depends, HTTPException, status
-from sqlalchemy import Select, and_, case, delete, func, or_, select, update
-from sqlalchemy.orm import Session
+from sqlalchemy import Select, Subquery, and_, case, delete, func, or_, select, update
+from sqlalchemy.orm import InstrumentedAttribute, Session
 
 from app import models, schemas
 from app.db import get_db
@@ -73,6 +73,11 @@ OWNER_MAY_DELETE = ("custom",)
 # the same job as approving it.
 ADMIN_MAY_EDIT = ("approved", "shadow")
 ADMIN_MAY_DELETE = ("approved",)
+
+# The ceiling on somebody's own list. High enough that nobody real reaches it,
+# and still a ceiling: a screen that reads every row at once needs a number it
+# cannot be given more than.
+MY_LIST_CAP = 1000
 
 # How many foods one page of the browse list holds.
 BROWSE_PAGE = 40
@@ -204,6 +209,26 @@ def food_rows(
     pictures = photo_urls(db, [food.id for food in foods])
     states = community_states(db, user, foods)
     return [food_row(food, pictures.get(food.id), states[food.id]) for food in foods]
+
+
+def last_logged_by(
+    column: InstrumentedAttribute[int | None], user: models.User
+) -> Subquery:
+    """The newest day each row was eaten on, as a table to join against.
+
+    One grouped query for a whole list rather than a lookup per row. Which
+    column keys it is given, because a diary entry names the food it was and
+    the recipe it came out of in two different places.
+    """
+    return (
+        select(
+            column.label("owner"),
+            func.max(models.DiaryEntry.date_for).label("last_logged"),
+        )
+        .where(models.DiaryEntry.user_id == user.id, column.is_not(None))
+        .group_by(column)
+        .subquery()
+    )
 
 
 def hidden_ids(db: Session, user: models.User) -> set[int]:
@@ -443,11 +468,17 @@ def search_foods(
 def list_my_foods(
     db: Session = Depends(get_db), user: models.User = Depends(require_user)
 ) -> list[dict[str, object]]:
-    """This account's own foods, newest first, and the ones it gave away.
+    """This account's own foods, and the ones it gave away.
 
     A food that was approved belongs to nobody now, but the person who entered
     it still thinks of it as theirs and still wants to find it where they put
     it. So it stays in this list, marked as shared rather than owned.
+
+    Ordered by when each was last eaten rather than when it was entered. What
+    somebody had yesterday is what they are most likely to have again, and a
+    food entered a year ago and eaten every week belongs above one typed in
+    last month and never touched. A food nobody has logged has no such date and
+    falls to the bottom, newest first among its own kind.
     """
     offered = select(models.FoodSubmission.food_id).where(
         models.FoodSubmission.submitted_by_id == user.id,
@@ -455,21 +486,32 @@ def list_my_foods(
         models.FoodSubmission.status == "approved",
         models.FoodSubmission.food_id.is_not(None),
     )
+    logged = last_logged_by(models.DiaryEntry.food_id, user)
     query = (
-        select(models.Food)
+        select(models.Food, logged.c.last_logged)
+        .outerjoin(logged, logged.c.owner == models.Food.id)
         .where(
             or_(
                 and_(models.Food.owner_id == user.id, models.Food.status.in_(LISTED)),
                 and_(models.Food.status == "approved", models.Food.id.in_(offered)),
             )
         )
-        .order_by(models.Food.created_at.desc(), models.Food.id.desc())
-        # A ceiling rather than paging: this is one person's own list, and a
-        # screen that scrolls past two hundred of them needs a different shape
-        # than a longer response.
-        .limit(200)
+        .order_by(
+            logged.c.last_logged.desc().nullslast(),
+            models.Food.created_at.desc(),
+            models.Food.id.desc(),
+        )
+        # A ceiling rather than paging: this is one person's own list, and the
+        # screen that reads it filters what it was given rather than asking
+        # again.
+        .limit(MY_LIST_CAP)
     )
-    return food_rows(db, user, list(db.execute(query).scalars()))
+    found = db.execute(query).all()
+    rows = food_rows(db, user, [food for food, _ in found])
+    return [
+        {**row, "last_logged": stamp}
+        for row, (_, stamp) in zip(rows, found, strict=True)
+    ]
 
 
 @router.get("/repeat")

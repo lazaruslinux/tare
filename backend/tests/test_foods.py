@@ -1,4 +1,7 @@
+import datetime as dt
+
 from app import models
+from app.routers import foods as foods_router
 from app.routers.foods import MISSING_FOOD, NOT_YOURS
 from tests.conftest import PASSWORD
 
@@ -147,6 +150,67 @@ def test_the_food_list_is_newest_first(client, signed_in):
     create(client, name="Second one")
     listed = client.get("/api/foods/mine").json()
     assert [row["name"] for row in listed] == ["Second one", "First one"]
+
+
+def eaten(db, user, food, on):
+    """One diary entry, straight in, on the day a case needs it on."""
+    db.add(
+        models.DiaryEntry(
+            user_id=user.id,
+            date_for=dt.date.fromisoformat(on),
+            slot="breakfast",
+            name=food["name"],
+            food_id=food["id"],
+            calories=100,
+        )
+    )
+    db.commit()
+
+
+def test_the_food_list_leads_with_what_was_eaten_last(client, db_session, signed_in):
+    older = create(client, name="First one").json()
+    create(client, name="Second one")
+    newest = create(client, name="Third one").json()
+
+    # The oldest food, eaten today, and the newest, eaten a week ago.
+    eaten(db_session, signed_in, older, "2026-09-02")
+    eaten(db_session, signed_in, newest, "2026-08-26")
+
+    listed = client.get("/api/foods/mine").json()
+    assert [row["name"] for row in listed] == ["First one", "Third one", "Second one"]
+    assert [row["last_logged"] for row in listed] == ["2026-09-02", "2026-08-26", None]
+
+
+def test_a_food_nobody_logged_falls_below_every_one_that_was(client, db_session, signed_in):
+    logged = create(client, name="Eaten once").json()
+    create(client, name="Never eaten")
+    eaten(db_session, signed_in, logged, "2020-01-01")
+
+    listed = client.get("/api/foods/mine").json()
+    assert [row["name"] for row in listed] == ["Eaten once", "Never eaten"]
+
+
+def test_only_my_own_meals_count_towards_when_a_food_was_last_eaten(
+    client, db_session, make_user, signed_in
+):
+    shared_food = put_food(db_session, None, name="Shared bar", status="approved")
+    mine = create(client, name="Mine").json()
+    eaten(db_session, signed_in, mine, "2020-01-01")
+    # Somebody else ate the shared food today, which is none of my business.
+    stranger = make_user("stranger")
+    eaten(db_session, stranger, {"id": shared_food.id, "name": "Shared bar"}, "2026-09-02")
+
+    listed = client.get("/api/foods/mine").json()
+    assert [row["name"] for row in listed] == ["Mine"]
+    assert listed[0]["last_logged"] == "2020-01-01"
+
+
+def test_the_list_stops_at_the_cap(client, monkeypatch, signed_in):
+    assert foods_router.MY_LIST_CAP == 1000
+    monkeypatch.setattr(foods_router, "MY_LIST_CAP", 2)
+    for index in range(3):
+        create(client, name=f"Bean number {index}")
+    assert len(client.get("/api/foods/mine").json()) == 2
 
 
 def test_search_ranks_the_name_by_where_the_word_sits(client, signed_in):
