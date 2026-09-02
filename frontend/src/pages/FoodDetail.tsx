@@ -1,10 +1,11 @@
-import { ChevronLeft, ImagePlus, Pencil, Pin, PinOff } from 'lucide-react'
+import { ImagePlus, Pencil, Pin, PinOff } from 'lucide-react'
 import { useEffect, useState, type ChangeEvent } from 'react'
 
 import { api, errorText, upload, type Food, type Me } from '../api'
 import { FoodForm } from '../components/FoodForm'
 import { NutritionLabel } from '../components/NutritionLabel'
 import { PortionSheet } from '../components/PortionSheet'
+import { useTopBar } from '../hooks/useTopBar'
 import {
   MAX_PHOTO_BYTES,
   PHOTO_TOO_LARGE,
@@ -28,6 +29,7 @@ function panelOf(food: Food): Values {
 export function FoodDetail({
   id,
   me,
+  backLabel,
   onBack,
   onEdit,
   onDelete,
@@ -35,6 +37,9 @@ export function FoodDetail({
 }: {
   id: number
   me: Me
+  // What the screen behind this one is called, because a food is opened from
+  // the tab's own list and from the shared database alike.
+  backLabel: string
   onBack: () => void
   // The notice is why somebody was sent to the form: a food that was short of
   // what sharing needs opens the form saying which box is empty.
@@ -50,6 +55,11 @@ export function FoodDetail({
   // going back lands on the food it is about.
   const [suggesting, setSuggesting] = useState(false)
   const [notice, setNotice] = useState('')
+
+  // The correction form names itself while it is open.
+  useTopBar(
+    suggesting ? null : { title: food?.name ?? 'Food', back: { label: backLabel, onBack } }
+  )
 
   useEffect(() => {
     let alive = true
@@ -132,6 +142,7 @@ export function FoodDetail({
       <FoodForm
         food={food}
         title="Suggest edit"
+        backLabel={food.name}
         sharing
         onSubmit={async (payload) => {
           const { note, ...proposed } = payload
@@ -155,11 +166,6 @@ export function FoodDetail({
 
   return (
     <>
-      <button type="button" className="t-micro mb-2 flex items-center gap-1" onClick={onBack}>
-        <ChevronLeft className="h-3.5 w-3.5" strokeWidth={2.5} />
-        Food
-      </button>
-
       {error && <p className="t-error">{error}</p>}
       {food && (
         <>

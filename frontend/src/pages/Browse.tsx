@@ -1,7 +1,7 @@
-import { ChevronLeft } from 'lucide-react'
 import { useEffect, useState } from 'react'
 
 import { api, errorText, type BrowsePage, type FoodRow } from '../api'
+import { useTopBar } from '../hooks/useTopBar'
 
 // The shared database, as a wall of what is in it. Photographed foods come
 // first because a picture is what somebody recognises a packet by, and the
@@ -49,6 +49,8 @@ export function Browse({
   const [error, setError] = useState('')
   const [busy, setBusy] = useState(false)
 
+  useTopBar({ title: 'Browse database', back: { label: 'Food', onBack } })
+
   const address = (marker: string | null) =>
     marker === null ? '/foods/browse' : `/foods/browse?cursor=${encodeURIComponent(marker)}`
 
@@ -84,11 +86,6 @@ export function Browse({
 
   return (
     <>
-      <button type="button" className="t-micro mb-2 flex items-center gap-1" onClick={onBack}>
-        <ChevronLeft className="h-3.5 w-3.5" strokeWidth={2.5} />
-        Food
-      </button>
-      <p className="mb-3 text-xl font-semibold tracking-tight">Browse database</p>
 
       {error && <p className="t-error mb-3">{error}</p>}
 

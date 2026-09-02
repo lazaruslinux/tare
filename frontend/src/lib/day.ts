@@ -68,6 +68,7 @@ export function shiftDay(iso: string, days: number): string {
 export function dayLabel(iso: string, todayIso: string): string {
   if (iso === todayIso) return 'Today'
   if (iso === shiftDay(todayIso, -1)) return 'Yesterday'
+  if (iso === shiftDay(todayIso, 1)) return 'Tomorrow'
   return new Date(`${iso}T00:00:00Z`).toLocaleDateString(undefined, {
     timeZone: 'UTC',
     weekday: 'short',

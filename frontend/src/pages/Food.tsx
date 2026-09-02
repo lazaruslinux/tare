@@ -10,6 +10,7 @@ import {
   type MySubmission,
 } from '../api'
 import { FoodForm } from '../components/FoodForm'
+import { useTopBar } from '../hooks/useTopBar'
 import { Browse } from './Browse'
 import { FoodDetail } from './FoodDetail'
 
@@ -98,6 +99,10 @@ export function FoodTab({
   // Null is not an empty result: it is a box nobody has typed two letters into.
   const [results, setResults] = useState<FoodRow[] | null>(null)
   const [again, setAgain] = useState(0)
+
+  // The list is the tab's root. Every other view names itself, so the bar is
+  // left to whichever of them is on.
+  useTopBar(view.at === 'list' ? { title: 'Food' } : null)
 
   const [undo, setUndo] = useState<Undo | null>(null)
   const undoRef = useRef<Undo | null>(null)
@@ -219,6 +224,7 @@ export function FoodTab({
       <FoodDetail
         id={view.id}
         me={me}
+        backLabel={from === 'browse' ? 'Browse database' : 'Food'}
         onBack={() => setView(from === 'browse' ? { at: 'browse' } : { at: 'list' })}
         onEdit={(food, notice) => setView({ at: 'form', food, notice })}
         onDelete={remove}
@@ -236,6 +242,7 @@ export function FoodTab({
       <FoodForm
         food={editing}
         notice={view.notice}
+        backLabel={editing === null ? 'Food' : editing.name}
         onSaved={(saved) => {
           void load()
           setView({ at: 'detail', id: saved.id, from: 'list' })
@@ -251,7 +258,6 @@ export function FoodTab({
 
   return (
     <>
-      <p className="t-micro mb-2">Food</p>
 
       {foods.length > 0 && (
         <input

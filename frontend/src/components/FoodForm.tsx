@@ -1,7 +1,8 @@
-import { ChevronDown, ChevronLeft, Plus, X } from 'lucide-react'
+import { ChevronDown, Plus, X } from 'lucide-react'
 import { useState, type FormEvent } from 'react'
 
 import { api, errorText, type Food } from '../api'
+import { useTopBar } from '../hooks/useTopBar'
 import { SHARED_FACTS, missingSentence, type Values } from '../lib/community'
 import type { BaseUnit } from '../lib/units'
 import { HEADLINE, MORE_FACTS, type Nutrient } from './NutritionLabel'
@@ -52,6 +53,7 @@ export function FoodForm({
   food,
   notice,
   title,
+  backLabel,
   sharing,
   onSubmit,
   onSaved,
@@ -62,6 +64,10 @@ export function FoodForm({
   // and the panel opened underneath it, so the box it is about is on screen.
   notice?: string
   title?: string
+  // What the screen behind this one is called. The form is opened from a
+  // list, from a food, and from the queue, and each of them is a different
+  // place to be sent back to.
+  backLabel: string
   // Held to what the shared database needs rather than what a private food
   // needs: the whole panel, a serving, and room to say something to whoever
   // reads it.
@@ -87,6 +93,9 @@ export function FoodForm({
   const [densityWrong, setDensityWrong] = useState(false)
   const [error, setError] = useState('')
   const [saving, setSaving] = useState(false)
+
+  const heading = title ?? (food ? 'Edit food' : 'New food')
+  useTopBar({ title: heading, back: { label: backLabel, onBack: onCancel } })
 
   const setFact = (key: Nutrient, value: string) => setPanel({ ...panel, [key]: value })
 
@@ -154,13 +163,6 @@ export function FoodForm({
 
   return (
     <>
-      <button type="button" className="t-micro mb-2 flex items-center gap-1" onClick={onCancel}>
-        <ChevronLeft className="h-3.5 w-3.5" strokeWidth={2.5} />
-        Food
-      </button>
-      <p className="mb-3 text-xl font-semibold tracking-tight">
-        {title ?? (food ? 'Edit food' : 'New food')}
-      </p>
       {notice && <p className="t-card mb-3 text-sm text-muted">{notice}</p>}
 
       <form onSubmit={submit}>

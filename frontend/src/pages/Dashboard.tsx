@@ -2,11 +2,14 @@ import { useEffect, useState } from 'react'
 
 import { api, errorText, type DiaryDay, type Me } from '../api'
 import { HEADLINE, nutrientText } from '../components/NutritionLabel'
+import { useTopBar } from '../hooks/useTopBar'
 import { today } from '../lib/day'
 
 export function Dashboard({ me, refresh }: { me: Me; refresh: number }) {
   const [day, setDay] = useState<DiaryDay | null>(null)
   const [error, setError] = useState('')
+
+  useTopBar({ title: 'Dashboard' })
 
   useEffect(() => {
     let alive = true
@@ -20,7 +23,6 @@ export function Dashboard({ me, refresh }: { me: Me; refresh: number }) {
 
   return (
     <>
-      <p className="t-micro mb-2">Dashboard</p>
 
       {error && <p className="t-error mb-3">{error}</p>}
 

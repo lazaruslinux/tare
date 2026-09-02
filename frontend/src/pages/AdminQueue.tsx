@@ -1,8 +1,8 @@
-import { ChevronLeft } from 'lucide-react'
 import { useEffect, useState } from 'react'
 
 import { ApiError, api, errorText, type Food, type Proposed, type QueueItem } from '../api'
 import { FoodForm } from '../components/FoodForm'
+import { useTopBar } from '../hooks/useTopBar'
 import { SHARED_FACTS } from '../lib/community'
 
 // The queue, which is the only door into the shared database. It is read dense
@@ -157,6 +157,11 @@ export function AdminQueue({ onBack }: { onBack: () => void }) {
   // form has its servings as well as its panel.
   const [adjusting, setAdjusting] = useState<Food | null>(null)
 
+  // The form names itself while a proposal is being corrected.
+  useTopBar(
+    adjusting === null ? { title: 'Review queue', back: { label: 'Settings', onBack } } : null
+  )
+
   const load = () =>
     api<QueueItem[]>('/admin/queue').then(setQueue, (failure) => {
       setError(errorText(failure))
@@ -208,6 +213,7 @@ export function AdminQueue({ onBack }: { onBack: () => void }) {
       <FoodForm
         food={adjusting}
         title="Adjust proposal"
+        backLabel="Review queue"
         onSaved={() => {
           setAdjusting(null)
           void load()
@@ -219,11 +225,6 @@ export function AdminQueue({ onBack }: { onBack: () => void }) {
 
   return (
     <>
-      <button type="button" className="t-micro mb-2 flex items-center gap-1" onClick={onBack}>
-        <ChevronLeft className="h-3.5 w-3.5" strokeWidth={2.5} />
-        More
-      </button>
-      <p className="mb-3 text-xl font-semibold tracking-tight">Review queue</p>
 
       {error && <p className="t-error mb-3">{error}</p>}
 

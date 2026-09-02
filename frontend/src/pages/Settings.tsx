@@ -1,7 +1,8 @@
 import { ChevronRight } from 'lucide-react'
-import { useEffect, useState, type FormEvent } from 'react'
+import { useState, type FormEvent } from 'react'
 
-import { api, errorText, type Me, type QueueItem, type Units } from '../api'
+import { api, errorText, type Me, type Units } from '../api'
+import { useTopBar } from '../hooks/useTopBar'
 import { applyTheme, rememberTheme, useTheme, type Theme } from '../theme'
 import { AdminInvites } from './AdminInvites'
 import { AdminQueue } from './AdminQueue'
@@ -41,11 +42,19 @@ export function Settings({
   me,
   onChange,
   onSignedOut,
+  waiting,
+  onReviewed,
   onOpenSubmissions,
 }: {
   me: Me
   onChange: (me: Me) => void
   onSignedOut: () => void
+  // How many submissions are waiting. Read once above this screen, because the
+  // top bar says the same number.
+  waiting: number
+  // Said on the way out of an admin screen, so the count catches up with what
+  // was just decided.
+  onReviewed: () => void
   // What this account has offered lives on the Food tab beside the foods it
   // is about, so this row goes there rather than building a second screen for
   // the same list.
@@ -53,20 +62,9 @@ export function Settings({
 }) {
   const theme = useTheme()
   const [screen, setScreen] = useState<AdminScreen>(null)
-  // How many are waiting, so the row says whether it is worth opening. Only
-  // ever read by an administrator, because nobody else has the route.
-  const [waiting, setWaiting] = useState(0)
 
-  useEffect(() => {
-    if (!me.is_admin) return
-    let alive = true
-    api<QueueItem[]>('/admin/queue')
-      .then((rows) => alive && setWaiting(rows.length))
-      .catch(() => {})
-    return () => {
-      alive = false
-    }
-  }, [me.is_admin, screen])
+  // Each admin screen names itself while it is open.
+  useTopBar(screen === null ? { title: 'Settings' } : null)
 
   const [displayName, setDisplayName] = useState(me.display_name ?? '')
   const [units, setUnits] = useState<Units>(me.units)
@@ -137,14 +135,16 @@ export function Settings({
     onSignedOut()
   }
 
-  const leaveAdmin = () => setScreen(null)
+  const leaveAdmin = () => {
+    setScreen(null)
+    onReviewed()
+  }
   if (screen === 'queue') return <AdminQueue onBack={leaveAdmin} />
   if (screen === 'invites') return <AdminInvites onBack={leaveAdmin} />
   if (screen === 'users') return <AdminUsers onBack={leaveAdmin} />
 
   return (
     <>
-      <p className="t-micro mb-2">Settings</p>
 
       <div className="t-card mb-3">
         {me.is_admin && (

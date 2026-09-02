@@ -1,7 +1,8 @@
-import { ChevronLeft, Copy } from 'lucide-react'
+import { Copy } from 'lucide-react'
 import { useEffect, useState } from 'react'
 
 import { api, errorText, type AdminInvite } from '../api'
+import { useTopBar } from '../hooks/useTopBar'
 
 // The links that let somebody in. Three at a time on purpose: an unclaimed
 // link is a way into the instance, and a page that mints them freely is a page
@@ -35,6 +36,8 @@ export function AdminInvites({ onBack }: { onBack: () => void }) {
   // The link a second tap would revoke. Asking twice rather than opening a
   // dialogue: the answer is one word and the row is already on screen.
   const [sure, setSure] = useState('')
+
+  useTopBar({ title: 'Invites', back: { label: 'Settings', onBack } })
 
   const load = () =>
     api<AdminInvite[]>('/admin/invites').then(setInvites, (failure) => {
@@ -96,11 +99,6 @@ export function AdminInvites({ onBack }: { onBack: () => void }) {
 
   return (
     <>
-      <button type="button" className="t-micro mb-2 flex items-center gap-1" onClick={onBack}>
-        <ChevronLeft className="h-3.5 w-3.5" strokeWidth={2.5} />
-        More
-      </button>
-      <p className="mb-3 text-xl font-semibold tracking-tight">Invites</p>
 
       {error && <p className="t-error mb-3">{error}</p>}
 

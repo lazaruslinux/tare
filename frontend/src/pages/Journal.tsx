@@ -13,6 +13,7 @@ import {
 import { FoodPicker } from '../components/FoodPicker'
 import { HEADLINE, nutrientText } from '../components/NutritionLabel'
 import { PortionSheet } from '../components/PortionSheet'
+import { useTopBar } from '../hooks/useTopBar'
 import { SLOTS, SLOT_LABEL, dayLabel, shiftDay, slotByTime, today, type Slot } from '../lib/day'
 import { portionText } from '../lib/units'
 
@@ -58,6 +59,9 @@ export function Journal({ me, refresh }: { me: Me; refresh: number }) {
   const [again, setAgain] = useState(0)
   const [picking, setPicking] = useState<Slot | null>(null)
   const [editing, setEditing] = useState<Editing | null>(null)
+
+  // The bar says which day is being read, not just which tab this is.
+  useTopBar({ title: dayLabel(date, todayIso) })
 
   // A deletion that has not happened yet.
   const [pending, setPending] = useState<DiaryEntry | null>(null)
@@ -132,7 +136,6 @@ export function Journal({ me, refresh }: { me: Me; refresh: number }) {
 
   return (
     <>
-      <p className="t-micro mb-2">Journal</p>
 
       <div className="mb-3 flex items-center justify-between">
         <button

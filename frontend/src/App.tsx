@@ -7,7 +7,10 @@ import { PlusSheet } from './components/PlusSheet'
 import { ScanFlow } from './components/ScanFlow'
 import { SideRail } from './components/SideRail'
 import { TabBar, type Page } from './components/TabBar'
+import { TopBar } from './components/TopBar'
 import { entry } from './entry'
+import { TopBarContext, useTopBarState } from './hooks/useTopBar'
+import { useWaitingCount } from './hooks/useWaitingCount'
 import { useWideLayout } from './hooks/useWideLayout'
 import { slotByTime, today } from './lib/day'
 import { Dashboard } from './pages/Dashboard'
@@ -30,6 +33,9 @@ export default function App() {
   const [phase, setPhase] = useState<Phase>(entry.kind === 'app' ? 'loading' : entry.kind)
   const [page, setPage] = useState<Page>('dashboard')
   const [adding, setAdding] = useState(false)
+  // Where the add menu was opened from. The rail gives its button's place and
+  // gets a popover; the tab bar gives nothing and gets the sheet.
+  const [anchor, setAnchor] = useState<DOMRect | null>(null)
   const [picking, setPicking] = useState(false)
   const [scanning, setScanning] = useState(false)
   // Which part of the Food tab to open on. Only ever set by the More page's
@@ -39,8 +45,13 @@ export default function App() {
   // underneath stays mounted while that sheet is open, so it is told to read
   // the day again rather than being left showing the day before the meal.
   const [logged, setLogged] = useState(0)
+  // Bumped to send the tab that is already open back to its first screen. The
+  // remount is the reset: each tab keeps its own view state inside itself.
+  const [reset, setReset] = useState(0)
   const wide = useWideLayout()
   const reduced = useReducedMotion()
+  const bar = useTopBarState()
+  const { waiting, refresh: refreshWaiting } = useWaitingCount(me)
 
   useEffect(() => {
     if (phase !== 'loading') return
@@ -58,8 +69,23 @@ export default function App() {
   }, [phase])
 
   const select = (next: Page) => {
+    if (next === page) {
+      // Tapping the tab you are on returns it to its root. The sub-view's
+      // history entries are wound back by the root screen registering itself.
+      if (bar.hasBack) setReset(reset + 1)
+      window.scrollTo(0, 0)
+      return
+    }
+    // A tab is not a stop on the back journey, so the entry is rewritten
+    // rather than added and back still means the way out of the app.
+    window.history.replaceState({ tab: next }, '')
     setPage(next)
     window.scrollTo(0, 0)
+  }
+
+  const openAdd = (from: DOMRect | null) => {
+    setAnchor(from)
+    setAdding(true)
   }
 
   const enterFirstRun = async () => {
@@ -95,87 +121,99 @@ export default function App() {
   // Which navigation shows is the stylesheet's call: both are always mounted
   // and each hides itself at the widths the other owns.
   return (
-    <div className="t-shell">
-      <SideRail active={page} onSelect={select} onPlus={() => setAdding(true)} />
-      <div className="t-withrail">
-        <div className="t-main">
-          <div className="t-content">
-            <AnimatePresence mode="wait">
-              <motion.div
-                key={page}
-                initial={{ opacity: 0, y: reduced ? 0 : 10 }}
-                animate={{ opacity: 1, y: 0 }}
-                exit={{ opacity: 0, y: reduced ? 0 : -10 }}
-                transition={{ duration: 0.18 }}
-              >
-                {page === 'more' ? (
-                  <Settings
-                    me={me}
-                    onChange={setMe}
-                    onSignedOut={leave}
-                    onOpenSubmissions={() => {
-                      setFoodView('submissions')
-                      select('food')
-                    }}
-                  />
-                ) : page === 'food' ? (
-                  <FoodTab
-                    me={me}
-                    start={foodView}
-                    onStarted={() => setFoodView('list')}
-                    onScan={() => setScanning(true)}
-                  />
-                ) : page === 'journal' ? (
-                  <Journal me={me} refresh={logged} />
-                ) : (
-                  <Dashboard me={me} refresh={logged} />
-                )}
-              </motion.div>
-            </AnimatePresence>
+    <TopBarContext.Provider value={bar.register}>
+      <div className="t-shell">
+        <SideRail active={page} onSelect={select} onPlus={openAdd} />
+        <div className="t-withrail">
+          <div className="t-main">
+            <TopBar
+              title={bar.title}
+              backLabel={bar.backLabel}
+              waiting={waiting}
+              onBack={bar.goBack}
+              onSettings={() => select('more')}
+            />
+            <div className="t-content">
+              <AnimatePresence mode="wait">
+                <motion.div
+                  key={`${page}:${reset}`}
+                  initial={{ opacity: 0, y: reduced ? 0 : 10 }}
+                  animate={{ opacity: 1, y: 0 }}
+                  exit={{ opacity: 0, y: reduced ? 0 : -10 }}
+                  transition={{ duration: 0.18 }}
+                >
+                  {page === 'more' ? (
+                    <Settings
+                      me={me}
+                      onChange={setMe}
+                      onSignedOut={leave}
+                      waiting={waiting}
+                      onReviewed={refreshWaiting}
+                      onOpenSubmissions={() => {
+                        setFoodView('submissions')
+                        select('food')
+                      }}
+                    />
+                  ) : page === 'food' ? (
+                    <FoodTab
+                      me={me}
+                      start={foodView}
+                      onStarted={() => setFoodView('list')}
+                      onScan={() => setScanning(true)}
+                    />
+                  ) : page === 'journal' ? (
+                    <Journal me={me} refresh={logged} />
+                  ) : (
+                    <Dashboard me={me} refresh={logged} />
+                  )}
+                </motion.div>
+              </AnimatePresence>
+            </div>
+            <TabBar active={page} onSelect={select} onPlus={() => openAdd(null)} />
           </div>
-          <TabBar active={page} onSelect={select} onPlus={() => setAdding(true)} />
+          {wide && (
+            <aside className="t-aside">
+              <p className="t-micro">Alongside</p>
+              <div className="t-card text-sm text-muted">Nothing here yet.</div>
+            </aside>
+          )}
         </div>
-        {wide && (
-          <aside className="t-aside">
-            <p className="t-micro">Alongside</p>
-            <div className="t-card text-sm text-muted">Nothing here yet.</div>
-          </aside>
+        <PlusSheet
+          open={adding}
+          anchor={anchor}
+          onClose={() => setAdding(false)}
+          onScan={() => {
+            setAdding(false)
+            setScanning(true)
+          }}
+          onAddFood={() => {
+            setAdding(false)
+            setPicking(true)
+          }}
+        />
+        {scanning && (
+          <ScanFlow
+            me={me}
+            onClose={() => setScanning(false)}
+            onLogged={() => {
+              setScanning(false)
+              setLogged(logged + 1)
+            }}
+          />
+        )}
+        {picking && (
+          <FoodPicker
+            me={me}
+            date={today(me.timezone)}
+            slot={slotByTime(me.timezone)}
+            onClose={() => setPicking(false)}
+            onLogged={() => {
+              setPicking(false)
+              setLogged(logged + 1)
+            }}
+          />
         )}
       </div>
-      <PlusSheet
-        open={adding}
-        onClose={() => setAdding(false)}
-        onScan={() => {
-          setAdding(false)
-          setScanning(true)
-        }}
-        onAddFood={() => {
-          setAdding(false)
-          setPicking(true)
-        }}
-      />
-      {scanning && (
-        <ScanFlow
-          me={me}
-          onClose={() => setScanning(false)}
-          onLogged={() => {
-            setScanning(false)
-            setLogged(logged + 1)
-          }}
-        />
-      )}
-      {picking && (
-        <FoodPicker
-          me={me}
-          date={today(me.timezone)}
-          slot={slotByTime(me.timezone)}
-          onClose={() => setPicking(false)}
-          onLogged={() => {
-            setPicking(false)
-            setLogged(logged + 1)
-          }}
-        />
-      )}
-    </div>
+    </TopBarContext.Provider>
   )
 }
