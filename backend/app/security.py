@@ -6,7 +6,6 @@ import datetime as dt
 import re
 import secrets
 from hashlib import sha256
-from zoneinfo import ZoneInfo, ZoneInfoNotFoundError
 
 from argon2 import PasswordHasher
 from argon2.exceptions import VerificationError, VerifyMismatchError
@@ -78,17 +77,25 @@ def dummy_verify() -> None:
     verify_password("not-the-password", _DUMMY_HASH)
 
 
-def known_timezone(name: str) -> bool:
-    """True when this machine's zone database has this zone.
+# The zones tare offers, in the order the Display screen lists them. An
+# allowlist rather than the whole zone database: everybody here is in the
+# United States, and seven names somebody can read beats six hundred they have
+# to search. Accounts made before this list keep whatever zone they carry;
+# nothing reads this to decide whether a stored zone still works.
+US_ZONES = (
+    "America/New_York",
+    "America/Chicago",
+    "America/Denver",
+    "America/Phoenix",
+    "America/Los_Angeles",
+    "America/Anchorage",
+    "Pacific/Honolulu",
+)
 
-    Checked rather than pattern-matched: the list is the only authority on what
-    is a real zone, and ZoneInfo caches, so asking it is cheap after the first.
-    """
-    try:
-        ZoneInfo(name)
-    except (ZoneInfoNotFoundError, ValueError):
-        return False
-    return True
+
+def known_timezone(name: str) -> bool:
+    """True for one of the zones tare offers."""
+    return name in US_ZONES
 
 
 def generate_token() -> str:

@@ -1,27 +1,46 @@
 import { Plus } from 'lucide-react'
 import { useRef } from 'react'
 
-import { TABS, type Page } from './TabBar'
+import type { Screen } from '../pages/More'
+import { TABS, type Page, type RailTarget, type Tab } from './TabBar'
 
 // The desktop navigation. It reads the same TABS list as the bar, so the two
 // can only ever show the same destinations in the same order. The centre
-// action is not a rail item: at this width it is a plain primary button.
+// action is not a rail item: at this width it is a plain primary button. Two
+// of the rows lead to a screen inside a page rather than to a page, which is
+// why this is told which screen those two pages are on.
 export function SideRail({
   active,
+  moreScreen,
+  dashScreen,
   waiting,
   onSelect,
   onPlus,
 }: {
   active: Page
+  // Which screen More and the Dashboard are showing, so a row is lit by what
+  // is really on screen rather than by which page holds it.
+  moreScreen: Screen
+  dashScreen: 'measurements' | null
   // Submissions waiting on an administrator, counted on the row that leads to
   // them the same way the tab bar counts them.
   waiting: number
-  onSelect: (page: Page) => void
+  onSelect: (target: RailTarget) => void
   // Where the button is, so the add menu can hang off it instead of rising
   // from the bottom of a window it is nowhere near.
   onPlus: (anchor: DOMRect | null) => void
 }) {
   const plus = useRef<HTMLButtonElement>(null)
+
+  const isCurrent = (id: Tab): boolean => {
+    if (id === 'targets') return active === 'more' && moreScreen === 'targets'
+    if (id === 'measurements') return active === 'dashboard' && dashScreen === 'measurements'
+    // A page's own row is lit only while that page is at its root.
+    if (id === 'more') return active === 'more' && moreScreen === null
+    if (id === 'dashboard') return active === 'dashboard' && dashScreen === null
+    return id === active
+  }
+
   return (
     <nav aria-label="Main" className="t-rail">
       <span className="px-3 pb-4 text-xl font-semibold tracking-tight lowercase">tare</span>
@@ -33,13 +52,13 @@ export function SideRail({
         <Plus className="h-4 w-4" strokeWidth={2.5} /> Add
       </button>
       {TABS.filter(({ id }) => id !== 'plus').map(({ id, label, Icon }) => {
-        const page = id as Page
+        const target = id as RailTarget
         const counted = id === 'more' && waiting > 0
         return (
           <button
             key={id}
-            onClick={() => onSelect(page)}
-            aria-current={page === active ? 'page' : undefined}
+            onClick={() => onSelect(target)}
+            aria-current={isCurrent(id) ? 'page' : undefined}
             aria-label={counted ? `${label}, ${waiting} waiting` : undefined}
             className="t-navitem"
           >

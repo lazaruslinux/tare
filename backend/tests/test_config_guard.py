@@ -26,3 +26,10 @@ def test_missing_database_password_is_refused():
 
 def test_configured_settings_pass():
     check_deploy_config(Settings(database_url="sqlite://", secret_key="a-real-secret"))
+
+
+def test_a_timezone_tare_does_not_offer_is_refused():
+    wrong = Settings(database_url="sqlite://", secret_key="a-real-secret", TARE_TZ="Europe/Paris")
+    with pytest.raises(RuntimeError) as raised:
+        check_deploy_config(wrong)
+    assert "TARE_TZ" in str(raised.value)

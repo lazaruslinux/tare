@@ -4,7 +4,9 @@ import {
   IdCard,
   Inbox,
   Mail,
+  MessageSquare,
   Monitor,
+  ScrollText,
   Target,
   UserRound,
   Users,
@@ -17,10 +19,12 @@ import { MeasurementsSheet } from '../components/MeasurementsSheet'
 import { SaveMarks, useSavedChip } from '../components/SaveMarks'
 import { useTopBar, type TopBarHeader } from '../hooks/useTopBar'
 import { today } from '../lib/day'
+import { ZONES, offList } from '../lib/zones'
 import { applyTheme, rememberTheme, useTheme, type Theme } from '../theme'
 import { AdminInvites } from './AdminInvites'
 import { AdminQueue } from './AdminQueue'
 import { AdminUsers } from './AdminUsers'
+import { Feedback, FeedbackLog } from './Feedback'
 import { Profile } from './Profile'
 import { Targets } from './Targets'
 
@@ -32,9 +36,11 @@ export type Screen =
   | 'profile'
   | 'targets'
   | 'display'
+  | 'feedback'
   | 'queue'
   | 'invites'
   | 'users'
+  | 'feedbacklog'
   | null
 
 // Short enough to sit in the row without the select clipping it, and the
@@ -44,19 +50,13 @@ const UNITS: { value: Units; label: string }[] = [
   { value: 'metric', label: 'Metric (g, ml)' },
 ]
 
+// How long the line about what just happened stays up.
+const SAID_FOR = 4000
+
 const THEMES: { value: Theme; label: string }[] = [
   { value: 'light', label: 'Light' },
   { value: 'dark', label: 'Dark' },
 ]
-
-// Every zone the browser knows, which is the same list the account's own zone
-// came from. Older browsers have no such call, and the account still has a
-// zone, so it is offered on its own rather than an empty list.
-function zones(current: string): string[] {
-  const supported = (Intl as { supportedValuesOf?: (key: string) => string[] }).supportedValuesOf
-  const all = supported ? supported('timeZone') : []
-  return all.includes(current) ? all : [current, ...all]
-}
 
 function Row({
   label,
@@ -88,6 +88,7 @@ export function More({
   onOpenSubmissions,
   start,
   onStarted,
+  onScreen,
 }: {
   me: Me
   onChange: (me: Me) => void
@@ -106,10 +107,16 @@ export function More({
   // sending somebody straight to it, and handed back the moment it is read.
   start?: Screen
   onStarted?: () => void
+  // Which screen this tab is on, said upward so the rail can light the row
+  // that leads to it.
+  onScreen?: (screen: Screen) => void
 }) {
   const theme = useTheme()
   const [screen, setScreen] = useState<Screen>(start ?? null)
   const [measuring, setMeasuring] = useState(false)
+  // What was just done, said on the list this screen returns to. It lives here
+  // rather than on the screen that did it, because that screen has closed.
+  const [said, setSaid] = useState('')
 
   const [displayName, setDisplayName] = useState(me.display_name ?? '')
   const [units, setUnits] = useState<Units>(me.units)
@@ -123,6 +130,12 @@ export function More({
   const [passwordError, setPasswordError] = useState('')
   const [passwordSaved, markPasswordSaved] = useSavedChip()
   const [savingPassword, setSavingPassword] = useState(false)
+
+  useEffect(() => {
+    if (said === '') return
+    const timer = window.setTimeout(() => setSaid(''), SAID_FOR)
+    return () => window.clearTimeout(timer)
+  }, [said])
 
   // What was said about the last save belongs to the screen it was said on.
   const go = (next: Screen) => {
@@ -139,6 +152,8 @@ export function More({
     account: 'Account',
     profile: 'Profile',
     display: 'Display',
+    feedback: 'Send feedback',
+    feedbacklog: 'Feedback log',
   }
   const named = screen === null ? null : NAMED[screen]
   const header: TopBarHeader | null =
@@ -156,6 +171,12 @@ export function More({
     setScreen(start)
     onStarted?.()
   }, [start, onStarted])
+
+  useEffect(() => {
+    onScreen?.(screen)
+    // Leaving the tab leaves nothing behind for the rail to light.
+    return () => onScreen?.(null)
+  }, [screen, onScreen])
 
   // The name is edited on one screen and the two server-side preferences on
   // another, but they are one record and one request either way.
@@ -238,6 +259,19 @@ export function More({
       <Targets me={me} onBack={() => go(null)} onOpenProfile={() => go('profile')} />
     )
   }
+
+  if (screen === 'feedback') {
+    return (
+      <Feedback
+        onSent={() => {
+          setSaid('Thank you. It is in the log.')
+          go(null)
+        }}
+      />
+    )
+  }
+
+  if (screen === 'feedbacklog') return <FeedbackLog />
 
   if (screen === 'queue') return <AdminQueue onBack={leaveAdmin} onDecided={onReviewed} />
   if (screen === 'invites') return <AdminInvites onBack={leaveAdmin} />
@@ -361,9 +395,14 @@ export function More({
               value={timezone}
               onChange={(event) => setTimezone(event.target.value)}
             >
-              {zones(me.timezone).map((zone) => (
-                <option key={zone} value={zone}>
-                  {zone}
+              {/* An account made before this list keeps working, and says so
+                  once, until it is moved onto one of the seven. */}
+              {offList(me.timezone) && (
+                <option value={me.timezone}>Current: {me.timezone}</option>
+              )}
+              {ZONES.map((zone) => (
+                <option key={zone.value} value={zone.value}>
+                  {zone.label}
                 </option>
               ))}
             </select>
@@ -411,6 +450,7 @@ export function More({
         <Row label="Profile" icon={IdCard} onOpen={() => go('profile')} />
         <Row label="Targets" icon={Target} onOpen={() => go('targets')} />
         <Row label="Display" icon={Monitor} onOpen={() => go('display')} />
+        <Row label="Send feedback" icon={MessageSquare} onOpen={() => go('feedback')} />
         <Row label="My submissions" icon={Inbox} onOpen={onOpenSubmissions} />
       </div>
 
@@ -426,6 +466,7 @@ export function More({
             />
             <Row label="Invites" icon={Mail} onOpen={() => go('invites')} />
             <Row label="Members" icon={Users} onOpen={() => go('users')} />
+            <Row label="Feedback log" icon={ScrollText} onOpen={() => go('feedbacklog')} />
           </div>
         </>
       )}
@@ -435,6 +476,14 @@ export function More({
           Sign out
         </button>
       </div>
+
+      {said !== '' && (
+        <div className="pointer-events-none fixed inset-x-0 bottom-24 z-30 px-4">
+          <div className="pointer-events-auto mx-auto w-full max-w-md rounded-xl border border-line bg-surface-2 px-4 py-3 text-sm">
+            {said}
+          </div>
+        </div>
+      )}
     </>
   )
 }

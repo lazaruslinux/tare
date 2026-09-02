@@ -1,17 +1,40 @@
 import { motion } from 'framer-motion'
-import { Apple, BookOpen, Ellipsis, LayoutDashboard, Plus, type LucideIcon } from 'lucide-react'
+import {
+  Apple,
+  BookOpen,
+  Ellipsis,
+  LayoutDashboard,
+  Plus,
+  Target,
+  Weight,
+  type LucideIcon,
+} from 'lucide-react'
 
-export type Tab = 'dashboard' | 'journal' | 'plus' | 'food' | 'more'
-export type Page = Exclude<Tab, 'plus'>
+export type Tab =
+  | 'dashboard'
+  | 'journal'
+  | 'plus'
+  | 'food'
+  | 'targets'
+  | 'measurements'
+  | 'more'
+// A page the shell can be on. The centre action is not one, and neither are
+// the two rail rows: each of those opens a screen inside a page.
+export type Page = Exclude<Tab, 'plus' | 'targets' | 'measurements'>
+// What the rail can be asked for, which is every row it draws.
+export type RailTarget = Exclude<Tab, 'plus'>
 
 // The one list both navigations read, so the bar and the rail cannot drift
 // apart. The centre slot is an action rather than a destination: it opens the
-// add sheet and never becomes the current page.
-export const TABS: { id: Tab; label: string; Icon: LucideIcon }[] = [
+// add sheet and never becomes the current page. A railOnly row has no room on
+// a phone, where the screen it leads to is reached through its own page.
+export const TABS: { id: Tab; label: string; Icon: LucideIcon; railOnly?: true }[] = [
   { id: 'dashboard', label: 'Dashboard', Icon: LayoutDashboard },
   { id: 'journal', label: 'Journal', Icon: BookOpen },
   { id: 'plus', label: 'Add', Icon: Plus },
   { id: 'food', label: 'Food', Icon: Apple },
+  { id: 'targets', label: 'Targets', Icon: Target, railOnly: true },
+  { id: 'measurements', label: 'Measurements', Icon: Weight, railOnly: true },
   { id: 'more', label: 'More', Icon: Ellipsis },
 ]
 
@@ -31,7 +54,7 @@ export function TabBar({
   return (
     <nav aria-label="Main" className="t-tabbar">
       <div className="mx-auto flex w-full max-w-md items-end justify-around pt-1.5">
-        {TABS.map(({ id, label, Icon }) => {
+        {TABS.filter((tab) => !tab.railOnly).map(({ id, label, Icon }) => {
           if (id === 'plus') {
             return (
               <button key={id} onClick={onPlus} aria-label={label} className="t-plus">

@@ -49,6 +49,9 @@ export type Profile = {
   complete: boolean
   latest_weight_kg: number | null
   latest_weight_date: string | null
+  // Worked out on the server from the latest weight and the height, to one
+  // decimal. Null until both are there, and never carrying a category word.
+  bmi: number | null
 }
 
 // A day's targets: the four anybody reads, and the five to stay inside.
@@ -80,6 +83,16 @@ export type ActivityOption = {
   total: number | null
 }
 
+// The facts behind the resting figure, said back on the Activity Levels
+// screen. Body fat is the reading really used, and null when it was not.
+export type RestingInputs = {
+  age: number
+  sex: Sex
+  height_cm: number
+  weight_kg: number
+  body_fat_pct: number | null
+}
+
 // Where the budget came from, in three figures. The adjustment is signed.
 export type Breakdown = { use: number; adjustment: number; budget: number }
 
@@ -98,6 +111,9 @@ export type Targets = {
   // that figure was worked out from.
   resting: number | null
   uses_body_fat: boolean
+  // What the resting figure was worked out from, unrounded and in the
+  // server's own units. Null while the profile is incomplete.
+  resting_inputs: RestingInputs | null
   activity_options: ActivityOption[]
   // Null when there is nothing to work out: no profile, or a typed-in budget.
   breakdown: Breakdown | null

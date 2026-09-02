@@ -152,7 +152,7 @@ Items marked UNVERIFIED were not confirmed against a primary source at the time 
    - BMI of 40 or more: "A clinician can help plan safely at this weight. tare is only an estimate."
    Why: the WHO defines adult underweight as a BMI under 18.5 in its indicator set and overweight and obesity at 25 and 30 on its fact sheet; [25] the 40 threshold is obesity class III in the NHLBI classification table. [16] Eating-disorder red flags cannot be detected from a calorie budget, so the app does not attempt it; the disclaimer (decision 30) and the floors are the protection.
 
-23. BMI is computed on the server for the guardrails above but is not shown as a number or a category anywhere in the UI in version 1. Body-fat percentage is shown as the member's own recorded number without a category label.
+23. BMI is computed on the server for the guardrails and shown on the Profile screen as a plain number with no category word; it is never shown on any other screen. Body-fat percentage is shown as the member's own recorded number without a category label.
    Why: BMI does not distinguish fat from lean mass and its bands differ by population, [25][26] and a category label on a first screen is the opposite of the calm, non-judging tone the product owner asked for. This is a product decision; the ACE body-fat bands [27] are recorded for a future opt-in view only and are UNVERIFIED, since the cited page no longer exists at its address.
 
 24. Pregnancy and breastfeeding: the profile has an off-by-default switch, "Pregnant or breastfeeding". While on, weight-loss goals are unavailable, the budget is the maintenance estimate with no deficit, the Targets page says "Energy needs change during pregnancy and breastfeeding. Ask your clinician what is right for you," and no additional calories are added.
@@ -182,7 +182,7 @@ Items marked UNVERIFIED were not confirmed against a primary source at the time 
 28. Every computed number rounds for display: calories to the nearest 10, grams to the nearest 1, percentages to the nearest 1. Internal values keep full precision.
    Why: a budget of 1,847 kcal claims a precision the equation does not have. [2]
 
-29. Formula names (Mifflin-St Jeor, Cunningham, MET, PAL, BMI, AMDR, TDEE, BMR) never appear in the UI. They live in this document and in the Guide page under a "Where the numbers come from" heading for members who want them.
+29. Formula names (Mifflin-St Jeor, Cunningham, MET, PAL, BMI, AMDR, TDEE, BMR) never appear in the UI, with one exception: the At rest helper on the Activity Levels screen may say "Sometimes called basal metabolic rate" once, because it is the name a member is most likely to have met elsewhere and to be looking for. Every other formula name stays out. They live in this document and in the Guide page under a "Where the numbers come from" heading for members who want them.
 
 30. Disclaimer, shown once on the Targets page the first time a budget is computed, and always reachable from the Guide:
    "tare estimates. It is not medical advice. The numbers come from population averages and can be off by a few hundred calories for any one person. Talk to a clinician before changing how you eat if you are pregnant or breastfeeding, under care for a medical condition, or have a history of disordered eating."
@@ -191,8 +191,8 @@ Items marked UNVERIFIED were not confirmed against a primary source at the time 
 
 | Concept | Words the UI uses | Words the UI never uses |
 |---|---|---|
-| Resting energy expenditure | "what your body uses at rest" | BMR, RMR, REE, basal |
-| Total daily energy expenditure | "your daily budget", "about what you use in a day", the Energy screen's "About what you use today" | TDEE, maintenance calories, total daily energy expenditure |
+| Resting energy expenditure | "At rest", "what your body uses at rest", and once, in the helper under it, "Sometimes called basal metabolic rate" | RMR, REE, basal (BMR only in that one helper) |
+| Total daily energy expenditure | "your daily budget", "about what you use in a day", the Activity Levels screen's "About what you use today" | TDEE, maintenance calories, total daily energy expenditure |
 | Activity multiplier | "Baseline Activity Level" with Sedentary / Lightly Active / Moderately Active / Very Active, each with what it adds to the day | PAL, multiplier, activity factor |
 | Energy spent digesting food | not shown | TEF, thermic effect of food |
 | The three of them together | "Protein, Carbs and Fat", set Automatic, by Percentages or in Grams | macro split, macro ratio, IIFYM |
@@ -218,7 +218,6 @@ Each item is a decision for the product owner. The default in the Decisions sect
 1. Exercise credit fraction (decision 7): tare credits 100 percent of net exercise calories. MyFitnessPal is widely criticised for the same full credit because device estimates run high. [9] Alternative: credit 50 percent by default with a "count all of it" switch on the Targets page. Recommendation: keep 100 percent of the net figure for manual entries (the MET math is already conservative) and revisit for imported workouts in Round 9 when real device numbers are visible.
 2. Calorie floors (decision 15): decided 2026-09-01, 1,200 for women and 1,500 for men, the upper edges of the NHLBI ranges. [16]
 3. Default activity level (decision 6): Not much (1.2) is the conservative pick. Alternative: Light (1.375), which better matches a person who walks a fair amount but does not exercise. The cost of the wrong pick is a budget about 200 kcal too high or too low.
-4. BMI display (decision 23): hidden in version 1. Alternative: an opt-in "Show my BMI" in Settings for members who want it.
 5. Pregnancy switch (decision 24): included as a profile switch. Alternative: leave it out of version 1 and let the disclaimer carry it.
 6. Maintain protein (decision 10): decided 2026-09-01, 1.4 g/kg, the middle of the federal range. [12]
 9. Faster rates gated on BMI 35 (decision 13): decided 2026-09-01, the gate stays; it is what the source says. [16] The Targets page explains it in one sentence.

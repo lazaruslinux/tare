@@ -536,6 +536,9 @@ def read_profile(
         "latest_weight_date": (
             None if state.latest is None else state.latest.date_for.isoformat()
         ),
+        # Shown on the Profile screen as a plain number, never a category
+        # (decision 23). Null until there is both a height and a weigh-in.
+        "bmi": None if state.bmi is None else round(state.bmi, 1),
     }
 
 
@@ -689,6 +692,21 @@ def read_targets(
         },
         "preset_notes": PRESET_NOTE,
         "resting": None if resting is None else health.round_for_display(resting, "calories"),
+        # What that resting figure was worked out from, so the screen can say
+        # it back in the member's own units. Unrounded: the screen formats.
+        "resting_inputs": (
+            None
+            if not state.complete
+            else {
+                "age": state.age,
+                "sex": state.sex,
+                "height_cm": state.cm,
+                "weight_kg": state.kg,
+                # The reading really used, and null when the weight-based
+                # estimate was.
+                "body_fat_pct": state.fresh_body_fat(),
+            }
+        ),
         # Only true when it is really what the resting figure was worked out
         # from, so a screen never says it about a number that is not there.
         "uses_body_fat": resting is not None and state.fresh_body_fat() is not None,

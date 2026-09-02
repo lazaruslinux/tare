@@ -1,12 +1,12 @@
 import { Check } from 'lucide-react'
 import { useState } from 'react'
 
-import type { Me, Targets as TargetsRow } from '../api'
+import type { Me, RestingInputs, Targets as TargetsRow } from '../api'
 import { ExerciseSheet } from '../components/ExerciseSheet'
 import { SaveMarks, useSavedChip } from '../components/SaveMarks'
-import { Sheet } from '../components/Sheet'
 import { today } from '../lib/day'
-import { LEVELS, LEVEL_INTRO, LEVEL_LABEL, calText } from '../lib/targets'
+import { LEVELS, LEVEL_INTRO, calText } from '../lib/targets'
+import { heightText, round1, weightText } from '../lib/units'
 import type { Save } from './Targets'
 
 // The ring, drawn by hand: one circle whose stroke is cut into three arcs. No
@@ -47,37 +47,21 @@ function Ring({ slices, total }: { slices: Slice[]; total: number }) {
   )
 }
 
-function Row({ label, value, under, note, onOpen }: {
-  label: string
-  value: string
-  // A second, quieter line under the value.
-  under?: string
-  note?: string
-  onOpen?: () => void
-}) {
-  const inside = (
-    <>
-      <span className="min-w-0 flex-1">
-        <span className="block text-sm">{label}</span>
-        {note !== undefined && <span className="block text-xs text-muted">{note}</span>}
-      </span>
-      <span className="min-w-0 shrink-0 text-right">
-        <span className="t-nums block text-sm text-muted">{value}</span>
-        {under !== undefined && (
-          <span className="t-nums block text-xs text-muted">{under}</span>
-        )}
-      </span>
-    </>
-  )
-  if (onOpen === undefined) return <div className="t-row">{inside}</div>
-  return (
-    <button type="button" className="t-row w-full text-left" onClick={onOpen}>
-      {inside}
-    </button>
-  )
+// What the resting figure was worked out from, in the member's own units and
+// in one line. The body fat part is there only when it is the reading the
+// figure really used.
+function factsLine(facts: RestingInputs, units: Me['units']): string {
+  const parts = [
+    `${facts.age} years`,
+    facts.sex === 'male' ? 'Male' : 'Female',
+    heightText(facts.height_cm, units),
+    weightText(facts.weight_kg, units),
+  ]
+  if (facts.body_fat_pct !== null) parts.push(`${round1(facts.body_fat_pct)}% body fat`)
+  return parts.join(' · ')
 }
 
-export function Energy({
+export function ActivityLevels({
   me,
   targets,
   busy,
@@ -94,13 +78,13 @@ export function Energy({
   onSaveProfile: Save
   onOpenProfile: () => void
 }) {
-  const [choosing, setChoosing] = useState(false)
   const [logging, setLogging] = useState(false)
   const [saved, markSaved] = useSavedChip()
 
   const options = new Map(targets.activity_options.map((row) => [row.level, row]))
   const chosen = options.get(targets.activity_level)
   const resting = targets.resting
+  const facts = targets.resting_inputs
   const adds = chosen?.adds ?? null
   const exercise = targets.exercise_today
 
@@ -120,24 +104,69 @@ export function Energy({
       {error && <p className="t-error mb-3">{error}</p>}
 
       <div className="t-card mb-3">
-        <Row
-          label="At rest"
-          value={resting === null ? 'Add your details' : `${calText(resting)} cal`}
-          note={targets.uses_body_fat ? 'Uses your recent body fat reading' : undefined}
-          onOpen={onOpenProfile}
-        />
-        <Row
-          label="Baseline Activity Level"
-          value={LEVEL_LABEL[targets.activity_level]}
-          under={adds === null ? undefined : `adds about ${calText(adds)} cal`}
-          onOpen={() => setChoosing(true)}
-        />
-        <Row
-          label="Exercise today"
-          value={exercise > 0 ? `${calText(exercise)} cal` : 'Log exercise'}
-          onOpen={() => setLogging(true)}
-        />
+        <p className="t-micro mb-2">Baseline Activity Level</p>
+        <p className="t-note mb-3">{LEVEL_INTRO}</p>
+        {LEVELS.map((level) => {
+          const option = options.get(level.value)
+          return (
+            <button
+              key={level.value}
+              type="button"
+              aria-pressed={targets.activity_level === level.value}
+              disabled={busy}
+              className="t-option"
+              onClick={() => void pick(level.value)}
+            >
+              <span className="min-w-0 flex-1">
+                <span className="block text-sm font-semibold">{level.label}</span>
+                <span className="block text-xs text-muted">{level.note}</span>
+                <span className="block text-xs text-muted">Example: {level.example}</span>
+                {option?.adds !== null && option !== undefined && (
+                  <span className="t-nums mt-1 block text-xs">
+                    adds about {calText(option.adds)} cal
+                  </span>
+                )}
+              </span>
+              {targets.activity_level === level.value && (
+                <Check className="h-4 w-4 shrink-0 text-accent" strokeWidth={2.5} />
+              )}
+            </button>
+          )
+        })}
+        <div className="mt-3 flex items-center gap-3">
+          {busy ? (
+            <span className="text-xs text-muted">Saving</span>
+          ) : (
+            <SaveMarks dirty={false} saved={saved} />
+          )}
+        </div>
       </div>
+
+      {/* The whole card is the way to the details it is worked out from, the
+          same as the row it replaces. */}
+      <button type="button" className="t-card mb-3 block w-full text-left" onClick={onOpenProfile}>
+        <p className="t-micro mb-2">At rest</p>
+        {resting === null ? (
+          <span className="block text-sm text-accent">Add your details</span>
+        ) : (
+          <>
+            <span className="t-nums block text-[1.75rem] leading-none font-semibold">
+              {calText(resting)}
+              <span className="ml-1 text-sm font-normal text-muted">cal</span>
+            </span>
+            <p className="t-note mt-2">
+              The least energy your body needs just to run, worked out from your age, sex,
+              height, weight and body fat. Sometimes called basal metabolic rate.
+            </p>
+            {facts !== null && (
+              <p className="t-nums mt-2 text-xs text-muted">{factsLine(facts, me.units)}</p>
+            )}
+            {targets.uses_body_fat && (
+              <p className="mt-1 text-xs text-muted">Uses your recent body fat reading</p>
+            )}
+          </>
+        )}
+      </button>
 
       <div className="t-card mb-3">
         <p className="t-micro mb-2">About what you use today</p>
@@ -176,56 +205,23 @@ export function Energy({
             </div>
           </div>
         )}
+
+        <p className="t-note mt-3">
+          This is an estimate. What your body really uses can be a few hundred calories
+          either side of it.
+        </p>
+
+        <button
+          type="button"
+          className="t-row w-full text-left"
+          onClick={() => setLogging(true)}
+        >
+          <span className="min-w-0 flex-1 text-sm">Exercise today</span>
+          <span className="t-nums shrink-0 text-sm text-muted">
+            {exercise > 0 ? `${calText(exercise)} cal` : 'Log exercise'}
+          </span>
+        </button>
       </div>
-
-      <p className="t-note mb-3">
-        This is an estimate. What your body really uses can be a few hundred calories
-        either side of it.
-      </p>
-
-      <Sheet
-        open={choosing}
-        label="Baseline Activity Level"
-        tall
-        onClose={() => setChoosing(false)}
-      >
-        <p className="t-micro mb-2">Baseline Activity Level</p>
-        <p className="t-note mb-3">{LEVEL_INTRO}</p>
-        {LEVELS.map((level) => {
-          const option = options.get(level.value)
-          return (
-            <button
-              key={level.value}
-              type="button"
-              aria-pressed={targets.activity_level === level.value}
-              disabled={busy}
-              className="t-option"
-              onClick={() => void pick(level.value)}
-            >
-              <span className="min-w-0 flex-1">
-                <span className="block text-sm font-semibold">{level.label}</span>
-                <span className="block text-xs text-muted">{level.note}</span>
-                <span className="block text-xs text-muted">Example: {level.example}</span>
-                {option?.adds !== null && option !== undefined && (
-                  <span className="t-nums mt-1 block text-xs">
-                    adds about {calText(option.adds)} cal
-                  </span>
-                )}
-              </span>
-              {targets.activity_level === level.value && (
-                <Check className="h-4 w-4 shrink-0 text-accent" strokeWidth={2.5} />
-              )}
-            </button>
-          )
-        })}
-        <div className="mt-3 flex items-center gap-3">
-          {busy ? (
-            <span className="text-xs text-muted">Saving</span>
-          ) : (
-            <SaveMarks dirty={false} saved={saved} />
-          )}
-        </div>
-      </Sheet>
 
       {logging && (
         <ExerciseSheet

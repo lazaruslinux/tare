@@ -1,7 +1,7 @@
 // The words the three Targets screens share, and the two conversions they do.
 //
 // Kept out of the screens themselves because the list, the Weight goal screen
-// and the Energy screen all name the same four levels and the same three
+// and the Activity Levels screen all name the same four levels and the same three
 // goals, and one of them drifting would be a screen disagreeing with a screen.
 
 import type { ActivityLevel, Goal, Rate, Units } from '../api'

@@ -217,6 +217,13 @@ export function Profile({
         </button>
       </div>
 
+      {profile !== null && profile.bmi !== null && (
+        <div className="t-row">
+          <span className="flex-1 text-sm">Body mass index</span>
+          <span className="t-nums text-right text-sm">{profile.bmi}</span>
+        </div>
+      )}
+
       {error && <p className="t-error mt-3">{error}</p>}
 
       <div className="mt-3 flex items-center gap-3">

@@ -11,7 +11,7 @@ import os
 # engine this URL builds is never used, because get_db is overridden per test.
 os.environ.setdefault("DATABASE_URL", "sqlite://")
 os.environ.setdefault("SECRET_KEY", "tests-only-not-a-real-secret")
-os.environ.setdefault("TARE_TZ", "UTC")
+os.environ.setdefault("TARE_TZ", "America/New_York")
 
 import datetime as dt  # noqa: E402
 
@@ -49,6 +49,16 @@ def media_dir(tmp_path):
     settings.media_dir = str(tmp_path / "media")
     yield tmp_path / "media"
     settings.media_dir = was
+
+
+@pytest.fixture(autouse=True)
+def feedback_path(tmp_path):
+    """The same reason as the directory above: the configured path is a real
+    file on a deployment, and a suite that can reach it can wipe it."""
+    was = settings.feedback_path
+    settings.feedback_path = str(tmp_path / "feedback.md")
+    yield tmp_path / "feedback.md"
+    settings.feedback_path = was
 
 
 @pytest.fixture(autouse=True)

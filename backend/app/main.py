@@ -16,6 +16,7 @@ from app.routers import (
     auth,
     barcode,
     diary,
+    feedback,
     foods,
     health,
     invites,
@@ -182,6 +183,7 @@ def create_app() -> FastAPI:
     app.include_router(account.router, prefix="/api")
     app.include_router(foods.router, prefix="/api")
     app.include_router(diary.router, prefix="/api")
+    app.include_router(feedback.router, prefix="/api")
     app.include_router(health.router, prefix="/api")
     app.include_router(recipes.router, prefix="/api")
     app.include_router(meals.router, prefix="/api")

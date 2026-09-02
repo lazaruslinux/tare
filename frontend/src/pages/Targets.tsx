@@ -4,18 +4,18 @@ import { useCallback, useEffect, useState } from 'react'
 import { api, errorText, type Me, type Profile as ProfileRow, type Targets as TargetsRow } from '../api'
 import { useTopBar } from '../hooks/useTopBar'
 import { DISCLAIMER, GOAL_LABEL, LEVEL_LABEL, calText, monthText } from '../lib/targets'
+import { ActivityLevels } from './ActivityLevels'
 import { DailyBudget } from './DailyBudget'
-import { Energy } from './Energy'
 import { WeightGoal } from './WeightGoal'
 
 // The three screens under this one. Each is a sub-view with its own way back,
 // and this page is the list that names them.
-type View = 'weight' | 'energy' | 'budget' | null
+type View = 'weight' | 'activity' | 'budget' | null
 
 const TITLE: Record<NonNullable<View>, string> = {
   weight: 'Weight goal',
-  energy: 'Energy',
-  budget: 'Daily budget',
+  activity: 'Activity Levels',
+  budget: 'Macro & Calorie Targets',
 }
 
 // What a screen saves, and whether it worked. The answer is what lets a screen
@@ -41,7 +41,7 @@ export function Targets({
 }: {
   me: Me
   onBack: () => void
-  // The Energy screen sends people to their details, which live one screen
+  // The Activity Levels screen sends people to their details, which live one screen
   // over rather than inside this one.
   onOpenProfile: () => void
 }) {
@@ -117,9 +117,9 @@ export function Targets({
       />
     )
   }
-  if (view === 'energy') {
+  if (view === 'activity') {
     return (
-      <Energy
+      <ActivityLevels
         me={me}
         targets={targets}
         busy={busy}
@@ -143,24 +143,18 @@ export function Targets({
 
   // The glance value under each row: enough to answer the question without
   // opening the screen that owns it.
-  // The same three parts the Energy screen's ring adds up, so the two agree.
-  const chosen = targets.activity_options.find((row) => row.level === targets.activity_level)
-  const dayTotal =
-    targets.resting === null || chosen?.adds === null || chosen === undefined
-      ? null
-      : targets.resting + chosen.adds
   const weightValue =
     targets.goal === 'maintain'
       ? 'Maintain'
       : targets.projection === null
         ? GOAL_LABEL[targets.goal]
         : `${GOAL_LABEL[targets.goal]} · about ${monthText(targets.projection.month)}`
-  const energyValue =
-    dayTotal === null
+  // The level, and what the body uses before any of it. Without a profile
+  // there is no resting figure, and the level stands on its own.
+  const activityValue =
+    targets.resting === null
       ? LEVEL_LABEL[targets.activity_level]
-      : `${LEVEL_LABEL[targets.activity_level]} · about ${calText(
-          dayTotal + targets.exercise_today
-        )} today`
+      : `${LEVEL_LABEL[targets.activity_level]} · ${calText(targets.resting)} cal at rest`
   const budgetValue = `${calText(targets.budget.calories)} cal · ${targets.budget.protein_g}/${
     targets.budget.carbs_g
   }/${targets.budget.fat_g} g`
@@ -180,8 +174,16 @@ export function Targets({
 
       <div className="t-card mb-3">
         <Row label="Weight goal" value={weightValue} onOpen={() => setView('weight')} />
-        <Row label="Energy" value={energyValue} onOpen={() => setView('energy')} />
-        <Row label="Daily budget" value={budgetValue} onOpen={() => setView('budget')} />
+        <Row
+          label="Activity Levels"
+          value={activityValue}
+          onOpen={() => setView('activity')}
+        />
+        <Row
+          label="Macro & Calorie Targets"
+          value={budgetValue}
+          onOpen={() => setView('budget')}
+        />
       </div>
 
       <p className="t-note mb-3">

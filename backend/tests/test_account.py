@@ -47,10 +47,11 @@ def test_the_timezone_can_be_moved(client, db_session, signed_in):
     assert signed_in.timezone == "America/Phoenix"
 
 
-def test_an_unknown_timezone_is_refused_here(client, signed_in):
-    response = patch(client, timezone="Mars/Olympus")
+def test_a_zone_off_the_list_is_refused_here(client, signed_in):
+    # A real zone, and still not one of the seven tare offers.
+    response = patch(client, timezone="Europe/Paris")
     assert response.status_code == 400
-    assert response.json() == {"detail": "That is not a known time zone."}
+    assert response.json() == {"detail": "Pick a US time zone."}
 
 
 def test_the_birthdate_is_stored_and_cannot_be_cleared(client, db_session, signed_in):

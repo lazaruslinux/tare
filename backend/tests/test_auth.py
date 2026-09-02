@@ -4,6 +4,7 @@ import pytest
 from fastapi.testclient import TestClient
 
 from app import mail, models, security
+from app.config import settings
 from app.routers.auth import (
     BAD_CREDENTIALS,
     EMAIL_REQUIRED,
@@ -79,9 +80,11 @@ def test_an_instance_without_mail_leaves_the_address_optional(client, db_session
     assert user.email is None
 
 
-def test_an_unknown_timezone_falls_back_rather_than_refusing(client, db_session, invite):
-    assert signup(client, invite, timezone="Mars/Olympus").status_code == 200
-    assert db_session.query(models.User).filter_by(username="newcomer").one().timezone == "UTC"
+def test_a_zone_off_the_list_falls_back_rather_than_refusing(client, db_session, invite):
+    # The instance's own zone stands in, and the Display screen can change it.
+    assert signup(client, invite, timezone="Europe/Paris").status_code == 200
+    user = db_session.query(models.User).filter_by(username="newcomer").one()
+    assert user.timezone == settings.tz
 
 
 def test_a_taken_username_is_answered_plainly_when_the_invite_is_good(

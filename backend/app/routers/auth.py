@@ -18,6 +18,7 @@ from sqlalchemy import func, or_, select, update
 from sqlalchemy.orm import Session
 
 from app import mail, models, security, throttle
+from app.config import settings
 from app.db import get_db, rows_touched
 from app.deps import require_user
 from app.models import now_utc
@@ -209,9 +210,10 @@ def register(
     birthdate = checked_birthdate(body.birthdate, now_utc().date())
     email = signup_email(body.email)
     display_name = body.display_name.strip()[:60] or None
-    # A browser sends whatever zone it is set to, and an unknown one is not
-    # worth refusing a signup over. UTC is the same fallback the column carries.
-    timezone = body.timezone if security.known_timezone(body.timezone) else "UTC"
+    # A browser sends whatever zone it is set to, and one tare does not offer
+    # is not worth refusing a signup over: the instance's own zone stands in,
+    # and the Display screen can change it.
+    timezone = body.timezone if security.known_timezone(body.timezone) else settings.tz
 
     # Hashed before the duplicate check, and the wasted work on the duplicate
     # path is the point: Argon2 is by far the slowest part of this request, so

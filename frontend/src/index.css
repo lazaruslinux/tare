@@ -574,6 +574,47 @@
       overflow-y: auto;
     }
   }
+
+  /* What a pointer picks out. Only where there is a real pointer: on a phone
+     :hover sticks to whatever was tapped last. The transition rides on the
+     same rules so it works on the way out as well as in. */
+  @media (hover: hover) {
+    button.t-row,
+    a.t-row,
+    .t-btn,
+    .t-option,
+    .t-choice,
+    button.t-card,
+    .t-tap44 {
+      transition:
+        background-color 0.12s ease,
+        border-color 0.12s ease,
+        color 0.12s ease,
+        filter 0.12s ease;
+    }
+    button.t-row:hover,
+    a.t-row:hover {
+      background: var(--surface-2);
+      border-radius: 6px;
+    }
+    .t-btn:hover {
+      border-color: var(--muted);
+      color: var(--text);
+    }
+    .t-btn-primary:hover {
+      filter: brightness(1.08);
+    }
+    .t-option:hover,
+    .t-choice:hover {
+      border-color: var(--line-strong);
+    }
+    button.t-card:hover {
+      background: var(--surface-2);
+    }
+    .t-tap44:hover {
+      color: var(--text);
+    }
+  }
 }
 
 /* Motion is substituted, not deleted. Someone who asks for less of it still

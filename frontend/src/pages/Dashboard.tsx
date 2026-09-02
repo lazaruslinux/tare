@@ -169,11 +169,16 @@ function shareText(stamp: Stamp, units: Me['units']): string {
     : `${round1(stamp.value)}% · ${weightText(mass, units)}`
 }
 
+type DashScreen = 'measurements' | null
+
 export function Dashboard({
   me,
   refresh,
   onOpenJournal,
   onOpenProfile,
+  start,
+  onStarted,
+  onScreen,
 }: {
   me: Me
   refresh: number
@@ -181,6 +186,13 @@ export function Dashboard({
   // now; the Exercise one gets its own screen in a later round.
   onOpenJournal: () => void
   onOpenProfile: () => void
+  // Which screen to open on. Only ever set by something outside this tab
+  // sending somebody straight to it, and handed back the moment it is read.
+  start?: DashScreen
+  onStarted?: () => void
+  // Which screen this is on, said upward so the rail can light the row that
+  // leads to it.
+  onScreen?: (screen: DashScreen) => void
 }) {
   const todayIso = today(me.timezone)
   const [day, setDay] = useState<DiaryDay | null>(null)
@@ -188,7 +200,7 @@ export function Dashboard({
   const [history, setHistory] = useState<Measurements | null>(null)
   const [error, setError] = useState('')
   const [again, setAgain] = useState(0)
-  const [screen, setScreen] = useState<'measurements' | null>(null)
+  const [screen, setScreen] = useState<DashScreen>(null)
   const [picking, setPicking] = useState(false)
   const [measuring, setMeasuring] = useState<string | null>(null)
   const [exercising, setExercising] = useState(false)
@@ -203,6 +215,20 @@ export function Dashboard({
       ? { title: 'Measurements', back: { label: 'Dashboard', onBack: () => setScreen(null) } }
       : { title: 'Dashboard', left: 'wordmark' }
   )
+
+  // A screen asked for from outside is opened once, and then this tab owns
+  // where it is again.
+  useEffect(() => {
+    if (start === undefined || start === null) return
+    setScreen(start)
+    onStarted?.()
+  }, [start, onStarted])
+
+  useEffect(() => {
+    onScreen?.(screen)
+    // Leaving the tab leaves nothing behind for the rail to light.
+    return () => onScreen?.(null)
+  }, [screen, onScreen])
 
   useEffect(() => {
     let alive = true

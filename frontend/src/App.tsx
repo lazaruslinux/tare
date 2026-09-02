@@ -8,7 +8,7 @@ import { MeasurementsSheet } from './components/MeasurementsSheet'
 import { PlusSheet } from './components/PlusSheet'
 import { ScanFlow } from './components/ScanFlow'
 import { SideRail } from './components/SideRail'
-import { TabBar, type Page } from './components/TabBar'
+import { TabBar, type Page, type RailTarget } from './components/TabBar'
 import { TopBar } from './components/TopBar'
 import { entry } from './entry'
 import { TopBarContext, useTopBarState } from './hooks/useTopBar'
@@ -58,6 +58,12 @@ export default function App() {
   // Which screen the More tab should open on. Only ever set by something
   // sending somebody straight to it, and handed back once it has been read.
   const [moreView, setMoreView] = useState<Screen>(null)
+  // The same for the Dashboard's one sub-view.
+  const [dashView, setDashView] = useState<'measurements' | null>(null)
+  // Which screen each of those two is really showing. Reported upward so the
+  // rail can light the row that leads to it rather than the page holding it.
+  const [moreScreen, setMoreScreen] = useState<Screen>(null)
+  const [dashScreen, setDashScreen] = useState<'measurements' | null>(null)
   // The day the Journal is showing, so the centre control adds to the day
   // being read rather than always to today.
   const [journalDay, setJournalDay] = useState('')
@@ -105,6 +111,22 @@ export default function App() {
     window.history.replaceState({ tab: next }, '')
     setPage(next)
     window.scrollTo(0, 0)
+  }
+
+  // The rail draws two rows that are not pages: each opens a screen inside one,
+  // the same way the Journal's own shortcut into Targets does.
+  const selectRail = (target: RailTarget) => {
+    if (target === 'targets') {
+      setMoreView('targets')
+      select('more')
+      return
+    }
+    if (target === 'measurements') {
+      setDashView('measurements')
+      select('dashboard')
+      return
+    }
+    select(target)
   }
 
   const openAdd = (from: DOMRect | null) => {
@@ -172,7 +194,14 @@ export default function App() {
   return (
     <TopBarContext.Provider value={bar.register}>
       <div className="t-shell">
-        <SideRail active={page} waiting={waiting} onSelect={select} onPlus={openAdd} />
+        <SideRail
+          active={page}
+          moreScreen={moreScreen}
+          dashScreen={dashScreen}
+          waiting={waiting}
+          onSelect={selectRail}
+          onPlus={openAdd}
+        />
         <div className="t-withrail">
           <div className="t-main">
             <TopBar
@@ -208,6 +237,7 @@ export default function App() {
                       }}
                       start={moreView}
                       onStarted={() => setMoreView(null)}
+                      onScreen={setMoreScreen}
                     />
                   ) : page === 'food' ? (
                     <FoodTab
@@ -236,6 +266,9 @@ export default function App() {
                         setMoreView('profile')
                         select('more')
                       }}
+                      start={dashView}
+                      onStarted={() => setDashView(null)}
+                      onScreen={setDashScreen}
                     />
                   )}
                 </motion.div>

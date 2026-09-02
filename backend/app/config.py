@@ -53,8 +53,9 @@ class Settings(BaseSettings):
     trusted_proxy_hops: int = 1
 
     # Named TARE_TZ rather than TZ: containers already use TZ for the system
-    # clock, and this is the zone the app renders in.
-    tz: str = Field(default="UTC", validation_alias="TARE_TZ")
+    # clock, and this is the zone the app renders in. One of the seven zones
+    # tare offers, which is what the deploy check below holds it to.
+    tz: str = Field(default="America/New_York", validation_alias="TARE_TZ")
 
     usda_api_key: str = ""
 
@@ -65,6 +66,10 @@ class Settings(BaseSettings):
     smtp_from: str = ""
 
     media_dir: str = "/data/media"
+
+    # Where members' feedback is appended. A file rather than a table: it is
+    # prose an administrator reads start to finish, and nothing queries it.
+    feedback_path: str = "/data/feedback.md"
 
     @property
     def resolved_database_url(self) -> str:
@@ -106,6 +111,16 @@ def check_deploy_config(current: Settings | None = None) -> None:
             "POSTGRES_PASSWORD is missing or still set to the example value. "
             "Choose a password in your .env file, then recreate the database "
             "container so it is created with that password."
+        )
+
+    # Imported here rather than at the top: security reads settings, so the
+    # module-level import would be a circle.
+    from app.security import US_ZONES
+
+    if s.tz not in US_ZONES:
+        problems.append(
+            f"TARE_TZ is set to {s.tz!r}, which is not a zone tare offers. "
+            "Use one of: " + ", ".join(US_ZONES)
         )
 
     if problems:

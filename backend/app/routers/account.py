@@ -77,7 +77,7 @@ def update_account(
 
     if "timezone" in sent:
         if body.timezone is None or not security.known_timezone(body.timezone):
-            raise HTTPException(status.HTTP_400_BAD_REQUEST, "That is not a known time zone.")
+            raise HTTPException(status.HTTP_400_BAD_REQUEST, "Pick a US time zone.")
         user.timezone = body.timezone
 
     if "birthdate" in sent:
