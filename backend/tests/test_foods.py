@@ -243,3 +243,59 @@ def test_foods_need_a_session(client):
     assert client.post("/api/foods", json=body()).status_code == 401
     assert client.patch("/api/foods/1", json=body()).status_code == 401
     assert client.delete("/api/foods/1").status_code == 401
+
+
+# ---- The barcode a food was scanned from ----
+
+CODE = "034000002405"
+
+
+def test_a_food_keeps_the_code_it_was_scanned_from(client, db_session, signed_in):
+    made = create(client, barcode=CODE)
+    assert made.status_code == 201
+    assert db_session.get(models.Food, made.json()["id"]).barcode == CODE
+
+    # And the next scan of that packet is answered from here rather than out
+    # on somebody else's server.
+    answer = client.get(f"/api/barcode/{CODE}").json()
+    assert answer["state"] == "mine"
+    assert answer["food"]["id"] == made.json()["id"]
+
+
+def test_the_same_code_twice_in_one_account_is_refused(client, signed_in):
+    assert create(client, barcode=CODE).status_code == 201
+    response = create(client, name="The same bar again", barcode=CODE)
+    assert response.status_code == 400
+    assert response.json() == {"detail": "You already have a food with this barcode."}
+
+
+def test_a_code_the_shared_database_answers_is_refused(client, db_session, signed_in):
+    put_food(db_session, None, name="Already shared", status="approved", barcode=CODE)
+    response = create(client, barcode=CODE)
+    assert response.status_code == 400
+    assert response.json() == {"detail": "This barcode is already in the shared database."}
+
+
+def test_something_that_is_not_a_barcode_is_refused(client, signed_in):
+    for asked in ("12345", "not-a-code", "0340000024051234567"):
+        response = create(client, barcode=asked)
+        assert response.status_code == 400
+        assert response.json() == {"detail": "That is not a barcode."}
+
+
+def test_two_accounts_may_each_keep_a_private_food_with_one_code(
+    client, make_user, signed_in
+):
+    assert create(client, barcode=CODE).status_code == 201
+    make_user("stranger")
+    sign_in(client, "stranger")
+    assert create(client, barcode=CODE).status_code == 201
+
+
+def test_an_edit_leaves_the_code_where_it_was(client, db_session, signed_in):
+    made = create(client, barcode=CODE).json()
+    edited = client.patch(
+        f"/api/foods/{made['id']}", json=body(name="Renamed", barcode="0000000000000")
+    )
+    assert edited.status_code == 200
+    assert db_session.get(models.Food, made["id"]).barcode == CODE

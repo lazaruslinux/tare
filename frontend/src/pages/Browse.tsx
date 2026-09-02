@@ -1,34 +1,52 @@
-import { useEffect, useState } from 'react'
+import { useEffect, useRef, useState } from 'react'
 
 import { api, errorText, type BrowsePage, type FoodRow } from '../api'
 import { useTopBar } from '../hooks/useTopBar'
 
-// The shared database, as a wall of what is in it. Photographed foods come
-// first because a picture is what somebody recognises a packet by, and the
-// rest follow in the order they were approved.
+// The shared database, as a place to look something up rather than a wall to
+// scroll. Three ways in, in the order somebody reaches for them: type the name,
+// tap the letter it starts with, or read what is there.
 
-// A food with no picture still needs a shape on the grid. Its first letter is
-// enough to tell one tile from its neighbour while reading the names.
+// Long enough that typing a word is one request rather than five.
+const DEBOUNCE = 250
+const MIN_QUERY = 2
+
+const LETTERS = 'ABCDEFGHIJKLMNOPQRSTUVWXYZ'.split('')
+
+// Where the search box takes focus on its own. A phone would answer that with
+// the keyboard over half the screen before anybody asked for it.
+const ROOMY = '(min-width: 900px)'
+
+// A food with no picture still needs a shape in the row. Its first letter is
+// enough to tell one from its neighbour while reading down the names.
 function initial(name: string): string {
   return (name.trim()[0] ?? '?').toUpperCase()
 }
 
-function Tile({ row, onOpen }: { row: FoodRow; onOpen: () => void }) {
+function Row({ row, onOpen }: { row: FoodRow; onOpen: () => void }) {
   return (
-    <button type="button" className="text-left" onClick={onOpen}>
+    <button type="button" className="t-row w-full text-left" onClick={onOpen}>
       {row.photo_url ? (
         <img
           src={row.photo_url}
           alt=""
-          className="mb-2 aspect-square w-full rounded-xl border border-line object-cover"
+          className="h-10 w-10 shrink-0 rounded-lg border border-line object-cover"
         />
       ) : (
-        <span className="mb-2 flex aspect-square w-full items-center justify-center rounded-xl border border-line bg-surface-2 text-3xl font-semibold text-muted">
+        <span className="flex h-10 w-10 shrink-0 items-center justify-center rounded-lg border border-line bg-surface-2 text-sm font-semibold text-muted">
           {initial(row.name)}
         </span>
       )}
-      <span className="block truncate text-sm">{row.name}</span>
-      <span className="block truncate text-xs text-muted">{row.brand || 'No brand'}</span>
+      <span className="min-w-0 flex-1">
+        <span className="block truncate text-sm">{row.name}</span>
+        {row.brand && <span className="block truncate text-xs text-muted">{row.brand}</span>}
+      </span>
+      <span className="shrink-0 text-right">
+        <span className="t-nums block text-sm">
+          {row.calories === null ? '-' : Math.round(row.calories)} cal
+        </span>
+        <span className="block text-xs text-muted">per 100 {row.base_unit}</span>
+      </span>
     </button>
   )
 }
@@ -43,39 +61,65 @@ export function Browse({
   // The one thing worth doing when the database is empty: put something in it.
   onScan: () => void
 }) {
+  const [query, setQuery] = useState('')
+  // Null is not an empty result: it is a box nobody has typed two letters into.
+  const [results, setResults] = useState<FoodRow[] | null>(null)
+  const [letter, setLetter] = useState('')
   // Null is a page nobody has read yet, which is not the same as none.
   const [rows, setRows] = useState<FoodRow[] | null>(null)
   const [cursor, setCursor] = useState<string | null>(null)
   const [error, setError] = useState('')
   const [busy, setBusy] = useState(false)
+  const box = useRef<HTMLInputElement>(null)
 
-  useTopBar({ title: 'Browse database', back: { label: 'Food', onBack } })
-
-  const address = (marker: string | null) =>
-    marker === null ? '/foods/browse' : `/foods/browse?cursor=${encodeURIComponent(marker)}`
+  useTopBar({ title: 'Browse tare database', back: { label: 'Food', onBack } })
 
   useEffect(() => {
+    if (window.matchMedia(ROOMY).matches) box.current?.focus()
+  }, [])
+
+  // The letter is the whole of the listing's identity, so changing it reads the
+  // first page again rather than adding to what is on screen.
+  useEffect(() => {
     let alive = true
-    api<BrowsePage>('/foods/browse')
+    setRows(null)
+    const asked = letter ? `/foods/browse?letter=${letter}` : '/foods/browse'
+    api<BrowsePage>(asked)
       .then((page) => {
         if (!alive) return
         setRows(page.items)
         setCursor(page.next_cursor)
+        setError('')
       })
       .catch((failure) => alive && setError(errorText(failure)))
     return () => {
       alive = false
     }
-  }, [])
+  }, [letter])
+
+  useEffect(() => {
+    const needle = query.trim()
+    if (needle.length < MIN_QUERY) {
+      setResults(null)
+      return
+    }
+    const timer = window.setTimeout(() => {
+      api<FoodRow[]>(`/foods/search?q=${encodeURIComponent(needle)}`)
+        .then(setResults)
+        .catch(() => setResults([]))
+    }, DEBOUNCE)
+    return () => window.clearTimeout(timer)
+  }, [query])
 
   const more = async () => {
     if (cursor === null) return
     setBusy(true)
     setError('')
     try {
-      const page = await api<BrowsePage>(address(cursor))
+      const asked = new URLSearchParams(letter ? { letter, cursor } : { cursor })
+      const page = await api<BrowsePage>(`/foods/browse?${asked}`)
       // Added to what is on screen rather than replacing it: this is one long
-      // wall read downwards, not a set of numbered pages.
+      // list read downwards, not a set of numbered pages.
       setRows((seen) => [...(seen ?? []), ...page.items])
       setCursor(page.next_cursor)
     } catch (failure) {
@@ -86,30 +130,73 @@ export function Browse({
 
   return (
     <>
+      <input
+        ref={box}
+        className="t-input mb-3"
+        type="search"
+        placeholder="Search foods"
+        aria-label="Search foods"
+        value={query}
+        onChange={(event) => setQuery(event.target.value)}
+      />
 
-      {error && <p className="t-error mb-3">{error}</p>}
-
-      {rows !== null && rows.length === 0 && (
-        <div className="t-card mb-3">
-          <p className="mb-3 text-sm text-muted">Nothing shared yet.</p>
-          <button type="button" className="t-btn w-full" onClick={onScan}>
-            Scan a food
-          </button>
-        </div>
-      )}
-
-      {rows !== null && rows.length > 0 && (
-        <div className="grid grid-cols-2 gap-3 min-[900px]:grid-cols-4 min-[1200px]:grid-cols-5">
-          {rows.map((row) => (
-            <Tile key={row.id} row={row} onOpen={() => onOpen(row.id)} />
+      {results === null && (
+        <div className="mb-3 flex gap-x-2 gap-y-4 overflow-x-auto min-[900px]:flex-wrap">
+          {LETTERS.map((option) => (
+            <button
+              key={option}
+              type="button"
+              className="t-chip t-tap44 min-w-9 shrink-0 justify-center aria-pressed:border-accent aria-pressed:text-text"
+              aria-pressed={letter === option}
+              onClick={() => setLetter(letter === option ? '' : option)}
+            >
+              {option}
+            </button>
           ))}
         </div>
       )}
 
-      {cursor !== null && (
-        <button type="button" className="t-btn mt-3 w-full" disabled={busy} onClick={more}>
-          Show more
-        </button>
+      {error && <p className="t-error mb-3">{error}</p>}
+
+      {results !== null ? (
+        <div className="t-card mb-3">
+          {results.length === 0 ? (
+            <p className="text-sm text-muted">Nothing here goes by that name.</p>
+          ) : (
+            results.map((row) => <Row key={row.id} row={row} onOpen={() => onOpen(row.id)} />)
+          )}
+        </div>
+      ) : (
+        <>
+          {rows !== null && rows.length === 0 && (
+            <div className="t-card mb-3">
+              {letter ? (
+                <p className="text-sm text-muted">Nothing shared starts with {letter} yet.</p>
+              ) : (
+                <>
+                  <p className="mb-3 text-sm text-muted">Nothing shared yet.</p>
+                  <button type="button" className="t-btn w-full" onClick={onScan}>
+                    Scan a food
+                  </button>
+                </>
+              )}
+            </div>
+          )}
+
+          {rows !== null && rows.length > 0 && (
+            <div className="t-card mb-3">
+              {rows.map((row) => (
+                <Row key={row.id} row={row} onOpen={() => onOpen(row.id)} />
+              ))}
+            </div>
+          )}
+
+          {cursor !== null && (
+            <button type="button" className="t-btn mb-3 w-full" disabled={busy} onClick={more}>
+              Show more
+            </button>
+          )}
+        </>
       )}
     </>
   )

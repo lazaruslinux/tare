@@ -1,4 +1,4 @@
-import { ChevronLeft, Pin } from 'lucide-react'
+import { ChevronLeft, Pin, ScanLine } from 'lucide-react'
 import { useEffect, useState, type FormEvent } from 'react'
 
 import { api, errorText, type Food, type FoodRow, type Me, type RepeatRow } from '../api'
@@ -149,6 +149,7 @@ export function FoodPicker({
   onClose,
   onLogged,
   onPick,
+  onScan,
 }: {
   me: Me
   // The day and the meal a food is being logged into. Left out when nothing is
@@ -157,6 +158,9 @@ export function FoodPicker({
   slot?: Slot
   onClose: () => void
   onLogged?: () => void
+  // The camera, which lives above this sheet. Offered here because a packet in
+  // somebody's hand is faster to scan than to spell.
+  onScan?: () => void
   // Given instead when a food is being chosen for a recipe or a kept meal. The
   // portion is handed back and nothing is written to the diary.
   onPick?: (food: Food, amount: number, unit: string) => void
@@ -260,6 +264,17 @@ export function FoodPicker({
                 repeat.map((row) => <Row key={row.id} row={row} onOpen={() => open(row.id)} />)
               )}
             </>
+          )}
+
+          {onScan && (
+            <button
+              type="button"
+              className="t-row w-full text-left text-sm"
+              onClick={onScan}
+            >
+              <ScanLine className="h-4 w-4 shrink-0 text-accent" strokeWidth={2} />
+              Scan food
+            </button>
           )}
 
           {/* A quick add is logged and forgotten, so there is nothing in it to

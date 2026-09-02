@@ -1,10 +1,11 @@
-import { ChevronDown, Plus, X } from 'lucide-react'
+import { ChevronDown, Plus, ScanLine, X } from 'lucide-react'
 import { useState, type FormEvent } from 'react'
 
-import { api, errorText, type Food } from '../api'
+import { api, errorText, type Food, type Prefill, type Scanned } from '../api'
 import { useTopBar } from '../hooks/useTopBar'
 import { SHARED_FACTS, missingSentence, type Values } from '../lib/community'
 import type { BaseUnit } from '../lib/units'
+import { BarcodeScanner } from './BarcodeScanner'
 import { HEADLINE, MORE_FACTS, type Nutrient } from './NutritionLabel'
 
 // Two ways to measure a food, in the words somebody would use out loud.
@@ -59,6 +60,7 @@ export function FoodForm({
   onSubmit,
   onSaved,
   onCancel,
+  onOpenFood,
 }: {
   food: Food | null
   // Why somebody was sent here, when something else sent them. Said at the top
@@ -81,6 +83,10 @@ export function FoodForm({
   onSubmit?: (payload: Record<string, unknown>) => Promise<Food>
   onSaved: (food: Food) => void
   onCancel: () => void
+  // Where a scanned code that is already in tare sends somebody. Given only
+  // where scanning makes sense, which is a food being entered for the first
+  // time, and it is what puts the scan button on the form.
+  onOpenFood?: (id: number) => void
 }) {
   const [name, setName] = useState(food?.name ?? '')
   const [brand, setBrand] = useState(food?.brand ?? '')
@@ -97,6 +103,19 @@ export function FoodForm({
   const [densityWrong, setDensityWrong] = useState(false)
   const [error, setError] = useState('')
   const [saving, setSaving] = useState(false)
+  const [scanning, setScanning] = useState(false)
+  const [looking, setLooking] = useState(false)
+  const [barcode, setBarcode] = useState('')
+  // A scanned code is the packet's own, so it is held still until somebody
+  // says otherwise.
+  const [locked, setLocked] = useState(false)
+  // The food this code already is, when the scan turned one up. Nothing is
+  // created for it: it is there to be opened.
+  const [already, setAlready] = useState<{ id: number; name: string } | null>(null)
+
+  // Only where a food is being entered for the first time. Everywhere else
+  // this form is opened on a food that already exists.
+  const scannable = onOpenFood !== undefined && food === null
 
   const heading = title ?? (food ? 'Edit food' : 'New food')
   useTopBar({ title: heading, back: { label: backLabel, onBack: onCancel } })
@@ -105,6 +124,51 @@ export function FoodForm({
 
   const setServing = (index: number, draft: ServingDraft) =>
     setServings(servings.map((row, at) => (at === index ? draft : row)))
+
+  // What a lookup gives, put into the boxes it fills. Anything the reading did
+  // not carry is left alone rather than blanked: an empty box is a number
+  // nobody has, which is what it already was.
+  const fill = (reading: Prefill) => {
+    setName(reading.name)
+    setBrand(reading.brand)
+    setBaseUnit(reading.base_unit)
+    setDensity(reading.density_g_per_ml === null ? '' : String(reading.density_g_per_ml))
+    const filled = {} as Record<Nutrient, string>
+    for (const fact of SHARED_FACTS) {
+      const value = reading[fact.key]
+      filled[fact.key] = value === null ? '' : String(value)
+    }
+    setPanel(filled)
+    if (reading.serving) {
+      setServings([
+        { name: reading.serving.name, amount: String(reading.serving.base_amount) },
+      ])
+    }
+    setMore(true)
+  }
+
+  const resolve = async (code: string) => {
+    setScanning(false)
+    setLooking(true)
+    setError('')
+    setAlready(null)
+    try {
+      const answer = await api<Scanned>(`/barcode/${code}`)
+      if (answer.state === 'approved' || answer.state === 'mine') {
+        setAlready({ id: answer.food.id, name: answer.food.name })
+      } else if (answer.state === 'prefill') {
+        setBarcode(answer.prefill.barcode ?? code)
+        setLocked(true)
+        fill(answer.prefill)
+      } else {
+        setBarcode(answer.barcode)
+        setLocked(true)
+      }
+    } catch (failure) {
+      setError(errorText(failure))
+    }
+    setLooking(false)
+  }
 
   const submit = async (event: FormEvent) => {
     event.preventDefault()
@@ -147,6 +211,9 @@ export function FoodForm({
       })),
       ...read,
     }
+    // Only on a food being entered for the first time. The code is what this
+    // row was scanned from, and an edit never moves it.
+    if (scannable && barcode.trim()) body.barcode = barcode.trim()
     if (sharing) body.note = note
 
     const write =
@@ -165,12 +232,70 @@ export function FoodForm({
     }
   }
 
+  if (scanning) {
+    return (
+      <BarcodeScanner onCode={(code) => void resolve(code)} onClose={() => setScanning(false)} />
+    )
+  }
+
   return (
     <>
       {notice && <p className="t-card mb-3 text-sm text-muted">{notice}</p>}
 
+      {already !== null && (
+        <div className="t-card mb-3">
+          <p className="text-sm">Already in tare: {already.name}</p>
+          <button
+            type="button"
+            className="t-btn mt-3"
+            onClick={() => onOpenFood?.(already.id)}
+          >
+            Open
+          </button>
+        </div>
+      )}
+
       <form onSubmit={submit}>
         <div className="t-card mb-3">
+          {scannable && (
+            <button
+              type="button"
+              className="t-btn mb-3 w-full"
+              disabled={looking}
+              onClick={() => setScanning(true)}
+            >
+              <ScanLine className="h-4 w-4" strokeWidth={2} />
+              {looking ? 'Looking it up' : 'Scan barcode'}
+            </button>
+          )}
+
+          {barcode && (
+            <div className="mb-3">
+              <label className="t-label" htmlFor="food-barcode">
+                Barcode
+              </label>
+              <div className="flex items-center gap-2">
+                <input
+                  id="food-barcode"
+                  className="t-input t-nums"
+                  inputMode="numeric"
+                  readOnly={locked}
+                  value={barcode}
+                  onChange={(event) => setBarcode(event.target.value)}
+                />
+                {locked && (
+                  <button
+                    type="button"
+                    className="shrink-0 text-sm font-semibold text-accent"
+                    onClick={() => setLocked(false)}
+                  >
+                    Change
+                  </button>
+                )}
+              </div>
+            </div>
+          )}
+
           <div className="mb-3">
             <label className="t-label" htmlFor="food-name">
               Name

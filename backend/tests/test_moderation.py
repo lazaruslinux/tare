@@ -365,6 +365,8 @@ def test_rejecting_a_correction_throws_the_copy_away(client, db_session, make_us
     assert (row["kind"], row["status"]) == ("edit", "rejected")
     assert row["target_name"] == "Milk chocolate bar"
     assert row["decision_note"] == "The old weight is the right one."
+    # A correction opens the food it was about, not the copy that is now gone.
+    assert row["food_id"] == target.id
 
 
 def test_withdrawing_a_correction_throws_the_copy_away(client, db_session, make_user):
@@ -654,6 +656,42 @@ def test_a_page_marker_that_is_not_ours_is_refused(client, signed_in):
 
 def test_browse_needs_a_session(client):
     assert client.get("/api/foods/browse").status_code == 401
+
+
+def test_browse_by_letter_reads_alphabetically_and_ignores_the_case_of_it(
+    client, db_session, signed_in
+):
+    for name in ("Apricot", "almond butter", "Banana", "Apple"):
+        put_food(db_session, status="approved", name=name, barcode=None)
+
+    lower = client.get("/api/foods/browse?letter=a").json()
+    upper = client.get("/api/foods/browse?letter=A").json()
+    assert [row["id"] for row in lower["items"]] == [row["id"] for row in upper["items"]]
+    assert [row["name"] for row in lower["items"]] == ["almond butter", "Apple", "Apricot"]
+
+
+def test_browse_by_letter_still_pages(client, db_session, signed_in):
+    made = [
+        put_food(db_session, status="approved", name=f"Pear {index:02d}", barcode=None)
+        for index in range(45)
+    ]
+    first = client.get("/api/foods/browse?letter=p").json()
+    assert len(first["items"]) == 40
+    assert first["next_cursor"]
+
+    second = client.get(
+        f"/api/foods/browse?letter=p&cursor={first['next_cursor']}"
+    ).json()
+    assert second["next_cursor"] is None
+    seen = [row["id"] for row in first["items"]] + [row["id"] for row in second["items"]]
+    assert sorted(seen) == sorted(food.id for food in made)
+
+
+def test_browse_wants_a_letter_and_nothing_else(client, signed_in):
+    for asked in ("1", "ab", "%", " "):
+        response = client.get("/api/foods/browse", params={"letter": asked})
+        assert response.status_code == 400
+        assert response.json() == {"detail": "Pick a letter."}
 
 
 # ---- Invite links ----

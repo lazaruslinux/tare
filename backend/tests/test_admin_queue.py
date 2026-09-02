@@ -340,3 +340,113 @@ def test_a_food_turned_down_can_be_corrected_and_offered_again(client, make_user
 
     sign_in(client, "reviewer")
     assert len(client.get("/api/admin/queue").json()) == 1
+
+
+# ---- Where a food stands with the shared database ----
+
+
+def community(client, food_id):
+    """What this account's own list says about one food."""
+    rows = client.get("/api/foods/mine").json()
+    return next((row["community"] for row in rows if row["id"] == food_id), None)
+
+
+def test_a_food_nobody_offered_stands_at_none(client, signed_in):
+    made = client.post(
+        "/api/foods", json={"name": "Chicken breast", "calories": 165,
+                            "protein_g": 31, "carbs_g": 0, "fat_g": 3.6}
+    ).json()
+    assert community(client, made["id"]) == "none"
+    assert client.get(f"/api/foods/{made['id']}").json()["community"] == "none"
+
+
+def test_a_food_waiting_on_a_decision_stands_at_pending(client, make_user):
+    made = member_and_admin(client, make_user)
+    assert community(client, made["food"]["id"]) == "pending"
+    assert client.get(f"/api/foods/{made['food']['id']}").json()["community"] == "pending"
+
+
+def test_a_food_approved_stays_in_my_list_marked_as_shared(client, make_user):
+    made = member_and_admin(client, make_user)
+    sign_in(client, "reviewer")
+    assert client.post(f"/api/admin/queue/{made['submission_id']}/approve", json={}).status_code == 200
+
+    sign_in(client, "member")
+    assert community(client, made["food"]["id"]) == "approved"
+    detail = client.get(f"/api/foods/{made['food']['id']}").json()
+    assert detail["community"] == "approved"
+    # It belongs to everybody now, so the owner's own actions are gone with it.
+    assert detail["mine"] is False
+
+
+def test_a_food_turned_down_stands_at_rejected(client, make_user):
+    made = member_and_admin(client, make_user)
+    sign_in(client, "reviewer")
+    client.post(f"/api/admin/queue/{made['submission_id']}/reject", json={"note": "Check it."})
+
+    sign_in(client, "member")
+    assert community(client, made["food"]["id"]) == "rejected"
+    assert client.get(f"/api/foods/{made['food']['id']}").json()["community"] == "rejected"
+
+
+def test_taking_an_offer_back_puts_the_food_back_at_none(client, make_user):
+    made = member_and_admin(client, make_user)
+    assert client.delete(f"/api/submissions/{made['submission_id']}").status_code == 204
+    assert community(client, made["food"]["id"]) == "none"
+
+
+def test_somebody_else_s_approved_food_is_not_in_my_list(client, make_user):
+    made = member_and_admin(client, make_user)
+    sign_in(client, "reviewer")
+    client.post(f"/api/admin/queue/{made['submission_id']}/approve", json={})
+
+    make_user("stranger")
+    sign_in(client, "stranger")
+    assert client.get("/api/foods/mine").json() == []
+    # Readable, because it is shared, and marked as nobody's doing but its own.
+    assert client.get(f"/api/foods/{made['food']['id']}").json()["community"] == "none"
+
+
+def test_a_submission_row_names_the_food_it_is_about(client, make_user):
+    made = member_and_admin(client, make_user)
+    row = client.get("/api/submissions/mine").json()[0]
+    assert (row["kind"], row["food_id"]) == ("new", made["food"]["id"])
+
+
+def test_a_scanned_food_offered_from_the_form_carries_its_code_through(
+    client, db_session, make_user
+):
+    """A food entered from a scan keeps its code when it is offered, and the
+    queue holds it to the same one-row-per-barcode rule as anything else."""
+    make_user("member")
+    make_user("reviewer", admin=True)
+    sign_in(client, "member")
+    made = client.post(
+        "/api/foods",
+        json={
+            "name": "Milk chocolate bar",
+            "base_unit": "g",
+            "barcode": CODE,
+            "servings": SERVINGS,
+            **FULL,
+        },
+    ).json()
+    offered = client.post(f"/api/foods/{made['id']}/submit", json={})
+    assert offered.status_code == 201
+
+    db_session.expire_all()
+    waiting = db_session.get(models.Food, made["id"])
+    assert (waiting.status, waiting.barcode) == ("pending", CODE)
+
+    # Somebody else's food reached the shared database with that code first.
+    db_session.add(
+        models.Food(status="approved", barcode=CODE, name="Already shared", base_unit="g")
+    )
+    db_session.commit()
+
+    sign_in(client, "reviewer")
+    response = client.post(
+        f"/api/admin/queue/{offered.json()['submission_id']}/approve", json={}
+    )
+    assert response.status_code == 409
+    assert response.json() == {"detail": "This barcode is already in the shared database."}

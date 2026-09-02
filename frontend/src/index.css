@@ -22,6 +22,9 @@
   --label: #b5c6ba;
   --accent: #8fc7a0;
   --accent-strong: #a9dcb8;
+  /* Waiting on somebody else. Amber rather than a third green, because the
+     one thing this colour must not read as is done. */
+  --pending: #d9a441;
   --danger: #d98b83;
   --ring: rgba(143, 199, 160, 0.35);
 }
@@ -38,6 +41,7 @@
   --label: #45604f;
   --accent: #35684f;
   --accent-strong: #24503b;
+  --pending: #b7791f;
   --danger: #b3554b;
   --ring: rgba(53, 104, 79, 0.3);
 }
@@ -56,6 +60,7 @@
   --color-muted: var(--muted);
   --color-accent: var(--accent);
   --color-accent-strong: var(--accent-strong);
+  --color-pending: var(--pending);
   --color-danger: var(--danger);
   --color-ring: var(--ring);
   --font-sans: 'Inter Variable', ui-sans-serif, system-ui, sans-serif;
@@ -110,6 +115,19 @@
     letter-spacing: 0.08em;
     text-transform: uppercase;
     color: var(--label);
+  }
+
+  /* The name of a group of rows, said in the words a person would use. Louder
+     than .t-micro and in sentence case: these are headings on a page somebody
+     reads, not labels on a form. The icon leads and anything the group offers
+     sits at the far end of the row it is in. */
+  .t-section {
+    display: flex;
+    align-items: center;
+    gap: 0.5rem;
+    font-size: 0.8125rem;
+    font-weight: 600;
+    color: var(--text);
   }
 
   .t-chip {

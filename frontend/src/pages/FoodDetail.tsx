@@ -34,6 +34,7 @@ export function FoodDetail({
   onEdit,
   onDelete,
   onSubmitted,
+  onChanged,
 }: {
   id: number
   me: Me
@@ -46,6 +47,10 @@ export function FoodDetail({
   onEdit: (food: Food, notice?: string) => void
   onDelete: (food: Food) => void
   onSubmitted: () => void
+  // Something about this food changed that a screen behind this one shows too.
+  // Repeat is the one that does: pinning puts a food on it and unpinning takes
+  // it off, and the list was read once when that screen opened.
+  onChanged?: () => void
 }) {
   const [food, setFood] = useState<Food | null>(null)
   const [error, setError] = useState('')
@@ -83,6 +88,7 @@ export function FoodDetail({
     setFood({ ...current, pinned: !current.pinned })
     try {
       await api(`/foods/${current.id}/pin`, { method: current.pinned ? 'DELETE' : 'POST' })
+      onChanged?.()
     } catch (failure) {
       setFood(current)
       setError(errorText(failure))

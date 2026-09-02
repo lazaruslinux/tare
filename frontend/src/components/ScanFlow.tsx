@@ -1,7 +1,7 @@
 import { useCallback, useState } from 'react'
 
 import { api, errorText, type Food, type Me, type Prefill, type Scanned } from '../api'
-import { slotByTime, today } from '../lib/day'
+import { slotByTime, today, type Slot } from '../lib/day'
 import { BarcodeScanner } from './BarcodeScanner'
 import { PortionSheet } from './PortionSheet'
 import { Sheet } from './Sheet'
@@ -24,10 +24,17 @@ type Stage =
 
 export function ScanFlow({
   me,
+  date,
+  slot,
   onClose,
   onLogged,
 }: {
   me: Me
+  // Where what is scanned lands. Left out from the centre control and the Food
+  // tab, which both mean now; given by the Journal, which means the day and the
+  // meal somebody is looking at.
+  date?: string
+  slot?: Slot
   onClose: () => void
   onLogged: () => void
 }) {
@@ -96,8 +103,8 @@ export function ScanFlow({
     return (
       <PortionSheet
         food={stage.food}
-        date={today(me.timezone)}
-        slot={slotByTime(me.timezone)}
+        date={date ?? today(me.timezone)}
+        slot={slot ?? slotByTime(me.timezone)}
         units={me.units}
         onClose={onClose}
         onDone={onLogged}

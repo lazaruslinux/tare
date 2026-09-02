@@ -179,6 +179,11 @@ export type Activity = {
   efforts: { effort: EffortLevel; met: number }[]
 }
 
+// Where a food stands with the shared database, from where this account is
+// standing: never offered, waiting, shared because this account offered it, or
+// turned down.
+export type Community = 'none' | 'pending' | 'approved' | 'rejected'
+
 // A food as a list reads it: enough to pick it out and nothing else.
 export type FoodRow = {
   id: number
@@ -187,6 +192,7 @@ export type FoodRow = {
   calories: number | null
   base_unit: BaseUnit
   status: string
+  community: Community
   // The picture the shared database publishes for it, when it has one. Null is
   // a food nobody has photographed, not a picture that failed to load.
   photo_url: string | null
@@ -268,6 +274,9 @@ export type MySubmission = {
   id: number
   kind: string
   status: 'pending' | 'approved' | 'rejected'
+  // The food this row opens: the one that was offered, or the shared one a
+  // correction or a picture is about. Null once it is gone.
+  food_id: number | null
   // Null once the food it was about has been deleted.
   name: string | null
   // What a correction or a picture was about. Null for a new food.

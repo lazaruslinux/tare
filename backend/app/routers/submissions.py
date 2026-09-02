@@ -31,8 +31,11 @@ from app import models, schemas
 from app.db import get_db
 from app.deps import require_user
 from app.models import NUTRIENTS
-from app.routers.barcode import BAD_BARCODE, BARCODE_PATTERN
 from app.routers.foods import (
+    ALREADY_MINE,
+    ALREADY_SHARED,
+    BAD_BARCODE,
+    BARCODE_PATTERN,
     LISTED,
     MISSING_FOOD,
     apply_body,
@@ -47,8 +50,6 @@ MISSING_SUBMISSION = "There is no such submission."
 # A pending submission is the only kind that can still be taken back. One that
 # has been decided is history, and history does not get withdrawn.
 NOT_WITHDRAWABLE = "That submission has already been decided."
-ALREADY_MINE = "You already have a food with this barcode."
-ALREADY_SHARED = "This barcode is already in the shared database."
 ALREADY_OFFERED = "This food is already waiting for a decision."
 ALREADY_EDITING = "You already have an edit waiting on this food."
 ALREADY_PICTURING = "You already have a photo waiting on this food."
@@ -169,6 +170,9 @@ def submission_row(
         "id": submission.id,
         "kind": submission.kind,
         "status": submission.status,
+        # The food this row opens: the offered one for a new food, and the
+        # shared one a correction or a picture is about. Null once it is gone.
+        "food_id": submission.food_id if submission.kind == "new" else submission.target_food_id,
         # Null once the food it was about has been deleted. The row still reads,
         # because what somebody offered and what came of it is their own record.
         "name": name,

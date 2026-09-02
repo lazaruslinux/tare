@@ -43,6 +43,10 @@ class FoodIn(BaseModel):
     brand: str = ""
     base_unit: Literal["g", "ml"] = "g"
     density_g_per_ml: float | None = Field(default=None, ge=DENSITY_MIN, le=DENSITY_MAX)
+    # The code the form was filled in from, kept with the food so the next scan
+    # of that packet is answered from here. Set when a food is created and
+    # ignored on an edit: a code that moves is a code the scanner cannot trust.
+    barcode: str | None = None
 
     # Per 100 of the base unit. Negative nutrition is not a thing.
     calories: float | None = Field(default=None, ge=0)
@@ -70,14 +74,12 @@ MAX_NOTE = 500
 class SubmissionIn(FoodIn):
     """A food offered to the shared database.
 
-    The same form as a private food, with the three things only a shared one
-    has: the barcode it was scanned from, the picture of the label somebody
-    took, and a word for whoever reviews it. Which of the nutrients are needed
-    is the route's rule and a stricter one than a private food's, because
-    everybody eats out of what this becomes.
+    The same form as a private food, with the two things only a shared one
+    has: the picture of the label somebody took, and a word for whoever reviews
+    it. Which of the nutrients are needed is the route's rule and a stricter one
+    than a private food's, because everybody eats out of what this becomes.
     """
 
-    barcode: str | None = None
     photo_id: int | None = None
     note: str = Field(default="", max_length=MAX_NOTE)
 

@@ -16,7 +16,6 @@ filled in from it.
 from __future__ import annotations
 
 import datetime as dt
-import re
 
 from fastapi import APIRouter, Depends, HTTPException, status
 from sqlalchemy import select
@@ -27,14 +26,15 @@ from app.config import settings
 from app.db import get_db
 from app.deps import require_user
 from app.models import NUTRIENTS, now_utc
-from app.routers.foods import LISTED, MAX_SERVING_NAME, food_detail
+from app.routers.foods import (
+    BAD_BARCODE,
+    BARCODE_PATTERN,
+    LISTED,
+    MAX_SERVING_NAME,
+    food_detail,
+)
 
 router = APIRouter(prefix="/barcode", tags=["barcode"])
-
-# Every retail code printed on food: EAN-8 at the short end, GTIN-14 at the
-# long. Anything else is not a barcode this app has any use for.
-BARCODE_PATTERN = re.compile(r"^[0-9]{8,14}$")
-BAD_BARCODE = "That is not a barcode."
 
 # How long a fetched reading is trusted before it is asked for again. A label
 # changes rarely and a month is far longer than anybody's shopping cycle, so in

@@ -10,6 +10,7 @@ from __future__ import annotations
 
 import base64
 import binascii
+import re
 from collections.abc import Sequence
 
 from fastapi import APIRouter, Depends, HTTPException, status
@@ -32,6 +33,15 @@ NOT_YOURS = "This food is not yours to change."
 MAX_NAME = 200
 MAX_BRAND = 120
 MAX_SERVING_NAME = 60
+
+# Every retail code printed on food: EAN-8 at the short end, GTIN-14 at the
+# long. Anything else is not a barcode this app has any use for. It lives here
+# rather than beside the lookup because a barcode is something a food carries,
+# and both the lookup and the submission rules read it from here.
+BARCODE_PATTERN = re.compile(r"^[0-9]{8,14}$")
+BAD_BARCODE = "That is not a barcode."
+ALREADY_MINE = "You already have a food with this barcode."
+ALREADY_SHARED = "This barcode is already in the shared database."
 
 # The shortest thing worth searching for. One letter matches most of a database
 # and tells nobody anything.
@@ -67,6 +77,7 @@ ADMIN_MAY_DELETE = ("approved",)
 # How many foods one page of the browse list holds.
 BROWSE_PAGE = 40
 BAD_CURSOR = "That page marker is not one of ours."
+BAD_LETTER = "Pick a letter."
 
 
 def photo_url(photo_id: int) -> str:
@@ -92,6 +103,24 @@ def read_cursor(cursor: str) -> tuple[int, int]:
         raise HTTPException(status.HTTP_400_BAD_REQUEST, BAD_CURSOR) from None
 
 
+def write_name_cursor(name: str, food_id: int) -> str:
+    """Where a page of one letter stopped, which is a place in an A to Z.
+
+    The id leads so the two parts split cleanly: a name may hold a full stop
+    and a row id never does.
+    """
+    return base64.urlsafe_b64encode(f"{food_id}.{name}".encode()).decode().rstrip("=")
+
+
+def read_name_cursor(cursor: str) -> tuple[str, int]:
+    try:
+        padded = cursor + "=" * (-len(cursor) % 4)
+        food_id, name = base64.urlsafe_b64decode(padded).decode().split(".", 1)
+        return name, int(food_id)
+    except (ValueError, binascii.Error, UnicodeDecodeError):
+        raise HTTPException(status.HTTP_400_BAD_REQUEST, BAD_CURSOR) from None
+
+
 def photo_urls(db: Session, food_ids: Sequence[int]) -> dict[int, str]:
     """The published picture of each of these foods, where there is one.
 
@@ -109,7 +138,9 @@ def photo_urls(db: Session, food_ids: Sequence[int]) -> dict[int, str]:
     return {food_id: photo_url(photo_id) for food_id, photo_id in rows if food_id is not None}
 
 
-def food_row(food: models.Food, picture: str | None = None) -> dict[str, object]:
+def food_row(
+    food: models.Food, picture: str | None = None, community: str = "none"
+) -> dict[str, object]:
     """A food as it reads in a list: enough to pick it out, nothing else."""
     return {
         "id": food.id,
@@ -119,12 +150,60 @@ def food_row(food: models.Food, picture: str | None = None) -> dict[str, object]
         "base_unit": food.base_unit,
         "status": food.status,
         "photo_url": picture,
+        # Where this food stands with the shared database, from where the
+        # person reading is standing.
+        "community": community,
     }
 
 
-def food_rows(db: Session, foods: Sequence[models.Food]) -> list[dict[str, object]]:
+def community_states(
+    db: Session, user: models.User, foods: Sequence[models.Food]
+) -> dict[int, str]:
+    """What each of these foods is, to this account, as one word.
+
+    'pending' is waiting on a decision, 'approved' is shared because this
+    account offered it, 'rejected' is back in their own hands after a no, and
+    'none' is everything else, a food nobody has offered included. Withdrawing
+    deletes the request, so a food that was taken back reads as 'none' again.
+
+    One query for the lot: the alternative is a submissions lookup per row.
+    """
+    ids = [food.id for food in foods]
+    if not ids:
+        return {}
+    # Ascending by id, so the last one written for a food is the one left in
+    # the map: what came of the most recent offer is what the dot is about.
+    rows = db.execute(
+        select(models.FoodSubmission.food_id, models.FoodSubmission.status)
+        .where(
+            models.FoodSubmission.submitted_by_id == user.id,
+            models.FoodSubmission.kind == "new",
+            models.FoodSubmission.food_id.in_(ids),
+        )
+        .order_by(models.FoodSubmission.id)
+    ).all()
+    latest = {food_id: state for food_id, state in rows}
+
+    states: dict[int, str] = {}
+    for food in foods:
+        offered = latest.get(food.id)
+        if food.status == "pending":
+            states[food.id] = "pending"
+        elif food.status == "approved" and offered == "approved":
+            states[food.id] = "approved"
+        elif food.status == "custom" and offered == "rejected":
+            states[food.id] = "rejected"
+        else:
+            states[food.id] = "none"
+    return states
+
+
+def food_rows(
+    db: Session, user: models.User, foods: Sequence[models.Food]
+) -> list[dict[str, object]]:
     pictures = photo_urls(db, [food.id for food in foods])
-    return [food_row(food, pictures.get(food.id)) for food in foods]
+    states = community_states(db, user, foods)
+    return [food_row(food, pictures.get(food.id), states[food.id]) for food in foods]
 
 
 def hidden_ids(db: Session, user: models.User) -> set[int]:
@@ -153,7 +232,11 @@ def is_pinned(db: Session, user: models.User, food_id: int) -> bool:
 def food_detail(db: Session, food: models.Food, user: models.User) -> dict[str, object]:
     """The whole food, its panel per 100 of its base unit, and its servings."""
     detail: dict[str, object] = {
-        **food_row(food, photo_urls(db, [food.id]).get(food.id)),
+        **food_row(
+            food,
+            photo_urls(db, [food.id]).get(food.id),
+            community_states(db, user, [food])[food.id],
+        ),
         "density_g_per_ml": food.density_g_per_ml,
         "ingredients_text": food.ingredients_text,
         # Whether the account reading it is the one who may change it. The
@@ -289,6 +372,34 @@ def apply_body(food: models.Food, body: schemas.FoodIn) -> None:
     food.servings = servings
 
 
+def check_barcode(db: Session, user: models.User, code: str) -> None:
+    """Refuse a code this account cannot put on a new food of its own.
+
+    Two private foods in two accounts may carry one code, because a private
+    food is a note somebody made about a packet. One account holding the same
+    code twice is not a note, it is a duplicate, and neither is a code the
+    shared database already answers: that food is there to be used.
+    """
+    if not BARCODE_PATTERN.match(code):
+        raise HTTPException(status.HTTP_400_BAD_REQUEST, BAD_BARCODE)
+    shared = db.execute(
+        select(models.Food.id).where(
+            models.Food.status == "approved", models.Food.barcode == code
+        )
+    ).first()
+    if shared is not None:
+        raise HTTPException(status.HTTP_400_BAD_REQUEST, ALREADY_SHARED)
+    held = db.execute(
+        select(models.Food.id).where(
+            models.Food.owner_id == user.id,
+            models.Food.barcode == code,
+            models.Food.status.in_(LISTED),
+        )
+    ).first()
+    if held is not None:
+        raise HTTPException(status.HTTP_400_BAD_REQUEST, ALREADY_MINE)
+
+
 @router.get("/search")
 def search_foods(
     q: str = "",
@@ -325,24 +436,40 @@ def search_foods(
         .order_by(rank, func.length(models.Food.name), models.Food.id)
         .limit(SEARCH_LIMIT)
     )
-    return food_rows(db, list(db.execute(query).scalars()))
+    return food_rows(db, user, list(db.execute(query).scalars()))
 
 
 @router.get("/mine")
 def list_my_foods(
     db: Session = Depends(get_db), user: models.User = Depends(require_user)
 ) -> list[dict[str, object]]:
-    """This account's own foods, newest first."""
+    """This account's own foods, newest first, and the ones it gave away.
+
+    A food that was approved belongs to nobody now, but the person who entered
+    it still thinks of it as theirs and still wants to find it where they put
+    it. So it stays in this list, marked as shared rather than owned.
+    """
+    offered = select(models.FoodSubmission.food_id).where(
+        models.FoodSubmission.submitted_by_id == user.id,
+        models.FoodSubmission.kind == "new",
+        models.FoodSubmission.status == "approved",
+        models.FoodSubmission.food_id.is_not(None),
+    )
     query = (
         select(models.Food)
-        .where(models.Food.owner_id == user.id, models.Food.status.in_(LISTED))
+        .where(
+            or_(
+                and_(models.Food.owner_id == user.id, models.Food.status.in_(LISTED)),
+                and_(models.Food.status == "approved", models.Food.id.in_(offered)),
+            )
+        )
         .order_by(models.Food.created_at.desc(), models.Food.id.desc())
         # A ceiling rather than paging: this is one person's own list, and a
         # screen that scrolls past two hundred of them needs a different shape
         # than a longer response.
         .limit(200)
     )
-    return food_rows(db, list(db.execute(query).scalars()))
+    return food_rows(db, user, list(db.execute(query).scalars()))
 
 
 @router.get("/repeat")
@@ -364,7 +491,7 @@ def repeat_foods(
         ).scalars()
     )
     rows: list[dict[str, object]] = [
-        {**row, "pinned": True} for row in food_rows(db, pinned)
+        {**row, "pinned": True} for row in food_rows(db, user, pinned)
     ]
     kept = {food.id for food in pinned}
 
@@ -390,11 +517,14 @@ def repeat_foods(
         for food in db.execute(visible(user).where(models.Food.id.in_(wanted))).scalars()
     }
     pictures = photo_urls(db, list(found))
+    states = community_states(db, user, list(found.values()))
     for food_id in wanted:
         food = found.get(food_id)
         if food is None:
             continue
-        rows.append({**food_row(food, pictures.get(food.id)), "pinned": False})
+        rows.append(
+            {**food_row(food, pictures.get(food.id), states[food.id]), "pinned": False}
+        )
         if len(rows) - len(kept) == RECENT_LIMIT:
             break
     return rows
@@ -403,6 +533,7 @@ def repeat_foods(
 @router.get("/browse")
 def browse_foods(
     cursor: str = "",
+    letter: str = "",
     db: Session = Depends(get_db),
     user: models.User = Depends(require_user),
 ) -> dict[str, object]:
@@ -412,7 +543,13 @@ def browse_foods(
     approved while somebody is scrolling shifts every offset after it, which
     shows one row twice and hides another; a marker naming the last row read
     cannot do either.
+
+    Given a letter it is the same database read the other way: everything
+    starting with that letter, in alphabetical order, which is how somebody
+    looks for a food they cannot spell the middle of.
     """
+    if letter and not (len(letter) == 1 and letter.isascii() and letter.isalpha()):
+        raise HTTPException(status.HTTP_400_BAD_REQUEST, BAD_LETTER)
     # One row per food, so a food is not repeated when it has been photographed
     # more than once. The lowest id is the published one, and the partial index
     # allows only one of those anyway.
@@ -431,31 +568,49 @@ def browse_foods(
         select(models.Food, published.c.photo_id, has_photo.label("has_photo"))
         .outerjoin(published, published.c.food_id == models.Food.id)
         .where(models.Food.status == "approved")
-        .order_by(has_photo.desc(), models.Food.id)
         # One more than a page, which is how the answer knows whether there is
         # another one without counting the whole table.
         .limit(BROWSE_PAGE + 1)
     )
-    if cursor:
-        seen_photo, seen_id = read_cursor(cursor)
+    if letter:
+        # Sorted and compared on the folded name throughout, so a page break
+        # lands in the same place on either database rather than following
+        # whatever a collation does with capitals.
+        folded = func.lower(models.Food.name)
         query = query.where(
-            or_(
-                has_photo < seen_photo,
-                and_(has_photo == seen_photo, models.Food.id > seen_id),
+            models.Food.name.ilike(f"{like_literal(letter)}%", escape="\\")
+        ).order_by(folded, models.Food.id)
+        if cursor:
+            seen_name, seen_id = read_name_cursor(cursor)
+            query = query.where(
+                or_(folded > seen_name, and_(folded == seen_name, models.Food.id > seen_id))
             )
-        )
+    else:
+        query = query.order_by(has_photo.desc(), models.Food.id)
+        if cursor:
+            seen_photo, seen_id = read_cursor(cursor)
+            query = query.where(
+                or_(
+                    has_photo < seen_photo,
+                    and_(has_photo == seen_photo, models.Food.id > seen_id),
+                )
+            )
 
     rows = db.execute(query).all()
     page = rows[:BROWSE_PAGE]
+    states = community_states(db, user, [food for food, _, _ in page])
     items = [
-        food_row(food, None if photo_id is None else photo_url(photo_id))
+        food_row(food, None if photo_id is None else photo_url(photo_id), states[food.id])
         for food, photo_id, _ in page
     ]
     more = len(rows) > BROWSE_PAGE
-    return {
-        "items": items,
-        "next_cursor": write_cursor(page[-1][2], page[-1][0].id) if more and page else None,
-    }
+    if not more or not page:
+        marker = None
+    elif letter:
+        marker = write_name_cursor(page[-1][0].name.lower(), page[-1][0].id)
+    else:
+        marker = write_cursor(page[-1][2], page[-1][0].id)
+    return {"items": items, "next_cursor": marker}
 
 
 @router.get("/{food_id}")
@@ -530,8 +685,21 @@ def create_food(
     db: Session = Depends(get_db),
     user: models.User = Depends(require_user),
 ) -> dict[str, object]:
-    """Keep a food of your own. Private, and only ever yours."""
-    food = models.Food(status="custom", owner_id=user.id, created_by_id=user.id, source="user")
+    """Keep a food of your own. Private, and only ever yours.
+
+    A code scanned into the form is kept with it, so the next scan of that
+    packet is answered from this row rather than from somebody else's server.
+    """
+    code = (body.barcode or "").strip()
+    if code:
+        check_barcode(db, user, code)
+    food = models.Food(
+        status="custom",
+        owner_id=user.id,
+        created_by_id=user.id,
+        source="user",
+        barcode=code or None,
+    )
     apply_body(food, body)
     db.add(food)
     db.commit()
@@ -546,6 +714,8 @@ def update_food(
     user: models.User = Depends(require_user),
 ) -> dict[str, object]:
     food = changeable_food(db, user, food_id, OWNER_MAY_EDIT, ADMIN_MAY_EDIT)
+    # The barcode is not among what an edit changes. It is what the row was
+    # scanned from, and a code that moves is a code the scanner cannot trust.
     apply_body(food, body)
     db.commit()
     return food_detail(db, food, user)

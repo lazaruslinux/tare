@@ -84,6 +84,7 @@ export function Journal({
   me,
   refresh,
   onDay,
+  onScan,
   onOpenTargets,
 }: {
   me: Me
@@ -91,6 +92,9 @@ export function Journal({
   // Which day is on screen, told to the shell so its centre control adds to
   // the day being read rather than always to today.
   onDay: (date: string) => void
+  // The scanner lives above this tab, so it is opened by asking for it, with
+  // the day and the meal a scan should land on.
+  onScan: (date: string, slot: Slot) => void
   // The numbers this day is read against are set one tab over, and the card
   // that shows them says so.
   onOpenTargets: () => void
@@ -429,6 +433,11 @@ export function Journal({
           slot={picking}
           onClose={() => setPicking(null)}
           onLogged={reload}
+          onScan={() => {
+            const slot = picking
+            setPicking(null)
+            onScan(date, slot)
+          }}
         />
       )}
 

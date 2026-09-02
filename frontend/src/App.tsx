@@ -14,7 +14,7 @@ import { entry } from './entry'
 import { TopBarContext, useTopBarState } from './hooks/useTopBar'
 import { useWaitingCount } from './hooks/useWaitingCount'
 import { useWideLayout } from './hooks/useWideLayout'
-import { slotByTime, today } from './lib/day'
+import { slotByTime, today, type Slot } from './lib/day'
 import { Birthdate } from './pages/Birthdate'
 import { Dashboard } from './pages/Dashboard'
 import { FirstRun } from './pages/FirstRun'
@@ -49,7 +49,9 @@ export default function App() {
   // gets a popover; the tab bar gives nothing and gets the sheet.
   const [anchor, setAnchor] = useState<DOMRect | null>(null)
   const [picking, setPicking] = useState(false)
-  const [scanning, setScanning] = useState(false)
+  // The scanner, and where what it finds should land. An empty target is now,
+  // which is what every way in but the Journal's means.
+  const [scanning, setScanning] = useState<{ date?: string; slot?: Slot } | null>(null)
   // Which part of the Food tab to open on. Only ever set by the More page's
   // shortcut into it, and handed back to 'list' the moment the tab has read it.
   const [foodView, setFoodView] = useState<'list' | 'submissions'>('list')
@@ -212,13 +214,14 @@ export default function App() {
                       me={me}
                       start={foodView}
                       onStarted={() => setFoodView('list')}
-                      onScan={() => setScanning(true)}
+                      onScan={() => setScanning({})}
                     />
                   ) : page === 'journal' ? (
                     <Journal
                       me={me}
                       refresh={logged}
                       onDay={setJournalDay}
+                      onScan={(day, slot) => setScanning({ date: day, slot })}
                       onOpenTargets={() => {
                         setMoreView('targets')
                         select('more')
@@ -258,7 +261,7 @@ export default function App() {
           onClose={() => setAdding(false)}
           onScan={() => {
             setAdding(false)
-            setScanning(true)
+            setScanning({})
           }}
           onAddFood={() => {
             setAdding(false)
@@ -294,12 +297,14 @@ export default function App() {
             }}
           />
         )}
-        {scanning && (
+        {scanning !== null && (
           <ScanFlow
             me={me}
-            onClose={() => setScanning(false)}
+            date={scanning.date}
+            slot={scanning.slot}
+            onClose={() => setScanning(null)}
             onLogged={() => {
-              setScanning(false)
+              setScanning(null)
               setLogged(logged + 1)
             }}
           />

@@ -1,9 +1,20 @@
-import { Pin, Plus, X } from 'lucide-react'
+import {
+  CookingPot,
+  Pin,
+  Plus,
+  Repeat,
+  Sandwich,
+  ScanBarcode,
+  ScanLine,
+  Send,
+  X,
+} from 'lucide-react'
 import { useEffect, useRef, useState } from 'react'
 
 import {
   api,
   errorText,
+  type Community,
   type Food as FoodItem,
   type FoodRow,
   type Meal,
@@ -29,8 +40,6 @@ import { KIND_LABEL } from '../lib/community'
 
 // How many of your own foods the card shows before it offers the rest.
 const SHOWN = 6
-// Long enough that typing a word is one request rather than five.
-const DEBOUNCE = 250
 // How long something taken back can be put back. Short enough that nobody is
 // waiting on it, long enough to notice the mistake.
 const UNDO = 6000
@@ -60,13 +69,34 @@ type View =
 // first one destroyed.
 type Undo = { message: string; commit: () => void; revert?: () => void }
 
+// Where a food stands with the shared database, as one dot before its name.
+// A word for each of these on every row would be a column of shouting; the
+// colour carries it and the label is there for anybody reading with their ears.
+const DOTS: Record<Community, { label: string; look: string }> = {
+  none: { label: 'Not submitted', look: 'border border-line-strong' },
+  pending: { label: 'Waiting for review', look: 'bg-pending' },
+  approved: { label: 'Approved', look: 'bg-accent' },
+  rejected: { label: 'Not approved', look: 'bg-danger' },
+}
+
+function Dot({ state }: { state: Community }) {
+  const dot = DOTS[state]
+  return (
+    <span
+      className={`h-2 w-2 shrink-0 rounded-full ${dot.look}`}
+      role="img"
+      aria-label={dot.label}
+    />
+  )
+}
+
 function Row({ row, onOpen }: { row: FoodRow; onOpen: () => void }) {
   return (
     <button type="button" className="t-row w-full text-left" onClick={onOpen}>
       <span className="min-w-0 flex-1">
         <span className="flex items-center gap-2">
+          <Dot state={row.community} />
           <span className="truncate text-sm">{row.name}</span>
-          {row.status === 'pending' && <span className="t-chip shrink-0">pending</span>}
         </span>
         {row.brand && <span className="block truncate text-xs text-muted">{row.brand}</span>}
       </span>
@@ -104,10 +134,6 @@ export function FoodTab({
   const [submissions, setSubmissions] = useState<MySubmission[]>([])
   const [error, setError] = useState('')
   const [expanded, setExpanded] = useState(false)
-  const [query, setQuery] = useState('')
-  // Null is not an empty result: it is a box nobody has typed two letters into.
-  const [results, setResults] = useState<FoodRow[] | null>(null)
-  const [again, setAgain] = useState(0)
 
   // The list is the tab's root, and its header carries the way to a new food.
   // Every other view names itself, so the bar is left to whichever of them is
@@ -175,20 +201,6 @@ export function FoodTab({
   }, [])
 
   useEffect(() => {
-    const needle = query.trim()
-    if (needle.length < 2) {
-      setResults(null)
-      return
-    }
-    const timer = window.setTimeout(() => {
-      api<FoodRow[]>(`/foods/search?q=${encodeURIComponent(needle)}`)
-        .then(setResults)
-        .catch(() => setResults([]))
-    }, DEBOUNCE)
-    return () => window.clearTimeout(timer)
-  }, [query, again])
-
-  useEffect(() => {
     if (undo === null) return
     const timer = window.setTimeout(() => {
       settle()
@@ -209,7 +221,6 @@ export function FoodTab({
 
   const remove = (food: FoodItem) => {
     setFoods((rows) => rows.filter((row) => row.id !== food.id))
-    setResults((rows) => (rows === null ? null : rows.filter((row) => row.id !== food.id)))
     setView({ at: 'list' })
     const waiting: Undo = {
       message: `Deleted ${food.name}.`,
@@ -294,7 +305,7 @@ export function FoodTab({
     void loadSubmissions()
     void loadRecipes()
     void loadMeals()
-    setAgain(again + 1)
+    void loadRepeat()
   }
 
   if (view.at === 'browse') {
@@ -313,7 +324,7 @@ export function FoodTab({
       <FoodDetail
         id={view.id}
         me={me}
-        backLabel={from === 'browse' ? 'Browse database' : 'Food'}
+        backLabel={from === 'browse' ? 'Browse tare database' : 'Food'}
         onBack={() => setView(from === 'browse' ? { at: 'browse' } : { at: 'list' })}
         onEdit={(food, notice) => setView({ at: 'form', food, notice })}
         onDelete={remove}
@@ -321,6 +332,7 @@ export function FoodTab({
           void load()
           void loadSubmissions()
         }}
+        onChanged={() => void loadRepeat()}
       />
     )
   }
@@ -392,6 +404,7 @@ export function FoodTab({
         food={editing}
         notice={view.notice}
         backLabel={editing === null ? 'Food' : editing.name}
+        onOpenFood={(id) => setView({ at: 'detail', id, from: 'list' })}
         onSaved={(saved) => {
           void load()
           setView({ at: 'detail', id: saved.id, from: 'list' })
@@ -407,239 +420,268 @@ export function FoodTab({
 
   return (
     <>
-
-      {foods.length > 0 && (
-        <input
-          className="t-input mb-3"
-          type="search"
-          placeholder="Search foods"
-          aria-label="Search foods"
-          value={query}
-          onChange={(event) => setQuery(event.target.value)}
-        />
-      )}
-
       {error && <p className="t-error mb-3">{error}</p>}
 
-      {results !== null ? (
-        <div className="t-card mb-3">
-          <p className="t-micro mb-1">Results</p>
-          {results.length === 0 ? (
-            <p className="text-sm text-muted">Nothing here goes by that name.</p>
-          ) : (
-            results.map((row) => (
+      {/* The empty state below carries its own way in, so this is only here
+          once there is a list for it to sit above. */}
+      {foods.length > 0 && (
+        <button type="button" className="t-btn t-btn-primary mb-3 w-full" onClick={onScan}>
+          <ScanLine className="h-4 w-4" strokeWidth={2} />
+          Scan a barcode
+        </button>
+      )}
+
+      <div className="t-card mb-3">
+        <div className="mb-1 flex items-center justify-between">
+          <p className="t-section">
+            <ScanBarcode className="h-4 w-4" strokeWidth={2} />
+            Scanned / created foods
+          </p>
+          <button
+            type="button"
+            className="t-tap44 text-accent"
+            aria-label="Add a food"
+            onClick={() => setView({ at: 'form', food: null })}
+          >
+            <Plus className="h-5 w-5" strokeWidth={2.5} />
+          </button>
+        </div>
+        {foods.length === 0 ? (
+          <>
+            <p className="text-sm text-muted">
+              Start here: scan a barcode or create a food, then submit it to add it to the
+              tare database for everyone.
+            </p>
+            <div className="t-actions mt-3">
+              <button type="button" className="t-btn t-btn-primary flex-1" onClick={onScan}>
+                Scan a barcode
+              </button>
+              <button
+                type="button"
+                className="t-btn"
+                onClick={() => setView({ at: 'form', food: null })}
+              >
+                Create a food
+              </button>
+            </div>
+          </>
+        ) : (
+          <>
+            {(expanded ? foods : foods.slice(0, SHOWN)).map((row) => (
               <Row
                 key={row.id}
                 row={row}
                 onOpen={() => setView({ at: 'detail', id: row.id, from: 'list' })}
               />
-            ))
-          )}
-        </div>
-      ) : (
-        <>
-          <div className="t-card mb-3">
-            <div className="mb-1 flex items-center justify-between">
-              <p className="t-micro">Custom Foods</p>
+            ))}
+            {foods.length > SHOWN && (
               <button
                 type="button"
-                className="t-tap44 text-accent"
-                aria-label="Add a food"
-                onClick={() => setView({ at: 'form', food: null })}
+                className="t-row w-full text-left text-sm text-muted"
+                onClick={() => setExpanded(!expanded)}
               >
-                <Plus className="h-5 w-5" strokeWidth={2.5} />
+                {expanded ? 'Show fewer' : `See all ${foods.length}`}
               </button>
-            </div>
-            {foods.length === 0 ? (
-              <p className="text-sm text-muted">Foods you enter yourself are kept here.</p>
-            ) : (
-              <>
-                {(expanded ? foods : foods.slice(0, SHOWN)).map((row) => (
-                  <Row
-                    key={row.id}
-                    row={row}
-                    onOpen={() => setView({ at: 'detail', id: row.id, from: 'list' })}
-                  />
-                ))}
-                {foods.length > SHOWN && (
-                  <button
-                    type="button"
-                    className="t-row w-full text-left text-sm text-muted"
-                    onClick={() => setExpanded(!expanded)}
-                  >
-                    {expanded ? 'Show fewer' : `See all ${foods.length}`}
-                  </button>
-                )}
-              </>
             )}
-          </div>
+          </>
+        )}
+      </div>
 
-          <div className="t-card mb-3">
-            <div className="mb-1 flex items-center justify-between">
-              <p className="t-micro">Custom Meals</p>
-              <button
-                type="button"
-                className="t-tap44 text-accent"
-                aria-label="Add a meal"
-                onClick={() => setView({ at: 'mealForm', meal: null })}
-              >
-                <Plus className="h-5 w-5" strokeWidth={2.5} />
-              </button>
-            </div>
-            {meals.length === 0 ? (
-              <p className="text-sm text-muted">
-                Foods you eat together go here, so you can log them in one tap.
-              </p>
-            ) : (
-              meals.map((row) => (
-                <button
-                  key={row.id}
-                  type="button"
-                  className="t-row w-full text-left"
-                  onClick={() => setView({ at: 'meal', id: row.id })}
-                >
-                  <span className="min-w-0 flex-1 truncate text-sm">{row.name}</span>
-                  <span className="shrink-0 text-xs text-muted">
-                    {row.items === 1 ? '1 food' : `${row.items} foods`}
-                  </span>
-                </button>
-              ))
-            )}
-          </div>
-
-          <div className="t-card mb-3">
-            <div className="mb-1 flex items-center justify-between">
-              <p className="t-micro">Custom Recipes</p>
-              <button
-                type="button"
-                className="t-tap44 text-accent"
-                aria-label="Add a recipe"
-                onClick={() => setView({ at: 'recipeForm', recipe: null })}
-              >
-                <Plus className="h-5 w-5" strokeWidth={2.5} />
-              </button>
-            </div>
-            {recipes.length === 0 ? (
-              <p className="text-sm text-muted">
-                Things you cook go here, with the numbers worked out per serving.
-              </p>
-            ) : (
-              recipes.map((row) => (
-                <button
-                  key={row.id}
-                  type="button"
-                  className="t-row w-full text-left"
-                  onClick={() => setView({ at: 'recipe', id: row.id })}
-                >
-                  <span className="min-w-0 flex-1">
-                    <span className="block truncate text-sm">{row.name}</span>
-                    <span className="block truncate text-xs text-muted">
-                      Makes {servingsText(row.yield_servings)}
-                    </span>
-                  </span>
-                  <span className="shrink-0 text-right">
-                    <span className="t-nums block text-sm">
-                      {nutrientText('calories', row.per_serving.calories)} cal
-                    </span>
-                    <span className="block text-xs text-muted">per serving</span>
-                  </span>
-                </button>
-              ))
-            )}
-          </div>
-
-          <div className="t-card mb-3">
-            <p className="t-micro mb-1">Repeat Items</p>
-            {repeat.length === 0 ? (
-              <p className="text-sm text-muted">
-                The foods you pin and the ones you log will be offered here.
-              </p>
-            ) : (
-              repeat.map((row) => (
-                <div key={row.id} className="t-row">
-                  <button
-                    type="button"
-                    className="flex min-w-0 flex-1 items-center gap-3 text-left"
-                    onClick={() => openRepeat(row.id)}
-                  >
-                    <span className="min-w-0 flex-1">
-                      <span className="flex items-center gap-1.5">
-                        {row.pinned && (
-                          <Pin className="h-3 w-3 shrink-0 text-accent" strokeWidth={2.5} />
-                        )}
-                        <span className="truncate text-sm">{row.name}</span>
-                      </span>
-                      {row.brand && (
-                        <span className="block truncate text-xs text-muted">{row.brand}</span>
-                      )}
-                    </span>
-                    <span className="shrink-0 text-right">
-                      <span className="t-nums block text-sm">
-                        {nutrientText('calories', row.calories)} cal
-                      </span>
-                      <span className="block text-xs text-muted">per 100 {row.base_unit}</span>
-                    </span>
-                  </button>
-                  <button
-                    type="button"
-                    className="t-tap44 shrink-0 text-muted"
-                    aria-label={row.pinned ? `Unpin ${row.name}` : `Take ${row.name} off Repeat`}
-                    onClick={() => removeRepeat(row)}
-                  >
-                    <X className="h-4 w-4" strokeWidth={2.5} />
-                  </button>
-                </div>
-              ))
-            )}
-          </div>
-
-          <div className="t-card mb-3" ref={submittedRef}>
-            <p className="t-micro mb-1">Submitted</p>
-            {submissions.length === 0 ? (
-              <p className="text-sm text-muted">
-                Foods you offer to the shared database are tracked here.
-              </p>
-            ) : (
-              submissions.map((row) => (
-                <div key={row.id} className="t-row">
-                  <span className="min-w-0 flex-1">
-                    <span className="flex items-center gap-2">
-                      <span className="truncate text-sm">
-                        {row.target_name ?? row.name ?? 'A deleted food'}
-                      </span>
-                      <span className="t-chip shrink-0">{STATUS_LABEL[row.status]}</span>
-                    </span>
-                    <span className="block text-xs text-muted">
-                      {KIND_LABEL[row.kind] ?? row.kind}
-                    </span>
-                    {row.status === 'rejected' && row.decision_note && (
-                      <span className="block text-xs text-muted">{row.decision_note}</span>
-                    )}
-                  </span>
-                  {row.status === 'pending' && (
-                    <button
-                      type="button"
-                      className="shrink-0 text-sm font-semibold text-muted"
-                      onClick={() => withdraw(row)}
-                    >
-                      Withdraw
-                    </button>
-                  )}
-                </div>
-              ))
-            )}
-          </div>
-
+      <div className="t-card mb-3">
+        <div className="mb-1 flex items-center justify-between">
+          <p className="t-section">
+            <Sandwich className="h-4 w-4" strokeWidth={2} />
+            Meals
+          </p>
           <button
             type="button"
-            className="t-card mb-3 w-full text-left"
-            onClick={() => setView({ at: 'browse' })}
+            className="t-tap44 text-accent"
+            aria-label="Add a meal"
+            onClick={() => setView({ at: 'mealForm', meal: null })}
           >
-            <p className="t-micro mb-1">Browse database</p>
-            <p className="text-sm text-muted">Everything the instance has shared so far.</p>
+            <Plus className="h-5 w-5" strokeWidth={2.5} />
           </button>
-        </>
-      )}
+        </div>
+        {meals.length === 0 ? (
+          <>
+            <p className="text-sm text-muted">
+              Meals log several foods in one line, like bread, cheese, mayo, lettuce, tomato
+              and turkey as one Turkey sandwich.
+            </p>
+            <button
+              type="button"
+              className="t-btn mt-3"
+              onClick={() => setView({ at: 'mealForm', meal: null })}
+            >
+              New meal
+            </button>
+          </>
+        ) : (
+          meals.map((row) => (
+            <button
+              key={row.id}
+              type="button"
+              className="t-row w-full text-left"
+              onClick={() => setView({ at: 'meal', id: row.id })}
+            >
+              <span className="min-w-0 flex-1 truncate text-sm">{row.name}</span>
+              <span className="shrink-0 text-xs text-muted">
+                {row.items === 1 ? '1 food' : `${row.items} foods`}
+              </span>
+            </button>
+          ))
+        )}
+      </div>
+
+      <div className="t-card mb-3">
+        <div className="mb-1 flex items-center justify-between">
+          <p className="t-section">
+            <CookingPot className="h-4 w-4" strokeWidth={2} />
+            Recipes
+          </p>
+          <button
+            type="button"
+            className="t-tap44 text-accent"
+            aria-label="Add a recipe"
+            onClick={() => setView({ at: 'recipeForm', recipe: null })}
+          >
+            <Plus className="h-5 w-5" strokeWidth={2.5} />
+          </button>
+        </div>
+        {recipes.length === 0 ? (
+          <>
+            <p className="text-sm text-muted">
+              Recipes are for things you cook in a batch, like a pot of chili, with the
+              numbers worked out per serving.
+            </p>
+            <button
+              type="button"
+              className="t-btn mt-3"
+              onClick={() => setView({ at: 'recipeForm', recipe: null })}
+            >
+              New recipe
+            </button>
+          </>
+        ) : (
+          recipes.map((row) => (
+            <button
+              key={row.id}
+              type="button"
+              className="t-row w-full text-left"
+              onClick={() => setView({ at: 'recipe', id: row.id })}
+            >
+              <span className="min-w-0 flex-1">
+                <span className="block truncate text-sm">{row.name}</span>
+                <span className="block truncate text-xs text-muted">
+                  Makes {servingsText(row.yield_servings)}
+                </span>
+              </span>
+              <span className="shrink-0 text-right">
+                <span className="t-nums block text-sm">
+                  {nutrientText('calories', row.per_serving.calories)} cal
+                </span>
+                <span className="block text-xs text-muted">per serving</span>
+              </span>
+            </button>
+          ))
+        )}
+      </div>
+
+      <div className="t-card mb-3">
+        <p className="t-section mb-1">
+          <Repeat className="h-4 w-4" strokeWidth={2} />
+          Repeat items
+        </p>
+        {repeat.length === 0 ? (
+          <p className="text-sm text-muted">
+            The foods you pin and the ones you log will be offered here.
+          </p>
+        ) : (
+          repeat.map((row) => (
+            <div key={row.id} className="t-row">
+              <button
+                type="button"
+                className="flex min-w-0 flex-1 items-center gap-3 text-left"
+                onClick={() => openRepeat(row.id)}
+              >
+                <span className="min-w-0 flex-1">
+                  <span className="flex items-center gap-1.5">
+                    {row.pinned && (
+                      <Pin className="h-3 w-3 shrink-0 text-accent" strokeWidth={2.5} />
+                    )}
+                    <span className="truncate text-sm">{row.name}</span>
+                  </span>
+                  {row.brand && (
+                    <span className="block truncate text-xs text-muted">{row.brand}</span>
+                  )}
+                </span>
+                <span className="shrink-0 text-right">
+                  <span className="t-nums block text-sm">
+                    {nutrientText('calories', row.calories)} cal
+                  </span>
+                  <span className="block text-xs text-muted">per 100 {row.base_unit}</span>
+                </span>
+              </button>
+              <button
+                type="button"
+                className="t-tap44 shrink-0 text-muted"
+                aria-label={row.pinned ? `Unpin ${row.name}` : `Take ${row.name} off Repeat`}
+                onClick={() => removeRepeat(row)}
+              >
+                <X className="h-4 w-4" strokeWidth={2.5} />
+              </button>
+            </div>
+          ))
+        )}
+      </div>
+
+      <div className="t-card mb-3" ref={submittedRef}>
+        <p className="t-section mb-1">
+          <Send className="h-4 w-4" strokeWidth={2} />
+          Submitted
+        </p>
+        {submissions.length === 0 ? (
+          <p className="text-sm text-muted">
+            Foods you offer to the shared database are tracked here.
+          </p>
+        ) : (
+          submissions.map((row) => (
+            <div key={row.id} className="t-row">
+              <span className="min-w-0 flex-1">
+                <span className="flex items-center gap-2">
+                  <span className="truncate text-sm">
+                    {row.target_name ?? row.name ?? 'A deleted food'}
+                  </span>
+                  <span className="t-chip shrink-0">{STATUS_LABEL[row.status]}</span>
+                </span>
+                <span className="block text-xs text-muted">
+                  {KIND_LABEL[row.kind] ?? row.kind}
+                </span>
+                {row.status === 'rejected' && row.decision_note && (
+                  <span className="block text-xs text-muted">{row.decision_note}</span>
+                )}
+              </span>
+              {row.status === 'pending' && (
+                <button
+                  type="button"
+                  className="shrink-0 text-sm font-semibold text-muted"
+                  onClick={() => withdraw(row)}
+                >
+                  Withdraw
+                </button>
+              )}
+            </div>
+          ))
+        )}
+      </div>
+
+      <button
+        type="button"
+        className="t-card mb-3 w-full text-left"
+        onClick={() => setView({ at: 'browse' })}
+      >
+        <p className="t-section">Browse tare database</p>
+      </button>
 
       {logging !== null && (
         <PortionSheet
