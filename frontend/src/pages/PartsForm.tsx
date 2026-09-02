@@ -249,7 +249,7 @@ export function PartsForm({
 
         {error && <p className="t-error mb-3">{error}</p>}
 
-        <div className="mb-3 flex gap-3">
+        <div className="t-actions mb-3">
           <button className="t-btn t-btn-primary flex-1" type="submit" disabled={saving}>
             Save
           </button>

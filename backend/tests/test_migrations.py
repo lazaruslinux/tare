@@ -11,7 +11,7 @@ FOOD_TABLES = {"foods", "food_servings"}
 DIARY_TABLES = {"diary_entries", "saved_foods"}
 COMMUNITY_TABLES = {"food_photos", "food_submissions"}
 RECIPE_TABLES = {"recipes", "recipe_ingredients", "meal_templates", "meal_template_items"}
-HEALTH_TABLES = {"health_profiles", "weight_entries", "exercise_entries"}
+HEALTH_TABLES = {"health_profiles", "weight_entries", "repeat_hidden", "exercise_entries"}
 
 
 def test_upgrade_head_builds_the_identity_schema(tmp_path):

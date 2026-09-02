@@ -592,6 +592,53 @@ MEASUREMENT_SOURCES = ("manual", "ingest")
 EFFORTS = ("light", "moderate", "vigorous")
 
 
+class RepeatHidden(Base):
+    """A food somebody took off their Repeat list and wants kept off.
+
+    Eating it again does not bring it back; pinning it does, because a pin is
+    the stronger word about the same food.
+    """
+
+    __tablename__ = "repeat_hidden"
+    __table_args__ = (UniqueConstraint("user_id", "food_id", name="uq_repeat_hidden_user_food"),)
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True)
+    user_id: Mapped[int] = mapped_column(
+        ForeignKey("users.id", ondelete="CASCADE"), nullable=False, index=True
+    )
+    food_id: Mapped[int] = mapped_column(
+        ForeignKey("foods.id", ondelete="CASCADE"), nullable=False
+    )
+    created_at: Mapped[dt.datetime] = mapped_column(UtcDateTime, nullable=False, default=now_utc)
+
+
+# What the energy equations need a sex for, and nothing else: they carry
+# separate coefficients, and a member who would rather not say gets the fixed
+# guideline targets instead.
+SEXES = ("female", "male")
+
+# How much somebody moves in an ordinary day, workouts left out of it. The
+# multipliers live in app.health beside the equation they multiply.
+ACTIVITY_LEVELS = ("not_much", "light", "moderate", "heavy")
+
+GOALS = ("maintain", "lose", "gain")
+
+# How fast, in plain words. Which of them are offered depends on the goal and
+# on the member's own numbers, which is app.health's call.
+RATES = ("gentle", "steady", "faster", "fastest")
+
+# Whether the daily numbers are worked out or typed in.
+TARGET_MODES = ("auto", "manual")
+
+# Where a weight reading came from. Manual always wins a day.
+MEASUREMENT_SOURCES = ("manual", "ingest")
+
+# How hard a logged workout was, which is what picks the value it is credited
+# at. An activity offers only the ones it has a published value for.
+EFFORTS = ("light", "moderate", "vigorous")
+
+
+
 class HealthProfile(Base):
     """What tare needs to work out one member's own numbers.
 

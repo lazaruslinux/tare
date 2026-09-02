@@ -209,6 +209,18 @@
     color: var(--bg);
   }
 
+  /* The actions a screen offers, in one row. Capped where the reading column
+     is wide, so a button never stretches across the whole of it. */
+  .t-actions {
+    display: flex;
+    gap: 0.75rem;
+  }
+  @media (min-width: 900px) {
+    .t-actions {
+      max-width: 24rem;
+    }
+  }
+
   /* A choice made by picking one of a few cards rather than from a list, for
      the places where there are two answers and both deserve room. */
   .t-choice {

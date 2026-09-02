@@ -1,4 +1,4 @@
-import { Pin, Plus } from 'lucide-react'
+import { Pin, Plus, X } from 'lucide-react'
 import { useEffect, useRef, useState } from 'react'
 
 import {
@@ -58,7 +58,7 @@ type View =
 // Something taken off the screen that has not been sent yet. The request goes
 // when the window closes, so undoing is not a second write to put back what a
 // first one destroyed.
-type Undo = { message: string; commit: () => void }
+type Undo = { message: string; commit: () => void; revert?: () => void }
 
 function Row({ row, onOpen }: { row: FoodRow; onOpen: () => void }) {
   return (
@@ -142,6 +142,16 @@ export function FoodTab({
     waiting?.commit()
   }
 
+  // A second deletion inside the window settles the first rather than
+  // replacing it, so nothing leaves the screen without reaching the server.
+  const hold = (waiting: Undo) => {
+    settle()
+    undoRef.current = waiting
+    setUndo(waiting)
+  }
+
+  const loadRepeat = () => api<RepeatRow[]>('/foods/repeat').then(setRepeat, () => {})
+
   useEffect(() => {
     let alive = true
     api<FoodRow[]>('/foods/mine')
@@ -211,8 +221,7 @@ export function FoodTab({
         })
       },
     }
-    undoRef.current = waiting
-    setUndo(waiting)
+    hold(waiting)
   }
 
   const withdraw = (submission: MySubmission) => {
@@ -227,8 +236,19 @@ export function FoodTab({
           .catch(() => {})
       },
     }
-    undoRef.current = waiting
-    setUndo(waiting)
+    hold(waiting)
+  }
+
+  // Off the list at once; pinned rows unpin, the rest are kept off for good.
+  const removeRepeat = (row: RepeatRow) => {
+    setRepeat((rows) => rows.filter((item) => item.id !== row.id))
+    hold({
+      message: row.pinned ? `Unpinned ${row.name}.` : `Took ${row.name} off Repeat.`,
+      commit: () => {
+        api(`/foods/${row.id}/${row.pinned ? 'pin' : 'repeat'}`, { method: 'DELETE' }).catch(() => {})
+      },
+      revert: () => void loadRepeat(),
+    })
   }
 
   const removeRecipe = (recipe: Recipe) => {
@@ -240,8 +260,7 @@ export function FoodTab({
         api(`/recipes/${recipe.id}`, { method: 'DELETE' }).catch(() => {})
       },
     }
-    undoRef.current = waiting
-    setUndo(waiting)
+    hold(waiting)
   }
 
   const removeMeal = (meal: Meal) => {
@@ -253,8 +272,7 @@ export function FoodTab({
         api(`/meals/${meal.id}`, { method: 'DELETE' }).catch(() => {})
       },
     }
-    undoRef.current = waiting
-    setUndo(waiting)
+    hold(waiting)
   }
 
   // A repeat row is logged the way the picker logs one, at the portion sheet.
@@ -268,8 +286,10 @@ export function FoodTab({
   }
 
   const putBack = () => {
+    const waiting = undoRef.current
     undoRef.current = null
     setUndo(null)
+    waiting?.revert?.()
     void load()
     void loadSubmissions()
     void loadRecipes()
@@ -536,30 +556,39 @@ export function FoodTab({
               </p>
             ) : (
               repeat.map((row) => (
-                <button
-                  key={row.id}
-                  type="button"
-                  className="t-row w-full text-left"
-                  onClick={() => openRepeat(row.id)}
-                >
-                  <span className="min-w-0 flex-1">
-                    <span className="flex items-center gap-1.5">
-                      {row.pinned && (
-                        <Pin className="h-3 w-3 shrink-0 text-accent" strokeWidth={2.5} />
+                <div key={row.id} className="t-row">
+                  <button
+                    type="button"
+                    className="flex min-w-0 flex-1 items-center gap-3 text-left"
+                    onClick={() => openRepeat(row.id)}
+                  >
+                    <span className="min-w-0 flex-1">
+                      <span className="flex items-center gap-1.5">
+                        {row.pinned && (
+                          <Pin className="h-3 w-3 shrink-0 text-accent" strokeWidth={2.5} />
+                        )}
+                        <span className="truncate text-sm">{row.name}</span>
+                      </span>
+                      {row.brand && (
+                        <span className="block truncate text-xs text-muted">{row.brand}</span>
                       )}
-                      <span className="truncate text-sm">{row.name}</span>
                     </span>
-                    {row.brand && (
-                      <span className="block truncate text-xs text-muted">{row.brand}</span>
-                    )}
-                  </span>
-                  <span className="shrink-0 text-right">
-                    <span className="t-nums block text-sm">
-                      {nutrientText('calories', row.calories)} cal
+                    <span className="shrink-0 text-right">
+                      <span className="t-nums block text-sm">
+                        {nutrientText('calories', row.calories)} cal
+                      </span>
+                      <span className="block text-xs text-muted">per 100 {row.base_unit}</span>
                     </span>
-                    <span className="block text-xs text-muted">per 100 {row.base_unit}</span>
-                  </span>
-                </button>
+                  </button>
+                  <button
+                    type="button"
+                    className="t-tap44 shrink-0 text-muted"
+                    aria-label={row.pinned ? `Unpin ${row.name}` : `Take ${row.name} off Repeat`}
+                    onClick={() => removeRepeat(row)}
+                  >
+                    <X className="h-4 w-4" strokeWidth={2.5} />
+                  </button>
+                </div>
               ))
             )}
           </div>

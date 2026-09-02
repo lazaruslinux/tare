@@ -122,3 +122,52 @@ def test_pins_need_a_session(client):
     assert client.get("/api/foods/repeat").status_code == 401
     assert client.post("/api/foods/1/pin").status_code == 401
     assert client.delete("/api/foods/1/pin").status_code == 401
+
+
+def test_a_food_taken_off_repeat_stays_off_even_when_eaten_again(client, db_session, make_food):
+    oats = make_food("Rolled oats")
+    log(client, food_id=oats["id"], amount=40, unit="g")
+    assert [row["id"] for row in client.get("/api/foods/repeat").json()] == [oats["id"]]
+
+    assert client.delete(f"/api/foods/{oats['id']}/repeat").status_code == 204
+    assert client.delete(f"/api/foods/{oats['id']}/repeat").status_code == 204
+    assert db_session.query(models.RepeatHidden).count() == 1
+    assert client.get("/api/foods/repeat").json() == []
+
+    log(client, food_id=oats["id"], amount=40, unit="g", date="2026-09-02")
+    assert client.get("/api/foods/repeat").json() == []
+
+
+def test_a_food_put_back_on_repeat_shows_again_once_eaten(client, db_session, make_food):
+    oats = make_food("Rolled oats")
+    log(client, food_id=oats["id"], amount=40, unit="g")
+    client.delete(f"/api/foods/{oats['id']}/repeat")
+
+    assert client.post(f"/api/foods/{oats['id']}/repeat").status_code == 204
+    assert client.post(f"/api/foods/{oats['id']}/repeat").status_code == 204
+    assert db_session.query(models.RepeatHidden).count() == 0
+    assert [row["id"] for row in client.get("/api/foods/repeat").json()] == [oats["id"]]
+
+
+def test_pinning_brings_a_hidden_food_back(client, db_session, make_food):
+    oats = make_food("Rolled oats")
+    log(client, food_id=oats["id"], amount=40, unit="g")
+    client.delete(f"/api/foods/{oats['id']}/repeat")
+
+    assert client.post(f"/api/foods/{oats['id']}/pin").status_code == 204
+    assert db_session.query(models.RepeatHidden).count() == 0
+    rows = client.get("/api/foods/repeat").json()
+    assert [(row["id"], row["pinned"]) for row in rows] == [(oats["id"], True)]
+
+
+def test_a_food_that_is_not_visible_cannot_be_taken_off_repeat(client, make_user, make_food):
+    food = make_food("Rolled oats")
+    make_user("stranger")
+    sign_in(client, "stranger")
+
+    refused = client.delete(f"/api/foods/{food['id']}/repeat")
+    absent = client.post("/api/foods/999999/pin")
+    assert refused.status_code == absent.status_code == 404
+    assert refused.json() == absent.json() == {"detail": MISSING_FOOD}
+    assert client.delete(f"/api/foods/{food['id']}/pin").status_code == 404
+    assert client.get("/api/foods/repeat").json() == []

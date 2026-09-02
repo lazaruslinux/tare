@@ -187,7 +187,7 @@ export function FoodDetail({
 
           <NutritionLabel food={food} />
 
-          <div className="mb-3 flex gap-3">
+          <div className="t-actions mb-3">
             <button
               className="t-btn t-btn-primary flex-1"
               type="button"
@@ -206,12 +206,12 @@ export function FoodDetail({
               ) : (
                 <Pin className="h-4 w-4" strokeWidth={2} />
               )}
-              {food.pinned ? 'Unpin' : 'Pin'}
+              {food.pinned ? 'Unpin' : 'Pin to Repeat'}
             </button>
           </div>
 
           {(food.mine || (me.is_admin && shared)) && (
-            <div className="mb-3 flex gap-3">
+            <div className="t-actions mb-3">
               <button className="t-btn flex-1" type="button" onClick={() => onEdit(food)}>
                 <Pencil className="h-4 w-4" strokeWidth={2} />
                 Edit
@@ -231,7 +231,7 @@ export function FoodDetail({
           {shared && (
             <div className="t-card mb-3">
               <p className="t-micro mb-2">Something wrong with it</p>
-              <div className="flex gap-3">
+              <div className="t-actions">
                 <button
                   className="t-btn flex-1"
                   type="button"

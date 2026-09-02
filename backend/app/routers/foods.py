@@ -127,6 +127,22 @@ def food_rows(db: Session, foods: Sequence[models.Food]) -> list[dict[str, objec
     return [food_row(food, pictures.get(food.id)) for food in foods]
 
 
+def hidden_ids(db: Session, user: models.User) -> set[int]:
+    """The foods this member took off Repeat and wants kept off."""
+    rows = db.execute(
+        select(models.RepeatHidden.food_id).where(models.RepeatHidden.user_id == user.id)
+    ).scalars()
+    return set(rows)
+
+
+def unhide(db: Session, user: models.User, food_id: int) -> None:
+    db.execute(
+        delete(models.RepeatHidden).where(
+            models.RepeatHidden.user_id == user.id, models.RepeatHidden.food_id == food_id
+        )
+    )
+
+
 def is_pinned(db: Session, user: models.User, food_id: int) -> bool:
     query = select(models.SavedFood.id).where(
         models.SavedFood.user_id == user.id, models.SavedFood.food_id == food_id
@@ -361,7 +377,9 @@ def repeat_foods(
         .order_by(func.max(models.DiaryEntry.id).desc())
         .limit(RECENT_SCANNED)
     ).all()
-    wanted = [row.food_id for row in logged if row.food_id not in kept]
+    # Taken off the list on purpose, and eating it again does not put it back.
+    off = hidden_ids(db, user)
+    wanted = [row.food_id for row in logged if row.food_id not in kept and row.food_id not in off]
     if not wanted:
         return rows
 
@@ -457,9 +475,11 @@ def pin_food(
 ) -> None:
     """Keep a food to hand. Pinning one that is already pinned changes nothing."""
     food = readable_food(db, user, food_id)
+    # A pin is the stronger word: it also puts back a food taken off Repeat.
+    unhide(db, user, food.id)
     if not is_pinned(db, user, food.id):
         db.add(models.SavedFood(user_id=user.id, food_id=food.id))
-        db.commit()
+    db.commit()
 
 
 @router.delete("/{food_id}/pin", status_code=status.HTTP_204_NO_CONTENT)
@@ -474,6 +494,33 @@ def unpin_food(
             models.SavedFood.user_id == user.id, models.SavedFood.food_id == food.id
         )
     )
+    db.commit()
+
+
+@router.delete("/{food_id}/repeat", status_code=status.HTTP_204_NO_CONTENT)
+def leave_repeat(
+    food_id: int,
+    db: Session = Depends(get_db),
+    user: models.User = Depends(require_user),
+) -> None:
+    """Take a food off Repeat for good. Eating it again does not bring it back;
+    a pin does. Taking off one already off changes nothing."""
+    food = readable_food(db, user, food_id)
+    if food.id not in hidden_ids(db, user):
+        db.add(models.RepeatHidden(user_id=user.id, food_id=food.id))
+        db.commit()
+
+
+@router.post("/{food_id}/repeat", status_code=status.HTTP_204_NO_CONTENT)
+def rejoin_repeat(
+    food_id: int,
+    db: Session = Depends(get_db),
+    user: models.User = Depends(require_user),
+) -> None:
+    """Let a food be offered again. What was undone was the taking off, so this
+    puts nothing on the list by itself: the food shows when it is eaten."""
+    food = readable_food(db, user, food_id)
+    unhide(db, user, food.id)
     db.commit()
 
 
