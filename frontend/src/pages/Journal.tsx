@@ -1,4 +1,3 @@
-import { ChevronLeft, ChevronRight } from 'lucide-react'
 import { useEffect, useRef, useState } from 'react'
 
 import {
@@ -70,8 +69,18 @@ export function Journal({ me, refresh }: { me: Me; refresh: number }) {
   const [saving, setSaving] = useState(false)
   const [refusal, setRefusal] = useState('')
 
-  // The bar says which day is being read, not just which tab this is.
-  useTopBar({ title: dayLabel(date, todayIso) })
+  // The day chooser is this tab's header, so the day is picked in one place
+  // and the page below is only the day itself. The plus adds to the day on
+  // screen, at the meal the hour makes likely.
+  useTopBar({
+    title: dayLabel(date, todayIso),
+    pager: {
+      atToday: date >= todayIso,
+      onStep: (days) => setDate(shiftDay(date, days)),
+      onToday: () => setDate(todayIso),
+    },
+    action: { label: 'Add food', onAct: () => setPicking(slotByTime(me.timezone)) },
+  })
 
   // A deletion that has not happened yet.
   const [pending, setPending] = useState<DiaryEntry | null>(null)
@@ -166,27 +175,6 @@ export function Journal({ me, refresh }: { me: Me; refresh: number }) {
 
   return (
     <>
-
-      <div className="mb-3 flex items-center justify-between">
-        <button
-          type="button"
-          className="t-tap44 text-muted"
-          aria-label="Previous day"
-          onClick={() => setDate(shiftDay(date, -1))}
-        >
-          <ChevronLeft className="h-5 w-5" strokeWidth={2.5} />
-        </button>
-        <p className="text-sm font-semibold">{dayLabel(date, todayIso)}</p>
-        <button
-          type="button"
-          className="t-tap44 text-muted disabled:opacity-30"
-          aria-label="Next day"
-          disabled={date >= todayIso}
-          onClick={() => setDate(shiftDay(date, 1))}
-        >
-          <ChevronRight className="h-5 w-5" strokeWidth={2.5} />
-        </button>
-      </div>
 
       {error && <p className="t-error mb-3">{error}</p>}
 

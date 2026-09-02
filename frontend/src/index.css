@@ -17,6 +17,9 @@
   --line-strong: rgba(214, 228, 219, 0.16);
   --text: #dbe7dd;
   --muted: #94a89b;
+  /* One step up from muted for the small labels, which read as noise at the
+     quieter value and as shouting at full text colour. */
+  --label: #b5c6ba;
   --accent: #8fc7a0;
   --accent-strong: #a9dcb8;
   --danger: #d98b83;
@@ -32,6 +35,7 @@
   --line-strong: rgba(46, 79, 63, 0.24);
   --text: #2e4f3f;
   --muted: #5e7a6b;
+  --label: #45604f;
   --accent: #35684f;
   --accent-strong: #24503b;
   --danger: #b3554b;
@@ -96,7 +100,7 @@
     line-height: 1.45;
     letter-spacing: 0.08em;
     text-transform: uppercase;
-    color: var(--muted);
+    color: var(--label);
   }
 
   .t-chip {
@@ -114,7 +118,7 @@
   }
 
   .t-card {
-    padding: 1rem;
+    padding: 0.875rem;
     border: 1px solid var(--line);
     border-radius: 0.875rem;
     background: var(--surface);
@@ -261,16 +265,18 @@
     flex: 1;
     flex-direction: column;
     margin: 0 auto;
-    padding: 1.25rem 1rem 0;
+    padding: 1rem 0.875rem 0;
   }
   .t-content > * {
     min-width: 0;
   }
 
-  /* The header the whole app is read under: the way back or the wordmark, the
-     name of the screen, and the door to settings. Sticky at the top of the
-     column for the same reason the tab bar is sticky at the bottom, and under
-     the sheet layer, which is the one thing allowed to cover it. */
+  /* The header the whole app is read under. What it holds is the screen's own
+     call: a large title, the wordmark, or the day chooser, with the way back
+     out of a sub-view in the same left slot. It grows to fit rather than
+     keeping a fixed height. Sticky at the top of the column for the same
+     reason the tab bar is sticky at the bottom, and under the sheet layer,
+     which is the one thing allowed to cover it. */
   .t-topbar {
     position: sticky;
     top: 0;
@@ -279,7 +285,7 @@
     grid-template-columns: auto minmax(0, 1fr) auto;
     align-items: center;
     gap: 0.5rem;
-    height: calc(48px + env(safe-area-inset-top));
+    min-height: calc(48px + env(safe-area-inset-top));
     border-bottom: 1px solid var(--line);
     background: var(--surface);
     padding-top: env(safe-area-inset-top);
@@ -301,8 +307,8 @@
     color: var(--muted);
   }
 
-  .t-topbar-gear {
-    position: relative;
+  /* Any single control in the bar's outer slots: a day step, a plus. */
+  .t-topbar-icon {
     display: flex;
     width: 44px;
     height: 44px;
@@ -313,12 +319,33 @@
     color: var(--muted);
   }
 
-  /* How many submissions are waiting, on the gear rather than only inside a
-     screen nobody has opened. */
-  .t-topbar-count {
+  /* The name of a top-level screen, said once and on the left. */
+  .t-topbar-title {
+    padding-inline: 0.5rem;
+    font-size: 1.375rem;
+    font-weight: 600;
+    letter-spacing: -0.01em;
+    line-height: 1.2;
+    color: var(--text);
+  }
+
+  .t-topbar-sub {
+    padding-inline: 0.5rem;
+    font-size: 11px;
+    font-weight: 500;
+    line-height: 1.35;
+    color: var(--muted);
+  }
+
+  /* Only where the rail is. */
+  .t-topbar-wide {
+    display: none;
+  }
+
+  /* How many submissions are waiting, said on the way to the screen that
+     shows them rather than only inside it. Placed by whatever it sits on. */
+  .t-count {
     position: absolute;
-    top: 3px;
-    right: 1px;
     min-width: 16px;
     padding: 0 4px;
     border-radius: 999px;
@@ -327,6 +354,7 @@
     font-size: 10px;
     font-weight: 700;
     line-height: 16px;
+    text-align: center;
   }
 
   /* Sticky at the end of the column's flow, not fixed: iOS Safari freezes a
@@ -432,16 +460,18 @@
     }
     /* The closing gap is the shell's own now: there is no bar at this width. */
     .t-content {
-      padding: 1.375rem 1.75rem 2rem;
+      padding: 1.125rem 1.5rem 1.5rem;
     }
     .t-tabbar {
       display: none;
     }
-    /* The rail carries the name and reaches settings through More, so the bar
-       keeps the title and the way back and drops the other two. */
-    .t-topbar-mark,
-    .t-topbar-gear {
+    /* The rail carries the name at this width, so the bar says which screen
+       it is in the wordmark's place. */
+    .t-topbar-mark {
       display: none;
+    }
+    .t-topbar-wide {
+      display: block;
     }
   }
 

@@ -8,10 +8,14 @@ import { TABS, type Page } from './TabBar'
 // action is not a rail item: at this width it is a plain primary button.
 export function SideRail({
   active,
+  waiting,
   onSelect,
   onPlus,
 }: {
   active: Page
+  // Submissions waiting on an administrator, counted on the row that leads to
+  // them the same way the tab bar counts them.
+  waiting: number
   onSelect: (page: Page) => void
   // Where the button is, so the add menu can hang off it instead of rising
   // from the bottom of a window it is nowhere near.
@@ -30,14 +34,19 @@ export function SideRail({
       </button>
       {TABS.filter(({ id }) => id !== 'plus').map(({ id, label, Icon }) => {
         const page = id as Page
+        const counted = id === 'more' && waiting > 0
         return (
           <button
             key={id}
             onClick={() => onSelect(page)}
             aria-current={page === active ? 'page' : undefined}
+            aria-label={counted ? `${label}, ${waiting} waiting` : undefined}
             className="t-navitem"
           >
-            <Icon className="h-[18px] w-[18px]" strokeWidth={2} />
+            <span className="relative flex">
+              <Icon className="h-[18px] w-[18px]" strokeWidth={2} />
+              {counted && <span className="t-count t-nums -top-2 -right-2.5">{waiting}</span>}
+            </span>
             {label}
           </button>
         )

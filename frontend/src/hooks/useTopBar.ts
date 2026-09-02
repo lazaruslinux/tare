@@ -1,14 +1,46 @@
 import { createContext, useCallback, useContext, useEffect, useRef, useState } from 'react'
 
-// What the bar says for the screen that is on. A back means the screen is a
-// sub-view: the bar draws the control, and the browser gets an entry so its
-// own back button closes the sub-view rather than leaving the app.
-export type TopBarHeader = { title: string; back?: { label: string; onBack: () => void } }
+// What the bar says for the screen that is on.
+//
+// A back means the screen is a sub-view: the bar draws the control, and the
+// browser gets an entry so its own back button closes the sub-view rather than
+// leaving the app. Everything else describes a top-level screen's own header,
+// because each tab wears a different one.
+export type TopBarHeader = {
+  title: string
+  back?: { label: string; onBack: () => void }
+  // How the left slot reads on a top-level screen. The wordmark gives way to
+  // the title at rail width, where the rail carries the name instead.
+  left?: 'wordmark' | 'title'
+  // A quiet line under a large title.
+  subtitle?: string
+  // The day chooser, which is the whole of the Journal's header. The title is
+  // the day it names, and tapping it comes back to today.
+  pager?: { atToday: boolean; onStep: (days: number) => void; onToday: () => void }
+  // The one button on the right. A plus everywhere it appears so far.
+  action?: { label: string; onAct: () => void }
+}
 
-// What the bar draws. The handler is deliberately not part of it: a screen
-// hands over a fresh closure on every render, and re-rendering the shell for
-// that would be a loop. It is kept in a ref and read when it is needed.
-type View = { title: string; backLabel: string | null }
+// What the bar draws. The handlers are deliberately not part of it: a screen
+// hands over fresh closures on every render, and re-rendering the shell for
+// that would be a loop. They are kept in a ref and read when they are needed.
+export type TopBarView = {
+  kind: 'back' | 'wordmark' | 'title' | 'pager'
+  title: string
+  backLabel: string | null
+  subtitle: string | null
+  // Whether the next-day step has anywhere to go. True on anything but a pager.
+  atToday: boolean
+  // The right-hand button's name, or null for a bar without one.
+  action: string | null
+}
+
+type Handlers = {
+  back: (() => void) | null
+  step: ((days: number) => void) | null
+  today: (() => void) | null
+  act: (() => void) | null
+}
 
 export const TopBarContext = createContext<(header: TopBarHeader) => void>(() => {})
 
@@ -17,14 +49,24 @@ export const TopBarContext = createContext<(header: TopBarHeader) => void>(() =>
 // here as well would race that child's call.
 export function useTopBar(header: TopBarHeader | null) {
   const register = useContext(TopBarContext)
-  const title = header?.title
-  const label = header?.back?.label
-  const onBack = header?.back?.onBack
+  // Every render, because the handlers are closures over the state the screen
+  // has just drawn with: the Journal's steps mean nothing without the day they
+  // were built from. Registering is cheap, and the bar only redraws when what
+  // it draws has actually changed.
   useEffect(() => {
-    if (title === undefined) return
-    if (label === undefined || onBack === undefined) register({ title })
-    else register({ title, back: { label, onBack } })
-  }, [register, title, label, onBack])
+    if (header !== null) register(header)
+  })
+}
+
+function same(prev: TopBarView, next: TopBarView): boolean {
+  return (
+    prev.kind === next.kind &&
+    prev.title === next.title &&
+    prev.backLabel === next.backLabel &&
+    prev.subtitle === next.subtitle &&
+    prev.atToday === next.atToday &&
+    prev.action === next.action
+  )
 }
 
 // The bar's own state, held once at the top of the app.
@@ -35,11 +77,18 @@ export function useTopBar(header: TopBarHeader | null) {
 // top registered. Entries the app pushed and no longer needs are wound back in
 // rather than left for somebody to press through.
 export function useTopBarState() {
-  // The app opens on the dashboard, so that is what the bar says before the
+  // The app opens on the dashboard, so that is what the bar wears before the
   // first screen has had its say.
-  const [view, setView] = useState<View>({ title: 'Dashboard', backLabel: null })
+  const [view, setView] = useState<TopBarView>({
+    kind: 'wordmark',
+    title: 'Dashboard',
+    backLabel: null,
+    subtitle: null,
+    atToday: true,
+    action: null,
+  })
   const viewRef = useRef(view)
-  const backRef = useRef<(() => void) | null>(null)
+  const acts = useRef<Handlers>({ back: null, step: null, today: null, act: null })
   // Entries this app pushed and has not spent.
   const depth = useRef(0)
   // Pops the app asked for itself, which must not be answered as if somebody
@@ -58,10 +107,28 @@ export function useTopBarState() {
   }
 
   const register = useCallback((header: TopBarHeader) => {
-    backRef.current = header.back?.onBack ?? null
-    const next: View = { title: header.title, backLabel: header.back?.label ?? null }
+    acts.current = {
+      back: header.back?.onBack ?? null,
+      step: header.pager?.onStep ?? null,
+      today: header.pager?.onToday ?? null,
+      act: header.action?.onAct ?? null,
+    }
+    const next: TopBarView = {
+      kind: header.back
+        ? 'back'
+        : header.pager
+          ? 'pager'
+          : header.left === 'wordmark'
+            ? 'wordmark'
+            : 'title',
+      title: header.title,
+      backLabel: header.back?.label ?? null,
+      subtitle: header.subtitle ?? null,
+      atToday: header.pager?.atToday ?? true,
+      action: header.action?.label ?? null,
+    }
     const prev = viewRef.current
-    if (prev.title === next.title && prev.backLabel === next.backLabel) return
+    if (same(prev, next)) return
     viewRef.current = next
     setView(next)
 
@@ -94,7 +161,7 @@ export function useTopBarState() {
         if (depth.current > 0) depth.current -= 1
         return
       }
-      const back = backRef.current
+      const back = acts.current.back
       if (back === null) {
         // Nothing on screen to close. The app was opened here, or every entry
         // it pushed has been spent, and leaving is what back means.
@@ -113,14 +180,20 @@ export function useTopBarState() {
   // handler, so it and the browser's back button leave the same stack behind.
   const goBack = useCallback(() => {
     if (depth.current > 0) window.history.back()
-    else backRef.current?.()
+    else acts.current.back?.()
   }, [])
 
+  const step = useCallback((days: number) => acts.current.step?.(days), [])
+  const goToday = useCallback(() => acts.current.today?.(), [])
+  const act = useCallback(() => acts.current.act?.(), [])
+
   return {
-    title: view.title,
-    backLabel: view.backLabel,
+    view,
     hasBack: view.backLabel !== null,
     register,
     goBack,
+    step,
+    goToday,
+    act,
   }
 }

@@ -160,7 +160,7 @@ export function AdminQueue({
 
   // The form names itself while a proposal is being corrected.
   useTopBar(
-    adjusting === null ? { title: 'Review queue', back: { label: 'Settings', onBack } } : null
+    adjusting === null ? { title: 'Review queue', back: { label: 'More', onBack } } : null
   )
 
   const load = () =>

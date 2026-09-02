@@ -18,7 +18,7 @@ import { FirstRun } from './pages/FirstRun'
 import { FoodTab } from './pages/Food'
 import { Journal } from './pages/Journal'
 import { Login } from './pages/Login'
-import { Settings } from './pages/Settings'
+import { More } from './pages/More'
 import { VerifyEmail } from './pages/VerifyEmail'
 import { Welcome } from './pages/Welcome'
 
@@ -123,15 +123,15 @@ export default function App() {
   return (
     <TopBarContext.Provider value={bar.register}>
       <div className="t-shell">
-        <SideRail active={page} onSelect={select} onPlus={openAdd} />
+        <SideRail active={page} waiting={waiting} onSelect={select} onPlus={openAdd} />
         <div className="t-withrail">
           <div className="t-main">
             <TopBar
-              title={bar.title}
-              backLabel={bar.backLabel}
-              waiting={waiting}
+              view={bar.view}
               onBack={bar.goBack}
-              onSettings={() => select('more')}
+              onStep={bar.step}
+              onToday={bar.goToday}
+              onAct={bar.act}
               onHome={() => {
                 select('dashboard')
                 window.scrollTo({ top: 0 })
@@ -147,7 +147,7 @@ export default function App() {
                   transition={{ duration: 0.18 }}
                 >
                   {page === 'more' ? (
-                    <Settings
+                    <More
                       me={me}
                       onChange={setMe}
                       onSignedOut={leave}
@@ -173,7 +173,12 @@ export default function App() {
                 </motion.div>
               </AnimatePresence>
             </div>
-            <TabBar active={page} onSelect={select} onPlus={() => openAdd(null)} />
+            <TabBar
+              active={page}
+              waiting={waiting}
+              onSelect={select}
+              onPlus={() => openAdd(null)}
+            />
           </div>
           {wide && (
             <aside className="t-aside">

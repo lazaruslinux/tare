@@ -17,10 +17,14 @@ export const TABS: { id: Tab; label: string; Icon: LucideIcon }[] = [
 
 export function TabBar({
   active,
+  waiting,
   onSelect,
   onPlus,
 }: {
   active: Page
+  // Submissions waiting on an administrator, which is nought for everybody
+  // else. The screen that shows them is behind More, so the count rides there.
+  waiting: number
   onSelect: (page: Page) => void
   onPlus: () => void
 }) {
@@ -37,11 +41,13 @@ export function TabBar({
           }
           const page = id as Page
           const isActive = page === active
+          const counted = id === 'more' && waiting > 0
           return (
             <button
               key={id}
               onClick={() => onSelect(page)}
               aria-current={isActive ? 'page' : undefined}
+              aria-label={counted ? `${label}, ${waiting} waiting` : undefined}
               className="t-tabitem"
             >
               {isActive && (
@@ -52,7 +58,10 @@ export function TabBar({
                   transition={{ type: 'spring', stiffness: 400, damping: 32 }}
                 />
               )}
-              <Icon className={`relative h-5 w-5 ${isActive ? 'text-accent' : ''}`} strokeWidth={2} />
+              <span className="relative flex">
+                <Icon className={`h-5 w-5 ${isActive ? 'text-accent' : ''}`} strokeWidth={2} />
+                {counted && <span className="t-count t-nums -top-1 -right-2">{waiting}</span>}
+              </span>
               <span className="relative">{label}</span>
             </button>
           )

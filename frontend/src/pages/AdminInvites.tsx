@@ -37,7 +37,7 @@ export function AdminInvites({ onBack }: { onBack: () => void }) {
   // dialogue: the answer is one word and the row is already on screen.
   const [sure, setSure] = useState('')
 
-  useTopBar({ title: 'Invites', back: { label: 'Settings', onBack } })
+  useTopBar({ title: 'Invites', back: { label: 'More', onBack } })
 
   // The guard says whether the screen is still there to take the answer.
   const load = (live: () => boolean = () => true) =>

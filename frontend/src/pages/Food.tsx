@@ -109,9 +109,18 @@ export function FoodTab({
   const [results, setResults] = useState<FoodRow[] | null>(null)
   const [again, setAgain] = useState(0)
 
-  // The list is the tab's root. Every other view names itself, so the bar is
-  // left to whichever of them is on.
-  useTopBar(view.at === 'list' ? { title: 'Food' } : null)
+  // The list is the tab's root, and its header carries the way to a new food.
+  // Every other view names itself, so the bar is left to whichever of them is
+  // on.
+  useTopBar(
+    view.at === 'list'
+      ? {
+          title: 'Food',
+          left: 'title',
+          action: { label: 'New food', onAct: () => setView({ at: 'form', food: null }) },
+        }
+      : null
+  )
 
   const [undo, setUndo] = useState<Undo | null>(null)
   const undoRef = useRef<Undo | null>(null)

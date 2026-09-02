@@ -9,7 +9,9 @@ export function Dashboard({ me, refresh }: { me: Me; refresh: number }) {
   const [day, setDay] = useState<DiaryDay | null>(null)
   const [error, setError] = useState('')
 
-  useTopBar({ title: 'Dashboard' })
+  // The wordmark is the header here, and the rail's own name takes over
+  // from it at the width the rail appears.
+  useTopBar({ title: 'Dashboard', left: 'wordmark' })
 
   useEffect(() => {
     let alive = true
