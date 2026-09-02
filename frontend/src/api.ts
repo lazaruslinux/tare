@@ -126,6 +126,10 @@ export type Measurement = {
   weight_kg: number
   body_fat_pct: number | null
   body_water_pct: number | null
+  // Muscle and bone are shares of the weight; the masses beside them are
+  // worked out from that day's weight for showing.
+  muscle_pct: number | null
+  bone_pct: number | null
   muscle_kg: number | null
   bone_kg: number | null
   visceral_fat: number | null
@@ -133,10 +137,23 @@ export type Measurement = {
   source: string
 }
 
+// The newest reading of one number and the day it was taken.
+export type Stamp = { value: number; date: string; mass_kg?: number | null }
+
+export type Latest = {
+  weight_kg: Stamp | null
+  body_fat_pct: Stamp | null
+  body_water_pct: Stamp | null
+  muscle_pct: Stamp | null
+  bone_pct: Stamp | null
+  visceral_fat: Stamp | null
+}
+
 export type TrendPoint = { date: string; kg: number }
 
 export type Measurements = {
   days: number
+  latest: Latest
   measurements: Measurement[]
   trend: TrendPoint[]
 }

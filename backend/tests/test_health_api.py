@@ -334,13 +334,28 @@ def test_a_measurement_outside_the_bounds_is_refused(client, member, field, valu
     assert list(answer.json()) == ["detail"]
 
 
-def test_muscle_and_bone_have_to_fit_inside_the_weight(client, member):
+def test_muscle_and_bone_are_shares_of_the_weight(client, member):
     refused = client.put(
         f"/api/health/measurements/{TODAY.isoformat()}",
-        json={"weight_kg": 80, "muscle_kg": 90},
+        json={"weight_kg": 80, "muscle_pct": 95},
     )
     assert refused.status_code == 400
-    assert weigh(client, 80, muscle_kg=35, bone_kg=3).status_code == 200
+    assert refused.json() == {"detail": "That is not a muscle percentage tare can use."}
+    saved = weigh(client, 101.6, muscle_pct=67.7, bone_pct=3.5).json()
+    assert saved["muscle_pct"] == 67.7
+    assert saved["muscle_kg"] == 68.78
+    assert saved["bone_kg"] == 3.56
+
+
+def test_the_latest_of_each_number_carries_its_own_day(client, member):
+    earlier = TODAY - dt.timedelta(days=3)
+    assert weigh(client, 82, earlier, body_fat_pct=30, muscle_pct=60).status_code == 200
+    assert weigh(client, 81).status_code == 200
+    latest = client.get("/api/health/measurements").json()["latest"]
+    assert latest["weight_kg"] == {"value": 81.0, "date": TODAY.isoformat()}
+    assert latest["body_fat_pct"] == {"value": 30.0, "date": earlier.isoformat()}
+    assert latest["muscle_pct"] == {"value": 60.0, "date": earlier.isoformat(), "mass_kg": 49.2}
+    assert latest["bone_pct"] is None
 
 
 def test_a_measurement_cannot_be_in_the_future(client, member):

@@ -696,8 +696,10 @@ class WeightEntry(Base):
     # measured rather than none of it.
     body_fat_pct: Mapped[float | None] = mapped_column(Float, nullable=True)
     body_water_pct: Mapped[float | None] = mapped_column(Float, nullable=True)
-    muscle_kg: Mapped[float | None] = mapped_column(Float, nullable=True)
-    bone_kg: Mapped[float | None] = mapped_column(Float, nullable=True)
+    # Muscle and bone as a share of the weight, the way bioimpedance scales
+    # report them. A mass typed in is turned into a share before it is stored.
+    muscle_pct: Mapped[float | None] = mapped_column(Float, nullable=True)
+    bone_pct: Mapped[float | None] = mapped_column(Float, nullable=True)
     visceral_fat: Mapped[int | None] = mapped_column(Integer, nullable=True)
     source: Mapped[str] = mapped_column(
         Enum(*MEASUREMENT_SOURCES, name="measurement_source", native_enum=False),

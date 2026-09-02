@@ -58,7 +58,12 @@ LIMITS = {
     "body_fat_pct": (2.0, 70.0),
     "body_water_pct": (20.0, 80.0),
     "visceral_fat": (1.0, 59.0),
+    "muscle_pct": (5.0, 90.0),
+    "bone_pct": (0.5, 20.0),
 }
+
+# The fields a scale can add to a weight, in the order they are shown.
+EXTRA_FIELDS = ("body_fat_pct", "body_water_pct", "muscle_pct", "bone_pct", "visceral_fat")
 
 MIN_HEIGHT_CM = 90.0
 MAX_HEIGHT_CM = 250.0
@@ -149,8 +154,8 @@ class MeasurementIn(BaseModel):
     weight_kg: float
     body_fat_pct: float | None = None
     body_water_pct: float | None = None
-    muscle_kg: float | None = None
-    bone_kg: float | None = None
+    muscle_pct: float | None = None
+    bone_pct: float | None = None
     visceral_fat: int | None = None
 
 
@@ -214,18 +219,49 @@ def lean_kg(row: models.WeightEntry) -> float | None:
     return health.round_for_display(row.weight_kg * (1.0 - row.body_fat_pct / 100.0), "kg")
 
 
+def share_kg(row: models.WeightEntry, pct: float | None) -> float | None:
+    """A share of the day's weight as a mass, for showing beside the percent."""
+    if pct is None:
+        return None
+    return health.round_for_display(row.weight_kg * pct / 100.0, "kg")
+
+
 def measurement_row(row: models.WeightEntry) -> dict[str, object]:
     return {
         "date": row.date_for.isoformat(),
         "weight_kg": health.round_for_display(row.weight_kg, "kg"),
         "body_fat_pct": row.body_fat_pct,
         "body_water_pct": row.body_water_pct,
-        "muscle_kg": row.muscle_kg,
-        "bone_kg": row.bone_kg,
+        "muscle_pct": row.muscle_pct,
+        "bone_pct": row.bone_pct,
+        "muscle_kg": share_kg(row, row.muscle_pct),
+        "bone_kg": share_kg(row, row.bone_pct),
         "visceral_fat": row.visceral_fat,
         "lean_kg": lean_kg(row),
         "source": row.source,
     }
+
+
+def latest_by_field(rows: list[models.WeightEntry]) -> dict[str, object]:
+    """The newest reading of each number and the day it was taken, so a screen
+    can say how old each one is. Rows arrive oldest first."""
+    out: dict[str, object] = {"weight_kg": None}
+    for field in EXTRA_FIELDS:
+        out[field] = None
+    for row in reversed(rows):
+        if out["weight_kg"] is None:
+            out["weight_kg"] = {
+                "value": health.round_for_display(row.weight_kg, "kg"),
+                "date": row.date_for.isoformat(),
+            }
+        for field in EXTRA_FIELDS:
+            value = getattr(row, field)
+            if out[field] is None and value is not None:
+                stamp: dict[str, object] = {"value": value, "date": row.date_for.isoformat()}
+                if field in ("muscle_pct", "bone_pct"):
+                    stamp["mass_kg"] = share_kg(row, value)
+                out[field] = stamp
+    return out
 
 
 def exercise_row(row: models.ExerciseEntry) -> dict[str, object]:
@@ -783,6 +819,7 @@ def read_measurements(
     db.commit()
     return {
         "days": window,
+        "latest": latest_by_field(rows),
         "measurements": [measurement_row(row) for row in reversed(rows)],
         "trend": [
             {"date": day.isoformat(), "kg": health.round_for_display(value, "kg")}
@@ -803,18 +840,11 @@ def write_measurement(
     if day > clock.user_today(user):
         raise HTTPException(status.HTTP_400_BAD_REQUEST, FUTURE_MEASUREMENT)
 
-    for field in ("weight_kg", "body_fat_pct", "body_water_pct", "visceral_fat"):
+    for field in ("weight_kg", *EXTRA_FIELDS):
         value = getattr(body, field)
         low, high = LIMITS[field]
         if value is not None and not (low <= value <= high):
             raise HTTPException(status.HTTP_400_BAD_REQUEST, f"That is not a {_name(field)}.")
-    for field in ("muscle_kg", "bone_kg"):
-        value = getattr(body, field)
-        if value is not None and not (0 < value < body.weight_kg):
-            raise HTTPException(
-                status.HTTP_400_BAD_REQUEST,
-                "Muscle and bone have to be more than nothing and less than your weight.",
-            )
 
     row = db.execute(
         select(models.WeightEntry).where(
@@ -827,8 +857,8 @@ def write_measurement(
     row.weight_kg = body.weight_kg
     row.body_fat_pct = body.body_fat_pct
     row.body_water_pct = body.body_water_pct
-    row.muscle_kg = body.muscle_kg
-    row.bone_kg = body.bone_kg
+    row.muscle_pct = body.muscle_pct
+    row.bone_pct = body.bone_pct
     row.visceral_fat = body.visceral_fat
     # Typed in always wins the day. An import that arrives later leaves this
     # standing rather than overwriting somebody's own reading.
@@ -844,6 +874,8 @@ def _name(field: str) -> str:
         "body_fat_pct": "body fat percentage tare can use",
         "body_water_pct": "body water percentage tare can use",
         "visceral_fat": "visceral fat rating tare can use",
+        "muscle_pct": "muscle percentage tare can use",
+        "bone_pct": "bone percentage tare can use",
     }[field]
 
 

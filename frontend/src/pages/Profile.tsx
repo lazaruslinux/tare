@@ -1,6 +1,7 @@
 import { useEffect, useState, type FormEvent } from 'react'
 
 import { api, errorText, type Me, type Profile as ProfileRow, type Sex } from '../api'
+import { dayLabel, today } from '../lib/day'
 import { SaveMarks, useSavedChip } from '../components/SaveMarks'
 import { heightParts, partsToCm, weightText } from '../lib/units'
 
@@ -208,7 +209,11 @@ export function Profile({
         <button type="button" className="text-sm text-accent" onClick={onAddMeasurement}>
           {profile === null || profile.latest_weight_kg === null
             ? 'Add'
-            : weightText(profile.latest_weight_kg, me.units)}
+            : `${weightText(profile.latest_weight_kg, me.units)}${
+                profile.latest_weight_date === null
+                  ? ''
+                  : ` · ${dayLabel(profile.latest_weight_date, today(me.timezone))}`
+              }`}
         </button>
       </div>
 

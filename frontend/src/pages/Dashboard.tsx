@@ -8,6 +8,7 @@ import {
   type Me,
   type Measurement,
   type Measurements,
+  type Stamp,
   type Profile,
 } from '../api'
 import { ExerciseSheet } from '../components/ExerciseSheet'
@@ -137,6 +138,37 @@ function CardHead({ label, onOpen, onAdd }: {
   )
 }
 
+// One measured number with the day it was last taken under it.
+function Dated({
+  label,
+  value,
+  date,
+  todayIso,
+}: {
+  label: string
+  value: string
+  date: string
+  todayIso: string
+}) {
+  return (
+    <div className="t-row min-h-9 text-sm">
+      <span className="flex-1 text-muted">{label}</span>
+      <span className="text-right">
+        <span className="t-nums block">{value}</span>
+        <span className="block text-xs text-muted">{dayLabel(date, todayIso)}</span>
+      </span>
+    </div>
+  )
+}
+
+// A share of the weight with the mass it works out to beside it.
+function shareText(stamp: Stamp, units: Me['units']): string {
+  const mass = stamp.mass_kg ?? null
+  return mass === null
+    ? `${round1(stamp.value)}%`
+    : `${round1(stamp.value)}% · ${weightText(mass, units)}`
+}
+
 export function Dashboard({
   me,
   refresh,
@@ -239,6 +271,8 @@ export function Dashboard({
 
   const rows = history?.measurements ?? []
   const latest = rows[0] ?? null
+  // Each number's own newest reading, so the card can say how old it is.
+  const stamps = history?.latest ?? null
   const trend = (history?.trend ?? []).slice(-SPARK_DAYS)
   const spots = rows.filter((row) => trend.some((point) => point.date === row.date))
   // The trend is the smoothed figure the goal is read against; the latest
@@ -305,16 +339,20 @@ export function Dashboard({
                   <span className="t-nums">{round1(row.body_water_pct)}%</span>
                 </div>
               )}
-              {row.muscle_kg !== null && (
+              {row.muscle_pct !== null && row.muscle_kg !== null && (
                 <div className="t-row min-h-9 text-sm">
                   <span className="flex-1 text-muted">Muscle</span>
-                  <span className="t-nums">{weightText(row.muscle_kg, me.units)}</span>
+                  <span className="t-nums">
+                    {round1(row.muscle_pct)}% · {weightText(row.muscle_kg, me.units)}
+                  </span>
                 </div>
               )}
-              {row.bone_kg !== null && (
+              {row.bone_pct !== null && row.bone_kg !== null && (
                 <div className="t-row min-h-9 text-sm">
                   <span className="flex-1 text-muted">Bone</span>
-                  <span className="t-nums">{weightText(row.bone_kg, me.units)}</span>
+                  <span className="t-nums">
+                    {round1(row.bone_pct)}% · {weightText(row.bone_kg, me.units)}
+                  </span>
                 </div>
               )}
               {row.visceral_fat !== null && (
@@ -415,33 +453,58 @@ export function Dashboard({
               {weightText(latest.weight_kg, me.units)}
             </span>
             <span className="block text-xs text-muted">
-              Latest{trendKg === null ? '' : ` · your trend ${weightText(trendKg, me.units)}`}
+              {dayLabel(latest.date, todayIso)}
+              {trendKg === null ? '' : ` · your trend ${weightText(trendKg, me.units)}`}
             </span>
             <Spark trend={trend} points={spots} />
             <div className="mt-1">
-              {latest.body_fat_pct !== null && (
-                <div className="t-row min-h-9 text-sm">
-                  <span className="flex-1 text-muted">Body fat</span>
-                  <span className="t-nums">{round1(latest.body_fat_pct)}%</span>
-                </div>
+              {stamps?.body_fat_pct && (
+                <Dated
+                  label="Body fat"
+                  value={`${round1(stamps.body_fat_pct.value)}%`}
+                  date={stamps.body_fat_pct.date}
+                  todayIso={todayIso}
+                />
               )}
-              {latest.body_water_pct !== null && (
-                <div className="t-row min-h-9 text-sm">
-                  <span className="flex-1 text-muted">Body water</span>
-                  <span className="t-nums">{round1(latest.body_water_pct)}%</span>
-                </div>
+              {stamps?.body_water_pct && (
+                <Dated
+                  label="Body water"
+                  value={`${round1(stamps.body_water_pct.value)}%`}
+                  date={stamps.body_water_pct.date}
+                  todayIso={todayIso}
+                />
               )}
-              {latest.muscle_kg !== null && (
-                <div className="t-row min-h-9 text-sm">
-                  <span className="flex-1 text-muted">Muscle</span>
-                  <span className="t-nums">{weightText(latest.muscle_kg, me.units)}</span>
-                </div>
+              {stamps?.muscle_pct && (
+                <Dated
+                  label="Muscle"
+                  value={shareText(stamps.muscle_pct, me.units)}
+                  date={stamps.muscle_pct.date}
+                  todayIso={todayIso}
+                />
+              )}
+              {stamps?.bone_pct && (
+                <Dated
+                  label="Bone"
+                  value={shareText(stamps.bone_pct, me.units)}
+                  date={stamps.bone_pct.date}
+                  todayIso={todayIso}
+                />
+              )}
+              {stamps?.visceral_fat && (
+                <Dated
+                  label="Visceral rating"
+                  value={String(stamps.visceral_fat.value)}
+                  date={stamps.visceral_fat.date}
+                  todayIso={todayIso}
+                />
               )}
               {latest.lean_kg !== null && (
-                <div className="t-row min-h-9 text-sm">
-                  <span className="flex-1 text-muted">Lean weight</span>
-                  <span className="t-nums">{weightText(latest.lean_kg, me.units)}</span>
-                </div>
+                <Dated
+                  label="Lean weight"
+                  value={weightText(latest.lean_kg, me.units)}
+                  date={latest.date}
+                  todayIso={todayIso}
+                />
               )}
             </div>
           </>
