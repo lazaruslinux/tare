@@ -258,6 +258,33 @@ def test_a_reviewer_may_correct_a_proposal_before_deciding_it(
     assert refused.status_code == 404
 
 
+def test_a_proposal_a_reviewer_left_half_filled_cannot_be_approved(
+    client, db_session, make_user
+):
+    people(client, make_user)
+    target = shared(db_session)
+    before = target.sodium_mg
+    made = suggest(client, target.id)
+    shadow_id = made.json()["food"]["id"]
+
+    sign_in(client, "reviewer")
+    blanked = client.patch(
+        f"/api/foods/{shadow_id}",
+        json={"name": "Milk chocolate bar", "base_unit": "g", **FULL, "sodium_mg": None},
+    )
+    assert blanked.status_code == 200
+
+    refused = client.post(f"/api/admin/queue/{made.json()['submission_id']}/approve", json={})
+    assert refused.status_code == 400
+    assert refused.json()["detail"] == "Sodium is needed before this can be shared."
+
+    # Nothing moved: the shared row still says what it said, and the request
+    # is still waiting.
+    db_session.expire_all()
+    assert db_session.get(models.Food, target.id).sodium_mg == before
+    assert db_session.get(models.FoodSubmission, made.json()["submission_id"]).status == "pending"
+
+
 # ---- Deciding a correction ----
 
 

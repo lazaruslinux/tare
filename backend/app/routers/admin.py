@@ -31,7 +31,12 @@ from app.models import NUTRIENTS, SUBMISSION_STATUSES, now_utc
 from app.routers import invites
 from app.routers.foods import photo_url
 from app.routers.photos import discard, published
-from app.routers.submissions import ALREADY_SHARED, MISSING_SUBMISSION, drop_shadow
+from app.routers.submissions import (
+    ALREADY_SHARED,
+    MISSING_SUBMISSION,
+    check_complete,
+    drop_shadow,
+)
 
 router = APIRouter(prefix="/admin", tags=["admin"])
 
@@ -184,6 +189,9 @@ def approve_edit(
     """
     target = shared_target(db, submission)
     shadow = offered_food(db, submission)
+    # A reviewer may have adjusted the copy since it was checked on the way
+    # in, and an empty box must not travel onto the shared row.
+    check_complete(shadow, shadow.servings)
 
     target.name = shadow.name
     target.brand = shadow.brand
@@ -247,6 +255,9 @@ def approve(
 
     # A new food, published. From here it is everybody's and nobody's.
     food = offered_food(db, submission)
+    # The owner could edit it while it waited, so the panel is checked again
+    # at the moment it becomes everybody's.
+    check_complete(food, food.servings)
 
     if food.barcode:
         clash = db.execute(

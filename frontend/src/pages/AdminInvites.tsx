@@ -39,21 +39,22 @@ export function AdminInvites({ onBack }: { onBack: () => void }) {
 
   useTopBar({ title: 'Invites', back: { label: 'Settings', onBack } })
 
-  const load = () =>
-    api<AdminInvite[]>('/admin/invites').then(setInvites, (failure) => {
-      setError(errorText(failure))
-      setInvites([])
-    })
+  // The guard says whether the screen is still there to take the answer.
+  const load = (live: () => boolean = () => true) =>
+    api<AdminInvite[]>('/admin/invites').then(
+      (rows) => {
+        if (live()) setInvites(rows)
+      },
+      (failure) => {
+        if (!live()) return
+        setError(errorText(failure))
+        setInvites([])
+      },
+    )
 
   useEffect(() => {
     let alive = true
-    api<AdminInvite[]>('/admin/invites')
-      .then((rows) => alive && setInvites(rows))
-      .catch((failure) => {
-        if (!alive) return
-        setError(errorText(failure))
-        setInvites([])
-      })
+    void load(() => alive)
     return () => {
       alive = false
     }

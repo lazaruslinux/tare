@@ -77,3 +77,10 @@ export function macroDoubt(values: Values): Nutrient | null {
   const floor = 4 * protein + 4 * sugar + 9 * fat
   return floor >= FLOOR_MIN && calories < TOLERANCE * floor ? 'calories' : null
 }
+
+// What a submission is called in the queue and in a member's own list.
+export const KIND_LABEL: Record<string, string> = {
+  new: 'New food',
+  edit: 'Edit',
+  photo: 'Photo',
+}

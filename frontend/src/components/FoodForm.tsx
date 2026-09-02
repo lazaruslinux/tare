@@ -55,6 +55,7 @@ export function FoodForm({
   title,
   backLabel,
   sharing,
+  complete,
   onSubmit,
   onSaved,
   onCancel,
@@ -72,6 +73,9 @@ export function FoodForm({
   // needs: the whole panel, a serving, and room to say something to whoever
   // reads it.
   sharing?: boolean
+  // The whole panel is needed even though nothing is being sent for review,
+  // as when a reviewer adjusts a proposal that is about to be shared.
+  complete?: boolean
   // Where the filled-in form goes. Left out, it writes the food itself, which
   // is what every screen that keeps one of your own wants.
   onSubmit?: (payload: Record<string, unknown>) => Promise<Food>
@@ -89,7 +93,7 @@ export function FoodForm({
   const [note, setNote] = useState('')
   // Opened when every box is going to be asked for anyway, so nothing that is
   // needed is behind a fold.
-  const [more, setMore] = useState(Boolean(notice) || Boolean(sharing))
+  const [more, setMore] = useState(Boolean(notice) || Boolean(sharing) || Boolean(complete))
   const [densityWrong, setDensityWrong] = useState(false)
   const [error, setError] = useState('')
   const [saving, setSaving] = useState(false)
@@ -118,7 +122,7 @@ export function FoodForm({
     const read = {} as Values
     for (const fact of SHARED_FACTS) read[fact.key] = num(panel[fact.key])
 
-    if (sharing) {
+    if (sharing || complete) {
       // Checked here in the server's own words, so a half-filled panel is said
       // while somebody is still looking at the boxes.
       const missing = missingSentence(read, rows.length)

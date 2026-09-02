@@ -13,6 +13,7 @@ import { FoodForm } from '../components/FoodForm'
 import { useTopBar } from '../hooks/useTopBar'
 import { Browse } from './Browse'
 import { FoodDetail } from './FoodDetail'
+import { KIND_LABEL } from '../lib/community'
 
 // How many of your own foods the card shows before it offers the rest.
 const SHOWN = 6
@@ -38,12 +39,6 @@ const STATUS_LABEL: Record<MySubmission['status'], string> = {
 
 // What each kind of request is called where somebody reads their own list of
 // them, in the words they would use rather than the words the column stores.
-const KIND_LABEL: Record<string, string> = {
-  new: 'New food',
-  edit: 'Edit',
-  photo: 'Photo',
-}
-
 type View =
   | { at: 'list' }
   | { at: 'browse' }

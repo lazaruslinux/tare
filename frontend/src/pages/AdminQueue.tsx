@@ -3,7 +3,7 @@ import { useEffect, useState } from 'react'
 import { ApiError, api, errorText, type Food, type Proposed, type QueueItem } from '../api'
 import { FoodForm } from '../components/FoodForm'
 import { useTopBar } from '../hooks/useTopBar'
-import { SHARED_FACTS } from '../lib/community'
+import { KIND_LABEL, SHARED_FACTS } from '../lib/community'
 
 // The queue, which is the only door into the shared database. It is read dense
 // on purpose: whoever is here is comparing ten numbers against a photograph of
@@ -11,12 +11,6 @@ import { SHARED_FACTS } from '../lib/community'
 
 // What each kind of request is called on screen, in the words a reviewer would
 // use for it rather than the words the column stores.
-const KIND_LABEL: Record<string, string> = {
-  new: 'New food',
-  edit: 'Edit',
-  photo: 'Photo',
-}
-
 // Said instead of the server's own sentence, because a reviewer looking at a
 // conflict needs the next move rather than the reason.
 const DUPLICATE =
@@ -214,6 +208,7 @@ export function AdminQueue({ onBack }: { onBack: () => void }) {
         food={adjusting}
         title="Adjust proposal"
         backLabel="Review queue"
+        complete
         onSaved={() => {
           setAdjusting(null)
           void load()
