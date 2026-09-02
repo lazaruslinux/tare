@@ -1,14 +1,19 @@
-"""Pictures of labels: uploading one, and reading one back.
+"""Pictures of food: uploading one, and reading one back.
 
 A photo is uploaded before the food it belongs to exists, because somebody
 attaches it while filling the form in and may never send the form. So an upload
 lands as a row belonging to nobody's food, and the submission that follows
 claims it. The ones no submission ever claims are swept up here.
 
-Who may see one follows the food it is attached to. A picture waiting on a
-decision is visible to the person who took it and to an administrator; a
-published one is visible to anybody signed in. A photo somebody may not see
-answers exactly what an id that was never used answers.
+Two kinds, and they are not read by the same rule. A front photo is the pack on
+a shelf: one per food is published and anybody signed in may read it. A label
+photo is the nutrition panel, offered as evidence for a request, and it is
+never served to anybody but the person who took it and an administrator. That
+is the whole of the difference, and it is enforced here rather than trusted to
+the screens.
+
+A photo somebody may not see answers exactly what an id that was never used
+answers.
 """
 
 from __future__ import annotations
@@ -16,7 +21,7 @@ from __future__ import annotations
 import datetime as dt
 import os
 
-from fastapi import APIRouter, Depends, File, HTTPException, UploadFile, status
+from fastapi import APIRouter, Depends, File, Form, HTTPException, UploadFile, status
 from fastapi.responses import FileResponse
 from sqlalchemy import select, update
 from sqlalchemy.orm import Session
@@ -31,6 +36,7 @@ router = APIRouter(prefix="/photos", tags=["photos"])
 MISSING_PHOTO = "There is no such photo."
 NO_FILE = "Choose a picture to attach."
 TOO_LARGE = "A photo must be at most 10 MB."
+BAD_PURPOSE = "A photo is of the front or of the label."
 
 # How long an upload that was never sent with anything is kept. Long enough
 # that somebody who filled a form in, went away, and came back still has their
@@ -39,12 +45,19 @@ ORPHAN_HOURS = 24
 
 
 def readable_photo(db: Session, user: models.User, photo_id: int) -> models.FoodPhoto:
+    """The picture, or the answer a wrong id gets.
+
+    A label photo is the narrow case and it is checked first: whatever its
+    status, only the person who took it and an administrator are ever served
+    one. Nothing publishes a label photo, so this is a second lock on a door
+    that should already be shut.
+    """
     photo = db.get(models.FoodPhoto, photo_id)
     if photo is None:
         raise HTTPException(status.HTTP_404_NOT_FOUND, MISSING_PHOTO)
-    if photo.status == "approved":
-        return photo
     if photo.uploaded_by_id == user.id or user.is_admin:
+        return photo
+    if photo.purpose == "front" and photo.status == "approved":
         return photo
     raise HTTPException(status.HTTP_404_NOT_FOUND, MISSING_PHOTO)
 
@@ -59,7 +72,29 @@ def published(db: Session, food_id: int) -> models.FoodPhoto | None:
         select(models.FoodPhoto).where(
             models.FoodPhoto.food_id == food_id,
             models.FoodPhoto.status == "approved",
+            models.FoodPhoto.purpose == "front",
         )
+    ).scalars().first()
+
+
+def front_photo(db: Session, food_id: int) -> models.FoodPhoto | None:
+    """The front picture this food carries, published or still waiting.
+
+    The published one if there is one, and otherwise the newest its owner has
+    attached: while a food is somebody's own, the picture they put on it is the
+    picture they should be looking at.
+    """
+    shown = published(db, food_id)
+    if shown is not None:
+        return shown
+    return db.execute(
+        select(models.FoodPhoto)
+        .where(
+            models.FoodPhoto.food_id == food_id,
+            models.FoodPhoto.status == "pending",
+            models.FoodPhoto.purpose == "front",
+        )
+        .order_by(models.FoodPhoto.id.desc())
     ).scalars().first()
 
 
@@ -78,6 +113,11 @@ def discard(db: Session, photo: models.FoodPhoto) -> None:
         .where(models.FoodSubmission.photo_id == photo.id)
         .values(photo_id=None)
     )
+    db.execute(
+        update(models.FoodSubmission)
+        .where(models.FoodSubmission.label_photo_id == photo.id)
+        .values(label_photo_id=None)
+    )
     db.delete(photo)
     photos.remove(name)
 
@@ -90,11 +130,19 @@ def _sweep(db: Session) -> None:
     an instance nobody is uploading to has none to sweep.
     """
     cutoff = now_utc() - dt.timedelta(hours=ORPHAN_HOURS)
+    # A label photo never gets a food: it belongs to the request that carries
+    # it. So the sweep asks whether anything still points at it rather than
+    # whether it reached a food, or it would take away the evidence under a
+    # request nobody has judged yet.
+    spoken_for = select(models.FoodSubmission.label_photo_id).where(
+        models.FoodSubmission.label_photo_id.is_not(None)
+    )
     stale = db.execute(
         select(models.FoodPhoto).where(
             models.FoodPhoto.food_id.is_(None),
             models.FoodPhoto.status == "pending",
             models.FoodPhoto.created_at < cutoff,
+            models.FoodPhoto.id.not_in(spoken_for),
         )
     ).scalars().all()
     for photo in stale:
@@ -104,12 +152,15 @@ def _sweep(db: Session) -> None:
 @router.post("", status_code=status.HTTP_201_CREATED)
 def upload_photo(
     file: UploadFile = File(default=None),
+    purpose: str = Form(default="front"),
     db: Session = Depends(get_db),
     user: models.User = Depends(require_user),
 ) -> dict[str, int]:
     """Take one picture, and answer with the id a submission attaches it by."""
     if file is None:
         raise HTTPException(status.HTTP_400_BAD_REQUEST, NO_FILE)
+    if purpose not in models.PHOTO_PURPOSES:
+        raise HTTPException(status.HTTP_400_BAD_REQUEST, BAD_PURPOSE)
     # One byte past the ceiling is enough to know it is over it, and is the
     # most this ever holds.
     raw = file.file.read(photos.MAX_UPLOAD_BYTES + 1)
@@ -124,7 +175,9 @@ def upload_photo(
         raise HTTPException(status.HTTP_400_BAD_REQUEST, str(refused)) from None
 
     _sweep(db)
-    row = models.FoodPhoto(uploaded_by_id=user.id, path=name, status="pending")
+    row = models.FoodPhoto(
+        uploaded_by_id=user.id, path=name, status="pending", purpose=purpose
+    )
     db.add(row)
     db.commit()
     return {"photo_id": row.id}

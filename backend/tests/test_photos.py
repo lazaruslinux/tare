@@ -31,9 +31,11 @@ def picture(size=(240, 180), colour=(120, 160, 130), exif=None, fmt="JPEG"):
     return out.getvalue()
 
 
-def upload(client, raw=None, name="label.jpg", kind="image/jpeg"):
+def upload(client, raw=None, name="label.jpg", kind="image/jpeg", purpose="front"):
     return client.post(
-        "/api/photos", files={"file": (name, raw if raw is not None else picture(), kind)}
+        "/api/photos",
+        files={"file": (name, raw if raw is not None else picture(), kind)},
+        data={"purpose": purpose},
     )
 
 
@@ -191,3 +193,75 @@ def test_an_upload_that_was_sent_with_something_is_left_alone(
 
 def test_uploading_needs_a_session(client):
     assert upload(client).status_code == 401
+
+
+# ---- The label photo, which is evidence rather than a picture of a food ----
+
+
+def test_a_photo_is_of_the_front_unless_it_says_otherwise(client, db_session, signed_in):
+    front = upload(client).json()["photo_id"]
+    label = upload(client, purpose="label").json()["photo_id"]
+    assert db_session.get(models.FoodPhoto, front).purpose == "front"
+    assert db_session.get(models.FoodPhoto, label).purpose == "label"
+
+
+def test_a_purpose_that_is_not_one_of_the_two_is_refused(client, signed_in):
+    response = upload(client, purpose="sideways")
+    assert response.status_code == 400
+    assert response.json() == {"detail": "A photo is of the front or of the label."}
+
+
+def test_a_label_photo_is_the_uploader_s_and_the_reviewer_s_and_nobody_else_s(
+    client, db_session, make_user, signed_in
+):
+    photo_id = upload(client, purpose="label").json()["photo_id"]
+    # Published by hand, which nothing in the app does to a label photo. Even
+    # then it is not everybody's: what a panel is for is checking, not showing.
+    db_session.get(models.FoodPhoto, photo_id).status = "approved"
+    db_session.commit()
+
+    assert client.get(f"/api/photos/{photo_id}.webp").status_code == 200
+
+    make_user("stranger")
+    sign_in(client, "stranger")
+    absent = client.get(f"/api/photos/{photo_id}.webp")
+    assert absent.status_code == 404
+    assert absent.json() == {"detail": "There is no such photo."}
+
+    make_user("reviewer", admin=True)
+    sign_in(client, "reviewer")
+    assert client.get(f"/api/photos/{photo_id}.webp").status_code == 200
+
+
+def test_a_label_photo_a_request_still_needs_is_not_swept_up(
+    client, db_session, signed_in
+):
+    """A label photo never reaches a food, so the sweep has to ask what points
+    at it instead of whether it was attached to one."""
+    food = models.Food(status="pending", owner_id=signed_in.id, name="A bar", base_unit="g")
+    db_session.add(food)
+    db_session.commit()
+
+    kept_id = upload(client, purpose="label").json()["photo_id"]
+    loose_id = upload(client, purpose="label").json()["photo_id"]
+    for photo_id in (kept_id, loose_id):
+        db_session.get(models.FoodPhoto, photo_id).created_at = now_utc() - dt.timedelta(
+            hours=25
+        )
+    db_session.add(
+        models.FoodSubmission(
+            kind="new",
+            status="pending",
+            food_id=food.id,
+            label_photo_id=kept_id,
+            submitted_by_id=signed_in.id,
+        )
+    )
+    db_session.commit()
+    loose_name = db_session.get(models.FoodPhoto, loose_id).path
+
+    upload(client)
+
+    assert db_session.get(models.FoodPhoto, kept_id) is not None
+    assert db_session.get(models.FoodPhoto, loose_id) is None
+    assert not on_disk(loose_name)

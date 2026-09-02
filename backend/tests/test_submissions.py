@@ -48,8 +48,28 @@ def body(**overrides):
     return sent
 
 
+def attach_front(client, food_id):
+    """The picture an owner puts on their own food from its page."""
+    photo_id = a_photo(client)
+    assert (
+        client.post(f"/api/foods/{food_id}/photo", json={"photo_id": photo_id}).status_code
+        == 204
+    )
+    return photo_id
+
+
 def offer(client, **overrides):
-    return client.post("/api/submissions/food", json=body(**overrides))
+    """Offered with the pictures anything shared has to carry.
+
+    Supplied here rather than in each case, so the cases that are about
+    something else read as they did before the rule existed. The ones that are
+    about the rule pass their own photo_id, including None.
+    """
+    sent = body(**overrides)
+    sent.setdefault("photo_id", a_photo(client))
+    if sent.get("barcode"):
+        sent.setdefault("label_photo_id", a_photo(client, "label"))
+    return client.post("/api/submissions/food", json=sent)
 
 
 def sign_in(client, username):
@@ -57,11 +77,13 @@ def sign_in(client, username):
     assert response.status_code == 200
 
 
-def a_photo(client):
+def a_photo(client, purpose="front"):
     out = io.BytesIO()
     Image.new("RGB", (160, 120), (200, 180, 120)).save(out, format="JPEG")
     response = client.post(
-        "/api/photos", files={"file": ("label.jpg", out.getvalue(), "image/jpeg")}
+        "/api/photos",
+        files={"file": ("label.jpg", out.getvalue(), "image/jpeg")},
+        data={"purpose": purpose},
     )
     assert response.status_code == 201
     return response.json()["photo_id"]
@@ -192,6 +214,7 @@ def test_a_food_you_already_keep_can_be_offered_as_it_stands(client, db_session,
         json={"name": "Grandma's fudge", "base_unit": "g", "servings": SERVINGS, **FULL},
     ).json()
 
+    attach_front(client, made["id"])
     response = client.post(f"/api/foods/{made['id']}/submit", json={"note": "Home made."})
     assert response.status_code == 201
     assert response.json()["food"]["status"] == "pending"
@@ -205,6 +228,7 @@ def test_offering_one_you_keep_is_held_to_the_same_whole_label(client, signed_in
               "carbs_g": 2, "fat_g": 3, "servings": SERVINGS},
     ).json()
 
+    attach_front(client, made["id"])
     response = client.post(f"/api/foods/{made['id']}/submit", json={})
     assert response.status_code == 400
     assert response.json() == {"detail": "Saturated fat is needed before this can be shared."}
@@ -227,6 +251,7 @@ def test_one_food_cannot_be_waiting_twice(client, signed_in):
         "/api/foods",
         json={"name": "Grandma's fudge", "base_unit": "g", "servings": SERVINGS, **FULL},
     ).json()
+    attach_front(client, made["id"])
     assert client.post(f"/api/foods/{made['id']}/submit", json={}).status_code == 201
 
     again = client.post(f"/api/foods/{made['id']}/submit", json={})
@@ -311,5 +336,204 @@ def test_somebody_else_s_offer_cannot_be_taken_back(client, make_user, signed_in
 
 
 def test_offering_needs_a_session(client):
-    assert offer(client).status_code == 401
+    # Sent by hand rather than through the helper, which would need a session
+    # of its own to upload a photo with.
+    assert client.post("/api/submissions/food", json=body()).status_code == 401
     assert client.get("/api/submissions/mine").status_code == 401
+
+
+# ---- What a food everybody will eat out of has to be photographed from ----
+
+
+def test_a_packet_needs_the_front_and_the_label(client, signed_in):
+    without = client.post("/api/submissions/food", json=body(photo_id=a_photo(client)))
+    assert without.status_code == 400
+    assert without.json() == {"detail": "Add a photo of the nutrition label."}
+
+    with_both = offer(client)
+    assert with_both.status_code == 201
+
+
+def test_anything_shared_needs_the_front_of_the_pack(client, signed_in):
+    response = client.post("/api/submissions/food", json=body(barcode=None))
+    assert response.status_code == 400
+    assert response.json() == {"detail": "Add a photo of the front of the pack."}
+
+
+def test_loose_food_needs_no_label_photo(client, db_session, signed_in):
+    response = client.post(
+        "/api/submissions/food", json=body(barcode=None, photo_id=a_photo(client))
+    )
+    assert response.status_code == 201
+    submission = db_session.get(
+        models.FoodSubmission, response.json()["submission_id"]
+    )
+    assert submission.label_photo_id is None
+
+
+def test_the_label_photo_is_kept_with_the_request_and_not_with_the_food(
+    client, db_session, signed_in
+):
+    label_id = a_photo(client, "label")
+    made = offer(client, label_photo_id=label_id).json()
+    submission = db_session.get(models.FoodSubmission, made["submission_id"])
+
+    assert submission.label_photo_id == label_id
+    # It belongs to the request. Attaching it to the food would publish it the
+    # day somebody publishes the food's picture.
+    assert db_session.get(models.FoodPhoto, label_id).food_id is None
+    assert db_session.get(models.FoodPhoto, label_id).status == "pending"
+
+
+def test_a_front_photo_cannot_stand_in_for_the_label(client, signed_in):
+    response = client.post(
+        "/api/submissions/food",
+        json=body(photo_id=a_photo(client), label_photo_id=a_photo(client)),
+    )
+    assert response.status_code == 400
+    assert response.json() == {"detail": "That photo is not there to attach."}
+
+
+def test_one_label_photo_cannot_be_evidence_for_two_requests(client, signed_in):
+    label_id = a_photo(client, "label")
+    assert offer(client, label_photo_id=label_id).status_code == 201
+
+    again = client.post(
+        "/api/submissions/food",
+        json=body(barcode="0123456789012", photo_id=a_photo(client), label_photo_id=label_id),
+    )
+    assert again.status_code == 400
+    assert again.json() == {"detail": "That photo is not there to attach."}
+
+
+def test_taking_an_offer_back_takes_the_label_photo_with_it(client, db_session, signed_in):
+    label_id = a_photo(client, "label")
+    name = db_session.get(models.FoodPhoto, label_id).path
+    submission_id = offer(client, label_photo_id=label_id).json()["submission_id"]
+
+    assert client.delete(f"/api/submissions/{submission_id}").status_code == 204
+    assert db_session.get(models.FoodPhoto, label_id) is None
+    assert not os.path.isfile(photos.path_for(name))
+
+
+def test_a_food_with_a_barcode_offered_from_its_own_page_needs_both(
+    client, db_session, signed_in
+):
+    made = client.post(
+        "/api/foods",
+        json={
+            "name": "Scanned bar",
+            "base_unit": "g",
+            "barcode": CODE,
+            "servings": SERVINGS,
+            **FULL,
+        },
+    ).json()
+
+    bare = client.post(f"/api/foods/{made['id']}/submit", json={})
+    assert bare.status_code == 400
+    assert bare.json() == {"detail": "Add a photo of the front of the pack."}
+
+    front_id = attach_front(client, made["id"])
+    no_label = client.post(f"/api/foods/{made['id']}/submit", json={})
+    assert no_label.status_code == 400
+    assert no_label.json() == {"detail": "Add a photo of the nutrition label."}
+
+    sent = client.post(
+        f"/api/foods/{made['id']}/submit", json={"label_photo_id": a_photo(client, "label")}
+    )
+    assert sent.status_code == 201
+    # The picture the owner put on the food is the one the request carries.
+    submission = db_session.get(models.FoodSubmission, sent.json()["submission_id"])
+    assert submission.photo_id == front_id
+
+
+def test_a_second_front_photo_replaces_the_first(client, db_session, signed_in):
+    made = client.post(
+        "/api/foods", json={"name": "Fudge", "base_unit": "g", **FULL}
+    ).json()
+    first = attach_front(client, made["id"])
+    name = db_session.get(models.FoodPhoto, first).path
+    second = attach_front(client, made["id"])
+
+    assert db_session.get(models.FoodPhoto, first) is None
+    assert not os.path.isfile(photos.path_for(name))
+    assert db_session.get(models.FoodPhoto, second).food_id == made["id"]
+    # And the owner sees it on their own food before anybody has published it.
+    assert client.get(f"/api/foods/{made['id']}").json()["photo_url"] == (
+        f"/api/photos/{second}.webp"
+    )
+
+
+def test_somebody_else_s_food_cannot_be_photographed(client, db_session, make_user, signed_in):
+    stranger = make_user("stranger")
+    theirs = models.Food(
+        status="custom", owner_id=stranger.id, name="Their food", base_unit="g", **FULL
+    )
+    db_session.add(theirs)
+    db_session.commit()
+
+    response = client.post(
+        f"/api/foods/{theirs.id}/photo", json={"photo_id": a_photo(client)}
+    )
+    assert response.status_code == 404
+
+
+def test_a_correction_may_carry_the_panel_it_was_read_off(client, db_session, signed_in):
+    shared = models.Food(
+        status="approved", name="Shared bar", base_unit="g", **FULL
+    )
+    shared.servings = [models.FoodServing(name="1 bar", base_amount=43, position=0)]
+    db_session.add(shared)
+    db_session.commit()
+
+    label_id = a_photo(client, "label")
+    response = client.post(
+        "/api/submissions/edit",
+        json={
+            "target_food_id": shared.id,
+            "proposed": {"name": "Shared bar", "base_unit": "g", "servings": SERVINGS, **FULL},
+            "label_photo_id": label_id,
+        },
+    )
+    assert response.status_code == 201
+    submission = db_session.get(models.FoodSubmission, response.json()["submission_id"])
+    assert submission.label_photo_id == label_id
+
+
+def test_the_owner_sees_their_own_waiting_photo_in_their_own_list(
+    client, make_user, signed_in
+):
+    made = client.post(
+        "/api/foods", json={"name": "Kitchen bar", "base_unit": "g", **FULL}
+    ).json()
+    photo_id = attach_front(client, made["id"])
+
+    row = next(r for r in client.get("/api/foods/mine").json() if r["id"] == made["id"])
+    assert row["photo_url"] == f"/api/photos/{photo_id}.webp"
+
+    # Nobody else has this food in a list to begin with, so nobody else is
+    # handed the picture with it, and the file itself is not theirs to read.
+    make_user("stranger")
+    sign_in(client, "stranger")
+    assert client.get("/api/foods/search", params={"q": "kitchen"}).json() == []
+    assert client.get(f"/api/photos/{photo_id}.webp").status_code == 404
+
+
+def test_a_shared_food_shows_only_what_was_published(client, db_session, signed_in):
+    """The fallback is about a food of your own. A picture waiting on somebody
+    else's decision is not shown on a row everybody reads."""
+    shared = models.Food(status="approved", name="Shared bar", base_unit="g", **FULL)
+    db_session.add(shared)
+    db_session.commit()
+    photo_id = a_photo(client)
+    assert (
+        client.post(
+            "/api/submissions/photo",
+            json={"target_food_id": shared.id, "photo_id": photo_id},
+        ).status_code
+        == 201
+    )
+
+    found = client.get("/api/foods/search", params={"q": "shared"}).json()
+    assert [row["photo_url"] for row in found] == [None]

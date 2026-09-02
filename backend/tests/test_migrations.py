@@ -39,6 +39,10 @@ def test_upgrade_head_builds_the_identity_schema(tmp_path):
             for constraint in inspector.get_unique_constraints("weight_entries")
         }
         user_columns = {column["name"] for column in inspector.get_columns("users")}
+        photo_columns = {column["name"] for column in inspector.get_columns("food_photos")}
+        submission_columns = {
+            column["name"] for column in inspector.get_columns("food_submissions")
+        }
     finally:
         engine.dispose()
     assert IDENTITY_TABLES <= tables
@@ -57,6 +61,9 @@ def test_upgrade_head_builds_the_identity_schema(tmp_path):
     # And the one that holds a person to a single open request of each kind
     # about a food that is already shared.
     assert "uq_food_submissions_open_target" in submission_indexes
+    # The two purposes a picture has, and the panel a request carries.
+    assert "purpose" in photo_columns
+    assert "label_photo_id" in submission_columns
     # And the pair that stops one food being pinned twice.
     assert "uq_saved_foods_user_food" in saved_unique
     # And the one that holds a member to a single weigh-in a day.

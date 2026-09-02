@@ -234,6 +234,9 @@ export type FoodServing = {
 // label never said rather than none of it.
 export type Food = FoodRow & {
   density_g_per_ml: number | null
+  // The code on the packet, where there was one. A food with one is held to
+  // both photographs when it is offered to everybody.
+  barcode: string | null
   ingredients_text: string
   // Whether this account is the one that may change it.
   mine: boolean
@@ -331,6 +334,9 @@ export type QueueItem = {
   submitted_by: string | null
   // The picture being offered. Null unless one came with the request.
   photo_url: string | null
+  // The nutrition panel it was read off, for checking the numbers against.
+  // Only the queue asks for this, and only an administrator is served it.
+  label_photo_url: string | null
   // The food being proposed. Null on a picture, which proposes no food.
   food: Proposed | null
   // What a correction or a picture is about, and what it would replace.
@@ -479,9 +485,19 @@ export async function api<T>(path: string, options: Options = {}): Promise<T> {
 // The photo upload, which is the one call that does not send JSON. The browser
 // writes the multipart boundary itself, so no Content-Type is set here: setting
 // one by hand omits the boundary and the body arrives unreadable.
-export async function upload<T>(path: string, file: File): Promise<T> {
+// What a picture is for. A front photo is the pack on a shelf and one per food
+// is published; a label photo is the nutrition panel, offered as evidence for a
+// request, and nobody but its uploader and an administrator is ever served one.
+export type PhotoPurpose = 'front' | 'label'
+
+export async function upload<T>(
+  path: string,
+  file: File,
+  purpose: PhotoPurpose = 'front'
+): Promise<T> {
   const form = new FormData()
   form.append('file', file)
+  form.append('purpose', purpose)
   return send<T>(path, { method: 'POST', body: form })
 }
 

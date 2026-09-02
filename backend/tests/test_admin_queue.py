@@ -47,16 +47,23 @@ def offer(client, **overrides):
         **FULL,
     }
     sent.update(overrides)
+    # The pictures anything offered to everybody carries, unless the case says
+    # otherwise: the front of the pack, and the panel where there is a barcode.
+    sent.setdefault("photo_id", a_photo(client))
+    if sent.get("barcode"):
+        sent.setdefault("label_photo_id", a_photo(client, "label"))
     response = client.post("/api/submissions/food", json=sent)
     assert response.status_code == 201
     return response.json()
 
 
-def a_photo(client):
+def a_photo(client, purpose="front"):
     out = io.BytesIO()
     Image.new("RGB", (160, 120), (200, 180, 120)).save(out, format="JPEG")
     response = client.post(
-        "/api/photos", files={"file": ("label.jpg", out.getvalue(), "image/jpeg")}
+        "/api/photos",
+        files={"file": ("label.jpg", out.getvalue(), "image/jpeg")},
+        data={"purpose": purpose},
     )
     assert response.status_code == 201
     return response.json()["photo_id"]
@@ -125,7 +132,12 @@ def test_the_queue_carries_the_whole_proposed_label(client, make_user):
     first = queue[0]
     assert first["id"] == made["submission_id"]
     assert first["submitted_by"] == "member"
-    assert first["photo_url"] is None
+    # Both pictures, because it is a packet: the front of it, and the panel the
+    # numbers were read off, which only this screen is ever served.
+    assert first["photo_url"] is not None
+    assert first["label_photo_url"] is not None
+    # And nothing to check the numbers against on the one with no barcode.
+    assert queue[1]["label_photo_url"] is None
     assert first["food"]["barcode"] == CODE
     assert first["food"]["sodium_mg"] == 81
     assert first["food"]["servings"] == [{"name": "1 bar", "base_amount": 43}]
@@ -335,7 +347,12 @@ def test_a_food_turned_down_can_be_corrected_and_offered_again(client, make_user
     client.post(f"/api/admin/queue/{made['submission_id']}/reject", json={"note": "Check it."})
 
     sign_in(client, "member")
-    again = client.post(f"/api/foods/{made['food']['id']}/submit", json={})
+    # The pictures went back with the refusal, so it is offered again with new
+    # ones. The front photo rides on the food; the panel goes with the request.
+    again = client.post(
+        f"/api/foods/{made['food']['id']}/submit",
+        json={"photo_id": a_photo(client), "label_photo_id": a_photo(client, "label")},
+    )
     assert again.status_code == 201
 
     sign_in(client, "reviewer")
@@ -431,7 +448,10 @@ def test_a_scanned_food_offered_from_the_form_carries_its_code_through(
             **FULL,
         },
     ).json()
-    offered = client.post(f"/api/foods/{made['id']}/submit", json={})
+    offered = client.post(
+        f"/api/foods/{made['id']}/submit",
+        json={"photo_id": a_photo(client), "label_photo_id": a_photo(client, "label")},
+    )
     assert offered.status_code == 201
 
     db_session.expire_all()

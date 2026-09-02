@@ -29,6 +29,7 @@ router = APIRouter(prefix="/foods", tags=["foods"])
 # the other.
 MISSING_FOOD = "There is no such food."
 NOT_YOURS = "This food is not yours to change."
+MISSING_PHOTO_TO_ATTACH = "That photo is not there to attach."
 
 MAX_NAME = 200
 MAX_BRAND = 120
@@ -143,6 +144,43 @@ def photo_urls(db: Session, food_ids: Sequence[int]) -> dict[int, str]:
     return {food_id: photo_url(photo_id) for food_id, photo_id in rows if food_id is not None}
 
 
+def pictures_for(
+    db: Session, user: models.User, foods: Sequence[models.Food]
+) -> dict[int, str]:
+    """The picture each of these foods shows to this account.
+
+    The published one wherever there is one, and on a food of this account's
+    own that nobody has published yet, the front photo they attached to it
+    themselves. Nobody else is ever handed that: the foods it can happen on are
+    private or waiting, and neither is in anybody else's list to begin with.
+
+    Two queries for a whole list rather than one per row.
+    """
+    shown = photo_urls(db, [food.id for food in foods])
+    waiting = [
+        food.id
+        for food in foods
+        if food.id not in shown and food.owner_id is not None and food.owner_id == user.id
+    ]
+    if not waiting:
+        return shown
+    # Newest first, so the one an owner attached last is the one they see. The
+    # attach route replaces rather than piles up, so in practice there is one.
+    rows = db.execute(
+        select(models.FoodPhoto.food_id, models.FoodPhoto.id)
+        .where(
+            models.FoodPhoto.food_id.in_(waiting),
+            models.FoodPhoto.status == "pending",
+            models.FoodPhoto.purpose == "front",
+        )
+        .order_by(models.FoodPhoto.id)
+    ).all()
+    for food_id, photo_id in rows:
+        if food_id is not None:
+            shown[food_id] = photo_url(photo_id)
+    return shown
+
+
 def food_row(
     food: models.Food, picture: str | None = None, community: str = "none"
 ) -> dict[str, object]:
@@ -206,7 +244,7 @@ def community_states(
 def food_rows(
     db: Session, user: models.User, foods: Sequence[models.Food]
 ) -> list[dict[str, object]]:
-    pictures = photo_urls(db, [food.id for food in foods])
+    pictures = pictures_for(db, user, foods)
     states = community_states(db, user, foods)
     return [food_row(food, pictures.get(food.id), states[food.id]) for food in foods]
 
@@ -255,14 +293,24 @@ def is_pinned(db: Session, user: models.User, food_id: int) -> bool:
 
 
 def food_detail(db: Session, food: models.Food, user: models.User) -> dict[str, object]:
-    """The whole food, its panel per 100 of its base unit, and its servings."""
+    """The whole food, its panel per 100 of its base unit, and its servings.
+
+    The picture here is the published one, and for the owner of a food nobody
+    has published yet it is the front photo they attached themselves. A list
+    shows only what everybody can see; the page where somebody manages their
+    own food has to show them what they put on it.
+    """
     detail: dict[str, object] = {
         **food_row(
             food,
-            photo_urls(db, [food.id]).get(food.id),
+            pictures_for(db, user, [food]).get(food.id),
             community_states(db, user, [food])[food.id],
         ),
         "density_g_per_ml": food.density_g_per_ml,
+        # What it was scanned from, where it was. On the packaging either way,
+        # and it is what decides whether offering this food needs a photograph
+        # of the panel printed beside it.
+        "barcode": food.barcode,
         "ingredients_text": food.ingredients_text,
         # Whether the account reading it is the one who may change it. The
         # owner's id is not sent: the answer is what the screen needs, and the
@@ -662,6 +710,41 @@ def read_food(
     user: models.User = Depends(require_user),
 ) -> dict[str, object]:
     return food_detail(db, readable_food(db, user, food_id), user)
+
+
+@router.post("/{food_id}/photo", status_code=status.HTTP_204_NO_CONTENT)
+def attach_front_photo(
+    food_id: int,
+    body: schemas.FoodPhotoIn,
+    db: Session = Depends(get_db),
+    user: models.User = Depends(require_user),
+) -> None:
+    """Put a picture of the front of the pack on one of your own foods.
+
+    Attached rather than offered, because until this food is shared it is
+    nobody else's business. It rides along if the food is ever submitted.
+    Attaching a second one replaces the first, file and all: a food shows one
+    picture, and a stack of replaced attempts is a directory nobody empties.
+    """
+    from app.routers.photos import discard, front_photo
+
+    food = changeable_food(db, user, food_id, ("custom", "pending"), ())
+    photo = db.get(models.FoodPhoto, body.photo_id)
+    if (
+        photo is None
+        or photo.uploaded_by_id != user.id
+        or photo.food_id is not None
+        or photo.purpose != "front"
+    ):
+        raise HTTPException(status.HTTP_400_BAD_REQUEST, MISSING_PHOTO_TO_ATTACH)
+
+    standing = front_photo(db, food.id)
+    # Only one that is still waiting. A published picture belongs to the shared
+    # database, and this route never reaches a food that has one.
+    if standing is not None and standing.status == "pending":
+        discard(db, standing)
+    photo.food_id = food.id
+    db.commit()
 
 
 @router.post("/{food_id}/pin", status_code=status.HTTP_204_NO_CONTENT)

@@ -1,3 +1,5 @@
+import { Camera } from 'lucide-react'
+
 import type { Community, FoodRow, MealRow, RecipeRow } from '../api'
 import { servingsText } from '../lib/units'
 import { nutrientText } from './NutritionLabel'
@@ -27,9 +29,25 @@ export function Dot({ state }: { state: Community }) {
   )
 }
 
+// The picture beside a food in a list, or where one would be. Decorative: the
+// row itself is what opens the food.
+export function PhotoThumb({ url }: { url: string | null }) {
+  if (url === null) {
+    return (
+      <span className="t-phototile h-10 w-10" aria-hidden="true">
+        <Camera className="h-4 w-4" strokeWidth={1.75} />
+      </span>
+    )
+  }
+  return (
+    <img src={url} alt="" className="h-10 w-10 shrink-0 rounded-lg border border-line object-cover" />
+  )
+}
+
 export function FoodLine({ row, onOpen }: { row: FoodRow; onOpen: () => void }) {
   return (
     <button type="button" className="t-row w-full text-left" onClick={onOpen}>
+      <PhotoThumb url={row.photo_url} />
       <span className="min-w-0 flex-1">
         <span className="flex items-center gap-2">
           <Dot state={row.community} />

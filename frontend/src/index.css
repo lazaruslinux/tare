@@ -144,6 +144,20 @@
     font-weight: 600;
   }
 
+  /* Where a picture would be. A camera rather than a letter, so the tile says
+     what is missing and, where it is a button, what tapping it does. Sized by
+     whatever it sits in: 40px beside a row, 96px in a form. */
+  .t-phototile {
+    display: flex;
+    flex: none;
+    align-items: center;
+    justify-content: center;
+    border: 1px solid var(--line);
+    border-radius: 0.5rem;
+    background: var(--surface-2);
+    color: var(--muted);
+  }
+
   .t-card {
     padding: 0.875rem;
     border: 1px solid var(--line);

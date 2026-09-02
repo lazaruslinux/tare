@@ -269,9 +269,18 @@ SUBMISSION_KINDS = ("new", "edit", "photo")
 # a fourth state: nobody has judged it, so there is nothing to keep.
 SUBMISSION_STATUSES = ("pending", "approved", "rejected")
 
+# What a picture is for, which decides who may ever see it.
+#   front   the pack as it looks on a shelf. One of these per food is
+#           published, and everybody signed in can read it.
+#   label   the nutrition panel, offered so a reviewer can check the numbers
+#           against something. It belongs to the request rather than the food,
+#           it is never published, and nobody but its uploader and an
+#           administrator is ever served it.
+PHOTO_PURPOSES = ("front", "label")
+
 
 class FoodPhoto(Base):
-    """A picture of a label, uploaded before there is a food to attach it to.
+    """A picture of a food, uploaded before there is a food to attach it to.
 
     Held as its own row rather than a column on the food because the upload
     happens first: somebody chooses a photo while filling the form in, and the
@@ -307,6 +316,14 @@ class FoodPhoto(Base):
     # comes from the upload. A path from a client is a path traversal.
     path: Mapped[str] = mapped_column(String(128), nullable=False)
     status: Mapped[str] = mapped_column(String(10), nullable=False, default="pending")
+    # A label photo never reaches 'approved' and never counts towards the one
+    # published picture per food: the index above is about front photos, and
+    # nothing ever publishes the other kind.
+    purpose: Mapped[str] = mapped_column(
+        Enum(*PHOTO_PURPOSES, name="photo_purpose", native_enum=False),
+        nullable=False,
+        default="front",
+    )
     created_at: Mapped[dt.datetime] = mapped_column(UtcDateTime, nullable=False, default=now_utc)
 
 
@@ -355,6 +372,12 @@ class FoodSubmission(Base):
         ForeignKey("foods.id", ondelete="CASCADE"), nullable=True
     )
     photo_id: Mapped[int | None] = mapped_column(
+        ForeignKey("food_photos.id", ondelete="SET NULL"), nullable=True
+    )
+    # The nutrition panel offered with this request, for whoever reads it. It
+    # belongs to the request and not to the food: it is never published, and
+    # withdrawing the request takes it away with everything else.
+    label_photo_id: Mapped[int | None] = mapped_column(
         ForeignKey("food_photos.id", ondelete="SET NULL"), nullable=True
     )
     submitted_by_id: Mapped[int | None] = mapped_column(

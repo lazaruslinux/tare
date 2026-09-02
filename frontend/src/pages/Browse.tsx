@@ -1,6 +1,7 @@
 import { useEffect, useRef, useState } from 'react'
 
 import { api, errorText, type BrowsePage, type FoodRow } from '../api'
+import { PhotoThumb } from '../components/FoodRows'
 import { useTopBar } from '../hooks/useTopBar'
 
 // The shared database, as a place to look something up rather than a wall to
@@ -17,26 +18,10 @@ const LETTERS = 'ABCDEFGHIJKLMNOPQRSTUVWXYZ'.split('')
 // the keyboard over half the screen before anybody asked for it.
 const ROOMY = '(min-width: 900px)'
 
-// A food with no picture still needs a shape in the row. Its first letter is
-// enough to tell one from its neighbour while reading down the names.
-function initial(name: string): string {
-  return (name.trim()[0] ?? '?').toUpperCase()
-}
-
 function Row({ row, onOpen }: { row: FoodRow; onOpen: () => void }) {
   return (
     <button type="button" className="t-row w-full text-left" onClick={onOpen}>
-      {row.photo_url ? (
-        <img
-          src={row.photo_url}
-          alt=""
-          className="h-10 w-10 shrink-0 rounded-lg border border-line object-cover"
-        />
-      ) : (
-        <span className="flex h-10 w-10 shrink-0 items-center justify-center rounded-lg border border-line bg-surface-2 text-sm font-semibold text-muted">
-          {initial(row.name)}
-        </span>
-      )}
+      <PhotoThumb url={row.photo_url} />
       <span className="min-w-0 flex-1">
         <span className="block truncate text-sm">{row.name}</span>
         {row.brand && <span className="block truncate text-xs text-muted">{row.brand}</span>}

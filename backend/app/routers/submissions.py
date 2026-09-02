@@ -42,7 +42,7 @@ from app.routers.foods import (
     food_detail,
     readable_food,
 )
-from app.routers.photos import discard
+from app.routers.photos import discard, front_photo
 
 router = APIRouter(tags=["submissions"])
 
@@ -55,6 +55,13 @@ ALREADY_EDITING = "You already have an edit waiting on this food."
 ALREADY_PICTURING = "You already have a photo waiting on this food."
 NOT_YOURS_TO_OFFER = "Only your own foods can be offered to the shared database."
 MISSING_PHOTO = "That photo is not there to attach."
+# What a food everybody will eat out of has to be photographed from. The front
+# is what somebody recognises it by on a shelf; the label is what a reviewer
+# checks the ten numbers against. A packaged food has both printed on it, so a
+# food with a barcode is held to both; loose food often has neither, and the
+# front alone is what can honestly be asked for.
+NO_FRONT = "Add a photo of the front of the pack."
+NO_LABEL = "Add a photo of the nutrition label."
 
 # What each nutrient is called when a sentence has to name the missing one.
 NUTRIENT_LABELS = {
@@ -91,14 +98,49 @@ def check_complete(panel: object, servings: Sequence[object] | None) -> None:
 
 
 def attach(db: Session, user: models.User, photo_id: int | None, food_id: int) -> int | None:
-    """Claim an uploaded photo for a food, or refuse a photo that is not theirs."""
+    """Claim an uploaded front photo for a food, or refuse one that is not theirs."""
     if photo_id is None:
         return None
     photo = db.get(models.FoodPhoto, photo_id)
-    if photo is None or photo.uploaded_by_id != user.id or photo.food_id is not None:
+    if (
+        photo is None
+        or photo.uploaded_by_id != user.id
+        or photo.food_id is not None
+        or photo.purpose != "front"
+    ):
         raise HTTPException(status.HTTP_400_BAD_REQUEST, MISSING_PHOTO)
     photo.food_id = food_id
     return photo.id
+
+
+def attach_label(db: Session, user: models.User, photo_id: int | None) -> int | None:
+    """Claim an uploaded label photo for a request.
+
+    No food is set on it. A label photo belongs to the request that carries it
+    and goes away with it, so one request never holds up another's evidence:
+    a photo already spoken for is refused rather than shared.
+    """
+    if photo_id is None:
+        return None
+    photo = db.get(models.FoodPhoto, photo_id)
+    if photo is None or photo.uploaded_by_id != user.id or photo.purpose != "label":
+        raise HTTPException(status.HTTP_400_BAD_REQUEST, MISSING_PHOTO)
+    taken = db.execute(
+        select(models.FoodSubmission.id).where(
+            models.FoodSubmission.label_photo_id == photo.id
+        )
+    ).first()
+    if taken is not None:
+        raise HTTPException(status.HTTP_400_BAD_REQUEST, MISSING_PHOTO)
+    return photo.id
+
+
+def check_photos(packaged: bool, front: bool, label: bool) -> None:
+    """Refuse a submission that is not photographed well enough to judge."""
+    if not front:
+        raise HTTPException(status.HTTP_400_BAD_REQUEST, NO_FRONT)
+    if packaged and not label:
+        raise HTTPException(status.HTTP_400_BAD_REQUEST, NO_LABEL)
 
 
 def open_submission(db: Session, food_id: int) -> models.FoodSubmission | None:
@@ -218,6 +260,9 @@ def submit_new_food(
         if held is not None:
             raise HTTPException(status.HTTP_400_BAD_REQUEST, ALREADY_MINE)
 
+    # Both checks before anything is written, so a refusal leaves the upload
+    # exactly where it was and the form can be sent again.
+    check_photos(bool(code), body.photo_id is not None, body.label_photo_id is not None)
     check_complete(body, body.servings)
     food = models.Food(
         status="pending",
@@ -236,6 +281,7 @@ def submit_new_food(
         "new",
         food_id=food.id,
         photo_id=attach(db, user, body.photo_id, food.id),
+        label_photo_id=attach_label(db, user, body.label_photo_id),
         submitted_by_id=user.id,
         note=body.note.strip(),
     )
@@ -251,19 +297,32 @@ def submit_own_food(
     db: Session = Depends(get_db),
     user: models.User = Depends(require_user),
 ) -> dict[str, object]:
-    """One of your own foods, offered as it stands. A barcode is not needed."""
+    """One of your own foods, offered as it stands. A barcode is not needed.
+
+    The front photo may already be on the food: its owner attaches one from the
+    food's own page, and it rides along when the food is offered. So either
+    that or one sent with this counts.
+    """
     food = readable_food(db, user, food_id)
     if food.owner_id != user.id or food.status != "custom":
         raise HTTPException(status.HTTP_403_FORBIDDEN, NOT_YOURS_TO_OFFER)
     if open_submission(db, food.id) is not None:
         raise HTTPException(status.HTTP_409_CONFLICT, ALREADY_OFFERED)
 
+    standing = front_photo(db, food.id)
+    check_photos(
+        bool(food.barcode),
+        body.photo_id is not None or standing is not None,
+        body.label_photo_id is not None,
+    )
     check_complete(food, food.servings)
     food.status = "pending"
     submission = offering(
         "new",
         food_id=food.id,
-        photo_id=attach(db, user, body.photo_id, food.id),
+        photo_id=attach(db, user, body.photo_id, food.id)
+        or (None if standing is None else standing.id),
+        label_photo_id=attach_label(db, user, body.label_photo_id),
         submitted_by_id=user.id,
         note=body.note.strip(),
     )
@@ -309,6 +368,7 @@ def suggest_edit(
         "edit",
         food_id=shadow.id,
         target_food_id=target.id,
+        label_photo_id=attach_label(db, user, body.label_photo_id),
         submitted_by_id=user.id,
         note=body.note.strip(),
     )
@@ -394,6 +454,17 @@ def withdraw_submission(
     photo = db.get(models.FoodPhoto, submission.photo_id) if submission.photo_id else None
     if photo is not None and photo.status == "pending":
         discard(db, photo)
+
+    # The label photo was only ever evidence for this request, so it goes
+    # outright. A decided request keeps its own, because that is the record of
+    # what the decision was made on.
+    label = (
+        db.get(models.FoodPhoto, submission.label_photo_id)
+        if submission.label_photo_id
+        else None
+    )
+    if label is not None:
+        discard(db, label)
 
     db.delete(submission)
     db.commit()

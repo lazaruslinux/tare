@@ -132,6 +132,11 @@ def queue_item(
         db.get(models.Food, submission.target_food_id) if submission.target_food_id else None
     )
     photo = db.get(models.FoodPhoto, submission.photo_id) if submission.photo_id else None
+    label = (
+        db.get(models.FoodPhoto, submission.label_photo_id)
+        if submission.label_photo_id
+        else None
+    )
 
     if submission.kind == "photo":
         if target is None or photo is None:
@@ -149,6 +154,10 @@ def queue_item(
         # judging; there is just nobody to tell.
         "submitted_by": username,
         "photo_url": None if photo is None else photo_url(photo.id),
+        # The nutrition panel this was read off, for checking the numbers
+        # against. Only this screen ever asks for it, and only an
+        # administrator is ever served one.
+        "label_photo_url": None if label is None else photo_url(label.id),
         "food": None if food is None else proposed(food),
         "target": None if target is None else named(target),
         # What the shared food says now, so a correction is read beside the

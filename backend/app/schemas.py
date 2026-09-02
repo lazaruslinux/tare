@@ -81,13 +81,23 @@ class SubmissionIn(FoodIn):
     """
 
     photo_id: int | None = None
+    # The nutrition panel, for whoever reviews this. Needed on anything with a
+    # barcode on it, because a packaged food has a panel printed on the back.
+    label_photo_id: int | None = None
     note: str = Field(default="", max_length=MAX_NOTE)
+
+
+class FoodPhotoIn(BaseModel):
+    """A picture of the front of the pack, put on one of your own foods."""
+
+    photo_id: int
 
 
 class SubmitIn(BaseModel):
     """One food already kept privately, offered as it stands."""
 
     photo_id: int | None = None
+    label_photo_id: int | None = None
     note: str = Field(default="", max_length=MAX_NOTE)
 
 
@@ -101,6 +111,8 @@ class EditIn(BaseModel):
 
     target_food_id: int
     proposed: FoodIn
+    # Optional evidence: a picture of the panel these numbers were read off.
+    label_photo_id: int | None = None
     note: str = Field(default="", max_length=MAX_NOTE)
 
 

@@ -54,6 +54,53 @@ function comparison(now: Proposed, proposed: Proposed): Line[] {
   return lines
 }
 
+// What a request is judged against, beside the numbers. The front of the pack
+// is what it looks like; the label is what the panel below can be checked
+// against, and it is never served to anybody but an administrator and whoever
+// took it.
+function Evidence({
+  item,
+  name,
+  onLook,
+}: {
+  item: QueueItem
+  name: string
+  onLook: (url: string) => void
+}) {
+  const shots: { url: string; alt: string; label: string }[] = []
+  if (item.photo_url) {
+    shots.push({ url: item.photo_url, alt: `The front of ${name}`, label: 'Front' })
+  }
+  if (item.label_photo_url) {
+    shots.push({
+      url: item.label_photo_url,
+      alt: `The nutrition label for ${name}`,
+      label: 'Label',
+    })
+  }
+  if (shots.length === 0) return null
+  return (
+    <div className="mt-3 flex gap-3">
+      {shots.map((shot) => (
+        <button
+          key={shot.url}
+          type="button"
+          className="block text-left"
+          aria-label={`Look at the ${shot.label.toLowerCase()}`}
+          onClick={() => onLook(shot.url)}
+        >
+          <img
+            src={shot.url}
+            alt={shot.alt}
+            className="h-24 w-24 rounded-lg border border-line object-cover"
+          />
+          <span className="t-micro mt-1 block">{shot.label}</span>
+        </button>
+      ))}
+    </div>
+  )
+}
+
 function Panel({ food }: { food: Proposed }) {
   return (
     <>
@@ -264,26 +311,14 @@ export function AdminQueue({
 
             {item.kind === 'new' && proposal && (
               <>
-                {item.photo_url && (
-                  <button
-                    type="button"
-                    className="mt-3 block"
-                    aria-label="Look at the label"
-                    onClick={() => setLooking(item.photo_url)}
-                  >
-                    <img
-                      src={item.photo_url}
-                      alt={`The label for ${proposal.name}`}
-                      className="h-24 w-24 rounded-lg border border-line object-cover"
-                    />
-                  </button>
-                )}
+                <Evidence item={item} name={proposal.name} onLook={setLooking} />
                 <Panel food={proposal} />
               </>
             )}
 
             {item.kind === 'edit' && proposal && item.current && (
               <>
+                <Evidence item={item} name={proposal.name} onLook={setLooking} />
                 <Comparison
                   now={item.current}
                   proposed={proposal}

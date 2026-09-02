@@ -1,10 +1,12 @@
-import { ImagePlus, Pencil, Pin, PinOff } from 'lucide-react'
+import { Camera, Pencil, Pin, PinOff } from 'lucide-react'
 import { useEffect, useState, type ChangeEvent } from 'react'
 
 import { api, errorText, upload, type Food, type Me } from '../api'
 import { FoodForm } from '../components/FoodForm'
 import { NutritionLabel } from '../components/NutritionLabel'
+import { PhotoSlots } from '../components/PhotoSlots'
 import { PortionSheet } from '../components/PortionSheet'
+import { Sheet } from '../components/Sheet'
 import { useTopBar } from '../hooks/useTopBar'
 import {
   MAX_PHOTO_BYTES,
@@ -59,6 +61,11 @@ export function FoodDetail({
   // The correction form, open over this screen rather than in place of it, so
   // going back lands on the food it is about.
   const [suggesting, setSuggesting] = useState(false)
+  // The photos step of offering a food, which is the one thing the page cannot
+  // already answer: a packaged food needs its panel photographed, and that
+  // picture belongs to the request rather than to the food.
+  const [offering, setOffering] = useState(false)
+  const [labelPhotoId, setLabelPhotoId] = useState<number | null>(null)
   const [notice, setNotice] = useState('')
 
   // The correction form names itself while it is open.
@@ -95,7 +102,7 @@ export function FoodDetail({
     }
   }
 
-  const offer = async (current: Food) => {
+  const offer = (current: Food) => {
     // Checked here first, so somebody short of half a label lands in the form
     // with the reason rather than on a refusal they have to go back from.
     const missing = missingSentence(panelOf(current), current.servings.length)
@@ -103,13 +110,19 @@ export function FoodDetail({
       onEdit(current, missing)
       return
     }
+    setError('')
+    setOffering(true)
+  }
+
+  const send = async (current: Food) => {
     setSending(true)
     setError('')
     try {
       const answer = await api<{ food: Food }>(`/foods/${current.id}/submit`, {
         method: 'POST',
-        body: {},
+        body: { label_photo_id: labelPhotoId },
       })
+      setOffering(false)
       setFood(answer.food)
       onSubmitted()
     } catch (failure) {
@@ -118,7 +131,24 @@ export function FoodDetail({
     setSending(false)
   }
 
-  const offerPhoto = async (event: ChangeEvent<HTMLInputElement>, current: Food) => {
+  // Put a picture on one of your own foods. It is not offered to anybody: it
+  // stays with the food, and goes with it if the food is ever shared.
+  const attachFront = async (current: Food, photoId: number) => {
+    setSending(true)
+    setError('')
+    try {
+      await api(`/foods/${current.id}/photo`, { method: 'POST', body: { photo_id: photoId } })
+      setFood(await api<Food>(`/foods/${current.id}`))
+    } catch (failure) {
+      setError(errorText(failure))
+    }
+    setSending(false)
+  }
+
+  // One control, two meanings, and which one it is follows who owns the food.
+  // Your own: the picture goes straight on it and rides along if you ever offer
+  // it. Everybody's: a picture of a shared food is a proposal like any other.
+  const takePhoto = async (event: ChangeEvent<HTMLInputElement>, current: Food) => {
     const file = event.target.files?.[0]
     // Cleared either way, so choosing the same file twice still fires.
     event.target.value = ''
@@ -130,7 +160,11 @@ export function FoodDetail({
     }
     setSending(true)
     try {
-      const { photo_id } = await upload<{ photo_id: number }>('/photos', file)
+      const { photo_id } = await upload<{ photo_id: number }>('/photos', file, 'front')
+      if (current.mine) {
+        await attachFront(current, photo_id)
+        return
+      }
       await api('/submissions/photo', {
         method: 'POST',
         body: { target_food_id: current.id, photo_id },
@@ -183,13 +217,43 @@ export function FoodDetail({
             {food.status === 'pending' && <span className="t-chip shrink-0">pending</span>}
           </div>
 
-          {food.photo_url && (
-            <img
-              src={food.photo_url}
-              alt={`The label for ${food.name}`}
-              className="mb-3 max-h-72 w-full rounded-xl border border-line object-cover"
+          <div className="mb-3 flex items-center gap-3">
+            <label
+              className={
+                food.photo_url
+                  ? 'block cursor-pointer'
+                  : 't-phototile h-24 w-24 cursor-pointer rounded-xl'
+              }
+              htmlFor="detail-photo"
+            >
+              {food.photo_url ? (
+                <img
+                  src={food.photo_url}
+                  alt={`The front of ${food.name}`}
+                  className="h-24 w-24 rounded-xl border border-line object-cover"
+                />
+              ) : (
+                <Camera className="h-6 w-6" strokeWidth={1.75} />
+              )}
+              <span className="sr-only">
+                {food.mine ? 'Add a photo of the front' : 'Offer a photo of the front'}
+              </span>
+            </label>
+            <input
+              id="detail-photo"
+              className="sr-only"
+              type="file"
+              accept="image/*"
+              capture="environment"
+              disabled={sending}
+              onChange={(event) => takePhoto(event, food)}
             />
-          )}
+            <p className="min-w-0 flex-1 text-xs text-muted">
+              {food.mine
+                ? 'A picture of the front of the pack. It goes with this food if you ever offer it.'
+                : 'Offer a picture of the front. An administrator decides whether it is published.'}
+            </p>
+          </div>
 
           <NutritionLabel food={food} />
 
@@ -246,22 +310,9 @@ export function FoodDetail({
                 >
                   Suggest edit
                 </button>
-                <label className="t-btn flex-1" htmlFor="detail-photo">
-                  <ImagePlus className="h-4 w-4" strokeWidth={2} />
-                  Submit photo
-                </label>
-                <input
-                  id="detail-photo"
-                  className="sr-only"
-                  type="file"
-                  accept="image/*"
-                  capture="environment"
-                  disabled={sending}
-                  onChange={(event) => offerPhoto(event, food)}
-                />
               </div>
               <p className="mt-2 text-xs text-muted">
-                Both go to an administrator. Nothing changes here until one is approved.
+                It goes to an administrator. Nothing changes here until it is approved.
               </p>
             </div>
           )}
@@ -296,6 +347,49 @@ export function FoodDetail({
                 {notice}
               </div>
             </div>
+          )}
+
+          {offering && (
+            <Sheet open tall label="Photos" onClose={() => setOffering(false)}>
+              <p className="t-micro mb-1">Offering</p>
+              <p className="text-base font-semibold tracking-tight">{food.name}</p>
+              <p className="mt-2 mb-3 text-sm text-muted">
+                {food.barcode === null
+                  ? 'A picture of the front is needed. The nutrition label is worth adding if you have it to hand.'
+                  : 'A packaged food needs both photos: the front of the pack, and the nutrition label the reviewer checks the numbers against.'}
+              </p>
+
+              <PhotoSlots
+                front={{ id: null, url: food.photo_url, required: true }}
+                label={{ id: labelPhotoId, required: food.barcode !== null }}
+                busy={sending}
+                onFront={(id) => {
+                  if (id !== null) void attachFront(food, id)
+                }}
+                onLabel={setLabelPhotoId}
+                onFailed={setError}
+              />
+
+              {error && <p className="t-error mb-3">{error}</p>}
+
+              <div className="t-actions">
+                <button
+                  className="t-btn t-btn-primary flex-1"
+                  type="button"
+                  disabled={sending}
+                  onClick={() => void send(food)}
+                >
+                  Send
+                </button>
+                <button
+                  className="t-btn"
+                  type="button"
+                  onClick={() => setOffering(false)}
+                >
+                  Cancel
+                </button>
+              </div>
+            </Sheet>
           )}
 
           {logging && (

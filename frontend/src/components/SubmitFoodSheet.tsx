@@ -1,11 +1,9 @@
-import { ImagePlus, X } from 'lucide-react'
-import { useRef, useState, type ChangeEvent, type FormEvent } from 'react'
+import { X } from 'lucide-react'
+import { useRef, useState, type FormEvent } from 'react'
 
-import { ApiError, api, errorText, upload, type Food, type Prefill } from '../api'
+import { ApiError, api, errorText, type Food, type Prefill } from '../api'
 import {
   MACRO_WARNING,
-  MAX_PHOTO_BYTES,
-  PHOTO_TOO_LARGE,
   SHARED_FACTS,
   macroDoubt,
   missingSentence,
@@ -13,6 +11,7 @@ import {
 } from '../lib/community'
 import type { BaseUnit } from '../lib/units'
 import type { Nutrient } from './NutritionLabel'
+import { PhotoSlots } from './PhotoSlots'
 import { Sheet } from './Sheet'
 
 // The form that offers a food to everybody. Its whole shape follows from one
@@ -73,7 +72,7 @@ export function SubmitFoodSheet({
   const [servings, setServings] = useState<ServingDraft[]>(() => startingServings(prefill))
   const [note, setNote] = useState('')
   const [photoId, setPhotoId] = useState<number | null>(null)
-  const [uploading, setUploading] = useState(false)
+  const [labelPhotoId, setLabelPhotoId] = useState<number | null>(null)
   const [warning, setWarning] = useState('')
   const [error, setError] = useState('')
   const [saving, setSaving] = useState(false)
@@ -96,26 +95,6 @@ export function SubmitFoodSheet({
 
   const setServing = (index: number, draft: ServingDraft) =>
     setServings(servings.map((row, at) => (at === index ? draft : row)))
-
-  const attach = async (event: ChangeEvent<HTMLInputElement>) => {
-    const file = event.target.files?.[0]
-    // Cleared either way, so choosing the same file twice still fires.
-    event.target.value = ''
-    if (!file) return
-    setError('')
-    if (file.size > MAX_PHOTO_BYTES) {
-      setError(PHOTO_TOO_LARGE)
-      return
-    }
-    setUploading(true)
-    try {
-      const { photo_id } = await upload<{ photo_id: number }>('/photos', file)
-      setPhotoId(photo_id)
-    } catch (failure) {
-      setError(errorText(failure))
-    }
-    setUploading(false)
-  }
 
   const focusFirst = (key: Nutrient) => {
     const box = boxes.current[key]
@@ -158,6 +137,7 @@ export function SubmitFoodSheet({
           ingredients_text: prefill?.ingredients_text ?? '',
           density_g_per_ml: prefill?.density_g_per_ml ?? null,
           photo_id: photoId,
+          label_photo_id: labelPhotoId,
           note,
           servings: rows.map((row, position) => ({
             name: row.name,
@@ -327,44 +307,6 @@ export function SubmitFoodSheet({
         </div>
 
         <div className="t-card mb-3">
-          <p className="t-micro mb-2">Photo of the label</p>
-          {photoId === null ? (
-            <>
-              <label className="t-btn w-full" htmlFor="submit-photo">
-                <ImagePlus className="h-4 w-4" strokeWidth={2} />
-                {uploading ? 'Adding' : 'Add a photo'}
-              </label>
-              <input
-                id="submit-photo"
-                className="sr-only"
-                type="file"
-                accept="image/*"
-                capture="environment"
-                onChange={attach}
-              />
-              <p className="mt-2 text-xs text-muted">
-                Optional. It lets whoever reviews this check the numbers themselves.
-              </p>
-            </>
-          ) : (
-            <div className="flex items-center gap-3">
-              <img
-                src={`/api/photos/${photoId}.webp`}
-                alt="The label you attached"
-                className="h-16 w-16 rounded-lg border border-line object-cover"
-              />
-              <button
-                type="button"
-                className="t-btn"
-                onClick={() => setPhotoId(null)}
-              >
-                Remove
-              </button>
-            </div>
-          )}
-        </div>
-
-        <div className="t-card mb-3">
           <label className="t-label" htmlFor="submit-note">
             Anything the reviewer should know (optional)
           </label>
@@ -377,12 +319,23 @@ export function SubmitFoodSheet({
           />
         </div>
 
+        {/* Last, because it is the one part somebody has to stand up for: the
+            numbers can be typed sitting down and the pictures cannot. */}
+        <PhotoSlots
+          front={{ id: photoId, required: true }}
+          label={{ id: labelPhotoId, required: Boolean(barcode) }}
+          busy={saving}
+          onFront={setPhotoId}
+          onLabel={setLabelPhotoId}
+          onFailed={setError}
+        />
+
         {error && <p className="t-error mb-3">{error}</p>}
 
         <button
           className="t-btn t-btn-primary w-full"
           type="submit"
-          disabled={saving || uploading}
+          disabled={saving}
         >
           Send for approval
         </button>
