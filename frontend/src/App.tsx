@@ -2,7 +2,9 @@ import { AnimatePresence, motion, useReducedMotion } from 'framer-motion'
 import { useEffect, useState } from 'react'
 
 import { api, type Me } from './api'
+import { ExerciseSheet } from './components/ExerciseSheet'
 import { FoodPicker } from './components/FoodPicker'
+import { MeasurementsSheet } from './components/MeasurementsSheet'
 import { PlusSheet } from './components/PlusSheet'
 import { ScanFlow } from './components/ScanFlow'
 import { SideRail } from './components/SideRail'
@@ -13,18 +15,26 @@ import { TopBarContext, useTopBarState } from './hooks/useTopBar'
 import { useWaitingCount } from './hooks/useWaitingCount'
 import { useWideLayout } from './hooks/useWideLayout'
 import { slotByTime, today } from './lib/day'
+import { Birthdate } from './pages/Birthdate'
 import { Dashboard } from './pages/Dashboard'
 import { FirstRun } from './pages/FirstRun'
 import { FoodTab } from './pages/Food'
 import { Journal } from './pages/Journal'
 import { Login } from './pages/Login'
-import { More } from './pages/More'
+import { More, type Screen } from './pages/More'
 import { VerifyEmail } from './pages/VerifyEmail'
 import { Welcome } from './pages/Welcome'
 
 // Which screen the whole app is on. Everything except 'signedin' is a single
 // centred card, so the shell below is only ever built for somebody who is in.
-type Phase = 'loading' | 'welcome' | 'verify' | 'anon' | 'firstrun' | 'signedin'
+type Phase =
+  | 'loading'
+  | 'welcome'
+  | 'verify'
+  | 'anon'
+  | 'firstrun'
+  | 'birthdate'
+  | 'signedin'
 
 export default function App() {
   const [me, setMe] = useState<Me | null>(null)
@@ -41,6 +51,14 @@ export default function App() {
   // Which part of the Food tab to open on. Only ever set by the More page's
   // shortcut into it, and handed back to 'list' the moment the tab has read it.
   const [foodView, setFoodView] = useState<'list' | 'submissions'>('list')
+  // Which screen the More tab should open on. Only ever set by something
+  // sending somebody straight to it, and handed back once it has been read.
+  const [moreView, setMoreView] = useState<Screen>(null)
+  // The day the Journal is showing, so the centre control adds to the day
+  // being read rather than always to today.
+  const [journalDay, setJournalDay] = useState('')
+  const [measuring, setMeasuring] = useState(false)
+  const [exercising, setExercising] = useState(false)
   // Bumped whenever something is logged from the centre control. The tab
   // underneath stays mounted while that sheet is open, so it is told to read
   // the day again rather than being left showing the day before the meal.
@@ -60,7 +78,9 @@ export default function App() {
       .then((who) => {
         if (!alive) return
         setMe(who)
-        setPhase('signedin')
+        // An account made before tare asked for a birthdate answers that one
+        // question before anything else opens.
+        setPhase(who.birthdate === null ? 'birthdate' : 'signedin')
       })
       .catch(() => alive && setPhase('anon'))
     return () => {
@@ -97,7 +117,9 @@ export default function App() {
 
   const enter = (who: Me) => {
     setMe(who)
-    setPhase('signedin')
+    // The same question the first load asks: an account without a birthdate
+    // answers it before the app opens, whichever door it came through.
+    setPhase(who.birthdate === null ? 'birthdate' : 'signedin')
   }
 
   const leave = () => {
@@ -116,7 +138,25 @@ export default function App() {
     return <VerifyEmail token={entry.token} onSignIn={() => setPhase('anon')} />
   }
   if (phase === 'anon' || me === null) return <Login onSignedIn={enter} />
-  if (phase === 'firstrun') return <FirstRun me={me} onDone={enter} />
+  if (phase === 'birthdate') return <Birthdate onDone={enter} />
+  if (phase === 'firstrun') {
+    return (
+      <FirstRun
+        me={me}
+        onDone={(who, openTargets) => {
+          if (openTargets) {
+            setMoreView('targets')
+            setPage('more')
+          }
+          enter(who)
+        }}
+      />
+    )
+  }
+
+  // What the centre control adds to: the day the Journal is showing when that
+  // is the tab underneath, and today everywhere else.
+  const addDay = page === 'journal' && journalDay ? journalDay : today(me.timezone)
 
   // Which navigation shows is the stylesheet's call: both are always mounted
   // and each hides itself at the widths the other owns.
@@ -157,6 +197,8 @@ export default function App() {
                         setFoodView('submissions')
                         select('food')
                       }}
+                      start={moreView}
+                      onStarted={() => setMoreView(null)}
                     />
                   ) : page === 'food' ? (
                     <FoodTab
@@ -166,9 +208,17 @@ export default function App() {
                       onScan={() => setScanning(true)}
                     />
                   ) : page === 'journal' ? (
-                    <Journal me={me} refresh={logged} />
+                    <Journal me={me} refresh={logged} onDay={setJournalDay} />
                   ) : (
-                    <Dashboard me={me} refresh={logged} />
+                    <Dashboard
+                      me={me}
+                      refresh={logged}
+                      onOpenJournal={() => select('journal')}
+                      onOpenProfile={() => {
+                        setMoreView('profile')
+                        select('more')
+                      }}
+                    />
                   )}
                 </motion.div>
               </AnimatePresence>
@@ -199,7 +249,36 @@ export default function App() {
             setAdding(false)
             setPicking(true)
           }}
+          onMeasure={() => {
+            setAdding(false)
+            setMeasuring(true)
+          }}
+          onExercise={() => {
+            setAdding(false)
+            setExercising(true)
+          }}
         />
+        {measuring && (
+          <MeasurementsSheet
+            me={me}
+            date={addDay}
+            onClose={() => setMeasuring(false)}
+            onSaved={() => {
+              setMeasuring(false)
+              setLogged(logged + 1)
+            }}
+          />
+        )}
+        {exercising && (
+          <ExerciseSheet
+            date={addDay}
+            onClose={() => setExercising(false)}
+            onSaved={() => {
+              setExercising(false)
+              setLogged(logged + 1)
+            }}
+          />
+        )}
         {scanning && (
           <ScanFlow
             me={me}

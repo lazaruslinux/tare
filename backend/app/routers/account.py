@@ -9,16 +9,32 @@ from fastapi import APIRouter, Depends, HTTPException, status
 from pydantic import BaseModel
 from sqlalchemy.orm import Session
 
-from app import models, security
+from app import clock, models, security
 from app.db import get_db
 from app.deps import require_user
-from app.routers.auth import me_payload
+from app.routers.auth import CLEARED_BIRTHDATE, checked_birthdate, me_payload
 
 router = APIRouter(tags=["account"])
 
 UNITS = ("imperial", "metric")
 
 MAX_DISPLAY_NAME = 60
+
+# Free text, "City, State". Never geocoded, never looked up, never checked
+# against a list: it is the member's own words for where they are.
+MAX_LOCATION = 80
+
+
+def clean_location(raw: str | None) -> str | None:
+    """Trimmed, and blank clears it. Shared with the health router, which sets
+    the same field from the profile screen."""
+    text = (raw or "").strip()
+    if len(text) > MAX_LOCATION:
+        raise HTTPException(
+            status.HTTP_400_BAD_REQUEST,
+            f"Location must be at most {MAX_LOCATION} characters.",
+        )
+    return text or None
 
 
 class AccountPatch(BaseModel):
@@ -30,6 +46,7 @@ class AccountPatch(BaseModel):
     units: str | None = None
     timezone: str | None = None
     birthdate: dt.date | None = None
+    location: str | None = None
 
 
 @router.patch("/account")
@@ -64,7 +81,15 @@ def update_account(
         user.timezone = body.timezone
 
     if "birthdate" in sent:
-        user.birthdate = body.birthdate
+        # Null is refused here rather than clearing the field: tare is for
+        # adults, and an account that could empty its birthdate could walk
+        # back out of the check it already passed.
+        if body.birthdate is None:
+            raise HTTPException(status.HTTP_400_BAD_REQUEST, CLEARED_BIRTHDATE)
+        user.birthdate = checked_birthdate(body.birthdate, clock.user_today(user))
+
+    if "location" in sent:
+        user.location = clean_location(body.location)
 
     db.commit()
     return me_payload(user)

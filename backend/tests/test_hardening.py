@@ -24,6 +24,7 @@ def test_registration_has_its_own_allowance(client, invite):
                     "invite_code": "never-minted",
                     "username": "newcomer",
                     "password": "correct-horse-9",
+                    "birthdate": "1990-04-02",
                     "timezone": "UTC",
                 },
             ).status_code
@@ -36,6 +37,7 @@ def test_registration_has_its_own_allowance(client, invite):
             "invite_code": invite.code,
             "username": "newcomer",
             "password": "correct-horse-9",
+            "birthdate": "1990-04-02",
             "timezone": "UTC",
         },
     )

@@ -13,6 +13,8 @@ os.environ.setdefault("DATABASE_URL", "sqlite://")
 os.environ.setdefault("SECRET_KEY", "tests-only-not-a-real-secret")
 os.environ.setdefault("TARE_TZ", "UTC")
 
+import datetime as dt  # noqa: E402
+
 import pytest  # noqa: E402
 from fastapi.testclient import TestClient  # noqa: E402
 from sqlalchemy import create_engine  # noqa: E402
@@ -28,6 +30,11 @@ from app.models import now_utc  # noqa: E402
 # What the registration and sign-in cases use throughout. Long enough to clear
 # the minimum, and the same everywhere so a failing case is never about typing.
 PASSWORD = "correct-horse-9"
+
+# tare is for adults, so every account a case builds is one (decision 21). A
+# fixed date rather than one counted back from today, so a case that freezes
+# the clock is never arguing with the fixture that made its account.
+BIRTHDATE = dt.date(1990, 4, 2)
 
 
 @pytest.fixture(autouse=True)
@@ -95,12 +102,14 @@ def make_user(db_session):
         email=None,
         password=PASSWORD,
         timezone="UTC",
+        birthdate=BIRTHDATE,
     ):
         user = models.User(
             username=username,
             password_hash=security.hash_password(password),
             email=email,
             email_verified=verified,
+            birthdate=birthdate,
             is_admin=admin,
             units="imperial",
             timezone=timezone,

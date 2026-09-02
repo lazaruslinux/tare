@@ -10,16 +10,18 @@ is no mail server to answer.
 from __future__ import annotations
 
 import argparse
+import datetime as dt
 import sys
 from getpass import getpass
 
 from sqlalchemy import func, or_, select
 
-from app import models, security
+from app import health, models, security
 from app.config import check_deploy_config
 from app.db import SessionLocal
 from app.models import now_utc
 from app.routers import invites
+from app.routers.auth import MIN_AGE
 
 
 def create_admin(args: argparse.Namespace) -> int:
@@ -42,6 +44,17 @@ def create_admin(args: argparse.Namespace) -> int:
         email = args.email.strip().lower() if args.email else None
         if email is not None and not security.EMAIL_PATTERN.match(email):
             print("That does not look like an email address.", file=sys.stderr)
+            return 1
+
+        try:
+            birthdate = dt.date.fromisoformat(args.birthdate)
+        except ValueError:
+            print("Birthdate must be written as YYYY-MM-DD.", file=sys.stderr)
+            return 1
+        # The same rule the front door holds everybody to (decision 21).
+        today = now_utc().date()
+        if birthdate > today or health.age_on(birthdate, today) < MIN_AGE:
+            print(f"tare is for adults {MIN_AGE} and over.", file=sys.stderr)
             return 1
 
         conflicts = [models.User.username == name]
@@ -71,6 +84,7 @@ def create_admin(args: argparse.Namespace) -> int:
                 # Verified outright: there is nobody to send a link to this
                 # account, and it is the account that lets everyone else in.
                 email_verified=True,
+                birthdate=birthdate,
                 is_admin=True,
                 units="imperial",
                 timezone="UTC",
@@ -132,6 +146,7 @@ def build_parser() -> argparse.ArgumentParser:
 
     admin = commands.add_parser("create-admin", help="make an administrator account")
     admin.add_argument("--username", required=True)
+    admin.add_argument("--birthdate", required=True, help="YYYY-MM-DD")
     admin.add_argument("--email", default="")
     admin.set_defaults(run=create_admin)
 

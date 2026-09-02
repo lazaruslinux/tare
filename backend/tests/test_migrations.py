@@ -11,6 +11,7 @@ FOOD_TABLES = {"foods", "food_servings"}
 DIARY_TABLES = {"diary_entries", "saved_foods"}
 COMMUNITY_TABLES = {"food_photos", "food_submissions"}
 RECIPE_TABLES = {"recipes", "recipe_ingredients", "meal_templates", "meal_template_items"}
+HEALTH_TABLES = {"health_profiles", "weight_entries", "exercise_entries"}
 
 
 def test_upgrade_head_builds_the_identity_schema(tmp_path):
@@ -33,6 +34,11 @@ def test_upgrade_head_builds_the_identity_schema(tmp_path):
         saved_unique = {
             constraint["name"] for constraint in inspector.get_unique_constraints("saved_foods")
         }
+        weight_unique = {
+            constraint["name"]
+            for constraint in inspector.get_unique_constraints("weight_entries")
+        }
+        user_columns = {column["name"] for column in inspector.get_columns("users")}
     finally:
         engine.dispose()
     assert IDENTITY_TABLES <= tables
@@ -40,6 +46,8 @@ def test_upgrade_head_builds_the_identity_schema(tmp_path):
     assert DIARY_TABLES <= tables
     assert COMMUNITY_TABLES <= tables
     assert RECIPE_TABLES <= tables
+    assert HEALTH_TABLES <= tables
+    assert "location" in user_columns
     assert "recipe_id" in {column["name"] for column in inspector.get_columns("diary_entries")}
     # The partial indexes are the one thing here a plain column cannot express,
     # so it is worth seeing that the migrations really emitted them.
@@ -51,3 +59,5 @@ def test_upgrade_head_builds_the_identity_schema(tmp_path):
     assert "uq_food_submissions_open_target" in submission_indexes
     # And the pair that stops one food being pinned twice.
     assert "uq_saved_foods_user_food" in saved_unique
+    # And the one that holds a member to a single weigh-in a day.
+    assert "uq_weight_entries_user_day" in weight_unique

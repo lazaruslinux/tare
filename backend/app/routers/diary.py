@@ -24,6 +24,13 @@ from app.deps import require_user
 from app.models import DIARY_SLOTS, NUTRIENTS, SERVING_UNIT
 from app.recipes import own_recipe, per_serving
 from app.routers.foods import MAX_NAME, readable_food
+from app.routers.health import (
+    Reckoning,
+    day_budget,
+    exercise_on,
+    exercise_row,
+    measurement_row,
+)
 
 router = APIRouter(prefix="/diary", tags=["diary"])
 
@@ -230,7 +237,13 @@ def read_day(
     db: Session = Depends(get_db),
     user: models.User = Depends(require_user),
 ) -> dict[str, object]:
-    """One day: its entries by meal, its subtotals, and what it came to."""
+    """One day, whole: its entries by meal, its subtotals, its targets, what was
+    weighed and what was worked off.
+
+    Everything the Journal draws comes back in one answer. A screen that had to
+    ask three times for one day would show three quarters of it while the last
+    request was still out.
+    """
     day = asked_day(date, user)
     entries = list(
         db.execute(
@@ -240,6 +253,17 @@ def read_day(
         ).scalars()
     )
     by_slot = {slot: [entry for entry in entries if entry.slot == slot] for slot in DIARY_SLOTS}
+
+    state = Reckoning(db, user)
+    budget = day_budget(state)
+    workouts = exercise_on(db, user, day)
+    # Decision 7: a logged workout adds its calories to that day's budget, and
+    # only that day's.
+    credit = round(sum(row.kcal for row in workouts) / 10) * 10
+    weighed = next((row for row in state.rows if row.date_for == day), None)
+    eaten = total(entries, "calories") or 0.0
+    db.commit()
+
     return {
         "date": day.isoformat(),
         "totals": {field: total(entries, field) for field in NUTRIENTS},
@@ -250,6 +274,16 @@ def read_day(
             }
             for slot, in_slot in by_slot.items()
         },
+        "budget": {
+            "calories": budget["calories"],
+            "protein_g": budget["protein_g"],
+            "carbs_g": budget["carbs_g"],
+            "fat_g": budget["fat_g"],
+        },
+        "exercise_kcal": credit,
+        "remaining_calories": round(budget["calories"] + credit - eaten),
+        "measurement": None if weighed is None else measurement_row(weighed),
+        "exercise": [exercise_row(row) for row in workouts],
     }
 
 

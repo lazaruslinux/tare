@@ -3,10 +3,6 @@ import { useEffect } from 'react'
 
 import { Sheet } from './Sheet'
 
-// What the centre action offers, in the order it was laid out. The two at the
-// bottom have no feature behind them yet; they wait rather than pretending.
-const LATER = ['Weigh-in', 'Manual exercise']
-
 // The width the rail shows instead of the bar. A popover only makes sense
 // where there is a rail button to hang it off.
 const WIDE = '(min-width: 900px)'
@@ -15,19 +11,19 @@ const WIDE = '(min-width: 900px)'
 const GAP = 8
 const WIDTH = 240
 
-function Items({ onScan, onAddFood }: { onScan: () => void; onAddFood: () => void }) {
+// What the centre action offers, in the order it was laid out.
+function Items({ rows }: { rows: { label: string; onPick: () => void }[] }) {
   return (
     <>
       <p className="t-micro mb-1">Add</p>
-      <button type="button" className="t-row w-full text-left" onClick={onScan}>
-        Scan food
-      </button>
-      <button type="button" className="t-row w-full text-left" onClick={onAddFood}>
-        Add food
-      </button>
-      {LATER.map((row) => (
-        <button key={row} disabled className="t-row w-full text-left opacity-40">
-          {row}
+      {rows.map((row) => (
+        <button
+          key={row.label}
+          type="button"
+          className="t-row w-full text-left"
+          onClick={row.onPick}
+        >
+          {row.label}
         </button>
       ))}
     </>
@@ -40,6 +36,8 @@ export function PlusSheet({
   onClose,
   onScan,
   onAddFood,
+  onMeasure,
+  onExercise,
 }: {
   open: boolean
   // Where the rail's button is. Null when the tab bar asked, which is the case
@@ -48,8 +46,16 @@ export function PlusSheet({
   onClose: () => void
   onScan: () => void
   onAddFood: () => void
+  onMeasure: () => void
+  onExercise: () => void
 }) {
   const reduced = useReducedMotion()
+  const rows = [
+    { label: 'Scan food', onPick: onScan },
+    { label: 'Add food', onPick: onAddFood },
+    { label: 'Measurements', onPick: onMeasure },
+    { label: 'Manual exercise', onPick: onExercise },
+  ]
   const popover = anchor !== null && window.matchMedia(WIDE).matches
 
   useEffect(() => {
@@ -64,7 +70,7 @@ export function PlusSheet({
   if (!popover) {
     return (
       <Sheet open={open} label="Add" onClose={onClose}>
-        <Items onScan={onScan} onAddFood={onAddFood} />
+        <Items rows={rows} />
       </Sheet>
     )
   }
@@ -91,7 +97,7 @@ export function PlusSheet({
             transition={{ duration: 0.18 }}
             onClick={(event) => event.stopPropagation()}
           >
-            <Items onScan={onScan} onAddFood={onAddFood} />
+            <Items rows={rows} />
           </motion.div>
         </motion.div>
       )}

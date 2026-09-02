@@ -2,6 +2,8 @@
 
 from __future__ import annotations
 
+import datetime as dt
+
 from fastapi import (
     APIRouter,
     BackgroundTasks,
@@ -30,11 +32,39 @@ BAD_CREDENTIALS = "Username or password is not correct."
 UNVERIFIED = "Check your email and verify your account before signing in."
 STALE_LINK = "That verification link is no longer valid. Ask for a new one."
 
+# Decision 21. tare is for adults, the birthdate is asked for at registration,
+# and the check is the server's rather than the form's.
+MIN_AGE = 18
+UNDER_AGE = "tare is for adults 18 and over."
+FUTURE_BIRTHDATE = "That birthdate is in the future."
+# A hundred and twenty years is older than anybody has been. Beyond it the
+# entry is a typed year rather than a person.
+MAX_AGE = 120
+IMPOSSIBLE_BIRTHDATE = "That birthdate is too far back to be right."
+CLEARED_BIRTHDATE = "tare needs your birthdate."
+
+
+def checked_birthdate(birthdate: dt.date, today: dt.date) -> dt.date:
+    """The one age rule, in the one place both the front door and the settings
+    screen call it from."""
+    if birthdate > today:
+        raise HTTPException(status.HTTP_400_BAD_REQUEST, FUTURE_BIRTHDATE)
+    years = today.year - birthdate.year - (
+        0 if (today.month, today.day) >= (birthdate.month, birthdate.day) else 1
+    )
+    if years > MAX_AGE:
+        raise HTTPException(status.HTTP_400_BAD_REQUEST, IMPOSSIBLE_BIRTHDATE)
+    if years < MIN_AGE:
+        raise HTTPException(status.HTTP_400_BAD_REQUEST, UNDER_AGE)
+    return birthdate
+
 
 class RegisterBody(BaseModel):
     invite_code: str
     username: str
     password: str
+    # Required, and checked on the server (decision 21).
+    birthdate: dt.date
     timezone: str = "UTC"
     email: str = ""
     display_name: str = ""
@@ -66,6 +96,10 @@ def me_payload(user: models.User) -> dict[str, object]:
         "is_admin": user.is_admin,
         "units": user.units,
         "timezone": user.timezone,
+        # Null on an account made before the gate existed, which is what sends
+        # it to the one screen that asks (decision 21).
+        "birthdate": None if user.birthdate is None else user.birthdate.isoformat(),
+        "location": user.location,
     }
 
 
@@ -134,6 +168,10 @@ def register(
 
     username = clean_username(body.username)
     check_password_length(body.password)
+    # The account has no zone of its own until it exists, so the day is read in
+    # UTC. Being a day out on an eighteenth birthday is the honest edge of a
+    # date-only field.
+    birthdate = checked_birthdate(body.birthdate, now_utc().date())
     email = clean_email(body.email) if body.email.strip() else None
     if email is None and mail.configured():
         # An instance that verifies by mail cannot make an account with nowhere
@@ -174,6 +212,7 @@ def register(
         email=email,
         email_verified=not mail.configured(),
         display_name=display_name,
+        birthdate=birthdate,
         is_admin=False,
         units="imperial",
         timezone=timezone,

@@ -1,5 +1,7 @@
 import datetime as dt
 
+from app.routers.auth import CLEARED_BIRTHDATE
+
 
 def patch(client, **fields):
     return client.patch("/api/account", json=fields)
@@ -51,14 +53,34 @@ def test_an_unknown_timezone_is_refused_here(client, signed_in):
     assert response.json() == {"detail": "That is not a known time zone."}
 
 
-def test_the_birthdate_is_stored_and_can_be_cleared(client, db_session, signed_in):
+def test_the_birthdate_is_stored_and_cannot_be_cleared(client, db_session, signed_in):
     assert patch(client, birthdate="1990-04-02").status_code == 200
     db_session.refresh(signed_in)
     assert signed_in.birthdate == dt.date(1990, 4, 2)
 
-    assert patch(client, birthdate=None).status_code == 200
+    # tare is for adults, so an account that has passed the check may not empty
+    # the field it passed with.
+    refused = patch(client, birthdate=None)
+    assert refused.status_code == 400
+    assert refused.json() == {"detail": CLEARED_BIRTHDATE}
     db_session.refresh(signed_in)
-    assert signed_in.birthdate is None
+    assert signed_in.birthdate == dt.date(1990, 4, 2)
+
+
+def test_the_location_is_trimmed_and_cleared_by_a_blank(client, db_session, signed_in):
+    assert patch(client, location="  Flagstaff, AZ  ").json()["location"] == "Flagstaff, AZ"
+    db_session.refresh(signed_in)
+    assert signed_in.location == "Flagstaff, AZ"
+
+    assert patch(client, location="   ").json()["location"] is None
+    db_session.refresh(signed_in)
+    assert signed_in.location is None
+
+
+def test_a_location_has_a_ceiling(client, signed_in):
+    response = patch(client, location="x" * 81)
+    assert response.status_code == 400
+    assert response.json() == {"detail": "Location must be at most 80 characters."}
 
 
 def test_a_field_left_out_is_left_alone(client, db_session, signed_in):

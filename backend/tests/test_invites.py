@@ -3,7 +3,7 @@ import datetime as dt
 from app import models
 from app.models import now_utc
 from app.routers.invites import DEAD_INVITE
-from tests.conftest import PASSWORD
+from tests.conftest import BIRTHDATE, PASSWORD
 
 
 def signup(client, code, username="newcomer"):
@@ -13,6 +13,7 @@ def signup(client, code, username="newcomer"):
             "invite_code": code,
             "username": username,
             "password": PASSWORD,
+            "birthdate": BIRTHDATE.isoformat(),
             "timezone": "UTC",
         },
     )

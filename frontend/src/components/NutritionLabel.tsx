@@ -36,7 +36,7 @@ export const MORE_FACTS: Fact[] = [
   { key: 'trans_fat_g', label: 'Trans fat', unit: 'g' },
   { key: 'cholesterol_mg', label: 'Cholesterol', unit: 'mg' },
   { key: 'sodium_mg', label: 'Sodium', unit: 'mg' },
-  { key: 'fiber_g', label: 'Fibre', unit: 'g' },
+  { key: 'fiber_g', label: 'Fiber', unit: 'g' },
   { key: 'sugar_g', label: 'Sugar', unit: 'g' },
 ]
 

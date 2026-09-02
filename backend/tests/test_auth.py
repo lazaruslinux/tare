@@ -1,10 +1,18 @@
+import datetime as dt
+
 import pytest
 from fastapi.testclient import TestClient
 
 from app import mail, models, security
-from app.routers.auth import BAD_CREDENTIALS, UNVERIFIED
+from app.routers.auth import (
+    BAD_CREDENTIALS,
+    FUTURE_BIRTHDATE,
+    IMPOSSIBLE_BIRTHDATE,
+    UNDER_AGE,
+    UNVERIFIED,
+)
 from app.routers.invites import DEAD_INVITE
-from tests.conftest import PASSWORD
+from tests.conftest import BIRTHDATE, PASSWORD
 
 
 @pytest.fixture()
@@ -19,6 +27,7 @@ def signup(client, invite, **overrides):
         "invite_code": invite.code,
         "username": "newcomer",
         "password": PASSWORD,
+        "birthdate": BIRTHDATE.isoformat(),
         "timezone": "America/Phoenix",
     }
     body.update(overrides)
@@ -122,6 +131,8 @@ def test_login_answers_with_the_me_payload(client, make_user):
         "is_admin": False,
         "units": "imperial",
         "timezone": "UTC",
+        "birthdate": BIRTHDATE.isoformat(),
+        "location": None,
     }
 
 
@@ -184,3 +195,50 @@ def test_a_new_password_still_has_to_clear_the_minimum(client, signed_in):
     )
     assert response.status_code == 400
     assert "at least" in response.json()["detail"]
+
+
+@pytest.fixture()
+def frozen_day(monkeypatch):
+    """The day the age cases were worked on, so an eighteenth birthday is one
+    date rather than whatever today happens to be."""
+    from app.routers import auth
+
+    monkeypatch.setattr(
+        auth, "now_utc", lambda: dt.datetime(2026, 9, 2, 12, 0, tzinfo=dt.timezone.utc)
+    )
+
+
+def test_seventeen_years_and_364_days_is_refused(client, invite, frozen_day):
+    refused = signup(client, invite, birthdate="2008-09-03")
+    assert refused.status_code == 400
+    assert refused.json() == {"detail": UNDER_AGE}
+
+
+def test_the_eighteenth_birthday_itself_is_accepted(client, invite, frozen_day):
+    assert signup(client, invite, birthdate="2008-09-02").status_code == 200
+
+
+def test_a_birthdate_in_the_future_is_refused(client, invite, frozen_day):
+    refused = signup(client, invite, birthdate="2027-01-01")
+    assert refused.status_code == 400
+    assert refused.json() == {"detail": FUTURE_BIRTHDATE}
+
+
+def test_a_birthdate_nobody_could_have_is_refused(client, invite, frozen_day):
+    refused = signup(client, invite, birthdate="1880-01-01")
+    assert refused.status_code == 400
+    assert refused.json() == {"detail": IMPOSSIBLE_BIRTHDATE}
+
+
+def test_registration_will_not_happen_without_one(client, invite):
+    response = client.post(
+        "/api/auth/register",
+        json={"invite_code": invite.code, "username": "newcomer", "password": PASSWORD},
+    )
+    assert response.status_code == 400
+
+
+def test_the_birthdate_is_kept_on_the_account(client, db_session, invite, frozen_day):
+    assert signup(client, invite, birthdate="1990-04-02").status_code == 200
+    user = db_session.query(models.User).filter_by(username="newcomer").one()
+    assert user.birthdate == dt.date(1990, 4, 2)

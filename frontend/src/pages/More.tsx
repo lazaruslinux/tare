@@ -1,17 +1,29 @@
 import { ChevronRight } from 'lucide-react'
-import { useState, type FormEvent } from 'react'
+import { useEffect, useState, type FormEvent } from 'react'
 
 import { api, errorText, type Me, type Units } from '../api'
+import { MeasurementsSheet } from '../components/MeasurementsSheet'
 import { useTopBar, type TopBarHeader } from '../hooks/useTopBar'
+import { today } from '../lib/day'
 import { applyTheme, rememberTheme, useTheme, type Theme } from '../theme'
 import { AdminInvites } from './AdminInvites'
 import { AdminQueue } from './AdminQueue'
 import { AdminUsers } from './AdminUsers'
+import { Profile } from './Profile'
+import { Targets } from './Targets'
 
 // Everything that is not a tab of its own, as a list of screens. Each row
 // opens one, and the screen it opens names the way back here. The last three
 // are only any use to an administrator, and only they are offered them.
-type Screen = 'account' | 'display' | 'queue' | 'invites' | 'users' | null
+export type Screen =
+  | 'account'
+  | 'profile'
+  | 'targets'
+  | 'display'
+  | 'queue'
+  | 'invites'
+  | 'users'
+  | null
 
 // Short enough to sit in the row without the select clipping it, and the
 // system is named so the abbreviations are not the only clue.
@@ -56,6 +68,8 @@ export function More({
   waiting,
   onReviewed,
   onOpenSubmissions,
+  start,
+  onStarted,
 }: {
   me: Me
   onChange: (me: Me) => void
@@ -70,9 +84,14 @@ export function More({
   // is about, so this row goes there rather than building a second screen for
   // the same list.
   onOpenSubmissions: () => void
+  // Which screen to open on. Only ever set by something outside this tab
+  // sending somebody straight to it, and handed back the moment it is read.
+  start?: Screen
+  onStarted?: () => void
 }) {
   const theme = useTheme()
-  const [screen, setScreen] = useState<Screen>(null)
+  const [screen, setScreen] = useState<Screen>(start ?? null)
+  const [measuring, setMeasuring] = useState(false)
 
   const [displayName, setDisplayName] = useState(me.display_name ?? '')
   const [units, setUnits] = useState<Units>(me.units)
@@ -97,15 +116,28 @@ export function More({
   // The two screens written here name themselves; the admin ones name
   // themselves from inside, and the list is the root.
   const back = { label: 'More', onBack: () => go(null) }
+  const NAMED: Partial<Record<NonNullable<Screen>, string>> = {
+    account: 'Account',
+    profile: 'Profile',
+    targets: 'Targets',
+    display: 'Display',
+  }
+  const named = screen === null ? null : NAMED[screen]
   const header: TopBarHeader | null =
     screen === null
       ? { title: 'More', left: 'title', subtitle: me.display_name || me.username }
-      : screen === 'account'
-        ? { title: 'Account', back }
-        : screen === 'display'
-          ? { title: 'Display', back }
-          : null
+      : named === undefined || named === null
+        ? null
+        : { title: named, back }
   useTopBar(header)
+
+  // A screen asked for from outside is opened once, and then this tab owns
+  // where it is again.
+  useEffect(() => {
+    if (start === undefined || start === null) return
+    setScreen(start)
+    onStarted?.()
+  }, [start, onStarted])
 
   // The name is edited on one screen and the two server-side preferences on
   // another, but they are one record and one request either way.
@@ -169,6 +201,24 @@ export function More({
     go(null)
     onReviewed()
   }
+  if (screen === 'profile') {
+    return (
+      <>
+        <Profile me={me} onChange={onChange} onAddMeasurement={() => setMeasuring(true)} />
+        {measuring && (
+          <MeasurementsSheet
+            me={me}
+            date={today(me.timezone)}
+            onClose={() => setMeasuring(false)}
+            onSaved={() => setMeasuring(false)}
+          />
+        )}
+      </>
+    )
+  }
+
+  if (screen === 'targets') return <Targets me={me} />
+
   if (screen === 'queue') return <AdminQueue onBack={leaveAdmin} onDecided={onReviewed} />
   if (screen === 'invites') return <AdminInvites onBack={leaveAdmin} />
   if (screen === 'users') return <AdminUsers onBack={leaveAdmin} />
@@ -330,6 +380,8 @@ export function More({
     <>
       <div className="t-card mb-3">
         <Row label="Account" onOpen={() => go('account')} />
+        <Row label="Profile" onOpen={() => go('profile')} />
+        <Row label="Targets" onOpen={() => go('targets')} />
         <Row label="Display" onOpen={() => go('display')} />
         <Row label="My submissions" onOpen={onOpenSubmissions} />
       </div>

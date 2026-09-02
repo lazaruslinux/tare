@@ -20,6 +20,7 @@ export function Welcome({ code, onReady }: { code: string; onReady: () => void }
 
   const [username, setUsername] = useState('')
   const [password, setPassword] = useState('')
+  const [birthdate, setBirthdate] = useState('')
   const [email, setEmail] = useState('')
   const [displayName, setDisplayName] = useState('')
   const [error, setError] = useState('')
@@ -46,6 +47,7 @@ export function Welcome({ code, onReady }: { code: string; onReady: () => void }
           invite_code: code,
           username,
           password,
+          birthdate,
           email,
           display_name: displayName,
           // Taken from the browser rather than asked for. Nobody opening an
@@ -119,6 +121,20 @@ export function Welcome({ code, onReady }: { code: string; onReady: () => void }
               onChange={(event) => setPassword(event.target.value)}
             />
             <p className="mt-1 text-xs text-muted">{strength(password)}</p>
+          </div>
+          <div>
+            <label className="t-label" htmlFor="new-birthdate">
+              Date of birth
+            </label>
+            <input
+              id="new-birthdate"
+              className="t-input"
+              type="date"
+              autoComplete="bday"
+              value={birthdate}
+              onChange={(event) => setBirthdate(event.target.value)}
+            />
+            <p className="mt-1 text-xs text-muted">tare is for adults 18 and over.</p>
           </div>
           <div>
             <label className="t-label" htmlFor="new-email">

@@ -20,6 +20,115 @@ export type Me = {
   is_admin: boolean
   units: Units
   timezone: string
+  // Null on an account made before tare asked for one, which is what sends it
+  // to the one screen that does.
+  birthdate: string | null
+  location: string | null
+}
+
+export type Sex = 'female' | 'male'
+export type ActivityLevel = 'not_much' | 'light' | 'moderate' | 'heavy'
+export type Goal = 'maintain' | 'lose' | 'gain'
+export type Rate = 'gentle' | 'steady' | 'faster' | 'fastest'
+export type EffortLevel = 'light' | 'moderate' | 'vigorous'
+
+// What tare needs to work out somebody's own numbers, and what it has so far.
+export type Profile = {
+  sex: Sex | null
+  height_cm: number | null
+  location: string | null
+  birthdate: string | null
+  pregnant_or_breastfeeding: boolean
+  activity_level: ActivityLevel
+  goal: Goal
+  // Null is the default pace for the goal rather than no pace at all.
+  rate: Rate | null
+  goal_weight_kg: number | null
+  // Whether sex, height, weight and age are all there. Without all four the
+  // published general targets stand.
+  complete: boolean
+  latest_weight_kg: number | null
+  latest_weight_date: string | null
+}
+
+// A day's targets: the four anybody reads, and the five to stay inside.
+export type BudgetFigures = {
+  calories: number
+  protein_g: number
+  carbs_g: number
+  fat_g: number
+  fiber_g: number
+  saturated_fat_g_max: number
+  sugar_g_max: number
+  sodium_mg_max: number
+  cholesterol_mg_max: number
+}
+
+// A calm sentence the Targets page shows until it is waved away.
+export type Nudge = { key: string; text: string }
+
+export type Targets = {
+  mode: 'auto' | 'manual'
+  complete: boolean
+  budget: BudgetFigures
+  // What was typed by hand, kept even while the automatic numbers are in use.
+  manual: BudgetFigures | null
+  activity_level: ActivityLevel
+  goal: Goal
+  rate: Rate | null
+  rates_offered: Rate[]
+  goal_weight_kg: number | null
+  weekly_rate: number
+  // Plain sentences from the server. Screens print them as they stand.
+  notes: string[]
+  nudges: Nudge[]
+  // A month and never a day.
+  projection: { month: string } | null
+  trend_kg: number | null
+  reestimate: { delta_calories: number; calories: number } | null
+  disclaimer_seen: boolean
+}
+
+// One day's reading. Null is a thing that was not measured, not none of it.
+export type Measurement = {
+  date: string
+  weight_kg: number
+  body_fat_pct: number | null
+  body_water_pct: number | null
+  muscle_kg: number | null
+  bone_kg: number | null
+  visceral_fat: number | null
+  lean_kg: number | null
+  source: string
+}
+
+export type TrendPoint = { date: string; kg: number }
+
+export type Measurements = {
+  days: number
+  measurements: Measurement[]
+  trend: TrendPoint[]
+}
+
+// One workout somebody typed in. estimated is set only on the answer to
+// logging it, and says the credit was worked out at an assumed weight.
+export type Exercise = {
+  id: number
+  date: string
+  activity: string
+  name: string
+  effort: EffortLevel
+  minutes: number
+  kcal: number
+  estimated?: boolean
+}
+
+// One row of the catalogue. An activity offers only the efforts it has a
+// published value for.
+export type Activity = {
+  key: string
+  name: string
+  efforts: { effort: EffortLevel; met: number }[]
 }
 
 // A food as a list reads it: enough to pick it out and nothing else.
@@ -247,6 +356,13 @@ export type DiaryDay = {
   date: string
   totals: Totals
   slots: Record<Slot, { entries: DiaryEntry[]; subtotal_calories: number | null }>
+  // The four the day is read against, what exercise added back to it, and what
+  // is left. All four arrive with the day so the Journal reads it in one call.
+  budget: { calories: number; protein_g: number; carbs_g: number; fat_g: number }
+  exercise_kcal: number
+  remaining_calories: number
+  measurement: Measurement | null
+  exercise: Exercise[]
 }
 
 // Every refusal from the API is a status and one sentence, so that is what a

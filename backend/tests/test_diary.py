@@ -363,3 +363,48 @@ def test_the_diary_needs_a_session(client):
     assert client.post("/api/diary", json=body).status_code == 401
     assert client.patch("/api/diary/1", json={"slot": "lunch"}).status_code == 401
     assert client.delete("/api/diary/1").status_code == 401
+
+
+def test_a_day_carries_the_budget_it_is_read_against(client, signed_in, chicken):
+    log(client, food_id=chicken["id"], amount=100, unit="g")
+    read = day(client)
+    # No profile yet, so the published guideline targets stand.
+    assert read["budget"] == {
+        "calories": 2000,
+        "protein_g": 100,
+        "carbs_g": 250,
+        "fat_g": 67,
+    }
+    assert read["exercise_kcal"] == 0
+    assert read["remaining_calories"] == 2000 - 165
+    assert read["measurement"] is None
+    assert read["exercise"] == []
+
+
+def test_a_workout_is_added_back_to_the_day_it_was_done_on(client, signed_in):
+    made = client.post(
+        "/api/health/exercise",
+        json={"date_for": TODAY, "activity": "walking", "effort": "moderate", "minutes": 30},
+    )
+    assert made.status_code == 201
+
+    read = day(client)
+    # At the assumed 70 kg, walking for half an hour is worth about 103.
+    assert read["exercise_kcal"] == 100
+    assert read["remaining_calories"] == 2100
+    assert [row["name"] for row in read["exercise"]] == ["Walking"]
+    # And the day before is untouched by it.
+    assert day(client, "2026-08-31")["exercise_kcal"] == 0
+
+
+def test_a_day_carries_what_was_weighed_on_it(client, signed_in):
+    assert (
+        client.put(
+            f"/api/health/measurements/{TODAY}", json={"weight_kg": 80, "body_fat_pct": 20}
+        ).status_code
+        == 200
+    )
+    read = day(client)
+    assert read["measurement"]["weight_kg"] == 80.0
+    assert read["measurement"]["lean_kg"] == 64.0
+    assert day(client, "2026-08-31")["measurement"] is None

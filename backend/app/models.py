@@ -78,6 +78,8 @@ class User(Base):
     pending_email: Mapped[str | None] = mapped_column(String(255), nullable=True)
     display_name: Mapped[str | None] = mapped_column(String(60), nullable=True)
     birthdate: Mapped[dt.date | None] = mapped_column(Date, nullable=True)
+    # Free text, "City, State". Never geocoded and never looked up.
+    location: Mapped[str | None] = mapped_column(String(80), nullable=True)
     is_admin: Mapped[bool] = mapped_column(Boolean, nullable=False, default=False)
     units: Mapped[str] = mapped_column(String(16), nullable=False, default="imperial")
     timezone: Mapped[str] = mapped_column(String(64), nullable=False, default="UTC")
@@ -561,4 +563,144 @@ class SavedFood(Base):
     food_id: Mapped[int] = mapped_column(
         ForeignKey("foods.id", ondelete="CASCADE"), nullable=False
     )
+    created_at: Mapped[dt.datetime] = mapped_column(UtcDateTime, nullable=False, default=now_utc)
+
+
+# What the energy equations need a sex for, and nothing else: they carry
+# separate coefficients, and a member who would rather not say gets the fixed
+# guideline targets instead.
+SEXES = ("female", "male")
+
+# How much somebody moves in an ordinary day, workouts left out of it. The
+# multipliers live in app.health beside the equation they multiply.
+ACTIVITY_LEVELS = ("not_much", "light", "moderate", "heavy")
+
+GOALS = ("maintain", "lose", "gain")
+
+# How fast, in plain words. Which of them are offered depends on the goal and
+# on the member's own numbers, which is app.health's call.
+RATES = ("gentle", "steady", "faster", "fastest")
+
+# Whether the daily numbers are worked out or typed in.
+TARGET_MODES = ("auto", "manual")
+
+# Where a weight reading came from. Manual always wins a day.
+MEASUREMENT_SOURCES = ("manual", "ingest")
+
+# How hard a logged workout was, which is what picks the value it is credited
+# at. An activity offers only the ones it has a published value for.
+EFFORTS = ("light", "moderate", "vigorous")
+
+
+class HealthProfile(Base):
+    """What tare needs to work out one member's own numbers.
+
+    One row per account, the account's id as its key: a member has one set of
+    details, not a list of them. Every field is optional because every one of
+    them has a stated fallback, and a member who fills in nothing still gets
+    the fixed guideline targets.
+    """
+
+    __tablename__ = "health_profiles"
+
+    user_id: Mapped[int] = mapped_column(
+        ForeignKey("users.id", ondelete="CASCADE"), primary_key=True
+    )
+    sex: Mapped[str | None] = mapped_column(
+        Enum(*SEXES, name="health_sex", native_enum=False), nullable=True
+    )
+    height_cm: Mapped[float | None] = mapped_column(Float, nullable=True)
+    activity_level: Mapped[str] = mapped_column(
+        Enum(*ACTIVITY_LEVELS, name="health_activity", native_enum=False),
+        nullable=False,
+        default="not_much",
+    )
+    goal: Mapped[str] = mapped_column(
+        Enum(*GOALS, name="health_goal", native_enum=False), nullable=False, default="maintain"
+    )
+    # Null is not "no pace": it is the default pace for the goal, which is
+    # steady for losing and gentle for gaining.
+    rate: Mapped[str | None] = mapped_column(
+        Enum(*RATES, name="health_rate", native_enum=False), nullable=True
+    )
+    goal_weight_kg: Mapped[float | None] = mapped_column(Float, nullable=True)
+    pregnant_or_breastfeeding: Mapped[bool] = mapped_column(
+        Boolean, nullable=False, default=False
+    )
+    targets_mode: Mapped[str] = mapped_column(
+        Enum(*TARGET_MODES, name="health_targets_mode", native_enum=False),
+        nullable=False,
+        default="auto",
+    )
+    manual_calories: Mapped[float | None] = mapped_column(Float, nullable=True)
+    manual_protein_g: Mapped[float | None] = mapped_column(Float, nullable=True)
+    manual_carbs_g: Mapped[float | None] = mapped_column(Float, nullable=True)
+    manual_fat_g: Mapped[float | None] = mapped_column(Float, nullable=True)
+    # When the estimate disclaimer was acknowledged. Null means never, and the
+    # Targets page shows it.
+    disclaimer_seen_at: Mapped[dt.datetime | None] = mapped_column(UtcDateTime, nullable=True)
+    # The nudge keys this member has waved away, so one that keeps being true
+    # is not said twice.
+    dismissed_nudges: Mapped[list[Any]] = mapped_column(JSON, nullable=False, default=list)
+    created_at: Mapped[dt.datetime] = mapped_column(UtcDateTime, nullable=False, default=now_utc)
+    updated_at: Mapped[dt.datetime] = mapped_column(UtcDateTime, nullable=False, default=now_utc)
+
+
+class WeightEntry(Base):
+    """One day's weight, and whatever else was measured with it.
+
+    One row per day per account. A day holds a single reading because the day
+    is what the trend is built from, and two readings for one day would make
+    the trend depend on which of them arrived last.
+    """
+
+    __tablename__ = "weight_entries"
+    __table_args__ = (
+        UniqueConstraint("user_id", "date_for", name="uq_weight_entries_user_day"),
+    )
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True)
+    user_id: Mapped[int] = mapped_column(
+        ForeignKey("users.id", ondelete="CASCADE"), nullable=False, index=True
+    )
+    date_for: Mapped[dt.date] = mapped_column(Date, nullable=False, index=True)
+    weight_kg: Mapped[float] = mapped_column(Float, nullable=False)
+    # What a scale reports beyond the weight. Null is a thing that was not
+    # measured rather than none of it.
+    body_fat_pct: Mapped[float | None] = mapped_column(Float, nullable=True)
+    body_water_pct: Mapped[float | None] = mapped_column(Float, nullable=True)
+    muscle_kg: Mapped[float | None] = mapped_column(Float, nullable=True)
+    bone_kg: Mapped[float | None] = mapped_column(Float, nullable=True)
+    visceral_fat: Mapped[int | None] = mapped_column(Integer, nullable=True)
+    source: Mapped[str] = mapped_column(
+        Enum(*MEASUREMENT_SOURCES, name="measurement_source", native_enum=False),
+        nullable=False,
+        default="manual",
+    )
+    created_at: Mapped[dt.datetime] = mapped_column(UtcDateTime, nullable=False, default=now_utc)
+
+
+class ExerciseEntry(Base):
+    """One workout somebody typed in, with what it was credited at.
+
+    The value, the weight and the calories are copied onto the row the moment
+    it is logged, for the reason a diary entry copies its panel: a later weigh
+    in corrects what happens next, not what already happened.
+    """
+
+    __tablename__ = "exercise_entries"
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True)
+    user_id: Mapped[int] = mapped_column(
+        ForeignKey("users.id", ondelete="CASCADE"), nullable=False, index=True
+    )
+    date_for: Mapped[dt.date] = mapped_column(Date, nullable=False, index=True)
+    activity: Mapped[str] = mapped_column(String(40), nullable=False)
+    effort: Mapped[str] = mapped_column(
+        Enum(*EFFORTS, name="exercise_effort", native_enum=False), nullable=False
+    )
+    minutes: Mapped[int] = mapped_column(Integer, nullable=False)
+    met: Mapped[float] = mapped_column(Float, nullable=False)
+    weight_kg: Mapped[float] = mapped_column(Float, nullable=False)
+    kcal: Mapped[float] = mapped_column(Float, nullable=False)
     created_at: Mapped[dt.datetime] = mapped_column(UtcDateTime, nullable=False, default=now_utc)

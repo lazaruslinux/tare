@@ -112,3 +112,47 @@ export function portionText(portion: {
 // the one portion that is not measured in anything.
 export const servingsText = (amount: number): string =>
   `${round1(amount)} ${amount === 1 ? 'serving' : 'servings'}`
+
+// ---- The body's own measurements, which are not a food's.
+//
+// A food is measured in grams or millilitres. A person is measured in
+// kilograms and centimetres on the server, whatever they read in, and these
+// are the constants that carry one to the other. They are the doc's, and the
+// backend's app/health.py holds the same two figures.
+
+export const KG_PER_LB = 0.45359237
+export const CM_PER_INCH = 2.54
+export const INCHES_PER_FOOT = 12
+
+export const lbToKg = (lb: number): number => lb * KG_PER_LB
+export const kgToLb = (kg: number): number => kg / KG_PER_LB
+export const inchesToCm = (inches: number): number => inches * CM_PER_INCH
+
+// A height in centimetres as feet and whole inches. Twelve inches rounds up to
+// the next foot rather than reading as "5 ft 12 in".
+export function heightParts(cm: number): { feet: number; inches: number } {
+  const total = Math.round(cm / CM_PER_INCH)
+  return { feet: Math.floor(total / INCHES_PER_FOOT), inches: total % INCHES_PER_FOOT }
+}
+
+export const partsToCm = (feet: number, inches: number): number =>
+  inchesToCm(feet * INCHES_PER_FOOT + inches)
+
+// What a weight is entered and shown in, by what the account reads in.
+export const weightUnit = (units: 'imperial' | 'metric'): string =>
+  units === 'imperial' ? 'lb' : 'kg'
+
+export const weightIn = (kg: number, units: 'imperial' | 'metric'): number =>
+  round1(units === 'imperial' ? kgToLb(kg) : kg)
+
+export const weightFrom = (value: number, units: 'imperial' | 'metric'): number =>
+  units === 'imperial' ? lbToKg(value) : value
+
+export const weightText = (kg: number, units: 'imperial' | 'metric'): string =>
+  `${weightIn(kg, units)} ${weightUnit(units)}`
+
+export function heightText(cm: number, units: 'imperial' | 'metric'): string {
+  if (units === 'metric') return `${Math.round(cm)} cm`
+  const { feet, inches } = heightParts(cm)
+  return `${feet} ft ${inches} in`
+}
