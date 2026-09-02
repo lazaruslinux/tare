@@ -1,8 +1,20 @@
-import { ChevronRight } from 'lucide-react'
+import {
+  ChevronRight,
+  ClipboardList,
+  IdCard,
+  Inbox,
+  Mail,
+  Monitor,
+  Target,
+  UserRound,
+  Users,
+  type LucideIcon,
+} from 'lucide-react'
 import { useEffect, useState, type FormEvent } from 'react'
 
 import { api, errorText, type Me, type Units } from '../api'
 import { MeasurementsSheet } from '../components/MeasurementsSheet'
+import { SaveMarks, useSavedChip } from '../components/SaveMarks'
 import { useTopBar, type TopBarHeader } from '../hooks/useTopBar'
 import { today } from '../lib/day'
 import { applyTheme, rememberTheme, useTheme, type Theme } from '../theme'
@@ -46,17 +58,23 @@ function zones(current: string): string[] {
   return all.includes(current) ? all : [current, ...all]
 }
 
-function Saved({ shown }: { shown: boolean }) {
-  if (!shown) return null
-  return <span className="t-chip text-accent">Saved.</span>
-}
-
-function Row({ label, count, onOpen }: { label: string; count?: number; onOpen: () => void }) {
+function Row({
+  label,
+  icon: Icon,
+  count,
+  onOpen,
+}: {
+  label: string
+  icon: LucideIcon
+  count?: number
+  onOpen: () => void
+}) {
   return (
     <button type="button" className="t-row w-full text-left" onClick={onOpen}>
+      <Icon className="h-4 w-4 shrink-0 text-muted" strokeWidth={2} />
       <span className="flex-1 text-sm">{label}</span>
       {count !== undefined && count > 0 && <span className="t-chip t-nums">{count}</span>}
-      <ChevronRight className="h-4 w-4 text-muted" strokeWidth={2} />
+      <ChevronRight className="h-4 w-4 shrink-0 text-muted" strokeWidth={2} />
     </button>
   )
 }
@@ -97,29 +115,29 @@ export function More({
   const [units, setUnits] = useState<Units>(me.units)
   const [timezone, setTimezone] = useState(me.timezone)
   const [accountError, setAccountError] = useState('')
-  const [accountSaved, setAccountSaved] = useState(false)
+  const [accountSaved, markAccountSaved] = useSavedChip()
   const [savingAccount, setSavingAccount] = useState(false)
 
   const [currentPassword, setCurrentPassword] = useState('')
   const [newPassword, setNewPassword] = useState('')
   const [passwordError, setPasswordError] = useState('')
-  const [passwordSaved, setPasswordSaved] = useState(false)
+  const [passwordSaved, markPasswordSaved] = useSavedChip()
   const [savingPassword, setSavingPassword] = useState(false)
 
   // What was said about the last save belongs to the screen it was said on.
   const go = (next: Screen) => {
     setAccountError('')
-    setAccountSaved(false)
     setScreen(next)
   }
 
   // The two screens written here name themselves; the admin ones name
   // themselves from inside, and the list is the root.
   const back = { label: 'More', onBack: () => go(null) }
+  // Targets names itself from inside, because it holds three screens of its
+  // own and each of them is a level deeper than this list.
   const NAMED: Partial<Record<NonNullable<Screen>, string>> = {
     account: 'Account',
     profile: 'Profile',
-    targets: 'Targets',
     display: 'Display',
   }
   const named = screen === null ? null : NAMED[screen]
@@ -148,7 +166,6 @@ export function More({
     event.preventDefault()
     setSavingAccount(true)
     setAccountError('')
-    setAccountSaved(false)
     try {
       onChange(
         await api<Me>('/account', {
@@ -156,7 +173,7 @@ export function More({
           body: { display_name: displayName, units, timezone },
         })
       )
-      setAccountSaved(true)
+      markAccountSaved()
     } catch (failure) {
       setAccountError(errorText(failure))
     }
@@ -167,7 +184,6 @@ export function More({
     event.preventDefault()
     setSavingPassword(true)
     setPasswordError('')
-    setPasswordSaved(false)
     try {
       await api('/auth/password', {
         method: 'POST',
@@ -175,7 +191,7 @@ export function More({
       })
       setCurrentPassword('')
       setNewPassword('')
-      setPasswordSaved(true)
+      markPasswordSaved()
     } catch (failure) {
       setPasswordError(errorText(failure))
     }
@@ -217,7 +233,11 @@ export function More({
     )
   }
 
-  if (screen === 'targets') return <Targets me={me} />
+  if (screen === 'targets') {
+    return (
+      <Targets me={me} onBack={() => go(null)} onOpenProfile={() => go('profile')} />
+    )
+  }
 
   if (screen === 'queue') return <AdminQueue onBack={leaveAdmin} onDecided={onReviewed} />
   if (screen === 'invites') return <AdminInvites onBack={leaveAdmin} />
@@ -257,7 +277,7 @@ export function More({
             >
               Save
             </button>
-            <Saved shown={accountSaved && !nameDirty} />
+            <SaveMarks dirty={nameDirty} saved={accountSaved} />
           </div>
         </form>
 
@@ -300,7 +320,7 @@ export function More({
             >
               Change password
             </button>
-            <Saved shown={passwordSaved} />
+            <SaveMarks dirty={false} saved={passwordSaved} />
           </div>
           <p className="mt-2 text-xs text-muted">
             Changing this signs out every other device and leaves this one signed in.
@@ -357,7 +377,7 @@ export function More({
             >
               Save
             </button>
-            <Saved shown={accountSaved && !displayDirty} />
+            <SaveMarks dirty={displayDirty} saved={accountSaved} />
           </div>
         </form>
 
@@ -387,20 +407,25 @@ export function More({
   return (
     <>
       <div className="t-card mb-3">
-        <Row label="Account" onOpen={() => go('account')} />
-        <Row label="Profile" onOpen={() => go('profile')} />
-        <Row label="Targets" onOpen={() => go('targets')} />
-        <Row label="Display" onOpen={() => go('display')} />
-        <Row label="My submissions" onOpen={onOpenSubmissions} />
+        <Row label="Account" icon={UserRound} onOpen={() => go('account')} />
+        <Row label="Profile" icon={IdCard} onOpen={() => go('profile')} />
+        <Row label="Targets" icon={Target} onOpen={() => go('targets')} />
+        <Row label="Display" icon={Monitor} onOpen={() => go('display')} />
+        <Row label="My submissions" icon={Inbox} onOpen={onOpenSubmissions} />
       </div>
 
       {me.is_admin && (
         <>
           <p className="t-micro mb-1">Administration</p>
           <div className="t-card mb-3">
-            <Row label="Review queue" count={waiting} onOpen={() => go('queue')} />
-            <Row label="Invites" onOpen={() => go('invites')} />
-            <Row label="Members" onOpen={() => go('users')} />
+            <Row
+              label="Review queue"
+              icon={ClipboardList}
+              count={waiting}
+              onOpen={() => go('queue')}
+            />
+            <Row label="Invites" icon={Mail} onOpen={() => go('invites')} />
+            <Row label="Members" icon={Users} onOpen={() => go('users')} />
           </div>
         </>
       )}

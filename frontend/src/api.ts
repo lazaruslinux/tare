@@ -67,20 +67,51 @@ export type BudgetFigures = {
 // A calm sentence the Targets page shows until it is waved away.
 export type Nudge = { key: string; text: string }
 
+// How the three are set: worked out, by percentages, or in grams.
+export type TargetMode = 'auto' | 'pct' | 'grams'
+
+export type Split = { protein_pct: number; carbs_pct: number; fat_pct: number }
+
+// One level of everyday movement, and what picking it would do to a day. Null
+// without a profile: no number is better than a made-up one.
+export type ActivityOption = {
+  level: ActivityLevel
+  adds: number | null
+  total: number | null
+}
+
+// Where the budget came from, in three figures. The adjustment is signed.
+export type Breakdown = { use: number; adjustment: number; budget: number }
+
 export type Targets = {
-  mode: 'auto' | 'manual'
+  mode: TargetMode
   complete: boolean
   budget: BudgetFigures
   // What was typed by hand, kept even while the automatic numbers are in use.
   manual: BudgetFigures | null
+  // What share of the day each of the three is.
+  percentages: Split
+  // The guide's starting points, and the one line the losing split adds.
+  presets: Record<Goal, Split>
+  preset_notes: Partial<Record<Goal, string>>
+  // What the body uses at rest, and whether a recent body fat reading is what
+  // that figure was worked out from.
+  resting: number | null
+  uses_body_fat: boolean
+  activity_options: ActivityOption[]
+  // Null when there is nothing to work out: no profile, or a typed-in budget.
+  breakdown: Breakdown | null
+  exercise_today: number
   activity_level: ActivityLevel
   goal: Goal
   rate: Rate | null
   rates_offered: Rate[]
   goal_weight_kg: number | null
   weekly_rate: number
-  // Plain sentences from the server. Screens print them as they stand.
+  // Plain sentences from the server. Screens print them as they stand, and
+  // the keys beside them say which screen each one belongs on.
   notes: string[]
+  note_keys: string[]
   nudges: Nudge[]
   // A month and never a day.
   projection: { month: string } | null

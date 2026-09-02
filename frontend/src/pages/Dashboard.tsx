@@ -13,6 +13,7 @@ import {
 import { ExerciseSheet } from '../components/ExerciseSheet'
 import { FoodPicker } from '../components/FoodPicker'
 import { MeasurementsSheet } from '../components/MeasurementsSheet'
+import { MacroBar } from '../components/MacroBar'
 import { HEADLINE, nutrientText } from '../components/NutritionLabel'
 import { useTopBar } from '../hooks/useTopBar'
 import { dayLabel, slotByTime, today } from '../lib/day'
@@ -25,7 +26,7 @@ const HISTORY_DAYS = 90
 const UNDO = 6000
 
 // The ring, drawn by hand: a circle whose stroke is dashed to the share of the
-// day that has been eaten. No library, and nothing that moves.
+// day that has been consumed. No library, and nothing that moves.
 const RADIUS = 42
 const ROUND = 2 * Math.PI * RADIUS
 
@@ -35,8 +36,8 @@ const SPARK_W = 240
 const SPARK_H = 44
 const SPARK_PAD = 4
 
-function Ring({ eaten, budget }: { eaten: number; budget: number }) {
-  const share = budget <= 0 ? 0 : Math.min(Math.max(eaten / budget, 0), 1)
+function Ring({ consumed, budget }: { consumed: number; budget: number }) {
+  const share = budget <= 0 ? 0 : Math.min(Math.max(consumed / budget, 0), 1)
   return (
     <svg viewBox="0 0 100 100" className="h-28 w-28 -rotate-90" aria-hidden="true">
       <circle
@@ -58,36 +59,6 @@ function Ring({ eaten, budget }: { eaten: number; budget: number }) {
         strokeDasharray={`${share * ROUND} ${ROUND}`}
       />
     </svg>
-  )
-}
-
-function Bar({ label, value, target, unit }: {
-  label: string
-  value: number | null
-  target: number
-  unit: string
-}) {
-  const share = target <= 0 ? 0 : Math.min(Math.max((value ?? 0) / target, 0), 1)
-  return (
-    <div>
-      <div className="flex items-baseline justify-between">
-        <span className="text-xs text-muted">{label}</span>
-        <span className="t-nums text-xs">
-          {value === null ? '-' : Math.round(value)}
-          <span className="text-muted">
-            {' '}
-            / {target}
-            {unit}
-          </span>
-        </span>
-      </div>
-      <div className="mt-1 h-1.5 overflow-hidden rounded-full bg-surface-2">
-        <div
-          className="h-full rounded-full bg-accent"
-          style={{ width: `${share * 100}%` }}
-        />
-      </div>
-    </div>
   )
 }
 
@@ -384,7 +355,7 @@ export function Dashboard({
         <div className="flex items-center gap-4">
           <div className="relative shrink-0">
             <Ring
-              eaten={day?.totals.calories ?? 0}
+              consumed={day?.totals.calories ?? 0}
               budget={(day?.budget.calories ?? 0) + (day?.exercise_kcal ?? 0)}
             />
             <div className="absolute inset-0 flex flex-col items-center justify-center">
@@ -397,7 +368,7 @@ export function Dashboard({
           <div className="min-w-0 flex-1">
             <span className="t-nums block text-sm">
               {day === null ? '-' : nutrientText('calories', day.totals.calories ?? 0)}
-              <span className="text-muted"> eaten of {day?.budget.calories ?? '-'}</span>
+              <span className="text-muted"> consumed of {day?.budget.calories ?? '-'}</span>
             </span>
             {day !== null && day.exercise_kcal > 0 && (
               <span className="block text-xs text-muted">
@@ -409,7 +380,7 @@ export function Dashboard({
 
         <div className="mt-4 flex flex-col gap-3">
           {HEADLINE.slice(1).map((fact) => (
-            <Bar
+            <MacroBar
               key={fact.key}
               label={fact.label}
               value={day === null ? null : day.totals[fact.key]}

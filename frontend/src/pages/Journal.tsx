@@ -1,3 +1,4 @@
+import { ChevronRight } from 'lucide-react'
 import { useEffect, useRef, useState } from 'react'
 
 import {
@@ -12,6 +13,7 @@ import {
 import { ExerciseSheet } from '../components/ExerciseSheet'
 import { FoodPicker } from '../components/FoodPicker'
 import { LogSheet } from '../components/LogSheet'
+import { MacroBar } from '../components/MacroBar'
 import { MeasurementsSheet } from '../components/MeasurementsSheet'
 import { HEADLINE, nutrientText } from '../components/NutritionLabel'
 import { PortionSheet } from '../components/PortionSheet'
@@ -82,12 +84,16 @@ export function Journal({
   me,
   refresh,
   onDay,
+  onOpenTargets,
 }: {
   me: Me
   refresh: number
   // Which day is on screen, told to the shell so its centre control adds to
   // the day being read rather than always to today.
   onDay: (date: string) => void
+  // The numbers this day is read against are set one tab over, and the card
+  // that shows them says so.
+  onOpenTargets: () => void
 }) {
   const todayIso = today(me.timezone)
   const [date, setDate] = useState(todayIso)
@@ -230,27 +236,34 @@ export function Journal({
 
       {day !== null && (
         <div className="t-card mb-3">
-          <p className="t-micro mb-1">Left today</p>
+          <div className="mb-1 flex items-center justify-between">
+            <p className="t-micro">Left today</p>
+            <button
+              type="button"
+              className="t-micro t-tap44 flex items-center gap-1"
+              onClick={onOpenTargets}
+            >
+              Targets
+              <ChevronRight className="h-3.5 w-3.5" strokeWidth={2.5} />
+            </button>
+          </div>
           <span className="t-nums block text-3xl font-semibold leading-tight">
             {day.remaining_calories}
           </span>
           <span className="block text-xs text-muted">
-            {nutrientText('calories', day.totals.calories ?? 0)} eaten of {day.budget.calories}
+            {nutrientText('calories', day.totals.calories ?? 0)} consumed of{' '}
+            {day.budget.calories}
             {day.exercise_kcal > 0 && ` · Exercise added back +${day.exercise_kcal}`}
           </span>
-          <div className="mt-3 grid grid-cols-3 gap-2">
+          <div className="mt-4 flex flex-col gap-3">
             {HEADLINE.slice(1).map((fact) => (
-              <div key={fact.key}>
-                <span className="t-nums block text-sm font-semibold">
-                  {nutrientText(fact.key, day.totals[fact.key])}
-                  <span className="font-normal text-muted">
-                    {' '}
-                    / {day.budget[fact.key]}
-                    {fact.unit}
-                  </span>
-                </span>
-                <span className="block text-xs text-muted">{fact.label}</span>
-              </div>
+              <MacroBar
+                key={fact.key}
+                label={fact.label}
+                value={day.totals[fact.key]}
+                target={day.budget[fact.key]}
+                unit={fact.unit}
+              />
             ))}
           </div>
         </div>

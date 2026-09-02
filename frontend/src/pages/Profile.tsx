@@ -1,6 +1,7 @@
 import { useEffect, useState, type FormEvent } from 'react'
 
 import { api, errorText, type Me, type Profile as ProfileRow, type Sex } from '../api'
+import { SaveMarks, useSavedChip } from '../components/SaveMarks'
 import { heightParts, partsToCm, weightText } from '../lib/units'
 
 const SEXES: { value: Sex; label: string }[] = [
@@ -34,7 +35,7 @@ export function Profile({
   const [location, setLocation] = useState('')
   const [expecting, setExpecting] = useState(false)
   const [error, setError] = useState('')
-  const [saved, setSaved] = useState(false)
+  const [saved, markSaved] = useSavedChip()
   const [saving, setSaving] = useState(false)
 
   useEffect(() => {
@@ -66,11 +67,22 @@ export function Profile({
     return partsToCm(ft, asNumber(inches) ?? 0)
   }
 
+  // What is on screen against what was loaded, so Save is offered only when
+  // there is something to save.
+  const height = centimetres()
+  const dirty =
+    profile !== null &&
+    (sex !== profile.sex ||
+      (height === null ? null : Math.round(height)) !==
+        (profile.height_cm === null ? null : Math.round(profile.height_cm)) ||
+      birthdate !== (profile.birthdate ?? '') ||
+      location !== (profile.location ?? '') ||
+      expecting !== profile.pregnant_or_breastfeeding)
+
   const save = async (event: FormEvent) => {
     event.preventDefault()
     setSaving(true)
     setError('')
-    setSaved(false)
     try {
       // The birthdate lives on the account rather than the profile, and it is
       // held to the same rule the front door holds everybody to.
@@ -89,7 +101,7 @@ export function Profile({
           },
         })
       )
-      setSaved(true)
+      markSaved()
     } catch (failure) {
       setError(errorText(failure))
     }
@@ -203,10 +215,10 @@ export function Profile({
       {error && <p className="t-error mt-3">{error}</p>}
 
       <div className="mt-3 flex items-center gap-3">
-        <button className="t-btn t-btn-primary" type="submit" disabled={saving}>
+        <button className="t-btn t-btn-primary" type="submit" disabled={saving || !dirty}>
           Save
         </button>
-        {saved && <span className="t-chip text-accent">Saved.</span>}
+        <SaveMarks dirty={dirty} saved={saved} />
       </div>
 
       <p className="mt-3 text-xs text-muted">

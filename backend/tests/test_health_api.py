@@ -11,7 +11,7 @@ import datetime as dt
 import pytest
 
 from app import clock, models
-from app.routers.health import NOTE_TEXT, NUDGE_TEXT
+from app.routers.health import NO_GRAMS, NOTE_TEXT, NUDGE_TEXT, PCT_RANGE, PCT_SUM
 from tests.conftest import PASSWORD
 
 TODAY = dt.date(2026, 9, 2)
@@ -77,7 +77,7 @@ def test_without_details_the_targets_are_the_published_ones(client, member):
         "fat_g": 67,
         "fiber_g": 28,
         "saturated_fat_g_max": 20,
-        "sugar_g_max": 50,
+        "sugar_g_max": 36,
         "sodium_mg_max": 2300,
         "cholesterol_mg_max": 300,
     }
@@ -95,7 +95,8 @@ def test_the_worked_case_comes_out_of_the_route(client, case_a):
     assert body["budget"]["fat_g"] == 43
     assert body["budget"]["fiber_g"] == 18
     assert body["budget"]["saturated_fat_g_max"] == 14
-    assert body["budget"]["sugar_g_max"] == 32
+    # The heart association's figure for a woman, not a share of the budget.
+    assert body["budget"]["sugar_g_max"] == 25
     assert body["weekly_rate"] == 0.43
     # The cap and the carbs sentence, and no clinician sentence at this weight.
     assert set(body["notes"]) == {NOTE_TEXT["cap"], NOTE_TEXT["carbs_low"]}
@@ -103,6 +104,21 @@ def test_the_worked_case_comes_out_of_the_route(client, case_a):
     # The two faster paces are not offered at these numbers.
     assert body["rates_offered"] == ["gentle", "steady"]
     assert body["trend_kg"] == 70.0
+
+
+def test_the_working_out_behind_the_budget_is_three_figures(client, case_a):
+    body = client.get("/api/health/targets").json()
+    # About what you use, eating a bit less, and what is left.
+    assert body["breakdown"] == {"use": 1700, "adjustment": -430, "budget": 1280}
+    # And the sentences carry their keys, so a screen can place each one.
+    assert set(body["note_keys"]) == {"cap", "carbs_low"}
+    assert len(body["note_keys"]) == len(body["notes"])
+
+
+def test_a_man_gets_the_higher_added_sugars_ceiling(client, member):
+    assert profile(client, sex="male", height_cm=180).status_code == 200
+    assert weigh(client, 95).status_code == 200
+    assert client.get("/api/health/targets").json()["budget"]["sugar_g_max"] == 36
 
 
 def test_a_goal_weight_gives_a_month_and_never_a_day(client, case_a):
@@ -167,20 +183,24 @@ def test_the_disclaimer_is_recorded_once(client, member):
     assert client.post("/api/health/disclaimer").status_code == 204
 
 
-def test_manual_targets_replace_the_four_numbers_and_can_be_handed_back(client, case_a):
+def test_grams_replace_the_four_numbers_and_can_be_handed_back(client, case_a):
     answer = client.put(
         "/api/health/targets",
-        json={"mode": "manual", "calories": 2100, "protein_g": 150, "carbs_g": 200, "fat_g": 70},
+        json={"mode": "grams", "calories": 2100, "protein_g": 150, "carbs_g": 200, "fat_g": 70},
     )
     assert answer.status_code == 200
     body = answer.json()
-    assert body["mode"] == "manual"
+    assert body["mode"] == "grams"
     assert body["budget"]["calories"] == 2100
     assert body["budget"]["protein_g"] == 150
     # The ceilings stay worked out, because they are limits rather than a
     # target anybody sets.
     assert body["budget"]["fiber_g"] == 29
     assert body["notes"] == [NOTE_TEXT["manual"]]
+    # The working out still describes the day tare would have set, which is
+    # what the percentages screen divides. The screen showing a typed-in
+    # budget hides it.
+    assert body["breakdown"] == {"use": 1700, "adjustment": -430, "budget": 1280}
 
     back = client.put("/api/health/targets", json={"mode": "auto"})
     assert back.json()["budget"]["calories"] == 1280
@@ -188,10 +208,84 @@ def test_manual_targets_replace_the_four_numbers_and_can_be_handed_back(client, 
     assert back.json()["manual"]["calories"] == 2100
 
 
-def test_manual_targets_need_all_four(client, case_a):
-    refused = client.put("/api/health/targets", json={"mode": "manual", "calories": 2100})
+def test_grams_need_all_four(client, case_a):
+    refused = client.put("/api/health/targets", json={"mode": "grams", "calories": 2100})
     assert refused.status_code == 400
-    assert refused.json()["detail"] == "Manual targets need calories, protein, carbs and fat."
+    assert refused.json()["detail"] == NO_GRAMS
+
+
+def test_percentages_divide_the_worked_out_day(client, case_a):
+    answer = client.put(
+        "/api/health/targets",
+        json={"mode": "pct", "protein_pct": 30, "carbs_pct": 40, "fat_pct": 30},
+    )
+    assert answer.status_code == 200
+    body = answer.json()
+    assert body["mode"] == "pct"
+    # The size of the day is still tare's; only the way it is divided changed.
+    assert body["budget"]["calories"] == 1280
+    assert body["budget"]["protein_g"] == 96
+    assert body["budget"]["carbs_g"] == 128
+    assert body["budget"]["fat_g"] == 43
+    assert body["percentages"] == {"protein_pct": 30, "carbs_pct": 40, "fat_pct": 30}
+    # And the working out still stands behind the calories.
+    assert body["breakdown"] == {"use": 1700, "adjustment": -430, "budget": 1280}
+
+
+def test_a_starting_point_fills_the_percentages(client, case_a):
+    body = client.put("/api/health/targets", json={"mode": "pct", "preset": "lose"}).json()
+    assert body["percentages"] == {"protein_pct": 35, "carbs_pct": 35, "fat_pct": 30}
+    assert body["presets"]["maintain"] == {"protein_pct": 30, "carbs_pct": 40, "fat_pct": 30}
+    # The one thing a starting point says about itself.
+    assert body["preset_notes"]["lose"] == "Protein is held at the top of the recommended range."
+
+    refused = client.put("/api/health/targets", json={"mode": "pct", "preset": "keto"})
+    assert refused.status_code == 400
+    assert refused.json() == {"detail": "That is not a starting point tare offers."}
+
+
+@pytest.mark.parametrize(
+    ("body", "sentence"),
+    [
+        ({"mode": "pct", "protein_pct": 30, "carbs_pct": 40, "fat_pct": 20}, PCT_SUM),
+        ({"mode": "pct", "protein_pct": 2, "carbs_pct": 58, "fat_pct": 40}, PCT_RANGE),
+        ({"mode": "pct", "protein_pct": 80, "carbs_pct": 15, "fat_pct": 5}, PCT_RANGE),
+    ],
+)
+def test_a_split_that_does_not_work_is_refused_in_plain_words(client, case_a, body, sentence):
+    refused = client.put("/api/health/targets", json=body)
+    assert refused.status_code == 400
+    assert refused.json() == {"detail": sentence}
+
+
+def test_a_way_of_setting_targets_that_does_not_exist_is_refused(client, case_a):
+    refused = client.put("/api/health/targets", json={"mode": "vibes"})
+    assert refused.status_code == 400
+    assert refused.json() == {"detail": "That is not a way to set targets."}
+
+
+def test_each_level_carries_what_it_would_add(client, member):
+    # The second worked case: male, 180 cm, 95 kg, 45, resting 1855.
+    assert client.patch("/api/account", json={"birthdate": "1981-03-15"}).status_code == 200
+    assert profile(client, sex="male", height_cm=180).status_code == 200
+    assert weigh(client, 95).status_code == 200
+
+    body = client.get("/api/health/targets").json()
+    assert body["resting"] == 1860
+    assert body["uses_body_fat"] is False
+    adds = {row["level"]: row["adds"] for row in body["activity_options"]}
+    assert adds == {"not_much": 370, "light": 700, "moderate": 1020, "heavy": 1340}
+    totals = {row["level"]: row["total"] for row in body["activity_options"]}
+    assert totals["moderate"] == 2880
+    assert body["breakdown"] == {"use": 2230, "adjustment": 0, "budget": 2230}
+    assert body["exercise_today"] == 0
+
+
+def test_without_a_profile_no_level_carries_a_number(client, member):
+    body = client.get("/api/health/targets").json()
+    assert body["resting"] is None
+    assert [row["adds"] for row in body["activity_options"]] == [None, None, None, None]
+    assert body["breakdown"] is None
 
 
 def test_a_measurement_is_one_row_a_day_and_carries_its_lean_figure(client, member):

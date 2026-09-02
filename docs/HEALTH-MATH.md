@@ -23,14 +23,16 @@ Items marked UNVERIFIED were not confirmed against a primary source at the time 
 
 5. Activity level multiplies resting energy to give the daily maintenance estimate. tare uses four levels with plain names:
 
-   | UI name | Multiplier | Meant for |
-   |---|---|---|
-   | Not much | 1.2 | Desk work, little walking |
-   | Light | 1.375 | On your feet part of the day |
-   | Moderate | 1.55 | Physical job or on your feet most of the day |
-   | Heavy | 1.725 | Hard physical work all day |
+   | UI name | Multiplier | Meant for | Example |
+   |---|---|---|---|
+   | Sedentary | 1.2 | Desk work, little walking | Desk work, driving, TV |
+   | Lightly Active | 1.375 | On your feet part of the day | On your feet part of the day, light chores |
+   | Moderately Active | 1.55 | Physical job or on your feet most of the day | A physical job or on your feet most of the day |
+   | Very Active | 1.725 | Hard physical work all day | Hard physical work all day |
 
-   The activity level describes daily life without workouts. Workouts are credited separately (decision 7).
+   The screen calls this Baseline Activity Level. The activity level describes the kind of job and ordinary day the member has, without workouts. Workouts are credited separately (decision 7), which the chooser says out loud so the same run is never counted twice.
+
+   The chooser shows what each level would add to a day rather than the multiplier it comes from, because a multiplier is a name nobody is told (decision 29): resting energy x (multiplier - 1), rounded to the nearest ten and read as "adds about 730 cal". Without sex, height and a weight there is no resting figure, so no level carries a number.
    Why: the multipliers are the convention used across consumer apps and clinical calculators. Their exact provenance is UNVERIFIED; they are consistent with the physical activity level (PAL) bands in the FAO/WHO/UNU energy requirements report (sedentary 1.40 to 1.69, active 1.70 to 1.99, vigorous 2.00 to 2.40) [6] and with the physical-activity coefficients in the Dietary Reference Intakes energy chapter (sedentary, low active, active, very active). [7] Keeping workouts out of the level is what stops the same run from being counted twice.
 
 6. The default activity level when the member has not chosen one is Not much (1.2).
@@ -54,7 +56,7 @@ Items marked UNVERIFIED were not confirmed against a primary source at the time 
    | Fat | 67 g (30 percent) | Inside the 20 to 35 percent acceptable range [7] |
    | Fiber | 28 g | Daily Value at 2,000 kcal [10], which follows 14 g per 1,000 kcal [7] |
    | Saturated fat, ceiling | 20 g | Under 10 percent of calories [12]; Daily Value 20 g [10] |
-   | Added sugars, ceiling | 50 g | Daily Value 50 g, which is 10 percent of 2,000 kcal [10]; the 2025-2030 Dietary Guidelines say added sugars are not recommended and no longer give a percentage [12] |
+   | Added sugars, ceiling | 36 g | American Heart Association: no more than 25 g a day for women and 36 g for men [31]. The higher of the two stands while sex is unknown, so tare never sets a lower ceiling than the member's own would be |
    | Sodium, ceiling | 2,300 mg | Dietary Guidelines limit for ages 14 and over [12]; Daily Value 2,300 mg [10] |
    | Cholesterol, ceiling | 300 mg | Daily Value [10] |
 
@@ -74,10 +76,29 @@ Items marked UNVERIFIED were not confirmed against a primary source at the time 
    Fat is then 30 percent of the budget (inside 20 to 35 percent) [7] and carbohydrate takes the remainder. If carbohydrate would fall below 130 g, the RDA, [7] the Targets page notes it in one sentence and offers the manual adjustment fold.
    Why: a grams-per-kilogram protein figure follows the evidence, which is expressed per kilogram, while a fixed percentage split gives small people too little protein and large people too much. [11][12] The joint ACSM, Academy and Dietitians of Canada position is reported as 1.2 to 2.0 g/kg for active people; [14] its full text was not reachable, so that range is UNVERIFIED here and nothing rests on it alone.
 
+10b. The Protein, Carbs and Fat split can be set three ways, and the automatic arithmetic in decision 10 is unchanged by the other two:
+
+   | Way | Calories | Split |
+   |---|---|---|
+   | Automatic | The budget from decisions 13 to 17 | Decision 10 |
+   | Percentages | The same budget | Three whole percentages the member sets, each 5 to 70, adding to 100. Grams are percentage x calories / 4 for protein and carbohydrate and / 9 for fat |
+   | Grams | Typed by the member | Typed by the member |
+
+   Three starting points fill the percentage fields. They are a convenience, never the automatic answer, and the member saves them like any other split:
+
+   | Starting point | Protein | Carbs | Fat |
+   |---|---|---|---|
+   | Lose weight | 35 | 35 | 30 |
+   | Maintain | 30 | 40 | 30 |
+   | Gain weight | 35 | 45 | 20 |
+
+   The losing split stops at 35 percent protein, which is the top of the acceptable range, [7] and the screen says "Protein is held at the top of the recommended range." Nothing is clamped after a member has set their own percentages: they were held to their bounds when they were accepted, and moving them afterwards would make the screen disagree with itself.
+   Why: a per-kilogram rule is the honest default (decision 10), but somebody following a plan written in percentages should not have to convert it by hand, and somebody who already knows their grams should not have to reach them through a percentage. The ceilings in decision 12 stay automatic in all three ways, because they are guideline limits rather than a target anybody picks.
+
 11. For members with a body mass index of 30 or more, the protein calculation uses current weight but the 35 percent clamp applies first, so protein never exceeds 35 percent of the budget. [7]
    Why: per-kilogram rules scaled to a high body weight can produce intakes above the acceptable range; the clamp keeps the target inside guideline bounds without a second body-weight adjustment the member would have to understand.
 
-12. Fiber target with a profile: 14 g per 1,000 kcal of the budget, the basis of the fiber Adequate Intake. [7] (The 14 g per 1,000 kcal derivation lives in the report text, which was not reachable; the published Adequate Intakes of 38 g for men and 25 g for women were confirmed. UNVERIFIED as a quoted line.) Saturated fat ceiling: 10 percent of the budget. [12] Added sugars ceiling: 10 percent of the budget, carried over from the Daily Value basis [10] because the 2025-2030 Dietary Guidelines dropped the percentage and say only that added sugars are not recommended. [12] Sodium ceiling: 2,300 mg regardless of budget. [12]
+12. Fiber target with a profile: 14 g per 1,000 kcal of the budget, the basis of the fiber Adequate Intake. [7] (The 14 g per 1,000 kcal derivation lives in the report text, which was not reachable; the published Adequate Intakes of 38 g for men and 25 g for women were confirmed. UNVERIFIED as a quoted line.) Saturated fat ceiling: 10 percent of the budget. [12] Added sugars ceiling: 25 g a day for female members and 36 g for male members, the American Heart Association's figures, [31] and 36 g while sex is unknown. It is a fixed figure and not a share, so it does not move with the budget. The 10 percent of calories basis is not used: the 2025-2030 Dietary Guidelines dropped the percentage and say only that added sugars are not recommended, [12] and the label's 50 g Daily Value is that same dropped percentage written at 2,000 kcal. [10] Sodium ceiling: 2,300 mg regardless of budget. [12]
 
 ### Weight change
 
@@ -171,8 +192,10 @@ Items marked UNVERIFIED were not confirmed against a primary source at the time 
 | Concept | Words the UI uses | Words the UI never uses |
 |---|---|---|
 | Resting energy expenditure | "what your body uses at rest" | BMR, RMR, REE, basal |
-| Total daily energy expenditure | "your daily budget", "about what you use in a day" | TDEE, maintenance calories |
-| Activity multiplier | "How active is your day?" with Not much / Light / Moderate / Heavy | PAL, multiplier, activity factor |
+| Total daily energy expenditure | "your daily budget", "about what you use in a day", the Energy screen's "About what you use today" | TDEE, maintenance calories, total daily energy expenditure |
+| Activity multiplier | "Baseline Activity Level" with Sedentary / Lightly Active / Moderately Active / Very Active, each with what it adds to the day | PAL, multiplier, activity factor |
+| Energy spent digesting food | not shown | TEF, thermic effect of food |
+| The three of them together | "Protein, Carbs and Fat", set Automatic, by Percentages or in Grams | macro split, macro ratio, IIFYM |
 | MET-based exercise calories | "Exercise added back" | MET, metabolic equivalent |
 | Calorie deficit | "eating a bit less than you use" | deficit, caloric restriction |
 | Calorie surplus | "eating a bit more than you use" | surplus, bulk |
@@ -199,7 +222,7 @@ Each item is a decision for the product owner. The default in the Decisions sect
 5. Pregnancy switch (decision 24): included as a profile switch. Alternative: leave it out of version 1 and let the disclaimer carry it.
 6. Maintain protein (decision 10): decided 2026-09-01, 1.4 g/kg, the middle of the federal range. [12]
 9. Faster rates gated on BMI 35 (decision 13): decided 2026-09-01, the gate stays; it is what the source says. [16] The Targets page explains it in one sentence.
-10. Added sugars ceiling (decisions 9 and 12): the new Dietary Guidelines no longer give a percentage. [12] tare keeps 10 percent from the Daily Value basis. [10] Alternative: show added sugars with no ceiling at all. Recommendation: keep the ceiling; the label still prints a 50 g Daily Value.
+10. Added sugars ceiling (decisions 9 and 12): decided 2026-09-02, the American Heart Association's 25 g for women and 36 g for men, [31] and 36 g while sex is unknown. The 10 percent of calories basis is dropped with the percentage the Dietary Guidelines withdrew. [12]
 7. Activity multiplier provenance (decision 5): the 1.2 to 1.9 set is a convention with no primary source found. Alternative: use the DRI physical-activity coefficients directly inside the DRI estimated energy requirement equations, [7] which have a documented derivation but are less familiar and give slightly different numbers.
 8. Older-adult protein (decision 10): PROT-AGE's 1.0 to 1.2 g/kg is a floor for age 65 and over, with at least 1.2 g/kg for those who exercise. [13] Its 1.2 to 1.5 g/kg band is for acute or chronic illness, which tare cannot know about. The 1.2 minimum stands.
 
@@ -235,3 +258,4 @@ Each item is a decision for the product owner. The default in the Decisions sect
 28. Institute of Medicine. Weight Gain During Pregnancy: Reexamining the Guidelines. National Academies Press, 2009. https://doi.org/10.17226/12584. Recommended gestational weight-gain ranges for every pre-pregnancy BMI class, none of which is a loss. Not fetched, UNVERIFIED as quoted. The ACOG FAQ on weight gain during pregnancy (https://www.acog.org/womens-health/faqs/weight-gain-during-pregnancy) was cited first but the page no longer exists at that address.
 29. Regulation (EU) 2016/679 (GDPR), Article 9. https://gdpr-info.eu/art-9-gdpr/. Accessed 2026-09-01. Health data is a special category of personal data.
 30. Federal Trade Commission. Health Breach Notification Rule, final rule of 2024-04-26. https://www.ftc.gov/legal-library/browse/rules/health-breach-notification-rule and https://www.ftc.gov/news-events/news/press-releases/2024/04/ftc-finalizes-changes-health-breach-notification-rule. Accessed 2026-09-01. The rule applies to "health apps and similar technologies not covered by HIPAA" and to vendors of personal health records. The HHS guidance page on HIPAA and health apps (https://www.hhs.gov/hipaa/for-professionals/privacy/guidance/access-right-health-apps-apis/index.html) returned 403 from every route, so the HHS half is UNVERIFIED. Whether a self-hosted private instance falls under the FTC rule is the author's reading, not the FTC's words.
+31. Johnson RK, Appel LJ, Brands M, et al. Dietary sugars intake and cardiovascular health: a scientific statement from the American Heart Association. Circulation, 2009;120:1011-1020. https://doi.org/10.1161/CIRCULATIONAHA.109.192627. Accessed 2026-09-02. Upper limit for added sugars of about 100 kcal a day for most women and about 150 kcal a day for most men, which is 25 g and about 36 g.

@@ -33,7 +33,12 @@ MISSING_MEASUREMENT = "There is no measurement on that day."
 BAD_DATE = "That is not a date."
 BAD_ACTIVITY = "That is not an activity tare knows."
 BAD_EFFORT = "That effort is not offered for this activity."
-NO_MANUAL = "Manual targets need calories, protein, carbs and fat."
+NO_GRAMS = "Setting the grams yourself needs calories, protein, carbs and fat."
+NO_PCT = "A percentage split needs all three numbers."
+PCT_RANGE = f"Each percentage has to be between {health.PCT_MIN} and {health.PCT_MAX}."
+PCT_SUM = f"The three percentages have to add up to {health.PCT_TOTAL}."
+BAD_PRESET = "That is not a starting point tare offers."
+BAD_MODE = "That is not a way to set targets."
 FUTURE_MEASUREMENT = "A measurement cannot be in the future."
 
 # How far back a measurement list reaches by default, and the furthest it will.
@@ -90,6 +95,10 @@ NOTE_TEXT = {
     "manual": "You set these numbers yourself. Switch back to automatic at any time.",
 }
 
+# What a starting point says about itself. Only the losing one has anything to
+# add, and it is the reason its protein figure stops where it does.
+PRESET_NOTE = {"lose": "Protein is held at the top of the recommended range."}
+
 # Decision 22, word for word.
 NUDGE_TEXT = {
     "below_range": (
@@ -119,11 +128,19 @@ class ProfileIn(BaseModel):
 
 
 class TargetsIn(BaseModel):
+    """How the daily split is set: worked out, by percentages, or in grams."""
+
     mode: str
+    # A starting point by name, which fills the three percentages from the
+    # table rather than asking the screen to know them.
+    preset: str | None = None
     calories: float | None = Field(default=None, gt=0)
     protein_g: float | None = Field(default=None, gt=0)
     carbs_g: float | None = Field(default=None, gt=0)
     fat_g: float | None = Field(default=None, gt=0)
+    protein_pct: int | None = None
+    carbs_pct: int | None = None
+    fat_pct: int | None = None
 
 
 class MeasurementIn(BaseModel):
@@ -308,8 +325,12 @@ def auto_budget(state: Reckoning) -> tuple[dict[str, float], list[str], float]:
     """The worked-out day, its note keys, and the pace it really achieves."""
     maintenance_kcal = state.maintenance()
     if maintenance_kcal is None or state.sex is None or state.kg is None or state.age is None:
-        # Decision 9: the fixed guideline targets, said to be general.
-        return dict(health.DEFAULTS_2000), ["defaults"], 0.0
+        # Decision 9: the fixed guideline targets, said to be general. Only the
+        # added sugars ceiling knows the member, because it is a figure by sex
+        # rather than a share of a budget nobody has yet.
+        general = dict(health.DEFAULTS_2000)
+        general["sugar_g_max"] = health.added_sugars_max(state.sex)
+        return general, ["defaults"], 0.0
 
     worked = health.budget(
         maintenance_kcal,
@@ -321,7 +342,7 @@ def auto_budget(state: Reckoning) -> tuple[dict[str, float], list[str], float]:
     )
     assert state.bmi is not None
     split = health.macros(worked.calories, state.kg, state.profile.goal, state.age, state.bmi)
-    limits = health.ceilings(worked.calories)
+    limits = health.ceilings(worked.calories, state.sex)
     notes = list(worked.notes)
     if split.carbs_low:
         notes.append("carbs_low")
@@ -354,20 +375,20 @@ def shown(figures: dict[str, float]) -> dict[str, float]:
     }
 
 
-def manual_figures(profile: models.HealthProfile) -> dict[str, float] | None:
-    """The four numbers somebody typed, with the ceilings worked from them.
+def with_ceilings(
+    calories: float, split: health.Macros, sex: str | None
+) -> dict[str, float]:
+    """A budget and its split, with the guideline limits worked from them.
 
-    The ceilings stay automatic on purpose: they are guideline limits rather
-    than a target anybody sets for themselves.
+    The ceilings stay automatic whichever way the split was set: they are
+    limits rather than a target anybody picks for themselves.
     """
-    if profile.manual_calories is None:
-        return None
-    limits = health.ceilings(profile.manual_calories)
+    limits = health.ceilings(calories, sex)
     return {
-        "calories": profile.manual_calories,
-        "protein_g": profile.manual_protein_g or 0.0,
-        "carbs_g": profile.manual_carbs_g or 0.0,
-        "fat_g": profile.manual_fat_g or 0.0,
+        "calories": calories,
+        "protein_g": split.protein_g,
+        "carbs_g": split.carbs_g,
+        "fat_g": split.fat_g,
         "fiber_g": limits.fiber_g,
         "saturated_fat_g_max": limits.saturated_fat_g_max,
         "sugar_g_max": limits.sugar_g_max,
@@ -376,14 +397,72 @@ def manual_figures(profile: models.HealthProfile) -> dict[str, float] | None:
     }
 
 
+def manual_figures(
+    profile: models.HealthProfile, sex: str | None
+) -> dict[str, float] | None:
+    """The four numbers somebody typed in grams, kept whatever mode is on."""
+    if profile.manual_calories is None:
+        return None
+    split = health.Macros(
+        profile.manual_protein_g or 0.0,
+        profile.manual_carbs_g or 0.0,
+        profile.manual_fat_g or 0.0,
+        False,
+    )
+    return with_ceilings(profile.manual_calories, split, sex)
+
+
+def typed_figures(state: Reckoning, auto_calories: float) -> dict[str, float] | None:
+    """The budget as this member set it, or nothing while it is worked out.
+
+    A percentage split rides on the automatic calories: the member chose how to
+    divide the day, not how big it is.
+    """
+    profile = state.profile
+    if profile.targets_mode == "grams":
+        return manual_figures(profile, state.sex)
+    if profile.targets_mode == "pct" and profile.manual_protein_pct is not None:
+        split = health.macros_from_percentages(
+            auto_calories,
+            profile.manual_protein_pct,
+            profile.manual_carbs_pct or 0,
+            profile.manual_fat_pct or 0,
+        )
+        return with_ceilings(auto_calories, split, state.sex)
+    return None
+
+
+def percentages(
+    figures: dict[str, float], profile: models.HealthProfile
+) -> dict[str, float]:
+    """What share of the day each of the three is, for the rows that say so.
+
+    A split somebody set by percentage reports the numbers they set, not the
+    numbers read back out of the rounded grams.
+    """
+    if profile.targets_mode == "pct" and profile.manual_protein_pct is not None:
+        return {
+            "protein_pct": profile.manual_protein_pct,
+            "carbs_pct": profile.manual_carbs_pct or 0,
+            "fat_pct": profile.manual_fat_pct or 0,
+        }
+    calories = figures["calories"] or 1.0
+
+    def share(grams: float, per_gram: float) -> float:
+        return health.round_for_display(grams * per_gram / calories * 100.0, "percent")
+
+    return {
+        "protein_pct": share(figures["protein_g"], health.KCAL_PER_G_PROTEIN),
+        "carbs_pct": share(figures["carbs_g"], health.KCAL_PER_G_CARBS),
+        "fat_pct": share(figures["fat_g"], health.KCAL_PER_G_FAT),
+    }
+
+
 def day_budget(state: Reckoning) -> dict[str, float]:
-    """The four figures a day is read against, worked out or typed in."""
-    if state.profile.targets_mode == "manual":
-        typed = manual_figures(state.profile)
-        if typed is not None:
-            return shown(typed)
+    """The four figures a day is read against, worked out or set by hand."""
     figures, _, _ = auto_budget(state)
-    return shown(figures)
+    typed = typed_figures(state, figures["calories"])
+    return shown(figures if typed is None else typed)
 
 
 def logged_days(db: Session, user: models.User, since: dt.date) -> int:
@@ -493,11 +572,10 @@ def read_targets(
     state = Reckoning(db, user)
     profile = state.profile
     figures, note_keys, weekly_rate = auto_budget(state)
-    typed = manual_figures(profile)
-    manual_mode = profile.targets_mode == "manual" and typed is not None
-    if manual_mode:
-        assert typed is not None
-        figures = typed
+    auto_calories = figures["calories"]
+    set_by_hand = typed_figures(state, auto_calories)
+    if set_by_hand is not None:
+        figures = set_by_hand
         note_keys = ["manual"]
 
     goal_bmi = (
@@ -524,7 +602,7 @@ def read_targets(
     )
 
     offer: dict[str, float] | None = None
-    if not manual_mode and state.complete and state.sex is not None:
+    if set_by_hand is None and state.complete and state.sex is not None:
         window = state.today - dt.timedelta(days=REESTIMATE_WINDOW - 1)
         series = [value for day, value in state.trend_days if day >= window]
         delta = health.reestimate(
@@ -544,12 +622,55 @@ def read_targets(
             if offer["delta_calories"] == 0:
                 offer = None
 
+    resting = state.rmr()
+    maintenance_now = state.maintenance()
+    # Where the worked-out day came from, whichever way the split is set: the
+    # screen that shows a typed-in budget hides this rather than contradicting
+    # itself, and the percentages screen divides this number.
+    breakdown = (
+        None
+        if maintenance_now is None
+        else {
+            "use": health.round_for_display(maintenance_now, "calories"),
+            "adjustment": health.round_for_display(
+                auto_calories - maintenance_now, "calories"
+            ),
+            "budget": health.round_for_display(auto_calories, "calories"),
+        }
+    )
+    kept = manual_figures(profile, state.sex)
+
     db.commit()
     return {
         "mode": profile.targets_mode,
         "complete": state.complete,
         "budget": shown(figures),
-        "manual": None if typed is None else shown(typed),
+        "manual": None if kept is None else shown(kept),
+        "percentages": percentages(figures, profile),
+        "presets": {
+            goal: {"protein_pct": split[0], "carbs_pct": split[1], "fat_pct": split[2]}
+            for goal, split in health.MACRO_PRESETS.items()
+        },
+        "preset_notes": PRESET_NOTE,
+        "resting": None if resting is None else health.round_for_display(resting, "calories"),
+        # Only true when it is really what the resting figure was worked out
+        # from, so a screen never says it about a number that is not there.
+        "uses_body_fat": resting is not None and state.fresh_body_fat() is not None,
+        "activity_options": [
+            {
+                "level": row.level,
+                "adds": None if row.adds is None else health.round_for_display(row.adds, "calories"),
+                "total": (
+                    None if row.total is None else health.round_for_display(row.total, "calories")
+                ),
+            }
+            for row in health.activity_options(resting)
+        ],
+        "breakdown": breakdown,
+        "exercise_today": round(
+            sum(row.kcal for row in exercise_on(db, user, state.today)) / 10
+        )
+        * 10,
         "activity_level": profile.activity_level,
         "goal": profile.goal,
         "rate": profile.rate or health.default_rate(profile.goal),
@@ -557,6 +678,10 @@ def read_targets(
         "goal_weight_kg": profile.goal_weight_kg,
         "weekly_rate": round(weekly_rate, 2),
         "notes": [NOTE_TEXT[key] for key in note_keys],
+        # The same sentences by their keys, in the same order, so a screen can
+        # put the ones about the pace beside the pace and the ones about the
+        # split beside the split.
+        "note_keys": note_keys,
         "nudges": waiting,
         "projection": None if month is None else {"month": month},
         "trend_kg": (
@@ -567,6 +692,28 @@ def read_targets(
     }
 
 
+def asked_split(body: TargetsIn) -> tuple[int, int, int]:
+    """The three percentages, from a starting point by name or from the fields.
+
+    Decision 10b: a starting point is a way to fill the fields, not a mode of
+    its own, so what is stored either way is three numbers.
+    """
+    if body.preset is not None:
+        if body.preset not in health.MACRO_PRESETS:
+            raise HTTPException(status.HTTP_400_BAD_REQUEST, BAD_PRESET)
+        return health.MACRO_PRESETS[body.preset]
+
+    share = (body.protein_pct, body.carbs_pct, body.fat_pct)
+    if any(value is None for value in share):
+        raise HTTPException(status.HTTP_400_BAD_REQUEST, NO_PCT)
+    split = (int(share[0] or 0), int(share[1] or 0), int(share[2] or 0))
+    if any(not (health.PCT_MIN <= value <= health.PCT_MAX) for value in split):
+        raise HTTPException(status.HTTP_400_BAD_REQUEST, PCT_RANGE)
+    if sum(split) != health.PCT_TOTAL:
+        raise HTTPException(status.HTTP_400_BAD_REQUEST, PCT_SUM)
+    return split
+
+
 @router.put("/targets")
 def write_targets(
     body: TargetsIn,
@@ -574,17 +721,22 @@ def write_targets(
     user: models.User = Depends(require_user),
 ) -> dict[str, object]:
     if body.mode not in models.TARGET_MODES:
-        raise HTTPException(status.HTTP_400_BAD_REQUEST, "That is not a way to set targets.")
+        raise HTTPException(status.HTTP_400_BAD_REQUEST, BAD_MODE)
     profile = profile_of(db, user)
 
-    if body.mode == "manual":
+    if body.mode == "grams":
         typed = (body.calories, body.protein_g, body.carbs_g, body.fat_g)
         if any(value is None for value in typed):
-            raise HTTPException(status.HTTP_400_BAD_REQUEST, NO_MANUAL)
+            raise HTTPException(status.HTTP_400_BAD_REQUEST, NO_GRAMS)
         profile.manual_calories = body.calories
         profile.manual_protein_g = body.protein_g
         profile.manual_carbs_g = body.carbs_g
         profile.manual_fat_g = body.fat_g
+
+    if body.mode == "pct":
+        profile.manual_protein_pct, profile.manual_carbs_pct, profile.manual_fat_pct = (
+            asked_split(body)
+        )
 
     profile.targets_mode = body.mode
     profile.updated_at = now_utc()

@@ -67,9 +67,31 @@ CARBS_LOW_G = 130.0
 # Decision 12.
 FIBER_G_PER_1000 = 14.0
 SATURATED_FAT_SHARE = 0.10
-ADDED_SUGARS_SHARE = 0.10
 SODIUM_MG_MAX = 2300.0
 CHOLESTEROL_MG_MAX = 300.0
+
+# Decision 12: added sugars are a fixed figure by sex rather than a share of
+# the budget, which is what the American Heart Association publishes. [31]
+# Somebody who has not said gets the higher of the two, so tare never sets a
+# lower ceiling than the member's own would be.
+ADDED_SUGARS_G_MAX = {"female": 25.0, "male": 36.0}
+ADDED_SUGARS_G_MAX_UNKNOWN = 36.0
+
+# Decision 10b: the guide's own splits, offered as a starting point and never
+# as the automatic answer. Protein is held at the top of the recommended range
+# rather than above it.
+PRESET_PROTEIN_MAX_PCT = 35
+MACRO_PRESETS: dict[str, tuple[int, int, int]] = {
+    "lose": (35, 35, 30),
+    "maintain": (30, 40, 30),
+    "gain": (35, 45, 20),
+}
+
+# Decision 10b: what a hand-set percentage may be, and what the three of them
+# have to come to.
+PCT_MIN = 5
+PCT_MAX = 70
+PCT_TOTAL = 100
 
 # What a gram of each is worth.
 KCAL_PER_G_PROTEIN = 4.0
@@ -122,6 +144,15 @@ class Ceilings(NamedTuple):
     cholesterol_mg_max: float
 
 
+class ActivityOption(NamedTuple):
+    """One level of everyday movement, and what picking it would do."""
+
+    level: str
+    # Null without a profile: no number is better than a made-up one.
+    adds: float | None
+    total: float | None
+
+
 class Effort(NamedTuple):
     effort: str
     met: float
@@ -143,7 +174,9 @@ DEFAULTS_2000 = {
     "fat_g": 67.0,
     "fiber_g": 28.0,
     "saturated_fat_g_max": 20.0,
-    "sugar_g_max": 50.0,
+    # Decision 12's figure rather than the label's 50 g, which is the 10
+    # percent basis the guidelines dropped.
+    "sugar_g_max": ADDED_SUGARS_G_MAX_UNKNOWN,
     "sodium_mg_max": SODIUM_MG_MAX,
     "cholesterol_mg_max": CHOLESTEROL_MG_MAX,
 }
@@ -286,14 +319,53 @@ def macros(calories: float, kg: float, goal: str, age: int, body_mass_index: flo
     return Macros(protein_g, carbs_g, fat_g, carbs_g < CARBS_LOW_G)
 
 
-def ceilings(calories: float) -> Ceilings:
+def added_sugars_max(sex: str | None) -> float:
+    """Decision 12: the added sugars ceiling, which is a figure and not a share."""
+    if sex is None:
+        return ADDED_SUGARS_G_MAX_UNKNOWN
+    return ADDED_SUGARS_G_MAX.get(sex, ADDED_SUGARS_G_MAX_UNKNOWN)
+
+
+def ceilings(calories: float, sex: str | None = None) -> Ceilings:
     """Decision 12: fibre to aim at, and the four figures to stay under."""
     return Ceilings(
         fiber_g=calories / 1000.0 * FIBER_G_PER_1000,
         saturated_fat_g_max=calories * SATURATED_FAT_SHARE / KCAL_PER_G_FAT,
-        sugar_g_max=calories * ADDED_SUGARS_SHARE / KCAL_PER_G_CARBS,
+        sugar_g_max=added_sugars_max(sex),
         sodium_mg_max=SODIUM_MG_MAX,
         cholesterol_mg_max=CHOLESTEROL_MG_MAX,
+    )
+
+
+def macros_from_percentages(
+    calories: float, protein_pct: int, carbs_pct: int, fat_pct: int
+) -> Macros:
+    """Decision 10b: the same three numbers from shares somebody set themselves.
+
+    Nothing is clamped here. These are the member's own percentages, already
+    held to their bounds where they were accepted, and quietly moving them
+    afterwards would make the screen disagree with itself.
+    """
+    protein_g = calories * protein_pct / 100.0 / KCAL_PER_G_PROTEIN
+    carbs_g = calories * carbs_pct / 100.0 / KCAL_PER_G_CARBS
+    fat_g = calories * fat_pct / 100.0 / KCAL_PER_G_FAT
+    return Macros(protein_g, carbs_g, fat_g, carbs_g < CARBS_LOW_G)
+
+
+def activity_options(resting: float | None) -> tuple[ActivityOption, ...]:
+    """Decision 5: what each level would add to a day, and what it comes to.
+
+    The added figure is the one the chooser shows, because the level is picked
+    against the difference it makes rather than against a multiplier nobody is
+    told the name of (decision 29).
+    """
+    return tuple(
+        ActivityOption(
+            level=level,
+            adds=None if resting is None else resting * (multiplier - 1.0),
+            total=None if resting is None else resting * multiplier,
+        )
+        for level, multiplier in ACTIVITY_MULTIPLIER.items()
     )
 
 

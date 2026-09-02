@@ -73,6 +73,15 @@
     outline: 2px solid var(--accent);
     outline-offset: 2px;
   }
+
+  /* A mouse should be told what is live. Buttons only: nothing else in this
+     app acts on a click. */
+  button:not(:disabled) {
+    cursor: pointer;
+  }
+  button:disabled {
+    cursor: default;
+  }
 }
 
 /* Density and component classes. Declared inside @layer components so a
@@ -236,6 +245,40 @@
     border-color: var(--accent);
     background: var(--surface-2);
     color: var(--text);
+  }
+
+  /* One answer out of a list, as a row rather than a card: taller than a
+     .t-row because it carries a line or two under its name. The chosen one is
+     tinted and wears a check, and nothing anywhere says "chosen" in words. */
+  .t-option {
+    display: flex;
+    width: 100%;
+    align-items: center;
+    gap: 0.75rem;
+    min-height: 56px;
+    padding: 0.625rem 0.75rem;
+    border: 1px solid var(--line);
+    border-radius: 0.75rem;
+    background: var(--surface);
+    color: var(--text);
+    text-align: left;
+  }
+  .t-option + .t-option {
+    margin-top: 0.5rem;
+  }
+  .t-option[aria-pressed='true'] {
+    border-color: var(--accent);
+    background: var(--surface-2);
+  }
+  .t-option:disabled {
+    opacity: 0.55;
+  }
+
+  /* A quiet aside. Not a banner: no border, no tint, no icon. */
+  .t-note {
+    color: var(--muted);
+    font-size: 0.8125rem;
+    line-height: 1.5;
   }
 
   .t-error {

@@ -215,7 +215,15 @@ export default function App() {
                       onScan={() => setScanning(true)}
                     />
                   ) : page === 'journal' ? (
-                    <Journal me={me} refresh={logged} onDay={setJournalDay} />
+                    <Journal
+                      me={me}
+                      refresh={logged}
+                      onDay={setJournalDay}
+                      onOpenTargets={() => {
+                        setMoreView('targets')
+                        select('more')
+                      }}
+                    />
                   ) : (
                     <Dashboard
                       me={me}

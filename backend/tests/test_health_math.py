@@ -201,12 +201,21 @@ def test_sixty_five_and_over_never_drops_under_the_older_adult_figure():
 
 
 def test_the_ceilings_follow_the_budget(case_a):
-    limits = health.ceilings(1278.225)
+    limits = health.ceilings(1278.225, "female")
     assert health.round_for_display(limits.fiber_g, "grams") == 18
     assert health.round_for_display(limits.saturated_fat_g_max, "grams") == 14
-    assert health.round_for_display(limits.sugar_g_max, "grams") == 32
     assert limits.sodium_mg_max == 2300
     assert limits.cholesterol_mg_max == 300
+
+
+def test_added_sugars_is_a_figure_by_sex_and_not_a_share():
+    # The heart association's two numbers, and the higher of them for somebody
+    # who has not said which they are.
+    assert health.ceilings(1278.225, "female").sugar_g_max == 25
+    assert health.ceilings(1278.225, "male").sugar_g_max == 36
+    assert health.ceilings(1278.225, None).sugar_g_max == 36
+    # And it does not move when the budget does.
+    assert health.ceilings(3000.0, "female").sugar_g_max == 25
 
 
 def test_the_no_profile_targets_are_the_published_ones():
@@ -217,7 +226,7 @@ def test_the_no_profile_targets_are_the_published_ones():
         "fat_g": 67.0,
         "fiber_g": 28.0,
         "saturated_fat_g_max": 20.0,
-        "sugar_g_max": 50.0,
+        "sugar_g_max": 36.0,
         "sodium_mg_max": 2300.0,
         "cholesterol_mg_max": 300.0,
     }
@@ -321,3 +330,36 @@ def test_every_activity_offers_only_the_efforts_it_has_a_value_for():
     assert health.met_for("walking", "moderate") == 3.8
     assert health.met_for("swimming", "light") is None
     assert health.met_for("quidditch", "light") is None
+
+
+def test_a_percentage_split_divides_the_day_the_way_it_was_asked_to():
+    split = health.macros_from_percentages(2000, 30, 40, 30)
+    assert split.protein_g == pytest.approx(150.0)
+    assert split.carbs_g == pytest.approx(200.0)
+    assert split.fat_g == pytest.approx(66.6667, abs=0.001)
+    # The carbs sentence still belongs to a split that leaves too few of them.
+    assert health.macros_from_percentages(1200, 40, 20, 40).carbs_low is True
+
+
+def test_the_starting_points_are_the_guide_s_own_and_stop_at_the_ceiling():
+    assert health.MACRO_PRESETS["lose"] == (35, 35, 30)
+    assert health.MACRO_PRESETS["maintain"] == (30, 40, 30)
+    assert health.MACRO_PRESETS["gain"] == (35, 45, 20)
+    for split in health.MACRO_PRESETS.values():
+        assert sum(split) == health.PCT_TOTAL
+        assert split[0] <= health.PRESET_PROTEIN_MAX_PCT
+
+
+def test_each_level_says_what_it_adds_to_a_day(case_b):
+    options = {row.level: row for row in health.activity_options(case_b["resting"])}
+    assert options["not_much"].adds == pytest.approx(1855 * 0.2)
+    assert options["light"].adds == pytest.approx(1855 * 0.375)
+    assert options["moderate"].adds == pytest.approx(1855 * 0.55)
+    assert options["heavy"].adds == pytest.approx(1855 * 0.725)
+    assert options["heavy"].total == pytest.approx(1855 * 1.725)
+
+
+def test_without_a_profile_no_level_carries_a_number():
+    for row in health.activity_options(None):
+        assert row.adds is None
+        assert row.total is None

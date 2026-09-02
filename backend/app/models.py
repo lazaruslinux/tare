@@ -566,32 +566,6 @@ class SavedFood(Base):
     created_at: Mapped[dt.datetime] = mapped_column(UtcDateTime, nullable=False, default=now_utc)
 
 
-# What the energy equations need a sex for, and nothing else: they carry
-# separate coefficients, and a member who would rather not say gets the fixed
-# guideline targets instead.
-SEXES = ("female", "male")
-
-# How much somebody moves in an ordinary day, workouts left out of it. The
-# multipliers live in app.health beside the equation they multiply.
-ACTIVITY_LEVELS = ("not_much", "light", "moderate", "heavy")
-
-GOALS = ("maintain", "lose", "gain")
-
-# How fast, in plain words. Which of them are offered depends on the goal and
-# on the member's own numbers, which is app.health's call.
-RATES = ("gentle", "steady", "faster", "fastest")
-
-# Whether the daily numbers are worked out or typed in.
-TARGET_MODES = ("auto", "manual")
-
-# Where a weight reading came from. Manual always wins a day.
-MEASUREMENT_SOURCES = ("manual", "ingest")
-
-# How hard a logged workout was, which is what picks the value it is credited
-# at. An activity offers only the ones it has a published value for.
-EFFORTS = ("light", "moderate", "vigorous")
-
-
 class RepeatHidden(Base):
     """A food somebody took off their Repeat list and wants kept off.
 
@@ -627,8 +601,9 @@ GOALS = ("maintain", "lose", "gain")
 # on the member's own numbers, which is app.health's call.
 RATES = ("gentle", "steady", "faster", "fastest")
 
-# Whether the daily numbers are worked out or typed in.
-TARGET_MODES = ("auto", "manual")
+# Whether the daily numbers are worked out, split by percentages somebody
+# chose, or typed in as grams.
+TARGET_MODES = ("auto", "pct", "grams")
 
 # Where a weight reading came from. Manual always wins a day.
 MEASUREMENT_SOURCES = ("manual", "ingest")
@@ -683,6 +658,11 @@ class HealthProfile(Base):
     manual_protein_g: Mapped[float | None] = mapped_column(Float, nullable=True)
     manual_carbs_g: Mapped[float | None] = mapped_column(Float, nullable=True)
     manual_fat_g: Mapped[float | None] = mapped_column(Float, nullable=True)
+    # The percentage split, kept beside the grams so switching between the two
+    # ways of setting them does not lose either one.
+    manual_protein_pct: Mapped[int | None] = mapped_column(Integer, nullable=True)
+    manual_carbs_pct: Mapped[int | None] = mapped_column(Integer, nullable=True)
+    manual_fat_pct: Mapped[int | None] = mapped_column(Integer, nullable=True)
     # When the estimate disclaimer was acknowledged. Null means never, and the
     # Targets page shows it.
     disclaimer_seen_at: Mapped[dt.datetime | None] = mapped_column(UtcDateTime, nullable=True)
