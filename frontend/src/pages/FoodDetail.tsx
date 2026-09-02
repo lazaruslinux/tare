@@ -262,14 +262,16 @@ export function FoodDetail({
 
           {food.mine && food.status === 'custom' && (
             <div className="t-card mb-3">
+              <div className="t-actions mb-2">
               <button
-                className="t-btn w-full"
-                type="button"
-                disabled={sending}
-                onClick={() => offer(food)}
-              >
-                Submit to community
-              </button>
+                  className="t-btn flex-1"
+                  type="button"
+                  disabled={sending}
+                  onClick={() => offer(food)}
+                >
+                  Submit to community
+                </button>
+              </div>
               <p className="mt-2 text-xs text-muted">
                 It stays yours until an administrator approves it. Then everyone has it.
               </p>
