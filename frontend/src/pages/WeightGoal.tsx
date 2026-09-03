@@ -1,5 +1,5 @@
 import { ChevronRight, CircleCheck, Minus, Plus, Trophy } from 'lucide-react'
-import { useState, type ReactNode } from 'react'
+import { useEffect, useState, type ReactNode } from 'react'
 
 import { api, type Me, type Profile as ProfileRow, type Targets as TargetsRow } from '../api'
 import { MeasurementsSheet } from '../components/MeasurementsSheet'
@@ -109,9 +109,18 @@ export function WeightGoal({
   const at = rate === null ? 0 : Math.max(steps.indexOf(rate), 0)
   const latestKg = profile?.latest_weight_kg ?? null
 
-  const step = async (to: number) => {
+  // The stepper only moves a draft; Save below the overview is what sends it.
+  const [draftAt, setDraftAt] = useState(at)
+  useEffect(() => setDraftAt(at), [at])
+  const rateDirty = steps.length > 0 && draftAt !== at
+
+  const step = (to: number) => {
     if (to < 0 || to >= steps.length) return
-    if (await onSaveProfile({ rate_kg_per_week: steps[to] })) markRateSaved()
+    setDraftAt(to)
+  }
+
+  const saveRate = async () => {
+    if (await onSaveProfile({ rate_kg_per_week: steps[draftAt] })) markRateSaved()
   }
 
   const notes = notesFor(targets.note_keys, targets.notes, PACE_NOTES)
@@ -158,35 +167,28 @@ export function WeightGoal({
               <button
                 type="button"
                 aria-label="Slower"
-                disabled={busy || at === 0}
-                onClick={() => void step(at - 1)}
+                disabled={busy || draftAt === 0}
+                onClick={() => step(draftAt - 1)}
               >
                 <Minus className="h-5 w-5" strokeWidth={2.5} />
               </button>
               <span className="t-nums flex-1 text-center text-base font-semibold">
-                {rateStepText(steps[at], units, targets.goal)}
+                {rateStepText(steps[draftAt], units, targets.goal)}
               </span>
               <button
                 type="button"
                 aria-label="Faster"
-                disabled={busy || at === steps.length - 1}
-                onClick={() => void step(at + 1)}
+                disabled={busy || draftAt === steps.length - 1}
+                onClick={() => step(draftAt + 1)}
               >
                 <Plus className="h-5 w-5" strokeWidth={2.5} />
               </button>
-            </div>
-            <div className="mt-2 flex items-center gap-3">
-              {busy ? (
-                <span className="text-xs text-muted">Saving</span>
-              ) : (
-                <SaveMarks dirty={false} saved={savedRate} />
-              )}
             </div>
             <div className="t-review mt-3">
               <CircleCheck className="mt-0.5 h-4 w-4 shrink-0" strokeWidth={2.5} />
               <span className="min-w-0">
                 <span className="block font-semibold">Goal rate review</span>
-                {rateReview(steps[at], latestKg, targets.goal)}
+                {rateReview(steps[draftAt], latestKg, targets.goal)}
               </span>
             </div>
           </>
@@ -225,15 +227,41 @@ export function WeightGoal({
         {adjustment !== null && (
           <p className="t-note mt-1">
             {targets.goal === 'maintain' || adjustment === 0
-              ? 'Matches what you use in a day.'
-              : `You will consume about ${calText(adjustment)} cal ${
-                  targets.goal === 'gain' ? 'more' : 'less'
-                } than what you use in a day.`}
+              ? 'No deficit. Matches what you use.'
+              : `${calText(adjustment)} cal daily ${
+                  targets.goal === 'gain' ? 'surplus' : 'deficit'
+                }`}
           </p>
         )}
       </div>
 
       {targets.projection !== null && <p className="t-note mb-3">{PACE_CAVEAT}</p>}
+
+      {steps.length > 0 && (
+        <div className="mb-3">
+          <div className="t-actions">
+            <button
+              type="button"
+              className="t-btn flex-1"
+              disabled={busy || !rateDirty}
+              onClick={() => setDraftAt(at)}
+            >
+              Cancel
+            </button>
+            <button
+              type="button"
+              className="t-btn t-btn-primary flex-1"
+              disabled={busy || !rateDirty}
+              onClick={() => void saveRate()}
+            >
+              {busy ? 'Saving' : 'Save'}
+            </button>
+          </div>
+          <div className="mt-2 flex items-center gap-3">
+            <SaveMarks dirty={rateDirty} saved={savedRate} />
+          </div>
+        </div>
+      )}
 
       {notes.map((note) => (
         <p key={note} className="t-note mb-3">

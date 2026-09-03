@@ -78,25 +78,17 @@ export const rateReview = (
   latestKg: number | null,
   goal: Goal
 ): string => {
-  if (goal === 'gain') return 'A small, steady gain keeps more of it as muscle.'
+  if (goal === 'gain') return 'Slow and steady gains more muscle.'
   if (kg <= 0.45) {
-    return (
-      'A steady pace most people can keep up. Slower loss tends to hold on to ' +
-      'more muscle.'
-    )
+    return 'Most sustainable. Keeps the most muscle.'
   }
   if (latestKg !== null && kg > latestKg * FAST_SHARE) {
     return (
-      'This is faster than about 1 percent of your weight a week. Loss this ' +
-      'quick is often water rather than fat, and makes it easier to lose muscle ' +
-      'and miss out on nutrients. Most guidance stops at 2 lb a week.'
+      'Aggressive. Over 1 percent of your weight a week: much of it is water, and ' +
+      'muscle goes with it. Most guidance stops at 2 lb.'
     )
   }
-  return (
-    'This makes a bigger gap between what you consume and what you use. It works ' +
-    'for some, but many find it hard to keep up. Watch how you feel and ease back ' +
-    'if it stops feeling right.'
-  )
+  return 'Achievable, with a bigger daily gap. Ease back if it stops feeling right.'
 }
 
 // What the four details a personal number needs are still waiting on, and
@@ -122,13 +114,12 @@ export const DISCLAIMER =
 
 // Decision 18's second sentence, which always travels with the month.
 export const PACE_CAVEAT =
-  'Bodies adapt, so the real date is usually later. The estimate updates as you weigh in.'
+  'Estimate. Updates with each weigh-in.'
 
 // The one paragraph on the Weight goal screen that is not about a number on it.
 export const GOOD_TO_KNOW =
-  'As your weight changes, so does what you use in a day. Tare re-figures your ' +
-  'budget from each weigh-in and, after a month of weigh-ins, may offer a small ' +
-  'correction.'
+  'Your budget is re-figured from every weigh-in. After a month, Tare may suggest a ' +
+  'small correction.'
 
 // Which sentences belong on which screen. The server sends them with their
 // keys so neither screen has to read the sentences to place them.
