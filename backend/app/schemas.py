@@ -25,9 +25,12 @@ MAX_SERVINGS = 8
 
 class ServingIn(BaseModel):
     name: str
-    # In the food's base unit. Zero is not a serving, and a negative one is a
-    # typo, so neither is a rounding question worth having later.
-    base_amount: float = Field(gt=0)
+    # As it was typed, in the unit beside it. Zero is not a serving, and a
+    # negative one is a typo, so neither is a rounding question worth having
+    # later. What it comes to in the food's base unit is the server's sum: a
+    # client that could send its own could disagree with the label it read.
+    amount: float = Field(gt=0)
+    unit: str
     position: int = 0
 
 

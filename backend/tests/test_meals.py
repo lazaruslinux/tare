@@ -32,7 +32,7 @@ def toast(client, signed_in):
             "protein_g": 9,
             "carbs_g": 50,
             "fat_g": 2,
-            "servings": [{"name": "1 slice", "base_amount": 45, "position": 0}],
+            "servings": [{"name": "1 slice", "amount": 45, "unit": "g", "position": 0}],
         },
     ).json()
 

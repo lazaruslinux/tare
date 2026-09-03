@@ -17,7 +17,7 @@ from fastapi import APIRouter, Depends, HTTPException, status
 from sqlalchemy import Select, Subquery, and_, case, delete, func, or_, select, update
 from sqlalchemy.orm import InstrumentedAttribute, Session
 
-from app import models, schemas
+from app import models, schemas, units
 from app.db import get_db
 from app.deps import require_user
 from app.models import NUTRIENTS
@@ -34,6 +34,15 @@ MISSING_PHOTO_TO_ATTACH = "That photo is not there to attach."
 MAX_NAME = 200
 MAX_BRAND = 120
 MAX_SERVING_NAME = 60
+
+# A serving is measured in the food's own family or not at all: a cup of a
+# food weighed in grams would need a density to mean anything, and a label
+# that gives both prints them as two servings rather than one.
+UNKNOWN_UNIT = "That is not a unit Tare knows."
+WRONG_FAMILY = {
+    "g": "Pick a weight unit for a food measured by weight.",
+    "ml": "Pick a volume unit for a food measured by volume.",
+}
 
 # Every retail code printed on food: EAN-8 at the short end, GTIN-14 at the
 # long. Anything else is not a barcode this app has any use for. It lives here
@@ -196,6 +205,8 @@ def first_servings(
         select(
             models.FoodServing.food_id,
             models.FoodServing.name,
+            models.FoodServing.amount,
+            models.FoodServing.unit,
             models.FoodServing.base_amount,
         )
         .where(models.FoodServing.food_id.in_(ids))
@@ -203,7 +214,8 @@ def first_servings(
         .order_by(models.FoodServing.position.desc())
     ).all()
     return {
-        food_id: {"name": name, "base_amount": amount} for food_id, name, amount in rows
+        food_id: {"name": name, "amount": amount, "unit": unit, "base_amount": base}
+        for food_id, name, amount, unit, base in rows
     }
 
 
@@ -365,7 +377,12 @@ def food_detail(db: Session, food: models.Food, user: models.User) -> dict[str, 
             state,
             None
             if label_serving is None
-            else {"name": label_serving.name, "base_amount": label_serving.base_amount},
+            else {
+                "name": label_serving.name,
+                "amount": label_serving.amount,
+                "unit": label_serving.unit,
+                "base_amount": label_serving.base_amount,
+            },
         ),
         # Why it was turned down, for the one screen that says so. Empty
         # unless this account's own offer of this food was rejected.
@@ -385,6 +402,8 @@ def food_detail(db: Session, food: models.Food, user: models.User) -> dict[str, 
             {
                 "id": serving.id,
                 "name": serving.name,
+                "amount": serving.amount,
+                "unit": serving.unit,
                 "base_amount": serving.base_amount,
                 "position": serving.position,
             }
@@ -499,9 +518,19 @@ def apply_body(food: models.Food, body: schemas.FoodIn) -> None:
                 status.HTTP_400_BAD_REQUEST,
                 f"A serving name must be at most {MAX_SERVING_NAME} characters.",
             )
+        if serving.unit not in units.UNIT_TO_BASE:
+            raise HTTPException(status.HTTP_400_BAD_REQUEST, UNKNOWN_UNIT)
+        if units.base_unit_of(serving.unit) != food.base_unit:
+            raise HTTPException(status.HTTP_400_BAD_REQUEST, WRONG_FAMILY[food.base_unit])
         servings.append(
             models.FoodServing(
-                name=serving_name, base_amount=serving.base_amount, position=serving.position
+                name=serving_name,
+                amount=serving.amount,
+                unit=serving.unit,
+                # The one sum, and the server's: within a family it is the
+                # factor and nothing else, because nothing was assumed.
+                base_amount=serving.amount * units.UNIT_TO_BASE[serving.unit],
+                position=serving.position,
             )
         )
     # Wholesale, never merged. A list that arrived without a row is a row the

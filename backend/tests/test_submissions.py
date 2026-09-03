@@ -32,7 +32,7 @@ FULL = {
     "sugar_g": 51.2,
 }
 
-SERVINGS = [{"name": "1 bar", "base_amount": 43, "position": 0}]
+SERVINGS = [{"name": "1 bar", "amount": 43, "unit": "g", "position": 0}]
 
 
 def body(**overrides):
@@ -489,7 +489,9 @@ def test_a_correction_may_carry_the_panel_it_was_read_off(client, db_session, si
     shared = models.Food(
         status="approved", name="Shared bar", base_unit="g", **FULL
     )
-    shared.servings = [models.FoodServing(name="1 bar", base_amount=43, position=0)]
+    shared.servings = [
+        models.FoodServing(name="1 bar", amount=43, unit="g", base_amount=43, position=0)
+    ]
     db_session.add(shared)
     db_session.commit()
 

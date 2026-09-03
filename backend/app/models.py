@@ -246,8 +246,12 @@ class FoodServing(Base):
         ForeignKey("foods.id", ondelete="CASCADE"), nullable=False, index=True
     )
     name: Mapped[str] = mapped_column(String(60), nullable=False)
-    # In the food's own base unit, never in the unit the label printed: a
-    # serving is the one measurement that never has to be converted.
+    # How it was typed: "1" and "lb", kept so the form and the picker can read
+    # a serving back in the words it was entered in.
+    amount: Mapped[float] = mapped_column(Float, nullable=False)
+    unit: Mapped[str] = mapped_column(String(8), nullable=False)
+    # What that came to in the food's own base unit, which is the number every
+    # sum is worked out from.
     base_amount: Mapped[float] = mapped_column(Float, nullable=False)
     position: Mapped[int] = mapped_column(Integer, nullable=False, default=0)
 

@@ -224,6 +224,8 @@ def test_a_lookup_is_written_down_once_however_often_it_is_scanned(
     assert rows[0].barcode == CODE
     assert len(rows[0].servings) == 1
     assert rows[0].servings[0].base_amount == 43
+    # A source states a serving in the base unit, so that is what it was typed in.
+    assert (rows[0].servings[0].amount, rows[0].servings[0].unit) == (43, "g")
 
 
 def test_an_out_of_date_reading_beats_a_network_that_is_not_there(

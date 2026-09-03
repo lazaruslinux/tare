@@ -71,7 +71,12 @@ def prefill(food: models.Food) -> dict[str, object]:
         "source": SOURCE_NAMES.get(food.source, food.source),
         "serving": None
         if serving is None
-        else {"name": serving.name, "base_amount": serving.base_amount},
+        else {
+            "name": serving.name,
+            "amount": serving.amount,
+            "unit": serving.unit,
+            "base_amount": serving.base_amount,
+        },
     }
     for field in NUTRIENTS:
         payload[field] = getattr(food, field)
@@ -109,7 +114,16 @@ def remember(db: Session, code: str, result: foods_api.FoodResult) -> models.Foo
     # against, so it is dropped rather than stored as a name with no number.
     if result.serving_amount:
         name = (result.serving.strip() or "1 serving")[:MAX_SERVING_NAME]
-        row.servings = [models.FoodServing(name=name, base_amount=result.serving_amount)]
+        # A source states a serving in the food's own base unit, so that is
+        # what it was typed in as far as this row is concerned.
+        row.servings = [
+            models.FoodServing(
+                name=name,
+                amount=result.serving_amount,
+                unit=row.base_unit,
+                base_amount=result.serving_amount,
+            )
+        ]
     else:
         row.servings = []
     db.commit()

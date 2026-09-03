@@ -46,8 +46,8 @@ def chicken(client, signed_in):
             "carbs_g": 0,
             "fat_g": 3.6,
             "servings": [
-                {"name": "1 breast", "base_amount": 174, "position": 0},
-                {"name": "100 g", "base_amount": 100, "position": 1},
+                {"name": "1 breast", "amount": 174, "unit": "g", "position": 0},
+                {"name": "100 g", "amount": 100, "unit": "g", "position": 1},
             ],
         },
     ).json()
@@ -67,7 +67,7 @@ def oil(client, signed_in):
             "protein_g": 0,
             "carbs_g": 0,
             "fat_g": 91,
-            "servings": [{"name": "1 tbsp", "base_amount": 15, "position": 0}],
+            "servings": [{"name": "1 tbsp", "amount": 15, "unit": "ml", "position": 0}],
         },
     ).json()
 
@@ -99,6 +99,29 @@ def test_a_serving_is_counted_rather_than_converted(client, chicken):
     # 174 g of something with 165 calories and 31 g of protein per 100 g.
     assert round(made["calories"], 3) == 287.1
     assert round(made["protein_g"], 3) == 53.94
+
+
+def test_a_food_entered_by_the_pound_is_logged_by_the_ounce(client, signed_in):
+    """The two halves of the same block of cheese: entered as one pound, eaten
+    four ounces at a time, both worked out from the one stored panel."""
+    block = client.post(
+        "/api/foods",
+        json={
+            "name": "Cheddar block",
+            "base_unit": "g",
+            # 70 calories a block, which is 15.43 per 100 g of a 453.592 g one.
+            "calories": 15.43,
+            "protein_g": 0,
+            "carbs_g": 0,
+            "fat_g": 0,
+            "servings": [{"name": "1 block", "amount": 1, "unit": "lb", "position": 0}],
+        },
+    ).json()
+    assert round(block["servings"][0]["base_amount"], 3) == 453.592
+
+    made = log(client, food_id=block["id"], amount=4, unit="oz").json()
+    # Four ounces is 113.398 g, and 15.43 per 100 g of that is 17.5 calories.
+    assert round(made["calories"], 1) == 17.5
 
 
 def test_a_unit_goes_through_the_one_conversion(client, chicken):

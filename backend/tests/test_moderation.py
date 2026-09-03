@@ -73,7 +73,9 @@ def put_food(db, *, status="approved", owner=None, name="Milk chocolate bar", **
         source="user",
         **{**FULL, **fields},
     )
-    food.servings = [models.FoodServing(name="1 bar", base_amount=43, position=0)]
+    food.servings = [
+        models.FoodServing(name="1 bar", amount=43, unit="g", base_amount=43, position=0)
+    ]
     db.add(food)
     db.commit()
     return food
@@ -88,7 +90,7 @@ def proposal(**overrides):
         "name": "Milk chocolate bar",
         "brand": "Hershey",
         "base_unit": "g",
-        "servings": [{"name": "1 bar", "base_amount": 45, "position": 0}],
+        "servings": [{"name": "1 bar", "amount": 45, "unit": "g", "position": 0}],
         **FULL,
         "calories": 500,
         "sodium_mg": 90,
@@ -229,9 +231,13 @@ def test_the_queue_shows_a_correction_beside_what_it_would_replace(
     assert item["submitted_by"] == "member"
     assert item["target"] == {"id": target.id, "name": target.name, "brand": target.brand}
     assert item["current"]["calories"] == 535
-    assert item["current"]["servings"] == [{"name": "1 bar", "base_amount": 43}]
+    assert item["current"]["servings"] == [
+        {"name": "1 bar", "amount": 43, "unit": "g", "base_amount": 43, "position": 0}
+    ]
     assert item["food"]["calories"] == 500
-    assert item["food"]["servings"] == [{"name": "1 bar", "base_amount": 45}]
+    assert item["food"]["servings"] == [
+        {"name": "1 bar", "amount": 45, "unit": "g", "base_amount": 45, "position": 0}
+    ]
     assert item["note"] == "The bar got smaller."
 
 

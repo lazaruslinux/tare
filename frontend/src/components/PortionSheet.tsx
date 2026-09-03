@@ -230,7 +230,7 @@ export function PortionSheet({
                 <optgroup label="Servings">
                   {food.servings.map((row, index) => (
                     <option key={row.id} value={`${SERVING}${index}`}>
-                      {row.name}
+                      {row.name}, {row.amount} {UNIT_LABEL[row.unit]}
                     </option>
                   ))}
                 </optgroup>

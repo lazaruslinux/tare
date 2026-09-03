@@ -40,6 +40,9 @@ def test_upgrade_head_builds_the_identity_schema(tmp_path):
         }
         user_columns = {column["name"] for column in inspector.get_columns("users")}
         photo_columns = {column["name"] for column in inspector.get_columns("food_photos")}
+        serving_columns = {
+            column["name"] for column in inspector.get_columns("food_servings")
+        }
         submission_columns = {
             column["name"] for column in inspector.get_columns("food_submissions")
         }
@@ -61,6 +64,8 @@ def test_upgrade_head_builds_the_identity_schema(tmp_path):
     # And the one that holds a person to a single open request of each kind
     # about a food that is already shared.
     assert "uq_food_submissions_open_target" in submission_indexes
+    # The words a serving was typed in, beside what they came to.
+    assert {"amount", "unit", "base_amount"} <= serving_columns
     # The two purposes a picture has, and the panel a request carries.
     assert "purpose" in photo_columns
     assert "label_photo_id" in submission_columns

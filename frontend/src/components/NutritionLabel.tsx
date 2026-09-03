@@ -2,7 +2,7 @@ import { ChevronDown } from 'lucide-react'
 import { useState } from 'react'
 
 import type { Food, Headline, Panel } from '../api'
-import { round1, scale } from '../lib/units'
+import { UNIT_LABEL, round1, scale } from '../lib/units'
 
 // The panel, as it is stored and as it reads. The form fills in the same list,
 // so the two can only ever ask for and show the same ten numbers in the same
@@ -43,10 +43,6 @@ export const MORE_FACTS: Fact[] = [
 // A number the label never gave. Not zero, and not left blank either: an empty
 // cell reads as a number that failed to load.
 const NOTHING = '-'
-
-export function amountText(food: Food, baseAmount: number): string {
-  return `${round1(baseAmount)} ${food.base_unit}`
-}
 
 // A nutrient as it reads anywhere: a whole number for calories, because a tenth
 // of one is noise, and a tenth for everything else.
@@ -147,7 +143,7 @@ export function NutritionLabel({ food }: { food: Food }) {
         values={panelAt(food, baseAmount)}
         note={
           perServing && serving
-            ? `${serving.name}, ${amountText(food, serving.base_amount)}`
+            ? `${serving.name}, ${serving.amount} ${UNIT_LABEL[serving.unit]}`
             : `100 ${food.base_unit}`
         }
       />

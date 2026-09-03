@@ -29,7 +29,7 @@ FULL = {
     "sugar_g": 51.2,
 }
 
-SERVINGS = [{"name": "1 bar", "base_amount": 43, "position": 0}]
+SERVINGS = [{"name": "1 bar", "amount": 43, "unit": "g", "position": 0}]
 
 
 def sign_in(client, username):
@@ -140,7 +140,9 @@ def test_the_queue_carries_the_whole_proposed_label(client, make_user):
     assert queue[1]["label_photo_url"] is not None
     assert first["food"]["barcode"] == CODE
     assert first["food"]["sodium_mg"] == 81
-    assert first["food"]["servings"] == [{"name": "1 bar", "base_amount": 43}]
+    assert first["food"]["servings"] == [
+        {"name": "1 bar", "amount": 43, "unit": "g", "base_amount": 43, "position": 0}
+    ]
     assert queue[1]["photo_url"] == f"/api/photos/{photo_id}.webp"
 
 

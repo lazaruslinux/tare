@@ -3,7 +3,7 @@
 // decided once instead of at each call site.
 
 import type { Slot } from './lib/day'
-import type { BaseUnit } from './lib/units'
+import type { BaseUnit, Unit } from './lib/units'
 
 export type Units = 'imperial' | 'metric'
 
@@ -224,7 +224,7 @@ export type FoodRow = {
   community: Community
   // What the label calls one of them, so a row can read per the serving
   // somebody eats. Null on a food nobody has named a serving for.
-  serving: { name: string; base_amount: number } | null
+  serving: LabelServing | null
   // The picture the shared database publishes for it, when it has one. Null is
   // a food nobody has photographed, not a picture that failed to load.
   photo_url: string | null
@@ -239,10 +239,17 @@ export type MyFoodRow = FoodRow & { last_logged: string | null }
 // page stopped and nothing else, and it is only ever handed back as it came.
 export type BrowsePage = { items: FoodRow[]; next_cursor: string | null }
 
-export type FoodServing = {
-  id: number
+// A serving as it was typed and as it is counted: "1 block", one pound, and
+// the 453.592 g every sum underneath it is worked out from.
+export type LabelServing = {
   name: string
+  amount: number
+  unit: Unit
   base_amount: number
+}
+
+export type FoodServing = LabelServing & {
+  id: number
   position: number
 }
 
@@ -302,7 +309,7 @@ export type Prefill = Panel & {
   ingredients_text: string
   // Where the reading came from, in the words a person reads.
   source: string
-  serving: { name: string; base_amount: number } | null
+  serving: LabelServing | null
 }
 
 // The four answers a scan gets, and the four things the app does with them.
@@ -339,7 +346,7 @@ export type Proposed = Panel & {
   base_unit: BaseUnit
   density_g_per_ml: number | null
   ingredients_text: string
-  servings: { name: string; base_amount: number }[]
+  servings: (LabelServing & { position: number })[]
 }
 
 // The shared food a request is about, named well enough to recognise.

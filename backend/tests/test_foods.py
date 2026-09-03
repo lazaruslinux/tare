@@ -88,24 +88,78 @@ def test_a_density_is_held_between_its_bounds(client, signed_in):
 
 
 def test_servings_are_capped_and_have_to_be_an_amount(client, signed_in):
-    eight = [{"name": f"{n} slice", "base_amount": 28, "position": n} for n in range(8)]
+    eight = [{"name": f"{n} slice", "amount": 28, "unit": "g", "position": n} for n in range(8)]
     assert create(client, servings=eight).status_code == 201
-    nine = [*eight, {"name": "9 slice", "base_amount": 28}]
+    nine = [*eight, {"name": "9 slice", "amount": 28, "unit": "g"}]
     assert create(client, servings=nine).status_code == 400
-    assert create(client, servings=[{"name": "1 slice", "base_amount": 0}]).status_code == 400
-    assert create(client, servings=[{"name": "1 slice", "base_amount": -28}]).status_code == 400
+    assert create(client, servings=[{"name": "1 slice", "amount": 0, "unit": "g"}]).status_code == 400
+    assert (
+        create(client, servings=[{"name": "1 slice", "amount": -28, "unit": "g"}]).status_code
+        == 400
+    )
 
-    response = create(client, servings=[{"name": "  ", "base_amount": 28}])
+    response = create(client, servings=[{"name": "  ", "amount": 28, "unit": "g"}])
     assert response.status_code == 400
     assert response.json() == {"detail": "Every serving needs a name."}
+
+
+def test_a_serving_keeps_the_unit_it_was_typed_in(client, db_session, signed_in):
+    """Cheese sold in a one pound block is entered as one pound of it. The
+    grams underneath are the server's arithmetic, and the words come back."""
+    made = create(
+        client,
+        name="Cheddar block",
+        # 70 calories a block, which is 15.43 per 100 g of a 453.592 g one.
+        calories=15.43,
+        servings=[{"name": "1 block", "amount": 1, "unit": "lb", "position": 0}],
+    ).json()
+    stored = db_session.query(models.FoodServing).one()
+    assert round(stored.base_amount, 3) == 453.592
+
+    read = client.get(f"/api/foods/{made['id']}").json()["servings"][0]
+    assert (read["name"], read["amount"], read["unit"]) == ("1 block", 1, "lb")
+    assert round(read["base_amount"], 3) == 453.592
+    # And the panel reads back as the label was filled in: 70 a block.
+    assert round(read["base_amount"] * 15.43 / 100) == 70
+
+
+def test_a_serving_of_a_poured_food_is_kept_in_what_it_was_poured_in(client, signed_in):
+    made = create(
+        client,
+        name="Sports drink",
+        base_unit="ml",
+        servings=[{"name": "1 bottle", "amount": 16.9, "unit": "floz", "position": 0}],
+    ).json()
+    read = client.get(f"/api/foods/{made['id']}").json()["servings"][0]
+    assert (read["amount"], read["unit"]) == (16.9, "floz")
+    # 16.9 fl oz is 499.79 mL, and no density was asked of anything.
+    assert round(read["base_amount"], 2) == 499.79
+
+
+def test_a_serving_cannot_leave_the_food_s_own_family(client, signed_in):
+    """A cup of a food measured by weight would need a density to mean
+    anything, and a serving is the one measurement that assumes nothing."""
+    weighed = create(client, servings=[{"name": "1 cup", "amount": 1, "unit": "cup"}])
+    assert weighed.status_code == 400
+    assert weighed.json() == {"detail": "Pick a weight unit for a food measured by weight."}
+
+    poured = create(
+        client, base_unit="ml", servings=[{"name": "1 oz", "amount": 1, "unit": "oz"}]
+    )
+    assert poured.status_code == 400
+    assert poured.json() == {"detail": "Pick a volume unit for a food measured by volume."}
+
+    unknown = create(client, servings=[{"name": "1 handful", "amount": 1, "unit": "handful"}])
+    assert unknown.status_code == 400
+    assert unknown.json() == {"detail": "That is not a unit Tare knows."}
 
 
 def test_a_food_reads_back_with_its_servings_in_order(client, signed_in):
     made = create(
         client,
         servings=[
-            {"name": "1 breast", "base_amount": 174, "position": 1},
-            {"name": "100 g", "base_amount": 100, "position": 0},
+            {"name": "1 breast", "amount": 174, "unit": "g", "position": 1},
+            {"name": "100 g", "amount": 100, "unit": "g", "position": 0},
         ],
     ).json()
     read = client.get(f"/api/foods/{made['id']}")
@@ -117,13 +171,13 @@ def test_an_edit_replaces_the_servings_wholesale(client, db_session, signed_in):
     made = create(
         client,
         servings=[
-            {"name": "1 slice", "base_amount": 28, "position": 0},
-            {"name": "2 slices", "base_amount": 56, "position": 1},
+            {"name": "1 slice", "amount": 28, "unit": "g", "position": 0},
+            {"name": "2 slices", "amount": 56, "unit": "g", "position": 1},
         ],
     ).json()
     edited = client.patch(
         f"/api/foods/{made['id']}",
-        json=body(name="Rye bread", servings=[{"name": "1 thick slice", "base_amount": 34}]),
+        json=body(name="Rye bread", servings=[{"name": "1 thick slice", "amount": 34, "unit": "g"}]),
     )
     assert edited.status_code == 200
     assert edited.json()["name"] == "Rye bread"
@@ -132,14 +186,14 @@ def test_an_edit_replaces_the_servings_wholesale(client, db_session, signed_in):
 
 
 def test_an_edit_without_a_servings_list_leaves_them_alone(client, signed_in):
-    made = create(client, servings=[{"name": "1 slice", "base_amount": 28}]).json()
+    made = create(client, servings=[{"name": "1 slice", "amount": 28, "unit": "g"}]).json()
     edited = client.patch(f"/api/foods/{made['id']}", json=body(name="Chicken thigh"))
     assert edited.status_code == 200
     assert [s["name"] for s in edited.json()["servings"]] == ["1 slice"]
 
 
 def test_deleting_a_food_takes_its_servings(client, db_session, signed_in):
-    made = create(client, servings=[{"name": "1 slice", "base_amount": 28}]).json()
+    made = create(client, servings=[{"name": "1 slice", "amount": 28, "unit": "g"}]).json()
     assert client.delete(f"/api/foods/{made['id']}").status_code == 204
     assert db_session.get(models.Food, made["id"]) is None
     assert db_session.query(models.FoodServing).count() == 0
@@ -152,14 +206,19 @@ def test_a_list_row_carries_the_label_serving(client, signed_in):
         client,
         name="Sliced cheese",
         servings=[
-            {"name": "1 slice", "base_amount": 19, "position": 0},
-            {"name": "1 pack", "base_amount": 340, "position": 1},
+            {"name": "1 slice", "amount": 19, "unit": "g", "position": 0},
+            {"name": "1 pack", "amount": 340, "unit": "g", "position": 1},
         ],
     )
     create(client, name="Loose rice")
 
     listed = {row["name"]: row["serving"] for row in client.get("/api/foods/mine").json()}
-    assert listed["Sliced cheese"] == {"name": "1 slice", "base_amount": 19}
+    assert listed["Sliced cheese"] == {
+        "name": "1 slice",
+        "amount": 19,
+        "unit": "g",
+        "base_amount": 19,
+    }
     # A food nobody named a serving for reads per 100 of its base unit still.
     assert listed["Loose rice"] is None
 

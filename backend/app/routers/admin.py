@@ -73,7 +73,13 @@ def proposed(food: models.Food) -> dict[str, object]:
         "density_g_per_ml": food.density_g_per_ml,
         "ingredients_text": food.ingredients_text,
         "servings": [
-            {"name": serving.name, "base_amount": serving.base_amount}
+            {
+                "name": serving.name,
+                "amount": serving.amount,
+                "unit": serving.unit,
+                "base_amount": serving.base_amount,
+                "position": serving.position,
+            }
             for serving in food.servings
         ],
     }
@@ -217,7 +223,11 @@ def approve_edit(
     # servings go with it.
     target.servings = [
         models.FoodServing(
-            name=serving.name, base_amount=serving.base_amount, position=serving.position
+            name=serving.name,
+            amount=serving.amount,
+            unit=serving.unit,
+            base_amount=serving.base_amount,
+            position=serving.position,
         )
         for serving in shadow.servings
     ]

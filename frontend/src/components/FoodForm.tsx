@@ -4,7 +4,17 @@ import { useState, type FormEvent } from 'react'
 import { ApiError, api, errorText, type Food, type Prefill, type Scanned } from '../api'
 import { useTopBar } from '../hooks/useTopBar'
 import { NO_SERVING, SHARED_FACTS, missingSentence, type Values } from '../lib/community'
-import { round1, scale, toPer100, type BaseUnit } from '../lib/units'
+import {
+  MASS_UNITS,
+  UNIT_LABEL,
+  UNIT_TO_BASE,
+  VOLUME_UNITS,
+  round1,
+  scale,
+  toPer100,
+  type BaseUnit,
+  type Unit,
+} from '../lib/units'
 import { BarcodeScanner } from './BarcodeScanner'
 import { HEADLINE, MORE_FACTS, type Nutrient } from './NutritionLabel'
 import { PhotoSlots } from './PhotoSlots'
@@ -28,7 +38,14 @@ const DENSITY_MIN = 0.2
 const DENSITY_MAX = 3
 const DENSITY_HINT = `A milliliter weighs between ${DENSITY_MIN} and ${DENSITY_MAX} grams.`
 
-type ServingDraft = { name: string; amount: string }
+// A serving as somebody types it: the words for it, the number, and the
+// unit that number is in. What it comes to in the food's base unit is
+// worked out from those, never typed.
+type ServingDraft = { name: string; amount: string; unit: Unit }
+
+// The units a food of this class may be served in. Only its own: a serving
+// measured across the two families would need a density to mean anything.
+const unitsFor = (base: BaseUnit): Unit[] => (base === 'g' ? MASS_UNITS : VOLUME_UNITS)
 
 // A typed field as a number, or nothing. An empty box is a nutrient the label
 // did not give, which is not the same as zero of it.
@@ -37,6 +54,13 @@ function num(raw: string): number | null {
   if (!trimmed) return null
   const parsed = Number(trimmed)
   return Number.isFinite(parsed) ? parsed : null
+}
+
+// What a typed serving comes to in the food's own base unit, which is what the
+// panel underneath it is read against. Null until there is a size to read.
+function baseOf(draft: ServingDraft): number | null {
+  const amount = num(draft.amount)
+  return amount === null || amount <= 0 ? null : amount * UNIT_TO_BASE[draft.unit]
 }
 
 // What is stored, as it reads for one serving of this size. Calories whole and
@@ -64,14 +88,20 @@ function panelOf(carrier: Food | Prefill | null): Values {
 // already are.
 function startingServing(food: Food | null, prefill: Prefill | null): ServingDraft {
   const first = food?.servings[0]
-  if (first) return { name: first.name, amount: String(first.base_amount) }
+  // The stored amount in the stored unit, never the base number it came to: a
+  // pound of cheese was entered as a pound and is read back as one.
+  if (first) return { name: first.name, amount: String(first.amount), unit: first.unit }
   if (prefill) {
     return prefill.serving
-      ? { name: prefill.serving.name, amount: String(prefill.serving.base_amount) }
-      : { name: `100 ${prefill.base_unit}`, amount: '100' }
+      ? {
+          name: prefill.serving.name,
+          amount: String(prefill.serving.amount),
+          unit: prefill.serving.unit,
+        }
+      : { name: `100 ${prefill.base_unit}`, amount: '100', unit: prefill.base_unit }
   }
-  if (food === null) return { name: '', amount: '' }
-  return { name: `100 ${food.base_unit}`, amount: '100' }
+  if (food === null) return { name: '', amount: '', unit: 'g' }
+  return { name: `100 ${food.base_unit}`, amount: '100', unit: food.base_unit }
 }
 
 // Anything a food carries beyond the label serving. Not shown and not changed:
@@ -80,17 +110,19 @@ function extraServings(food: Food | null): ServingDraft[] {
   if (!food) return []
   return food.servings
     .slice(1)
-    .map((serving) => ({ name: serving.name, amount: String(serving.base_amount) }))
+    .map((serving) => ({
+      name: serving.name,
+      amount: String(serving.amount),
+      unit: serving.unit,
+    }))
 }
 
 function startingPanel(
   carrier: Food | Prefill | null,
   serving: ServingDraft
 ): Record<Nutrient, string> {
-  const amount = num(serving.amount)
-  if (carrier === null || amount === null || amount <= 0) {
-    return perServingDraft(panelOf(null), 100)
-  }
+  const amount = baseOf(serving)
+  if (carrier === null || amount === null) return perServingDraft(panelOf(null), 100)
   return perServingDraft(panelOf(carrier), amount)
 }
 
@@ -214,10 +246,18 @@ export function FoodForm({
 
   const setServing = (draft: ServingDraft) => {
     setServingRow(draft)
-    const amount = num(draft.amount)
+    const amount = baseOf(draft)
     // Still the lookup's numbers, so they follow the serving they are read
-    // against: a panel per 100 g reads per the slice as soon as it is named.
-    if (basis !== null && amount !== null && amount > 0) setPanel(perServingDraft(basis, amount))
+    // against: a panel per 100 g reads per the slice as soon as it is named,
+    // and reads per the pound as soon as the unit beside it says pound.
+    if (basis !== null && amount !== null) setPanel(perServingDraft(basis, amount))
+  }
+
+  // The unit belongs to the class, so switching Measured by starts it over at
+  // that class's own base and leaves the number somebody typed alone.
+  const setBase = (next: BaseUnit) => {
+    setBaseUnit(next)
+    if (next !== baseUnit) setServing({ ...serving, unit: next })
   }
 
   // What a lookup gives, put into the boxes it fills. Anything the reading did
@@ -233,11 +273,15 @@ export function FoodForm({
     const read = {} as Values
     for (const fact of SHARED_FACTS) read[fact.key] = reading[fact.key]
     const seeded: ServingDraft = reading.serving
-      ? { name: reading.serving.name, amount: String(reading.serving.base_amount) }
-      : { name: `100 ${reading.base_unit}`, amount: '100' }
+      ? {
+          name: reading.serving.name,
+          amount: String(reading.serving.amount),
+          unit: reading.serving.unit,
+        }
+      : { name: `100 ${reading.base_unit}`, amount: '100', unit: reading.base_unit }
     setServingRow(seeded)
     setBasis(read)
-    setPanel(perServingDraft(read, num(seeded.amount) ?? 100))
+    setPanel(perServingDraft(read, baseOf(seeded) ?? 100))
     setMore(true)
   }
 
@@ -275,11 +319,14 @@ export function FoodForm({
       return
     }
 
-    const size = num(serving.amount)
-    if (!serving.name.trim() || size === null || size <= 0) {
+    const typed = num(serving.amount)
+    if (!serving.name.trim() || typed === null || typed <= 0) {
       setError(NO_SERVING)
       return
     }
+    // What the boxes are per, in the food's base unit. The server works the
+    // same sum from the amount and the unit that are sent to it.
+    const size = typed * UNIT_TO_BASE[serving.unit]
 
     // What is in the boxes, which is per one serving.
     const read = {} as Values
@@ -313,10 +360,11 @@ export function FoodForm({
       density_g_per_ml: weight,
       ingredients_text: ingredients,
       servings: [
-        { name: serving.name, base_amount: size, position: 0 },
+        { name: serving.name, amount: typed, unit: serving.unit, position: 0 },
         ...extras.map((row, index) => ({
           name: row.name,
-          base_amount: num(row.amount) ?? 0,
+          amount: num(row.amount) ?? 0,
+          unit: row.unit,
           position: index + 1,
         })),
       ],
@@ -371,10 +419,10 @@ export function FoodForm({
     )
   }
 
-  const size = num(serving.amount)
+  const typed = num(serving.amount)
   const per =
-    serving.name.trim() && size !== null && size > 0
-      ? `Per ${serving.name.trim()} (${size} ${baseUnit})`
+    serving.name.trim() && typed !== null && typed > 0
+      ? `Per ${serving.name.trim()} (${typed} ${UNIT_LABEL[serving.unit]})`
       : 'Per serving'
 
   return (
@@ -474,7 +522,7 @@ export function FoodForm({
                 type="button"
                 aria-pressed={baseUnit === base.value}
                 className="t-choice"
-                onClick={() => setBaseUnit(base.value)}
+                onClick={() => setBase(base.value)}
               >
                 <span className="block text-sm font-semibold">{base.title}</span>
                 <span className="block text-xs">{base.note}</span>
@@ -501,7 +549,20 @@ export function FoodForm({
               value={serving.amount}
               onChange={(event) => setServing({ ...serving, amount: event.target.value })}
             />
-            <span className="w-6 text-xs text-muted">{baseUnit}</span>
+            <select
+              className="t-input t-nums w-24 shrink-0"
+              aria-label="Serving unit"
+              value={serving.unit}
+              onChange={(event) =>
+                setServing({ ...serving, unit: event.target.value as Unit })
+              }
+            >
+              {unitsFor(baseUnit).map((unit) => (
+                <option key={unit} value={unit}>
+                  {UNIT_LABEL[unit]}
+                </option>
+              ))}
+            </select>
           </div>
 
           <p className="t-label mb-1">{per}</p>
