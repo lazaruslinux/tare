@@ -10,21 +10,24 @@ import {
   ScrollText,
   Smartphone,
   Target,
+  Upload,
   UserRound,
   Users,
 } from 'lucide-react'
 import { useEffect, useState, type FormEvent } from 'react'
 
-import { api, errorText, type Me, type Units } from '../api'
+import { api, errorText, type Me, type SyncKey, type Units } from '../api'
 import { MeasurementsSheet } from '../components/MeasurementsSheet'
 import { type Glyph } from '../components/TabBar'
 import { SaveMarks, useSavedChip } from '../components/SaveMarks'
 import { useTopBar, type TopBarHeader } from '../hooks/useTopBar'
+import { useRailLayout } from '../hooks/useWideLayout'
 import { today } from '../lib/day'
 import { ZONES, offList } from '../lib/zones'
 import { applyTheme, rememberTheme, useTheme, type Theme } from '../theme'
 import { AdminInvites } from './AdminInvites'
 import { AdminQueue } from './AdminQueue'
+import { AdminUploads } from './AdminUploads'
 import { AdminUsers } from './AdminUsers'
 import { Feedback, FeedbackLog } from './Feedback'
 import { Fitness } from './Fitness'
@@ -46,6 +49,7 @@ export type Screen =
   | 'queue'
   | 'invites'
   | 'users'
+  | 'uploads'
   | 'feedbacklog'
   | null
 
@@ -59,6 +63,12 @@ const UNITS: { value: Units; label: string }[] = [
 // How long the line about what just happened stays up.
 const SAID_FOR = 4000
 
+// What the sync row says under itself, or nothing at all before a key exists.
+function syncNote(row: SyncKey | null): string | undefined {
+  if (row === null || !row.connected) return undefined
+  return row.last_used_at === null ? 'Key made, nothing received yet' : 'Connected'
+}
+
 const THEMES: { value: Theme; label: string }[] = [
   { value: 'light', label: 'Light' },
   { value: 'dark', label: 'Dark' },
@@ -68,17 +78,24 @@ function Row({
   label,
   icon: Icon,
   count,
+  note,
   onOpen,
 }: {
   label: string
   icon: Glyph
   count?: number
+  // What this row is already showing, said under it. Only the rows that have
+  // something to report carry one.
+  note?: string
   onOpen: () => void
 }) {
   return (
     <button type="button" className="t-row w-full text-left" onClick={onOpen}>
       <Icon className="h-4 w-4 shrink-0 text-muted" strokeWidth={2} />
-      <span className="flex-1 text-sm">{label}</span>
+      <span className="min-w-0 flex-1">
+        <span className="block text-sm">{label}</span>
+        {note !== undefined && <span className="block text-xs text-muted">{note}</span>}
+      </span>
       {count !== undefined && count > 0 && <span className="t-chip t-nums">{count}</span>}
       <ChevronRight className="h-4 w-4 shrink-0 text-muted" strokeWidth={2} />
     </button>
@@ -118,7 +135,13 @@ export function More({
   onScreen?: (screen: Screen) => void
 }) {
   const theme = useTheme()
+  // At rail width the rail already lists Targets and Fitness, so this list
+  // does not say them twice.
+  const railed = useRailLayout()
   const [screen, setScreen] = useState<Screen>(start ?? null)
+  // What the sync row says under itself. One request when this tab opens, and
+  // nothing after that: it is a line on a row, not a live figure.
+  const [sync, setSync] = useState<SyncKey | null>(null)
   const [measuring, setMeasuring] = useState(false)
   // What was just done, said on the list this screen returns to. It lives here
   // rather than on the screen that did it, because that screen has closed.
@@ -136,6 +159,16 @@ export function More({
   const [passwordError, setPasswordError] = useState('')
   const [passwordSaved, markPasswordSaved] = useSavedChip()
   const [savingPassword, setSavingPassword] = useState(false)
+
+  useEffect(() => {
+    let alive = true
+    api<SyncKey>('/account/ingest-token')
+      .then((row) => alive && setSync(row))
+      .catch(() => undefined)
+    return () => {
+      alive = false
+    }
+  }, [])
 
   useEffect(() => {
     if (said === '') return
@@ -158,7 +191,7 @@ export function More({
     account: 'Account',
     profile: 'Profile',
     display: 'Display',
-    sync: 'Sync a device',
+    sync: 'Health data sync',
     feedback: 'Send feedback',
     feedbacklog: 'Feedback log',
   }
@@ -291,6 +324,7 @@ export function More({
   if (screen === 'queue') return <AdminQueue onBack={leaveAdmin} onDecided={onReviewed} />
   if (screen === 'invites') return <AdminInvites onBack={leaveAdmin} />
   if (screen === 'users') return <AdminUsers onBack={leaveAdmin} />
+  if (screen === 'uploads') return <AdminUploads onBack={() => go(null)} />
 
   if (screen === 'account') {
     return (
@@ -463,9 +497,14 @@ export function More({
       <div className="t-card mb-3">
         <Row label="Account" icon={UserRound} onOpen={() => go('account')} />
         <Row label="Profile" icon={IdCard} onOpen={() => go('profile')} />
-        <Row label="Targets" icon={Target} onOpen={() => go('targets')} />
-        <Row label="Fitness" icon={HeartPulse} onOpen={() => go('fitness')} />
-        <Row label="Sync a device" icon={Smartphone} onOpen={() => go('sync')} />
+        {!railed && <Row label="Targets" icon={Target} onOpen={() => go('targets')} />}
+        {!railed && <Row label="Fitness" icon={HeartPulse} onOpen={() => go('fitness')} />}
+        <Row
+          label="Health data sync"
+          icon={Smartphone}
+          note={syncNote(sync)}
+          onOpen={() => go('sync')}
+        />
         <Row label="Display" icon={Monitor} onOpen={() => go('display')} />
         <Row label="Send feedback" icon={MessageSquare} onOpen={() => go('feedback')} />
         <Row label="My submissions" icon={Inbox} onOpen={onOpenSubmissions} />
@@ -483,6 +522,7 @@ export function More({
             />
             <Row label="Invites" icon={Mail} onOpen={() => go('invites')} />
             <Row label="Members" icon={Users} onOpen={() => go('users')} />
+            <Row label="Uploads" icon={Upload} onOpen={() => go('uploads')} />
             <Row label="Feedback log" icon={ScrollText} onOpen={() => go('feedbacklog')} />
           </div>
         </>

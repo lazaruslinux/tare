@@ -23,6 +23,10 @@ log = logging.getLogger("tare.throttle")
 # asked the same way wherever they were typing.
 TOO_MANY = "Too many attempts just now. Wait a few minutes and try again."
 
+# Except the one that counts by the hour, which has to name the hour or it
+# reads as a wait of a few minutes that never ends.
+TOO_MANY_UPLOADS = "Too many uploads. Try again in an hour."
+
 # Sweep only once the table is larger than any real audience, so an ordinary
 # instance never pays for the sweep at all.
 _SWEEP_THRESHOLD = 2048
@@ -119,6 +123,11 @@ forgot_limiter = RateLimiter(5, 900, "forgot")
 # that address. Sixty a minute is far past what a phone automation does and far
 # under what a guessing run needs.
 ingest_limiter = RateLimiter(60, 60, "ingest")
+# Handing over a health export as a file, counted per account rather than per
+# address. Five an hour is more than anybody moving their history in needs, and
+# it is what stops one signed-in member asking this server to parse a large
+# file over and over.
+upload_limiter = RateLimiter(5, 3600, "upload")
 # Minting a sync key. Tight because each call replaces the standing key, and a
 # member who has just replaced theirs has no reason to do it again this minute.
 ingest_token_limiter = RateLimiter(5, 60, "ingest-token")

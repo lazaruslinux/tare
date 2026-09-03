@@ -10,10 +10,12 @@ from pydantic import BaseModel
 from sqlalchemy.orm import Session
 
 from app import clock, models, security, throttle
+from app.config import settings
 from app.db import get_db
 from app.deps import require_user
 from app.models import now_utc
 from app.routers.auth import CLEARED_BIRTHDATE, checked_birthdate, me_payload
+from app.routers.ingest import has_uploads
 
 router = APIRouter(tags=["account"])
 
@@ -101,11 +103,15 @@ def update_account(
 INGEST_PATH = "/api/ingest/health"
 
 
-def token_status(row: models.IngestToken | None) -> dict[str, object]:
+def token_status(row: models.IngestToken | None, uploaded: bool = False) -> dict[str, object]:
     """What is said about a sync key, which never includes the key.
 
     A key is shown once, at the moment it is made, and is not stored in a form
     anything could show again.
+
+    The two upload answers ride here because the screen that asks this question
+    is the screen they belong to: whether this instance takes files at all, and
+    whether this account has anything that came out of one.
     """
     return {
         "connected": row is not None,
@@ -114,6 +120,8 @@ def token_status(row: models.IngestToken | None) -> dict[str, object]:
         "last_used_at": (
             None if row is None or row.last_used_at is None else row.last_used_at.isoformat()
         ),
+        "uploads": settings.uploads_enabled,
+        "uploaded": uploaded,
     }
 
 
@@ -121,7 +129,7 @@ def token_status(row: models.IngestToken | None) -> dict[str, object]:
 def read_ingest_token(
     db: Session = Depends(get_db), user: models.User = Depends(require_user)
 ) -> dict[str, object]:
-    return token_status(db.get(models.IngestToken, user.id))
+    return token_status(db.get(models.IngestToken, user.id), has_uploads(db, user.id))
 
 
 @router.post("/account/ingest-token")

@@ -59,7 +59,7 @@ export default function App() {
   // sending somebody straight to it, and handed back once it has been read.
   const [moreView, setMoreView] = useState<Screen>(null)
   // The same for the Dashboard's one sub-view.
-  const [dashView, setDashView] = useState<'measurements' | null>(null)
+  const [dashView, setDashView] = useState<DashScreen>(null)
   // Which screen each of those two is really showing. Reported upward so the
   // rail can light the row that leads to it rather than the page holding it.
   const [moreScreen, setMoreScreen] = useState<Screen>(null)
@@ -122,7 +122,9 @@ export default function App() {
       return
     }
     if (target === 'measurements') {
-      setDashView('measurements')
+      // The row still reads Biometrics, because that is what somebody is
+      // looking for. What it opens is the screen the weigh-ins live on now.
+      setDashView('progress')
       select('dashboard')
       return
     }

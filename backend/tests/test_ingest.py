@@ -4,6 +4,7 @@ import json
 from sqlalchemy import select
 
 from app import models, security
+from app.config import settings
 from app.deps import BAD_INGEST_TOKEN
 from app.models import now_utc
 
@@ -472,7 +473,10 @@ def test_a_picked_file_lands_the_way_a_sync_does(client, db_session, signed_in):
     assert steps.value == 8500
     assert db_session.scalar(select(models.Workout)).activity == "Outdoor Run"
     row = db_session.scalar(select(models.IngestLog))
-    assert row.dialect == "hae"
+    # An upload says so rather than naming the dialect it happened to speak,
+    # and the size of the file is on the record beside it.
+    assert row.dialect == "upload"
+    assert row.bytes > 0
     assert row.user_id == signed_in.id
 
 
@@ -506,3 +510,163 @@ def test_a_sync_key_does_not_open_the_upload(client, db_session, make_user):
     assert response.status_code == 401
     assert response.json() == {"detail": "You are not signed in."}
     assert db_session.scalar(select(models.IngestLog)) is None
+
+
+# ---- What a file brought, and taking it back out ----
+
+
+def nested(levels):
+    """One object inside another, that many times over."""
+    node = {"end": 1}
+    for _ in range(levels - 1):
+        node = {"deeper": node}
+    return node
+
+
+def test_an_upload_stamps_every_row_it_writes(client, db_session, signed_in):
+    pick(client, json.dumps(export(yesterday())).encode())
+
+    assert {row.source for row in db_session.scalars(select(models.FitnessDaily))} == {"upload"}
+    assert {row.source for row in db_session.scalars(select(models.FitnessIntraday))} == {
+        "upload"
+    }
+    workout = db_session.scalar(select(models.Workout))
+    assert workout.source == "upload"
+    # Nothing out of a file is put in front of anybody until they say so.
+    assert workout.hidden_from_feed is True
+    weight = db_session.scalar(select(models.WeightEntry))
+    assert weight.source == "ingest"
+    assert weight.via == "upload"
+
+
+def test_a_sync_stamps_its_rows_as_a_sync(client, db_session, make_user):
+    user = make_user("runner")
+    token = token_for(db_session, user)
+
+    post(client, token, export(yesterday()))
+
+    assert {row.source for row in db_session.scalars(select(models.FitnessDaily))} == {"sync"}
+    assert {row.source for row in db_session.scalars(select(models.FitnessIntraday))} == {"sync"}
+    workout = db_session.scalar(select(models.Workout))
+    assert workout.source == "apple"
+    assert workout.hidden_from_feed is False
+    assert db_session.scalar(select(models.WeightEntry)).via is None
+
+
+def test_a_wipe_takes_only_what_a_file_brought(client, db_session, signed_in):
+    token = token_for(db_session, signed_in)
+    uploaded_day = yesterday()
+    synced_day = uploaded_day - dt.timedelta(days=1)
+    synced = export(synced_day)
+    # Its own id, or the second workout lands on the first one's row.
+    synced["data"]["workouts"][0]["id"] = "run-two"
+    pick(client, json.dumps(export(uploaded_day)).encode())
+    post(client, token, synced)
+    db_session.add(
+        models.WeightEntry(
+            user_id=signed_in.id,
+            date_for=uploaded_day - dt.timedelta(days=5),
+            weight_kg=91.2,
+            source="manual",
+        )
+    )
+    db_session.commit()
+
+    response = client.delete("/api/ingest/uploads")
+
+    assert response.status_code == 200
+    assert response.json()["removed"] > 0
+    db_session.expire_all()
+    assert {row.source for row in db_session.scalars(select(models.FitnessDaily))} == {"sync"}
+    assert {row.source for row in db_session.scalars(select(models.FitnessIntraday))} == {"sync"}
+    workouts = list(db_session.scalars(select(models.Workout)))
+    assert [row.source for row in workouts] == ["apple"]
+    # The line and the minute rows went with the workout they belonged to.
+    assert len(list(db_session.scalars(select(models.WorkoutRoute)))) == 1
+    assert {row.workout_id for row in db_session.scalars(select(models.WorkoutSample))} == {
+        workouts[0].id
+    }
+    weights = list(db_session.scalars(select(models.WeightEntry)))
+    assert {row.source for row in weights} == {"ingest", "manual"}
+    assert all(row.via is None for row in weights)
+    assert "wipe" in {row.dialect for row in db_session.scalars(select(models.IngestLog))}
+
+
+def test_the_screen_is_told_when_a_file_brought_something(client, db_session, signed_in):
+    assert client.get("/api/account/ingest-token").json()["uploaded"] is False
+
+    pick(client, json.dumps(export(yesterday())).encode())
+    assert client.get("/api/account/ingest-token").json()["uploaded"] is True
+
+    client.delete("/api/ingest/uploads")
+    assert client.get("/api/account/ingest-token").json()["uploaded"] is False
+
+
+def test_a_sixth_upload_in_an_hour_is_refused(client, signed_in):
+    body = json.dumps({"data": {"metrics": []}}).encode()
+    for _ in range(5):
+        assert pick(client, body).status_code == 200
+
+    response = pick(client, body)
+
+    assert response.status_code == 429
+    assert response.json() == {"detail": "Too many uploads. Try again in an hour."}
+
+
+def test_a_body_that_is_not_an_export_is_refused(client, db_session, signed_in):
+    response = pick(client, json.dumps({"notes": ["a holiday"]}).encode())
+
+    assert response.status_code == 400
+    assert response.json() == {"detail": "This file is not a health export."}
+    assert db_session.scalar(select(models.IngestLog)) is None
+
+
+def test_a_body_nested_past_the_ceiling_is_refused(client, db_session, signed_in):
+    response = pick(client, json.dumps({"data": nested(12)}).encode())
+
+    assert response.status_code == 400
+    assert response.json() == {"detail": "This file is not a health export."}
+    assert db_session.scalar(select(models.IngestLog)) is None
+
+
+def test_a_body_inside_the_ceiling_is_read(client, signed_in):
+    assert pick(client, json.dumps({"data": nested(11)}).encode()).status_code == 200
+
+
+def test_a_body_carrying_too_many_keys_is_refused(client, signed_in):
+    crowded = {"data": {"metrics": []}, "extra": {str(number): 1 for number in range(200_001)}}
+
+    response = pick(client, json.dumps(crowded).encode())
+
+    assert response.status_code == 400
+    assert response.json() == {"detail": "This file is not a health export."}
+
+
+def test_uploads_can_be_turned_off_without_closing_the_sync(
+    client, db_session, signed_in, monkeypatch
+):
+    monkeypatch.setattr(settings, "uploads_enabled", False)
+    token = token_for(db_session, signed_in)
+
+    response = pick(client, json.dumps({"data": {"metrics": []}}).encode())
+
+    assert response.status_code == 404
+    assert response.json() == {"detail": "Uploads are turned off on this instance."}
+    assert client.get("/api/account/ingest-token").json()["uploads"] is False
+    # A phone is unaffected: the switch is about files somebody hands over.
+    assert post(client, token, {"data": {"metrics": []}}).status_code == 200
+
+
+def test_the_upload_list_is_for_administrators_only(client, signed_in):
+    assert client.get("/api/admin/uploads").status_code == 403
+
+
+def test_the_upload_list_names_who_sent_what(admin_client, admin):
+    pick(admin_client, json.dumps(export(yesterday())).encode())
+
+    rows = admin_client.get("/api/admin/uploads").json()
+
+    assert len(rows) == 1
+    assert rows[0]["username"] == "admin"
+    assert rows[0]["bytes"] > 0
+    assert rows[0]["accepted"] > 0

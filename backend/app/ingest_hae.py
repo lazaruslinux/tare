@@ -160,6 +160,7 @@ def upsert_daily(
     value: float | None,
     unit: str,
     fields: dict[str, Any] | None = None,
+    origin: str = "sync",
 ) -> bool:
     """One metric's figure for one day. Answers whether a row was created.
 
@@ -180,6 +181,7 @@ def upsert_daily(
     row.value = None if value is None else round(value, 3)
     row.unit = unit[:20]
     row.fields = fields
+    row.source = origin
     return fresh
 
 
@@ -191,6 +193,7 @@ def upsert_intraday(
     metric: str,
     value: float,
     unit: str,
+    origin: str = "sync",
 ) -> None:
     row = db.scalar(
         select(models.FitnessIntraday).where(
@@ -207,6 +210,7 @@ def upsert_intraday(
         db.add(row)
     row.value = round(value, 3)
     row.unit = unit[:20]
+    row.source = origin
 
 
 # Reading the metrics
@@ -240,7 +244,12 @@ def _tile_value(metric: str, point: Any, unit: str) -> float | None:
 
 
 def import_metrics(
-    db: Session, user: models.User, metrics: list[Any], zone: dt.tzinfo, counts: Counts
+    db: Session,
+    user: models.User,
+    metrics: list[Any],
+    zone: dt.tzinfo,
+    counts: Counts,
+    origin: str = "sync",
 ) -> None:
     earliest = first_day(user)
     body_fat: list[tuple[dt.date, dt.datetime, float]] = []
@@ -292,19 +301,19 @@ def import_metrics(
             value = combine(gathered.values, rule)
             if value is None and gathered.fields is not None:
                 value = headline(gathered.fields)
-            if upsert_daily(db, user.id, day, name, value, unit, gathered.fields):
+            if upsert_daily(db, user.id, day, name, value, unit, gathered.fields, origin):
                 counts.days += 1
             if value is not None and _implausible(name, value):
                 counts.flagged += 1
 
         if name in INTRADAY:
-            _store_intraday(db, user, name, unit, points, zone, earliest)
+            _store_intraday(db, user, name, unit, points, zone, earliest, origin)
         if name == WEIGHT_METRIC:
             weights.extend(_weigh_ins(points, unit, zone, earliest))
         if name == BODY_FAT_METRIC:
             body_fat.extend(_body_fats(points, zone, earliest))
 
-    _write_weights(db, user, weights, counts)
+    _write_weights(db, user, weights, counts, origin)
     _write_body_fat(db, user, body_fat)
 
 
@@ -325,6 +334,7 @@ def _store_intraday(
     points: list[Any],
     zone: dt.tzinfo,
     earliest: dt.date,
+    origin: str = "sync",
 ) -> None:
     """The hour bars: a metric's readings bucketed to the hour they landed in.
 
@@ -357,7 +367,7 @@ def _store_intraday(
     for (day, hour), values in buckets.items():
         rolled = combine(values, rule)
         if rolled is not None:
-            upsert_intraday(db, user.id, day, hour, key, rolled, stored_unit)
+            upsert_intraday(db, user.id, day, hour, key, rolled, stored_unit, origin)
 
 
 def _weigh_ins(
@@ -403,6 +413,7 @@ def _write_weights(
     user: models.User,
     weights: list[tuple[dt.date, dt.datetime, float]],
     counts: Counts,
+    origin: str = "sync",
 ) -> None:
     """The scale's readings onto the weigh-in log, and only onto empty days.
 
@@ -428,7 +439,13 @@ def _write_weights(
             continue
         db.add(
             models.WeightEntry(
-                user_id=user.id, date_for=day, weight_kg=round(kg, 2), source="ingest"
+                user_id=user.id,
+                date_for=day,
+                weight_kg=round(kg, 2),
+                source="ingest",
+                # The source stays what it is. This is the mark that says a
+                # file brought it, and it is the only thing a wipe reads.
+                via="upload" if origin == "upload" else None,
             )
         )
 
@@ -568,6 +585,9 @@ def import_workouts(
             max_hr=_beats(heart_fields.get("max")),
             elevation_gain_m=None,
             indoor=bool(entry.get("isIndoor")),
+            # A file can carry a year of somebody else's mornings, so nothing
+            # out of one is put in front of anybody until they say so.
+            hidden_from_feed=source == "upload",
             source=source,
             flags=_pace_flags(activity, duration_s, distance_m),
             created_at=models.now_utc(),
@@ -604,10 +624,16 @@ def _beats(value: Any) -> int | None:
 def import_payload(
     db: Session, user: models.User, payload: dict[str, Any], source: str = "apple"
 ) -> Counts:
-    """One export, read whole. The caller has already checked its size."""
+    """One export, read whole. The caller has already checked its size.
+
+    `source` says which way in this was: a phone's own exporter, the Android
+    bridge, or a file somebody picked. Everything else here reads it as the one
+    question that matters later, which is whether a wipe should take this row.
+    """
     zone = clock.user_tz(user)
+    origin = "upload" if source == "upload" else "sync"
     metrics, workouts = envelope(payload)
     counts = Counts()
-    import_metrics(db, user, metrics, zone, counts)
+    import_metrics(db, user, metrics, zone, counts, origin)
     import_workouts(db, user, workouts, zone, source, counts)
     return counts

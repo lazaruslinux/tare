@@ -738,6 +738,9 @@ class WeightEntry(Base):
         nullable=False,
         default="manual",
     )
+    # Set only on a weigh-in a file brought in. The source above still reads
+    # "ingest", because that is what it is; this is what takes it away again.
+    via: Mapped[str | None] = mapped_column(String(8), nullable=True)
     created_at: Mapped[dt.datetime] = mapped_column(UtcDateTime, nullable=False, default=now_utc)
 
 
@@ -767,13 +770,19 @@ class ExerciseEntry(Base):
     created_at: Mapped[dt.datetime] = mapped_column(UtcDateTime, nullable=False, default=now_utc)
 
 
-# Where a workout came from. A phone's own export, the Android bridge, or
-# somebody typing it in.
-WORKOUT_SOURCES = ("apple", "hc", "manual")
+# Where a workout came from. A phone's own export, the Android bridge, a file
+# somebody uploaded, or somebody typing it in.
+WORKOUT_SOURCES = ("apple", "hc", "manual", "upload")
 
 # Which dialect one sync spoke, kept on the log so a sync that went wrong can
-# be told apart from one that never arrived.
-INGEST_DIALECTS = ("hae", "hc")
+# be told apart from one that never arrived. An upload says so instead of
+# naming its dialect, and a wipe is the record of numbers being taken away.
+INGEST_DIALECTS = ("hae", "hc", "upload", "wipe")
+
+# How a fitness row got here: a phone posting to the sync address, or a file
+# somebody picked. Carried on every table an upload writes so an upload can be
+# taken back out again without touching a single thing a phone sent.
+FITNESS_SOURCES = ("sync", "upload")
 
 
 class FitnessDaily(Base):
@@ -803,6 +812,8 @@ class FitnessDaily(Base):
     value: Mapped[float | None] = mapped_column(Float, nullable=True)
     unit: Mapped[str] = mapped_column(String(20), nullable=False, default="")
     fields: Mapped[dict[str, Any] | None] = mapped_column(JSON, nullable=True)
+    # Which way in wrote it. See FITNESS_SOURCES.
+    source: Mapped[str] = mapped_column(String(8), nullable=False, default="sync")
 
 
 class FitnessIntraday(Base):
@@ -830,6 +841,7 @@ class FitnessIntraday(Base):
     hour: Mapped[int] = mapped_column(Integer, nullable=False)
     value: Mapped[float | None] = mapped_column(Float, nullable=True)
     unit: Mapped[str] = mapped_column(String(20), nullable=False, default="")
+    source: Mapped[str] = mapped_column(String(8), nullable=False, default="sync")
 
 
 class Workout(Base):
@@ -945,5 +957,8 @@ class IngestLog(Base):
     accepted: Mapped[int] = mapped_column(Integer, nullable=False, default=0)
     flagged: Mapped[int] = mapped_column(Integer, nullable=False, default=0)
     skipped: Mapped[int] = mapped_column(Integer, nullable=False, default=0)
+    # How large the file was. Only an upload has one, and it is the size of the
+    # body rather than anything out of it.
+    bytes: Mapped[int | None] = mapped_column(Integer, nullable=True)
     # The first thing that could not be read, and why. One line, no payload.
     error: Mapped[str | None] = mapped_column(String(200), nullable=True)

@@ -550,6 +550,45 @@ def revoke_invite(
     db.commit()
 
 
+# ---- What has been uploaded ----
+
+# How far back the list reaches. Long enough to see a pattern, short enough
+# that the screen is one read.
+UPLOAD_ROWS = 200
+
+
+@router.get("/uploads")
+def read_uploads(
+    db: Session = Depends(get_db), admin: models.User = Depends(require_admin)
+) -> list[dict[str, object]]:
+    """Every file that has been handed to this instance, newest first.
+
+    A file is the one thing here that arrives by hand and can carry anything,
+    so who sent one, when, and how large it was is worth an administrator being
+    able to read. What was in it is not here and never will be.
+    """
+    rows = db.execute(
+        select(models.IngestLog, models.User.username, models.User.display_name)
+        .join(models.User, models.User.id == models.IngestLog.user_id)
+        .where(models.IngestLog.dialect == "upload")
+        .order_by(models.IngestLog.received_at.desc())
+        .limit(UPLOAD_ROWS)
+    ).all()
+    return [
+        {
+            "id": row.id,
+            "username": username,
+            "display_name": display_name,
+            "received_at": row.received_at,
+            "bytes": row.bytes,
+            "accepted": row.accepted,
+            "flagged": row.flagged,
+            "skipped": row.skipped,
+        }
+        for row, username, display_name in rows
+    ]
+
+
 # ---- Who is on the instance ----
 
 

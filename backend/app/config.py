@@ -59,6 +59,12 @@ class Settings(BaseSettings):
 
     usda_api_key: str = ""
 
+    # Whether a member may hand this server a health export as a file. On by
+    # default, because that is how somebody moves a year of history in. An
+    # instance that would rather only ever be posted to by a phone turns it
+    # off, and the address stops existing rather than starting to argue.
+    uploads_enabled: bool = Field(default=True, validation_alias="TARE_UPLOADS")
+
     smtp_host: str = ""
     smtp_port: int = 587
     smtp_user: str = ""

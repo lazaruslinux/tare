@@ -274,7 +274,80 @@ function shareText(stamp: Stamp, units: Me['units']): string {
     : `${round1(stamp.value)}% · ${weightText(mass, units)}`
 }
 
-export type DashScreen = 'measurements' | 'progress' | null
+// One recorded day, as the History card draws it: the day it was, a way to
+// take it back off, and every line that was measured with the weight.
+function WeighIn({
+  row,
+  units,
+  todayIso,
+  onOpen,
+  onDelete,
+}: {
+  row: Measurement
+  units: Me['units']
+  todayIso: string
+  onOpen: () => void
+  onDelete: () => void
+}) {
+  return (
+    <div>
+      <div className="mb-1 flex items-center justify-between">
+        <p className="t-micro">{dayLabel(row.date, todayIso)}</p>
+        <button type="button" className="t-tap44 text-xs text-muted" onClick={onDelete}>
+          Delete
+        </button>
+      </div>
+      <button type="button" className="w-full text-left" onClick={onOpen}>
+        <div className="t-row min-h-9 text-sm">
+          <span className="flex-1 text-muted">Weight</span>
+          <span className="t-nums">{weightText(row.weight_kg, units)}</span>
+        </div>
+        {row.body_fat_pct !== null && (
+          <div className="t-row min-h-9 text-sm">
+            <span className="flex-1 text-muted">Body fat</span>
+            <span className="t-nums">{round1(row.body_fat_pct)}%</span>
+          </div>
+        )}
+        {row.body_water_pct !== null && (
+          <div className="t-row min-h-9 text-sm">
+            <span className="flex-1 text-muted">Body water</span>
+            <span className="t-nums">{round1(row.body_water_pct)}%</span>
+          </div>
+        )}
+        {row.muscle_pct !== null && row.muscle_kg !== null && (
+          <div className="t-row min-h-9 text-sm">
+            <span className="flex-1 text-muted">Muscle</span>
+            <span className="t-nums">
+              {round1(row.muscle_pct)}% · {weightText(row.muscle_kg, units)}
+            </span>
+          </div>
+        )}
+        {row.bone_pct !== null && row.bone_kg !== null && (
+          <div className="t-row min-h-9 text-sm">
+            <span className="flex-1 text-muted">Bone</span>
+            <span className="t-nums">
+              {round1(row.bone_pct)}% · {weightText(row.bone_kg, units)}
+            </span>
+          </div>
+        )}
+        {row.visceral_fat !== null && (
+          <div className="t-row min-h-9 text-sm">
+            <span className="flex-1 text-muted">Visceral rating</span>
+            <span className="t-nums">{row.visceral_fat}</span>
+          </div>
+        )}
+        {row.lean_kg !== null && (
+          <div className="t-row min-h-9 text-sm">
+            <span className="flex-1 text-muted">Lean weight</span>
+            <span className="t-nums">{weightText(row.lean_kg, units)}</span>
+          </div>
+        )}
+      </button>
+    </div>
+  )
+}
+
+export type DashScreen = 'progress' | null
 
 export function Dashboard({
   me,
@@ -330,7 +403,7 @@ export function Dashboard({
     screen === null
       ? { title: 'Dashboard', left: 'wordmark' }
       : {
-          title: screen === 'measurements' ? 'Biometrics' : 'Progress',
+          title: 'Progress',
           back: { label: 'Dashboard', onBack: () => setScreen(null) },
         }
   )
@@ -427,14 +500,17 @@ export function Dashboard({
   }
 
   const removeMeasurement = (row: Measurement) => {
-    setHistory((current) =>
+    // Off both lists, because the card that shows the rows and the card that
+    // draws the trend are reading two different windows of the same log.
+    const without = (current: Measurements | null) =>
       current === null
         ? current
         : {
             ...current,
             measurements: current.measurements.filter((one) => one.date !== row.date),
           }
-    )
+    setHistory(without)
+    setWindowed(without)
     pendingRef.current = row
     setPending(row)
   }
@@ -509,6 +585,13 @@ export function Dashboard({
       line.some((point) => point.date === row.date)
     )
     const over = WINDOWS.find((row) => row.days === span)?.over ?? ''
+    // The rows this window holds, and the body fat inside them read oldest
+    // first, which is the order a line is drawn in.
+    const recorded = windowed?.measurements ?? []
+    const fatLine: TrendPoint[] = [...recorded]
+      .reverse()
+      .filter((row) => row.body_fat_pct !== null)
+      .map((row) => ({ date: row.date, kg: row.body_fat_pct as number }))
     const now = line.length > 0 ? line[line.length - 1].kg : null
     const newest = windowed?.latest.weight_kg ?? null
     const logged = run.filter((row) => row.logged).length
@@ -579,90 +662,43 @@ export function Dashboard({
             Days logged {logged} of {RUN_DAYS}
           </p>
         </div>
-      </>
-    )
-  }
 
-  if (screen === 'measurements') {
-    return (
-      <>
-        {rows.length === 0 && (
-          <div className="t-card mb-3">
-            <p className="text-sm text-muted">No biometrics yet.</p>
-            <button
-              type="button"
-              className="t-btn t-btn-primary mt-3"
-              onClick={() => setMeasuring(todayIso)}
-            >
-              Add biometrics
-            </button>
-          </div>
-        )}
-
-        {rows.map((row) => (
-          <div key={row.date} className="t-card mb-3">
-            <div className="mb-1 flex items-center justify-between">
-              <p className="t-micro">{dayLabel(row.date, todayIso)}</p>
+        <div className="t-card mb-3">
+          <p className="t-micro mb-2">History</p>
+          {fatLine.length > 1 && (
+            <div className="mb-3">
+              <p className="t-micro">Body fat</p>
+              <Spark trend={fatLine} points={[]} />
+            </div>
+          )}
+          {recorded.length === 0 ? (
+            <>
+              <p className="text-sm text-muted">No weigh-ins in this window.</p>
               <button
                 type="button"
-                className="t-tap44 text-xs text-muted"
-                onClick={() => removeMeasurement(row)}
+                className="t-btn t-btn-primary mt-3"
+                onClick={() => setMeasuring(todayIso)}
               >
-                Delete
+                Log weigh-in
               </button>
-            </div>
-            <button
-              type="button"
-              className="w-full text-left"
-              onClick={() => setMeasuring(row.date)}
-            >
-              <div className="t-row min-h-9 text-sm">
-                <span className="flex-1 text-muted">Weight</span>
-                <span className="t-nums">{weightText(row.weight_kg, me.units)}</span>
+            </>
+          ) : (
+            recorded.map((row, index) => (
+              <div
+                key={row.date}
+                className={index === 0 ? '' : 'mt-3 border-t border-line pt-3'}
+              >
+                <WeighIn
+                  row={row}
+                  units={me.units}
+                  todayIso={todayIso}
+                  onOpen={() => setMeasuring(row.date)}
+                  onDelete={() => removeMeasurement(row)}
+                />
               </div>
-              {row.body_fat_pct !== null && (
-                <div className="t-row min-h-9 text-sm">
-                  <span className="flex-1 text-muted">Body fat</span>
-                  <span className="t-nums">{round1(row.body_fat_pct)}%</span>
-                </div>
-              )}
-              {row.body_water_pct !== null && (
-                <div className="t-row min-h-9 text-sm">
-                  <span className="flex-1 text-muted">Body water</span>
-                  <span className="t-nums">{round1(row.body_water_pct)}%</span>
-                </div>
-              )}
-              {row.muscle_pct !== null && row.muscle_kg !== null && (
-                <div className="t-row min-h-9 text-sm">
-                  <span className="flex-1 text-muted">Muscle</span>
-                  <span className="t-nums">
-                    {round1(row.muscle_pct)}% · {weightText(row.muscle_kg, me.units)}
-                  </span>
-                </div>
-              )}
-              {row.bone_pct !== null && row.bone_kg !== null && (
-                <div className="t-row min-h-9 text-sm">
-                  <span className="flex-1 text-muted">Bone</span>
-                  <span className="t-nums">
-                    {round1(row.bone_pct)}% · {weightText(row.bone_kg, me.units)}
-                  </span>
-                </div>
-              )}
-              {row.visceral_fat !== null && (
-                <div className="t-row min-h-9 text-sm">
-                  <span className="flex-1 text-muted">Visceral rating</span>
-                  <span className="t-nums">{row.visceral_fat}</span>
-                </div>
-              )}
-              {row.lean_kg !== null && (
-                <div className="t-row min-h-9 text-sm">
-                  <span className="flex-1 text-muted">Lean weight</span>
-                  <span className="t-nums">{weightText(row.lean_kg, me.units)}</span>
-                </div>
-              )}
-            </button>
-          </div>
-        ))}
+            ))
+          )}
+        </div>
 
         {measuring !== null && (
           <MeasurementsSheet
@@ -766,7 +802,7 @@ export function Dashboard({
         <button
           type="button"
           className="t-micro t-tap44 mb-1 flex items-center gap-1"
-          onClick={() => setScreen('measurements')}
+          onClick={() => setScreen('progress')}
         >
           Biometrics
           <ChevronRight className="h-3.5 w-3.5" strokeWidth={2.5} />

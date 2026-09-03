@@ -28,6 +28,7 @@ import { portionText, round1, servingsText, weightText } from '../lib/units'
 const SOURCE_LABEL: Record<string, string> = {
   apple: 'Apple Watch',
   hc: 'Health Connect',
+  upload: 'From a file',
 }
 
 // How long a deleted row can be brought back. Short enough that nobody is

@@ -56,6 +56,11 @@ def test_upgrade_head_builds_the_identity_schema(tmp_path):
             column["name"] for column in inspector.get_columns("food_submissions")
         }
         log_columns = {column["name"] for column in inspector.get_columns("ingest_log")}
+        daily_columns = {column["name"] for column in inspector.get_columns("fitness_daily")}
+        intraday_columns = {
+            column["name"] for column in inspector.get_columns("fitness_intraday")
+        }
+        weight_columns = {column["name"] for column in inspector.get_columns("weight_entries")}
         daily_unique = {
             constraint["name"]
             for constraint in inspector.get_unique_constraints("fitness_daily")
@@ -72,6 +77,11 @@ def test_upgrade_head_builds_the_identity_schema(tmp_path):
     # The record of a sync keeps the counting and never the export itself.
     assert "payload" not in log_columns
     assert {"dialect", "items", "accepted", "flagged", "skipped", "error"} <= log_columns
+    # How large a file was, and the mark on every row one of them wrote.
+    assert "bytes" in log_columns
+    assert "source" in daily_columns
+    assert "source" in intraday_columns
+    assert "via" in weight_columns
     # And one figure per metric per day, whatever the metric turns out to be.
     assert "uq_fitness_daily_day_metric" in daily_unique
     assert "location" in user_columns

@@ -638,7 +638,7 @@ async function send<T>(path: string, init: RequestInit): Promise<T> {
 
 
 // Where a workout came from. Only a manual entry can be deleted in Tare.
-export type WorkoutSource = 'manual' | 'apple' | 'hc'
+export type WorkoutSource = 'manual' | 'apple' | 'hc' | 'upload'
 
 // The four readings the Fitness screen draws, by the keys the API answers in.
 export type FitnessMetric = 'steps' | 'active_kcal' | 'exercise_minutes' | 'resting_hr'
@@ -713,9 +713,28 @@ export type SyncKey = {
   path: string
   rotated_at: string | null
   last_used_at: string | null
+  // Whether this instance takes a health export as a file at all, and whether
+  // this account has anything that came out of one.
+  uploads: boolean
+  uploaded: boolean
 }
 
 export type MintedKey = SyncKey & { token: string }
 
 // What one export did, and the same four figures whichever way it arrived.
 export type Synced = { days: number; workouts: number; flagged: number; skipped: number }
+
+// What a wipe took away.
+export type Removed = { removed: number }
+
+// One file somebody handed this instance, on the administrator's list.
+export type Upload = {
+  id: number
+  username: string
+  display_name: string | null
+  received_at: string
+  bytes: number | null
+  accepted: number
+  flagged: number
+  skipped: number
+}
