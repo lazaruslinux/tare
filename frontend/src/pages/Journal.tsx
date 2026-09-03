@@ -23,6 +23,13 @@ import { SLOTS, SLOT_LABEL, dayLabel, shiftDay, slotByTime, today, type Slot } f
 import { calText } from '../lib/targets'
 import { portionText, round1, servingsText, weightText } from '../lib/units'
 
+// Where a row came from, in the words somebody would use for the thing on
+// their wrist rather than the name of a data format.
+const SOURCE_LABEL: Record<string, string> = {
+  apple: 'Apple Watch',
+  hc: 'Health Connect',
+}
+
 // How long a deleted row can be brought back. Short enough that nobody is
 // waiting on it, long enough to notice the mistake.
 const UNDO = 6000
@@ -347,20 +354,29 @@ export function Journal({
             <p className="text-sm text-muted">No exercise logged.</p>
           ) : (
             day.exercise.map((row) => (
-              <div key={row.id} className="t-row">
+              <div key={row.id ?? `w${row.workout_id}`} className="t-row">
                 <span className="min-w-0 flex-1">
                   <span className="block truncate text-sm">{row.name}</span>
                   <span className="block text-xs text-muted">
-                    {row.minutes} min · about {row.kcal} cal
+                    {row.minutes} min
+                    {row.kcal === null ? '' : ` · about ${row.kcal} cal`}
+                    {row.source === 'manual' ? '' : ` · ${SOURCE_LABEL[row.source]}`}
                   </span>
                 </span>
-                <button
-                  type="button"
-                  className="t-tap44 shrink-0 text-sm text-muted"
-                  onClick={() => removeExercise(row.id, row.name)}
-                >
-                  Delete
-                </button>
+                {row.id === null ? (
+                  // Nothing to delete here. A workout that arrived from a phone
+                  // is corrected on the phone, and this row follows what it
+                  // sends.
+                  <span className="shrink-0 text-xs text-muted">Synced</span>
+                ) : (
+                  <button
+                    type="button"
+                    className="t-tap44 shrink-0 text-sm text-muted"
+                    onClick={() => removeExercise(row.id as number, row.name)}
+                  >
+                    Delete
+                  </button>
+                )}
               </div>
             ))
           )}

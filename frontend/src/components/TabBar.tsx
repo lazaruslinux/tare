@@ -3,12 +3,14 @@ import {
   Apple,
   BookOpen,
   Ellipsis,
+  HeartPulse,
   LayoutDashboard,
   Plus,
   Target,
-  Weight,
   type LucideIcon,
 } from 'lucide-react'
+
+import { ScaleGlyph } from './ScaleGlyph'
 
 export type Tab =
   | 'dashboard'
@@ -17,10 +19,11 @@ export type Tab =
   | 'food'
   | 'targets'
   | 'measurements'
+  | 'fitness'
   | 'more'
 // A page the shell can be on. The centre action is not one, and neither are
 // the two rail rows: each of those opens a screen inside a page.
-export type Page = Exclude<Tab, 'plus' | 'targets' | 'measurements'>
+export type Page = Exclude<Tab, 'plus' | 'targets' | 'measurements' | 'fitness'>
 // What the rail can be asked for, which is every row it draws.
 export type RailTarget = Exclude<Tab, 'plus'>
 
@@ -28,13 +31,18 @@ export type RailTarget = Exclude<Tab, 'plus'>
 // apart. The centre slot is an action rather than a destination: it opens the
 // add sheet and never becomes the current page. A railOnly row has no room on
 // a phone, where the screen it leads to is reached through its own page.
-export const TABS: { id: Tab; label: string; Icon: LucideIcon; railOnly?: true }[] = [
+// A glyph is either one of lucide's or one drawn here, and both take the same
+// two props, so the lists below do not care which they were handed.
+export type Glyph = LucideIcon | typeof ScaleGlyph
+
+export const TABS: { id: Tab; label: string; Icon: Glyph; railOnly?: true }[] = [
   { id: 'dashboard', label: 'Dashboard', Icon: LayoutDashboard },
   { id: 'journal', label: 'Journal', Icon: BookOpen },
   { id: 'plus', label: 'Add', Icon: Plus },
   { id: 'food', label: 'Food', Icon: Apple },
   { id: 'targets', label: 'Targets', Icon: Target, railOnly: true },
-  { id: 'measurements', label: 'Biometrics', Icon: Weight, railOnly: true },
+  { id: 'measurements', label: 'Biometrics', Icon: ScaleGlyph, railOnly: true },
+  { id: 'fitness', label: 'Fitness', Icon: HeartPulse, railOnly: true },
   { id: 'more', label: 'More', Icon: Ellipsis },
 ]
 

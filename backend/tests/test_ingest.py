@@ -1,0 +1,450 @@
+import datetime as dt
+import json
+
+from sqlalchemy import select
+
+from app import models, security
+from app.deps import BAD_INGEST_TOKEN
+from app.models import now_utc
+
+PATH = "/api/ingest/health"
+
+
+def stamp(day: dt.date, hour: int, minute: int = 0) -> str:
+    """One moment written the way a phone's export writes it: the wall clock
+    where the phone was, with the offset it was at."""
+    return f"{day.isoformat()} {hour:02d}:{minute:02d}:00 -0700"
+
+
+def metric(name, unit, points):
+    return {"name": name, "units": unit, "data": points}
+
+
+def point(day, hour, qty, minute=0):
+    return {"date": stamp(day, hour, minute), "qty": qty}
+
+
+def line():
+    """A straight run of fixes about two kilometres long, which is long enough
+    that trimming both ends still leaves a shape."""
+    return [
+        {"latitude": round(33.4 + step * 0.0003, 6), "longitude": -111.9}
+        for step in range(60)
+    ]
+
+
+def beats(day, hour, count=6):
+    return [
+        {
+            "date": stamp(day, hour, minute),
+            "Min": 130 + minute,
+            "Avg": 142 + minute,
+            "Max": 158 + minute,
+        }
+        for minute in range(count)
+    ]
+
+
+def run(day):
+    return {
+        "name": "Outdoor Run",
+        "id": "run-one",
+        "start": stamp(day, 17, 12),
+        "end": stamp(day, 17, 54),
+        "duration": 2520,
+        "activeEnergyBurned": {"qty": 431, "units": "kcal"},
+        "distance": {"qty": 4.02, "units": "mi"},
+        "heartRate": {"min": 98, "avg": 146, "max": 171},
+        "maxHeartRate": {"qty": 171, "units": "count/min"},
+        "elevationUp": {"qty": 38, "units": "m"},
+        "isIndoor": False,
+        "route": line(),
+        "heartRateData": beats(day, 17),
+        "stepCount": [
+            {"date": stamp(day, 17, minute), "qty": 160 + minute} for minute in range(6)
+        ],
+        "activeEnergy": [
+            {"date": stamp(day, 17, minute), "qty": 10.2, "units": "kcal"}
+            for minute in range(6)
+        ],
+        "walkingAndRunningDistance": [
+            {"date": stamp(day, 17, minute), "qty": 0.16, "units": "mi"}
+            for minute in range(6)
+        ],
+    }
+
+
+def export(day):
+    """One export carrying the four the screen draws, four it only stores, a
+    weigh-in, a body fat reading and one run."""
+    return {
+        "data": {
+            "metrics": [
+                metric("step_count", "count", [point(day, 8, 4000), point(day, 18, 4500)]),
+                metric("active_energy", "kcal", [point(day, 8, 250), point(day, 18, 180)]),
+                metric("apple_exercise_time", "min", [point(day, 18, 42)]),
+                metric("resting_heart_rate", "count/min", [point(day, 6, 58)]),
+                metric("heart_rate_variability", "ms", [point(day, 6, 54)]),
+                metric("vo2_max", "mL/min·kg", [point(day, 6, 41.2)]),
+                metric(
+                    "sleep_analysis",
+                    "hr",
+                    [
+                        {
+                            "date": stamp(day, 6, 30),
+                            "asleep": 6.9,
+                            "core": 4.1,
+                            "deep": 1.1,
+                            "rem": 1.7,
+                            "awake": 0.4,
+                            "inBed": 7.5,
+                        }
+                    ],
+                ),
+                metric("weight_body_mass", "lb", [point(day, 7, 219.4)]),
+                metric("body_fat_percentage", "%", [point(day, 7, 0.281)]),
+            ],
+            "workouts": [run(day)],
+        }
+    }
+
+
+def token_for(db_session, user) -> str:
+    plain = security.generate_token()
+    db_session.add(
+        models.IngestToken(
+            user_id=user.id, token_hash=security.hash_token(plain), created_at=now_utc()
+        )
+    )
+    db_session.commit()
+    return plain
+
+
+def post(client, token, payload):
+    return client.post(PATH, json=payload, headers={"Authorization": f"Bearer {token}"})
+
+
+def yesterday():
+    return dt.date.today() - dt.timedelta(days=1)
+
+
+def test_an_export_lands_as_days_and_a_workout(client, db_session, make_user):
+    user = make_user("runner")
+    token = token_for(db_session, user)
+    day = yesterday()
+
+    response = post(client, token, export(day))
+
+    assert response.status_code == 200
+    body = response.json()
+    assert body["workouts"] == 1
+    assert body["skipped"] == 0
+    assert body["flagged"] == 0
+    assert body["days"] == 9
+
+    steps = db_session.scalar(
+        select(models.FitnessDaily).where(models.FitnessDaily.metric == "step_count")
+    )
+    assert steps.value == 8500
+    assert steps.unit == "count"
+    workout = db_session.scalar(select(models.Workout))
+    assert workout.activity == "Outdoor Run"
+    assert workout.date_for == day
+    assert workout.avg_hr == 146
+    assert workout.max_hr == 171
+    assert round(workout.distance_m) == 6470
+
+
+def test_every_metric_is_kept_not_only_the_ones_a_screen_draws(client, db_session, make_user):
+    user = make_user("keeper")
+    token = token_for(db_session, user)
+    post(client, token, export(yesterday()))
+
+    kept = {
+        row.metric
+        for row in db_session.execute(select(models.FitnessDaily)).scalars()
+    }
+    assert {"heart_rate_variability", "vo2_max", "sleep_analysis"} <= kept
+
+
+def test_a_reading_that_is_not_one_number_keeps_its_fields(client, db_session, make_user):
+    user = make_user("sleeper")
+    token = token_for(db_session, user)
+    post(client, token, export(yesterday()))
+
+    row = db_session.scalar(
+        select(models.FitnessDaily).where(models.FitnessDaily.metric == "sleep_analysis")
+    )
+    assert row.fields["deep"] == 1.1
+    assert row.fields["rem"] == 1.7
+    # The headline of a night's sleep is the hours asleep.
+    assert row.value == 6.9
+
+
+def test_the_same_export_sent_twice_changes_nothing(client, db_session, make_user):
+    user = make_user("repeater")
+    token = token_for(db_session, user)
+    day = yesterday()
+    post(client, token, export(day))
+
+    again = post(client, token, export(day)).json()
+
+    assert again["days"] == 0
+    assert again["workouts"] == 0
+    assert again["skipped"] == 1
+    assert len(list(db_session.execute(select(models.Workout)).scalars())) == 1
+
+
+def test_a_workout_the_route_was_drawn_for_keeps_its_minutes(client, db_session, make_user):
+    user = make_user("mapped")
+    token = token_for(db_session, user)
+    post(client, token, export(yesterday()))
+
+    workout = db_session.scalar(select(models.Workout))
+    route = db_session.get(models.WorkoutRoute, workout.id)
+    samples = list(
+        db_session.execute(
+            select(models.WorkoutSample).where(models.WorkoutSample.workout_id == workout.id)
+        ).scalars()
+    )
+    # Both ends of the trace are gone, and what is left is still a line.
+    assert 10 <= len(route.points) < 60
+    assert route.points[0] != [33.4, -111.9]
+    assert len(samples) == 6
+    assert samples[0].hr_avg == 142
+
+
+def test_a_weigh_in_somebody_typed_in_wins_its_day(client, db_session, make_user):
+    user = make_user("weigher")
+    token = token_for(db_session, user)
+    day = yesterday()
+    db_session.add(
+        models.WeightEntry(user_id=user.id, date_for=day, weight_kg=100.0, source="manual")
+    )
+    db_session.commit()
+
+    post(client, token, export(day))
+
+    rows = list(db_session.execute(select(models.WeightEntry)).scalars())
+    assert len(rows) == 1
+    assert rows[0].weight_kg == 100.0
+    assert rows[0].source == "manual"
+    # Body fat fills a blank on the day that was already there.
+    assert rows[0].body_fat_pct == 28.1
+
+
+def test_a_day_with_no_weigh_in_takes_the_scales_reading(client, db_session, make_user):
+    user = make_user("scaled")
+    token = token_for(db_session, user)
+    post(client, token, export(yesterday()))
+
+    row = db_session.scalar(select(models.WeightEntry))
+    assert row.source == "ingest"
+    assert round(row.weight_kg, 1) == 99.5
+    assert row.body_fat_pct == 28.1
+
+
+def test_a_body_fat_reading_never_overwrites_one_already_there(client, db_session, make_user):
+    user = make_user("measured")
+    token = token_for(db_session, user)
+    day = yesterday()
+    db_session.add(
+        models.WeightEntry(
+            user_id=user.id, date_for=day, weight_kg=99.0, body_fat_pct=22.0, source="manual"
+        )
+    )
+    db_session.commit()
+
+    post(client, token, export(day))
+
+    assert db_session.scalar(select(models.WeightEntry)).body_fat_pct == 22.0
+
+
+def test_a_reading_older_than_the_window_is_counted_not_stored(client, db_session, make_user):
+    user = make_user("historian")
+    token = token_for(db_session, user)
+    long_ago = dt.date.today() - dt.timedelta(days=800)
+
+    body = post(
+        client,
+        token,
+        {"data": {"metrics": [metric("step_count", "count", [point(long_ago, 8, 3000)])]}},
+    ).json()
+
+    assert body["days"] == 0
+    assert body["skipped"] == 1
+    assert db_session.scalar(select(models.FitnessDaily)) is None
+
+
+def test_a_figure_past_what_a_body_does_is_flagged_and_still_stored(
+    client, db_session, make_user
+):
+    user = make_user("striding")
+    token = token_for(db_session, user)
+    day = yesterday()
+
+    body = post(
+        client,
+        token,
+        {"data": {"metrics": [metric("step_count", "count", [point(day, 8, 250000)])]}},
+    ).json()
+
+    assert body["flagged"] == 1
+    assert body["skipped"] == 0
+    assert db_session.scalar(select(models.FitnessDaily)).value == 250000
+
+
+def test_a_workout_nobody_could_have_run_is_flagged_not_refused(client, db_session, make_user):
+    user = make_user("flying")
+    token = token_for(db_session, user)
+    day = yesterday()
+    impossible = {
+        **run(day),
+        "id": "too-fast",
+        "duration": 600,
+        "distance": {"qty": 12.0, "units": "mi"},
+    }
+
+    body = post(client, token, {"data": {"workouts": [impossible]}}).json()
+
+    assert body["workouts"] == 1
+    assert body["flagged"] == 1
+    assert db_session.scalar(select(models.Workout)).flags == {"impossible_pace": True}
+
+
+def test_one_unreadable_entry_does_not_cost_the_rest(client, db_session, make_user):
+    user = make_user("mixed")
+    token = token_for(db_session, user)
+    day = yesterday()
+    payload = export(day)
+    payload["data"]["workouts"] = [
+        "not a workout",
+        {"name": "Walk", "start": "the morning"},
+        run(day),
+    ]
+
+    body = post(client, token, payload).json()
+
+    assert body["workouts"] == 1
+    assert body["skipped"] == 2
+    assert body["days"] == 9
+
+
+def test_a_body_that_is_not_json_is_refused(client, db_session, make_user):
+    user = make_user("garbled")
+    token = token_for(db_session, user)
+
+    response = client.post(
+        PATH, content=b"{ not json", headers={"Authorization": f"Bearer {token}"}
+    )
+
+    assert response.status_code == 400
+    assert response.json() == {"detail": "Body must be JSON."}
+
+
+def test_a_figure_that_is_not_a_number_is_refused(client, db_session, make_user):
+    user = make_user("nan")
+    token = token_for(db_session, user)
+    day = yesterday()
+    body = json.dumps(
+        {"data": {"metrics": [metric("step_count", "count", [point(day, 8, 1)])]}}
+    ).replace('"qty": 1', '"qty": NaN')
+
+    response = client.post(
+        PATH,
+        content=body.encode(),
+        headers={"Authorization": f"Bearer {token}", "Content-Type": "application/json"},
+    )
+
+    assert response.status_code == 400
+    assert response.json() == {"detail": "Body must be JSON."}
+
+
+def test_an_export_past_the_caps_is_refused(client, db_session, make_user):
+    user = make_user("flooding")
+    token = token_for(db_session, user)
+    day = yesterday()
+    many = [metric(f"metric_{index}", "count", [point(day, 8, 1)]) for index in range(201)]
+
+    response = post(client, token, {"data": {"metrics": many}})
+
+    assert response.status_code == 400
+    assert response.json()["detail"].endswith(".")
+
+
+def test_a_bad_token_is_refused_before_the_body_is_read(client, db_session, make_user):
+    make_user("guarded")
+
+    response = client.post(
+        PATH, json={"data": {"metrics": []}}, headers={"Authorization": "Bearer nonsense"}
+    )
+
+    assert response.status_code == 401
+    assert response.json() == {"detail": BAD_INGEST_TOKEN}
+    assert db_session.scalar(select(models.IngestLog)) is None
+
+
+def test_a_session_cookie_is_never_a_sync_key(client, signed_in):
+    response = client.post(PATH, json={"data": {"metrics": []}})
+    assert response.status_code == 401
+    assert response.json() == {"detail": BAD_INGEST_TOKEN}
+
+
+def test_an_oversized_export_is_refused_before_it_is_parsed(client, db_session, make_user):
+    user = make_user("huge")
+    token = token_for(db_session, user)
+
+    response = client.post(
+        PATH,
+        content=b"x" * (16 * 1024 * 1024),
+        headers={"Authorization": f"Bearer {token}", "Content-Type": "application/json"},
+    )
+
+    assert response.status_code == 413
+    assert response.json() == {"detail": "Request body is too large."}
+
+
+def test_a_sync_writes_one_record_and_drops_the_expired_ones(client, db_session, make_user):
+    user = make_user("logged")
+    token = token_for(db_session, user)
+    db_session.add(
+        models.IngestLog(
+            user_id=user.id,
+            received_at=now_utc() - dt.timedelta(days=200),
+            dialect="hae",
+            items=1,
+            accepted=1,
+            flagged=0,
+            skipped=0,
+        )
+    )
+    db_session.commit()
+
+    post(client, token, export(yesterday()))
+
+    rows = list(db_session.execute(select(models.IngestLog)).scalars())
+    assert len(rows) == 1
+    assert rows[0].dialect == "hae"
+    assert rows[0].accepted == 10
+    assert rows[0].error is None
+
+
+def test_the_record_names_the_first_thing_it_could_not_read(client, db_session, make_user):
+    user = make_user("noted")
+    token = token_for(db_session, user)
+
+    post(client, token, {"data": {"workouts": [{"name": "Walk", "start": "the morning"}]}})
+
+    row = db_session.scalar(select(models.IngestLog))
+    assert row.error.startswith("Walk: ")
+    assert row.skipped == 1
+
+
+def test_a_sync_stamps_the_key_it_arrived_with(client, db_session, make_user):
+    user = make_user("stamped")
+    token = token_for(db_session, user)
+
+    post(client, token, export(yesterday()))
+
+    row = db_session.get(models.IngestToken, user.id)
+    assert row.last_used_at is not None

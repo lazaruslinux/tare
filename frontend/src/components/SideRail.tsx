@@ -35,6 +35,7 @@ export function SideRail({
 
   const isCurrent = (id: Tab): boolean => {
     if (id === 'targets') return active === 'more' && moreScreen === 'targets'
+    if (id === 'fitness') return active === 'more' && moreScreen === 'fitness'
     if (id === 'measurements') return active === 'dashboard' && dashScreen === 'measurements'
     // A page's own row is lit only while that page is at its root.
     if (id === 'more') return active === 'more' && moreScreen === null

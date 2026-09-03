@@ -765,3 +765,185 @@ class ExerciseEntry(Base):
     weight_kg: Mapped[float] = mapped_column(Float, nullable=False)
     kcal: Mapped[float] = mapped_column(Float, nullable=False)
     created_at: Mapped[dt.datetime] = mapped_column(UtcDateTime, nullable=False, default=now_utc)
+
+
+# Where a workout came from. A phone's own export, the Android bridge, or
+# somebody typing it in.
+WORKOUT_SOURCES = ("apple", "hc", "manual")
+
+# Which dialect one sync spoke, kept on the log so a sync that went wrong can
+# be told apart from one that never arrived.
+INGEST_DIALECTS = ("hae", "hc")
+
+
+class FitnessDaily(Base):
+    """One metric's figure for one day, whatever the metric is.
+
+    Deliberately generic: a phone exports far more than this app draws, and a
+    reading that is thrown away on the way in can never be shown later. So
+    every metric a sync carries is written here under the name the exporter
+    used, and the screens read the few they know about.
+
+    `fields` is for the readings that are not one number: a night's sleep in
+    its stages, a blood pressure, a heart rate summary. `value` then holds the
+    headline of it, or nothing when there is no single number to name.
+    """
+
+    __tablename__ = "fitness_daily"
+    __table_args__ = (
+        UniqueConstraint("user_id", "date_for", "metric", name="uq_fitness_daily_day_metric"),
+    )
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True)
+    user_id: Mapped[int] = mapped_column(
+        ForeignKey("users.id", ondelete="CASCADE"), nullable=False, index=True
+    )
+    date_for: Mapped[dt.date] = mapped_column(Date, nullable=False, index=True)
+    metric: Mapped[str] = mapped_column(String(60), nullable=False)
+    value: Mapped[float | None] = mapped_column(Float, nullable=True)
+    unit: Mapped[str] = mapped_column(String(20), nullable=False, default="")
+    fields: Mapped[dict[str, Any] | None] = mapped_column(JSON, nullable=True)
+
+
+class FitnessIntraday(Base):
+    """One metric's figure for one hour of one day, for the hour bars.
+
+    Only the four the bars are drawn from. Every metric is kept by the day
+    above; keeping every metric by the hour as well would be a table of
+    readings nothing reads.
+    """
+
+    __tablename__ = "fitness_intraday"
+    __table_args__ = (
+        UniqueConstraint(
+            "user_id", "date_for", "metric", "hour", name="uq_fitness_intraday_hour"
+        ),
+    )
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True)
+    user_id: Mapped[int] = mapped_column(
+        ForeignKey("users.id", ondelete="CASCADE"), nullable=False, index=True
+    )
+    date_for: Mapped[dt.date] = mapped_column(Date, nullable=False, index=True)
+    metric: Mapped[str] = mapped_column(String(30), nullable=False)
+    # The hour where the member was, not where the server is.
+    hour: Mapped[int] = mapped_column(Integer, nullable=False)
+    value: Mapped[float | None] = mapped_column(Float, nullable=True)
+    unit: Mapped[str] = mapped_column(String(20), nullable=False, default="")
+
+
+class Workout(Base):
+    """A session that arrived from a phone, or one that was typed in.
+
+    Everything is stored the way the arithmetic wants it, in metres and
+    kilograms, and turned into the member's own units on the way to a screen.
+    """
+
+    __tablename__ = "workouts"
+    __table_args__ = (
+        UniqueConstraint("user_id", "external_id", name="uq_workouts_user_external"),
+    )
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True)
+    user_id: Mapped[int] = mapped_column(
+        ForeignKey("users.id", ondelete="CASCADE"), nullable=False, index=True
+    )
+    # The exporter's own id when it sends one. It is what makes a resend of the
+    # same window land on the rows it already wrote.
+    external_id: Mapped[str | None] = mapped_column(String(64), nullable=True)
+    activity: Mapped[str] = mapped_column(String(80), nullable=False)
+    started_at: Mapped[dt.datetime] = mapped_column(UtcDateTime, nullable=False, index=True)
+    ended_at: Mapped[dt.datetime | None] = mapped_column(UtcDateTime, nullable=True)
+    # The day the session started on where the member was, which is the day it
+    # is credited to. Kept rather than worked out on every read: an instant
+    # says nothing about anybody's day on its own.
+    date_for: Mapped[dt.date] = mapped_column(Date, nullable=False, index=True)
+    duration_s: Mapped[int] = mapped_column(Integer, nullable=False, default=0)
+    kcal: Mapped[float | None] = mapped_column(Float, nullable=True)
+    distance_m: Mapped[float | None] = mapped_column(Float, nullable=True)
+    avg_hr: Mapped[int | None] = mapped_column(Integer, nullable=True)
+    max_hr: Mapped[int | None] = mapped_column(Integer, nullable=True)
+    elevation_gain_m: Mapped[float | None] = mapped_column(Float, nullable=True)
+    indoor: Mapped[bool] = mapped_column(Boolean, nullable=False, default=False)
+    # Nothing reads this yet. The column is here because the feed it belongs to
+    # is the next round, and a member's answer about one workout should not
+    # wait on it.
+    hidden_from_feed: Mapped[bool] = mapped_column(Boolean, nullable=False, default=False)
+    source: Mapped[str] = mapped_column(
+        Enum(*WORKOUT_SOURCES, name="workout_source", native_enum=False), nullable=False
+    )
+    # What looked wrong about it. A flag is never a refusal: the session
+    # happened, and a number that reads oddly is still the number the watch
+    # reported.
+    flags: Mapped[dict[str, Any]] = mapped_column(JSON, nullable=False, default=dict)
+    created_at: Mapped[dt.datetime] = mapped_column(UtcDateTime, nullable=False, default=now_utc)
+
+
+class WorkoutRoute(Base):
+    """The line one workout drew, with both its ends thrown away.
+
+    A raw trace starts and ends where somebody lives, so what is stored here
+    never can: see app.routemaps for the trimming, which happens once, on the
+    way in, and is never undone.
+    """
+
+    __tablename__ = "workout_routes"
+
+    workout_id: Mapped[int] = mapped_column(
+        ForeignKey("workouts.id", ondelete="CASCADE"), primary_key=True
+    )
+    points: Mapped[list[Any]] = mapped_column(JSON, nullable=False, default=list)
+
+
+class WorkoutSample(Base):
+    """One minute of one session, as the export described it.
+
+    Every reading is optional: the arrays a phone sends start and stop at their
+    own moments, and a strap that slipped sends heart rate for half a walk and
+    distance for all of it.
+    """
+
+    __tablename__ = "workout_samples"
+    __table_args__ = (
+        UniqueConstraint("workout_id", "minute", name="uq_workout_samples_minute"),
+    )
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True)
+    workout_id: Mapped[int] = mapped_column(
+        ForeignKey("workouts.id", ondelete="CASCADE"), nullable=False, index=True
+    )
+    minute: Mapped[int] = mapped_column(Integer, nullable=False)
+    distance_m: Mapped[float | None] = mapped_column(Float, nullable=True)
+    hr_min: Mapped[int | None] = mapped_column(Integer, nullable=True)
+    hr_avg: Mapped[int | None] = mapped_column(Integer, nullable=True)
+    hr_max: Mapped[int | None] = mapped_column(Integer, nullable=True)
+    kcal: Mapped[float | None] = mapped_column(Float, nullable=True)
+    steps: Mapped[int | None] = mapped_column(Integer, nullable=True)
+
+
+class IngestLog(Base):
+    """That a sync happened, and how it went. Never what was in it.
+
+    There is no payload column and there never will be one: a health export is
+    the most personal thing this app is ever handed, and the rows it becomes
+    are the only copy worth keeping. What is here is the counting, so a sync
+    that quietly dropped half an export can be told apart from one that had
+    nothing to bring.
+    """
+
+    __tablename__ = "ingest_log"
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True)
+    user_id: Mapped[int] = mapped_column(
+        ForeignKey("users.id", ondelete="CASCADE"), nullable=False, index=True
+    )
+    received_at: Mapped[dt.datetime] = mapped_column(UtcDateTime, nullable=False, default=now_utc)
+    dialect: Mapped[str] = mapped_column(
+        Enum(*INGEST_DIALECTS, name="ingest_dialect", native_enum=False), nullable=False
+    )
+    items: Mapped[int] = mapped_column(Integer, nullable=False, default=0)
+    accepted: Mapped[int] = mapped_column(Integer, nullable=False, default=0)
+    flagged: Mapped[int] = mapped_column(Integer, nullable=False, default=0)
+    skipped: Mapped[int] = mapped_column(Integer, nullable=False, default=0)
+    # The first thing that could not be read, and why. One line, no payload.
+    error: Mapped[str | None] = mapped_column(String(200), nullable=True)

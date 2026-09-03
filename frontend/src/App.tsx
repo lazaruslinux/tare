@@ -126,6 +126,11 @@ export default function App() {
       select('dashboard')
       return
     }
+    if (target === 'fitness') {
+      setMoreView('fitness')
+      select('more')
+      return
+    }
     select(target)
   }
 
@@ -263,6 +268,10 @@ export default function App() {
                       me={me}
                       refresh={logged}
                       onOpenJournal={() => select('journal')}
+                      onOpenFitness={() => {
+                        setMoreView('fitness')
+                        select('more')
+                      }}
                       onOpenProfile={() => {
                         setMoreView('profile')
                         select('more')

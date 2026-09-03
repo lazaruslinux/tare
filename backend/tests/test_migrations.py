@@ -12,6 +12,14 @@ DIARY_TABLES = {"diary_entries", "saved_foods"}
 COMMUNITY_TABLES = {"food_photos", "food_submissions"}
 RECIPE_TABLES = {"recipes", "recipe_ingredients", "meal_templates", "meal_template_items"}
 HEALTH_TABLES = {"health_profiles", "weight_entries", "repeat_hidden", "exercise_entries"}
+FITNESS_TABLES = {
+    "fitness_daily",
+    "fitness_intraday",
+    "workouts",
+    "workout_routes",
+    "workout_samples",
+    "ingest_log",
+}
 
 
 def test_upgrade_head_builds_the_identity_schema(tmp_path):
@@ -47,6 +55,11 @@ def test_upgrade_head_builds_the_identity_schema(tmp_path):
         submission_columns = {
             column["name"] for column in inspector.get_columns("food_submissions")
         }
+        log_columns = {column["name"] for column in inspector.get_columns("ingest_log")}
+        daily_unique = {
+            constraint["name"]
+            for constraint in inspector.get_unique_constraints("fitness_daily")
+        }
     finally:
         engine.dispose()
     assert IDENTITY_TABLES <= tables
@@ -55,6 +68,12 @@ def test_upgrade_head_builds_the_identity_schema(tmp_path):
     assert COMMUNITY_TABLES <= tables
     assert RECIPE_TABLES <= tables
     assert HEALTH_TABLES <= tables
+    assert FITNESS_TABLES <= tables
+    # The record of a sync keeps the counting and never the export itself.
+    assert "payload" not in log_columns
+    assert {"dialect", "items", "accepted", "flagged", "skipped", "error"} <= log_columns
+    # And one figure per metric per day, whatever the metric turns out to be.
+    assert "uq_fitness_daily_day_metric" in daily_unique
     assert "location" in user_columns
     assert "recipe_id" in {column["name"] for column in inspector.get_columns("diary_entries")}
     # The partial indexes are the one thing here a plain column cannot express,

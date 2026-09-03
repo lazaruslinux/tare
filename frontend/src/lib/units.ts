@@ -162,3 +162,40 @@ export function heightText(cm: number, units: 'imperial' | 'metric'): string {
   const { feet, inches } = heightParts(cm)
   return `${feet} ft ${inches} in`
 }
+
+// Distances. Everything the server stores is in metres, and everything on
+// screen is in whichever unit the member reads in.
+export const M_PER_MILE = 1609.344
+
+export const distanceUnit = (units: 'imperial' | 'metric'): string =>
+  units === 'metric' ? 'km' : 'mi'
+
+export const distanceIn = (metres: number, units: 'imperial' | 'metric'): number =>
+  units === 'metric' ? metres / 1000 : metres / M_PER_MILE
+
+export const distanceText = (metres: number, units: 'imperial' | 'metric'): string =>
+  `${round1(distanceIn(metres, units)).toLocaleString()} ${distanceUnit(units)}`
+
+// How long a session ran, in the shortest words that are still exact.
+export function durationText(seconds: number): string {
+  const whole = Math.max(0, Math.round(seconds))
+  const hours = Math.floor(whole / 3600)
+  const minutes = Math.floor((whole % 3600) / 60)
+  if (hours === 0) return `${minutes} min`
+  return `${hours} h ${minutes} min`
+}
+
+// Minutes per mile or per kilometre, written the way a pace is read.
+export function paceText(
+  metres: number,
+  seconds: number,
+  units: 'imperial' | 'metric'
+): string | null {
+  const covered = distanceIn(metres, units)
+  if (covered <= 0 || seconds <= 0) return null
+  const perUnit = seconds / 60 / covered
+  const minutes = Math.floor(perUnit)
+  const rest = Math.round((perUnit - minutes) * 60)
+  const carried = rest === 60 ? { minutes: minutes + 1, rest: 0 } : { minutes, rest }
+  return `${carried.minutes}:${String(carried.rest).padStart(2, '0')} /${distanceUnit(units)}`
+}

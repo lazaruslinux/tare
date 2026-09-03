@@ -23,6 +23,7 @@ from app.db import get_db
 from app.deps import require_user
 from app.models import DIARY_SLOTS, NUTRIENTS, SERVING_UNIT
 from app.recipes import own_recipe, per_serving
+from app.routers.fitness import day_exercise, imported_row, steps_on, workouts_on
 from app.routers.foods import MAX_NAME, readable_food
 from app.routers.health import (
     Reckoning,
@@ -301,7 +302,11 @@ def read_day(
     state = Reckoning(db, user)
     budget = day_budget(state)
     workouts = exercise_on(db, user, day)
-    credit = exercise_credit(sum(row.kcal for row in workouts))
+    imported = workouts_on(db, user, day)
+    # Decision 7: a day's exercise is counted once, and app.routers.fitness
+    # holds the rule so the Journal and the Targets screen cannot drift apart.
+    kcal, minutes = day_exercise(workouts, imported)
+    credit = exercise_credit(kcal)
     weighed = next((row for row in state.rows if row.date_for == day), None)
     eaten = total(entries, "calories") or 0.0
     db.commit()
@@ -323,14 +328,18 @@ def read_day(
             "fat_g": budget["fat_g"],
         },
         "exercise_kcal": credit,
-        "exercise_minutes": sum(row.minutes for row in workouts),
+        "exercise_minutes": minutes,
         "exercise_minutes_goal": state.profile.exercise_minutes_goal,
+        # Null rather than nothing when no phone has sent a day: the ring on the
+        # Dashboard is drawn only for a day that has an answer.
+        "steps": steps_on(db, user, [day]).get(day),
         "remaining_calories": round(budget["calories"] + credit - eaten),
         # Where the day's own number came from, in five lines that add up. Null
         # when there is nothing to break down.
         "energy": day_energy(state, budget["calories"], credit),
         "measurement": None if weighed is None else measurement_row(weighed),
-        "exercise": [exercise_row(row) for row in workouts],
+        "exercise": [exercise_row(row) for row in workouts]
+        + [imported_row(row) for row in imported],
     }
 
 
@@ -386,14 +395,33 @@ def read_days(
         )
     }
 
+    # The imported sessions across the same run, gathered once rather than a
+    # query per day, and grouped the way the day view groups them.
+    imported: dict[dt.date, list[models.Workout]] = {}
+    for row in db.execute(
+        select(models.Workout).where(
+            models.Workout.user_id == user.id,
+            models.Workout.date_for >= first,
+            models.Workout.date_for <= today,
+        )
+    ).scalars():
+        imported.setdefault(row.date_for, []).append(row)
+
+    span_days = [first + dt.timedelta(days=step) for step in range(span)]
+    steps = steps_on(db, user, span_days)
+
     state = Reckoning(db, user)
     budget = day_budget(state)["calories"]
     db.commit()
 
     run: list[dict[str, object]] = []
-    for step in range(span):
-        day = first + dt.timedelta(days=step)
+    for day in span_days:
         food = eaten.get(day)
+        # Decision 7 again, at the resolution a run of days has: the manual
+        # total for the day against the imported one, counted once.
+        manual_kcal = worked.get(day, 0.0)
+        day_imported = imported.get(day, [])
+        counted = max(manual_kcal, sum(row.kcal or 0.0 for row in day_imported))
         run.append(
             {
                 "date": day.isoformat(),
@@ -401,7 +429,8 @@ def read_days(
                 # height rather than a day with no answer.
                 "calories": 0 if food is None else round(food.calories),
                 "budget": budget,
-                "exercise_kcal": exercise_credit(worked.get(day, 0.0)),
+                "exercise_kcal": exercise_credit(counted),
+                "steps": steps.get(day),
                 "logged": food is not None,
             }
         )

@@ -190,14 +190,18 @@ export type Measurements = {
 // One workout somebody typed in. estimated is set only on the answer to
 // logging it, and says the credit was worked out at an assumed weight.
 export type Exercise = {
-  id: number
+  // Null on a row that arrived from a phone: there is nothing to delete, and
+  // the workout it came from is what carries an id.
+  id: number | null
+  workout_id: number | null
   date: string
   activity: string
   name: string
-  effort: EffortLevel
+  effort: EffortLevel | null
   minutes: number
-  kcal: number
+  kcal: number | null
   estimated?: boolean
+  source: WorkoutSource
 }
 
 // One row of the catalogue. An activity offers only the efforts it has a
@@ -511,6 +515,8 @@ export type DayRow = {
   calories: number
   budget: number
   exercise_kcal: number
+  // What a phone counted, or null on a day no phone sent.
+  steps: number | null
   logged: boolean
 }
 
@@ -532,9 +538,9 @@ export type DiaryDay = {
   // Where the day's own number came from. Null while the budget is typed in by
   // hand or the profile is short of a detail.
   energy: DayEnergy | null
-  // What a phone counted. Not sent yet: the ring it fills appears with device
-  // sync, and until then the day carries no steps at all.
-  steps?: number | null
+  // What a phone counted. Null on a day no phone sent, which is what keeps the
+  // ring off a day that has no answer.
+  steps: number | null
   measurement: Measurement | null
   exercise: Exercise[]
 }
@@ -622,3 +628,84 @@ async function send<T>(path: string, init: RequestInit): Promise<T> {
   }
   return payload as T
 }
+
+
+// Where a workout came from. Only a manual entry can be deleted in Tare.
+export type WorkoutSource = 'manual' | 'apple' | 'hc'
+
+// The four readings the Fitness screen draws, by the keys the API answers in.
+export type FitnessMetric = 'steps' | 'active_kcal' | 'exercise_minutes' | 'resting_hr'
+
+// The four the hour bars are drawn from.
+export type HourMetric = 'steps' | 'active_kcal' | 'distance' | 'hr'
+
+export type FitnessTiles = Record<FitnessMetric, number | null>
+
+export type FitnessWeekDay = FitnessTiles & { date: string }
+
+export type Workout = {
+  id: number
+  activity: string
+  date: string
+  started_at: string
+  duration_s: number
+  kcal: number | null
+  distance_m: number | null
+  avg_hr: number | null
+  max_hr: number | null
+  elevation_gain_m: number | null
+  indoor: boolean
+  source: WorkoutSource
+  // What looked odd about it, by key. Empty on almost every workout.
+  flags: string[]
+}
+
+// One minute of a session. Every reading is optional: the arrays a phone sends
+// start and stop at their own moments.
+export type WorkoutSample = {
+  minute: number
+  distance_m: number | null
+  hr_min: number | null
+  hr_avg: number | null
+  hr_max: number | null
+  kcal: number | null
+  steps: number | null
+}
+
+export type WorkoutDetail = Workout & {
+  samples: WorkoutSample[]
+  // The line, with both its ends already thrown away, or null for a session
+  // that recorded no route.
+  route: [number, number][] | null
+}
+
+export type FitnessSummary = {
+  date: string
+  connected: boolean
+  last_sync: string | null
+  today: FitnessTiles
+  week: FitnessWeekDay[]
+  goals: { exercise_minutes: number; steps: number }
+  workouts: Workout[]
+}
+
+export type FitnessHistory = {
+  metric: FitnessMetric
+  unit: string
+  days: { date: string; value: number | null }[]
+}
+
+export type FitnessHours = { date: string; metric: HourMetric; hours: (number | null)[] }
+
+export type WorkoutPage = { workouts: Workout[]; cursor: number | null }
+
+// What is said about a sync key, which never includes the key itself except in
+// the answer that made it.
+export type SyncKey = {
+  connected: boolean
+  path: string
+  rotated_at: string | null
+  last_used_at: string | null
+}
+
+export type MintedKey = SyncKey & { token: string }

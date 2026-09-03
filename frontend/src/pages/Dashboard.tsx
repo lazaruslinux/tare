@@ -7,6 +7,7 @@ import {
   type DayRow,
   type DiaryDay,
   type DiaryDays,
+  type FitnessSummary,
   type Me,
   type Measurement,
   type Measurements,
@@ -73,10 +74,14 @@ const SPARK_PAD = 4
 // day a phone starts sending steps.
 type RingSpec = { key: string; filled: number; centre: string; caption: string }
 
-function Ring({ filled }: { filled: number }) {
+function Ring({ filled, small }: { filled: number; small?: boolean }) {
   const share = Math.min(Math.max(filled, 0), 1)
   return (
-    <svg viewBox="0 0 100 100" className="h-28 w-28 -rotate-90" aria-hidden="true">
+    <svg
+      viewBox="0 0 100 100"
+      className={`${small ? 'h-24 w-24' : 'h-28 w-28'} -rotate-90`}
+      aria-hidden="true"
+    >
       <circle
         cx="50"
         cy="50"
@@ -99,16 +104,29 @@ function Ring({ filled }: { filled: number }) {
   )
 }
 
-// A row of them, side by side and the same size.
+// A row of them, side by side and the same size. Three rings do not fit a
+// phone at the size two of them wear, so the whole row steps down together
+// rather than the last one running off the edge of the card.
 function Rings({ rings }: { rings: RingSpec[] }) {
+  const tight = rings.length > 2
   return (
-    <div className="flex items-center gap-4">
+    <div className={`flex items-center ${tight ? 'justify-between gap-2' : 'gap-4'}`}>
       {rings.map((ring) => (
         <div key={ring.key} className="relative shrink-0">
-          <Ring filled={ring.filled} />
-          <div className="absolute inset-0 flex flex-col items-center justify-center">
-            <span className="t-nums text-2xl font-semibold leading-none">{ring.centre}</span>
-            <span className="text-xs text-muted">{ring.caption}</span>
+          <Ring filled={ring.filled} small={tight} />
+          <div className="absolute inset-0 flex flex-col items-center justify-center px-2">
+            <span
+              className={`t-nums font-semibold leading-none ${tight ? 'text-xl' : 'text-2xl'}`}
+            >
+              {ring.centre}
+            </span>
+            <span
+              className={`text-center leading-tight text-muted ${
+                tight ? 'text-[10px]' : 'text-xs'
+              }`}
+            >
+              {ring.caption}
+            </span>
           </div>
         </div>
       ))}
@@ -162,6 +180,19 @@ function Spark({ trend, points, tall }: {
       })}
       <path d={line} fill="none" stroke="var(--accent)" strokeWidth="2" />
     </svg>
+  )
+}
+
+// One reading from a phone, small, under the exercise rows. Drawn only once a
+// device is connected: three dashes would say nothing.
+function Tile({ label, value }: { label: string; value: number | null }) {
+  return (
+    <div>
+      <p className="t-micro mb-0.5">{label}</p>
+      <p className="t-nums text-sm">
+        {value === null ? '-' : Math.round(value).toLocaleString()}
+      </p>
+    </div>
   )
 }
 
@@ -249,6 +280,7 @@ export function Dashboard({
   me,
   refresh,
   onOpenJournal,
+  onOpenFitness,
   onOpenProfile,
   start,
   onStarted,
@@ -256,9 +288,10 @@ export function Dashboard({
 }: {
   me: Me
   refresh: number
-  // The Journal, on today. The Food and Exercise cards both lead there for
-  // now; the Exercise one gets its own screen in a later round.
+  // The Journal, on today. The Food card leads there.
   onOpenJournal: () => void
+  // The Fitness screen, which is where the Exercise card leads.
+  onOpenFitness: () => void
   onOpenProfile: () => void
   // Which screen to open on. Only ever set by something outside this tab
   // sending somebody straight to it, and handed back the moment it is read.
@@ -274,6 +307,9 @@ export function Dashboard({
   const [history, setHistory] = useState<Measurements | null>(null)
   const [run, setRun] = useState<DayRow[]>([])
   const [targets, setTargets] = useState<Targets | null>(null)
+  // What a phone sent for today. Null until it answers, and the strip it draws
+  // appears only once a device is connected.
+  const [fitness, setFitness] = useState<FitnessSummary | null>(null)
   // The weight line for whichever window the Progress screen is on, which is
   // its own request: a trend over a year is not a trend over a month cut short.
   const [span, setSpan] = useState(rememberedWindow)
@@ -329,6 +365,9 @@ export function Dashboard({
       .catch(() => undefined)
     api<Targets>('/health/targets')
       .then((loaded) => alive && setTargets(loaded))
+      .catch(() => undefined)
+    api<FitnessSummary>(`/fitness/summary?date=${todayIso}`)
+      .then((loaded) => alive && setFitness(loaded))
       .catch(() => undefined)
     return () => {
       alive = false
@@ -689,7 +728,7 @@ export function Dashboard({
       <div className="t-card mb-3">
         <CardHead
           label="Exercise"
-          onOpen={onOpenJournal}
+          onOpen={onOpenFitness}
           onAdd={() => setExercising(true)}
         />
         {day === null || day.exercise.length === 0 ? (
@@ -697,10 +736,11 @@ export function Dashboard({
         ) : (
           <>
             {day.exercise.map((row) => (
-              <div key={row.id} className="t-row min-h-9 text-sm">
+              <div key={row.id ?? `w${row.workout_id}`} className="t-row min-h-9 text-sm">
                 <span className="min-w-0 flex-1 truncate">{row.name}</span>
                 <span className="t-nums text-muted">
-                  {row.minutes} min · about {row.kcal} cal
+                  {row.minutes} min
+                  {row.kcal === null ? '' : ` · about ${row.kcal} cal`}
                 </span>
               </div>
             ))}
@@ -708,6 +748,13 @@ export function Dashboard({
               Includes exercise added: +{day.exercise_kcal} cal
             </p>
           </>
+        )}
+        {fitness !== null && fitness.connected && (
+          <div className="mt-3 flex gap-6 border-t border-line pt-3">
+            <Tile label="Steps" value={fitness.today.steps} />
+            <Tile label="Active cal" value={fitness.today.active_kcal} />
+            <Tile label="Resting" value={fitness.today.resting_hr} />
+          </div>
         )}
       </div>
 

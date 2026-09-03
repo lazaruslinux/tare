@@ -1,21 +1,23 @@
 import {
   ChevronRight,
   ClipboardList,
+  HeartPulse,
   IdCard,
   Inbox,
   Mail,
   MessageSquare,
   Monitor,
   ScrollText,
+  Smartphone,
   Target,
   UserRound,
   Users,
-  type LucideIcon,
 } from 'lucide-react'
 import { useEffect, useState, type FormEvent } from 'react'
 
 import { api, errorText, type Me, type Units } from '../api'
 import { MeasurementsSheet } from '../components/MeasurementsSheet'
+import { type Glyph } from '../components/TabBar'
 import { SaveMarks, useSavedChip } from '../components/SaveMarks'
 import { useTopBar, type TopBarHeader } from '../hooks/useTopBar'
 import { today } from '../lib/day'
@@ -25,7 +27,9 @@ import { AdminInvites } from './AdminInvites'
 import { AdminQueue } from './AdminQueue'
 import { AdminUsers } from './AdminUsers'
 import { Feedback, FeedbackLog } from './Feedback'
+import { Fitness } from './Fitness'
 import { Profile } from './Profile'
+import { SyncDevice } from './SyncDevice'
 import { Targets } from './Targets'
 
 // Everything that is not a tab of its own, as a list of screens. Each row
@@ -35,6 +39,8 @@ export type Screen =
   | 'account'
   | 'profile'
   | 'targets'
+  | 'fitness'
+  | 'sync'
   | 'display'
   | 'feedback'
   | 'queue'
@@ -65,7 +71,7 @@ function Row({
   onOpen,
 }: {
   label: string
-  icon: LucideIcon
+  icon: Glyph
   count?: number
   onOpen: () => void
 }) {
@@ -152,6 +158,7 @@ export function More({
     account: 'Account',
     profile: 'Profile',
     display: 'Display',
+    sync: 'Sync a device',
     feedback: 'Send feedback',
     feedbacklog: 'Feedback log',
   }
@@ -270,6 +277,14 @@ export function More({
       />
     )
   }
+
+  if (screen === 'fitness') {
+    return (
+      <Fitness me={me} onBack={() => go(null)} onOpenSync={() => go('sync')} />
+    )
+  }
+
+  if (screen === 'sync') return <SyncDevice />
 
   if (screen === 'feedbacklog') return <FeedbackLog />
 
@@ -449,6 +464,8 @@ export function More({
         <Row label="Account" icon={UserRound} onOpen={() => go('account')} />
         <Row label="Profile" icon={IdCard} onOpen={() => go('profile')} />
         <Row label="Targets" icon={Target} onOpen={() => go('targets')} />
+        <Row label="Fitness" icon={HeartPulse} onOpen={() => go('fitness')} />
+        <Row label="Sync a device" icon={Smartphone} onOpen={() => go('sync')} />
         <Row label="Display" icon={Monitor} onOpen={() => go('display')} />
         <Row label="Send feedback" icon={MessageSquare} onOpen={() => go('feedback')} />
         <Row label="My submissions" icon={Inbox} onOpen={onOpenSubmissions} />

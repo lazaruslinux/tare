@@ -1,14 +1,20 @@
 // A bathroom scale, drawn here because lucide has no such icon: its Scale is a
 // balance and its Weight is a kettlebell. Same 24 grid, 2px stroke, round caps
 // and currentColor as the lucide glyphs it sits beside.
-export function ScaleGlyph({ className }: { className?: string }) {
+export function ScaleGlyph({
+  className,
+  strokeWidth = 2,
+}: {
+  className?: string
+  strokeWidth?: number | string
+}) {
   return (
     <svg
       className={className}
       viewBox="0 0 24 24"
       fill="none"
       stroke="currentColor"
-      strokeWidth="2"
+      strokeWidth={strokeWidth}
       strokeLinecap="round"
       strokeLinejoin="round"
       aria-hidden="true"

@@ -114,6 +114,14 @@ resend_limiter = RateLimiter(3, 900, "resend")
 # roomier because the address is typed in rather than read off the account: the
 # same person mistyping it twice should not be locked out of their own reset.
 forgot_limiter = RateLimiter(5, 900, "forgot")
+# Posting a health export. Keyed by address and counted before the token is
+# looked at, so guessing tokens spends the same allowance as anything else from
+# that address. Sixty a minute is far past what a phone automation does and far
+# under what a guessing run needs.
+ingest_limiter = RateLimiter(60, 60, "ingest")
+# Minting a sync key. Tight because each call replaces the standing key, and a
+# member who has just replaced theirs has no reason to do it again this minute.
+ingest_token_limiter = RateLimiter(5, 60, "ingest-token")
 
 
 def reset_limiters() -> None:

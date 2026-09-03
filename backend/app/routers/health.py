@@ -25,6 +25,7 @@ from app.db import get_db
 from app.deps import require_user
 from app.models import now_utc
 from app.routers.account import clean_location
+from app.routers.fitness import day_exercise, workouts_on
 
 router = APIRouter(prefix="/health", tags=["health"])
 
@@ -274,16 +275,22 @@ def latest_by_field(rows: list[models.WeightEntry]) -> dict[str, object]:
 
 def exercise_row(row: models.ExerciseEntry) -> dict[str, object]:
     """One workout as a screen reads it. The value it was credited at stays in
-    the database (decision 29 keeps its name off every screen)."""
+    the database (decision 29 keeps its name off every screen).
+
+    `source` is what tells a screen whether the row can be deleted: a typed-in
+    entry can, and one that arrived from a phone is corrected on the phone.
+    """
     named = health.ACTIVITY_BY_KEY.get(row.activity)
     return {
         "id": row.id,
+        "workout_id": None,
         "date": row.date_for.isoformat(),
         "activity": row.activity,
         "name": named.name if named is not None else row.activity,
         "effort": row.effort,
         "minutes": row.minutes,
         "kcal": health.round_for_display(row.kcal, "calories"),
+        "source": "manual",
     }
 
 
@@ -768,8 +775,13 @@ def read_targets(
             for row in health.activity_options(resting)
         ],
         "breakdown": breakdown,
+        # Imported sessions counted the same way the diary counts them, so the
+        # Activity Levels ring and the Journal never disagree about a day.
         "exercise_today": round(
-            sum(row.kcal for row in exercise_on(db, user, state.today)) / 10
+            day_exercise(
+                exercise_on(db, user, state.today), workouts_on(db, user, state.today)
+            )[0]
+            / 10
         )
         * 10,
         "activity_level": profile.activity_level,

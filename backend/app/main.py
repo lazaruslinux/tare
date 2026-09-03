@@ -17,8 +17,10 @@ from app.routers import (
     barcode,
     diary,
     feedback,
+    fitness,
     foods,
     health,
+    ingest,
     invites,
     meals,
     photos,
@@ -37,6 +39,16 @@ MAX_BODY_BYTES = 64 * 1024
 # a body cut off mid-stream.
 UPLOAD_PATH = "/api/photos"
 MAX_UPLOAD_BYTES = 11 * 1024 * 1024
+
+# And the one that takes a health export. A first sync from a phone with years
+# on it is the largest honest body this server ever sees, and it arrives as one
+# JSON document rather than a file.
+INGEST_PATH = "/api/ingest/health"
+MAX_INGEST_BYTES = 15 * 1024 * 1024
+
+# What each of them is held to. By exact path, so nothing underneath one
+# inherits its allowance.
+PATH_CEILINGS = {UPLOAD_PATH: MAX_UPLOAD_BYTES, INGEST_PATH: MAX_INGEST_BYTES}
 
 _TOO_LARGE = b'{"detail":"Request body is too large."}'
 
@@ -73,10 +85,9 @@ class BodySizeLimitMiddleware:
             await self.app(scope, receive, send)
             return
 
-        # Which ceiling this address is held to. Only the upload route gets the
-        # larger one, and it is chosen by exact path so nothing underneath it
-        # inherits the allowance.
-        ceiling = MAX_UPLOAD_BYTES if scope.get("path") == UPLOAD_PATH else MAX_BODY_BYTES
+        # Which ceiling this address is held to. Two routes get a larger one
+        # and everything else gets the small one.
+        ceiling = PATH_CEILINGS.get(str(scope.get("path")), MAX_BODY_BYTES)
 
         declared = dict(scope.get("headers") or []).get(b"content-length")
         if declared is not None:
@@ -183,6 +194,9 @@ def create_app() -> FastAPI:
     app.include_router(account.router, prefix="/api")
     app.include_router(foods.router, prefix="/api")
     app.include_router(diary.router, prefix="/api")
+    app.include_router(fitness.router, prefix="/api")
+    app.include_router(fitness.workouts_router, prefix="/api")
+    app.include_router(ingest.router, prefix="/api")
     app.include_router(feedback.router, prefix="/api")
     app.include_router(health.router, prefix="/api")
     app.include_router(recipes.router, prefix="/api")
