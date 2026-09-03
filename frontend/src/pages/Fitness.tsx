@@ -1,4 +1,4 @@
-import { ChevronRight } from 'lucide-react'
+import { ChevronRight, StretchHorizontal } from 'lucide-react'
 import { useEffect, useState } from 'react'
 
 import {
@@ -16,6 +16,7 @@ import { WorkoutDetails } from '../components/WorkoutDetails'
 import { useTopBar } from '../hooks/useTopBar'
 import { dayLabel, today } from '../lib/day'
 import { distanceText, durationText } from '../lib/units'
+import { Moves } from './Moves'
 
 // The four readings, in the order they are drawn, with the plain words for
 // each and the unit each is read in. No formula names and no Apple words.
@@ -35,11 +36,12 @@ const TILES: {
 // What each tile's history is worth reading over.
 const HISTORY_DAYS = 30
 
-// Which of its own screens Fitness is on: a reading's history, one workout, or
-// the list itself.
+// Which of its own screens Fitness is on: a reading's history, one workout,
+// the stretches library, or the list itself.
 type FitnessScreen =
   | { kind: 'metric'; metric: FitnessMetric }
   | { kind: 'workout'; id: number }
+  | { kind: 'moves' }
   | null
 
 const whole = (value: number): string => Math.round(value).toLocaleString()
@@ -237,6 +239,9 @@ export function Fitness({
 
   useTopBar(screen === null ? { title: 'Fitness', back: { label: 'More', onBack } } : null)
 
+  if (screen !== null && screen.kind === 'moves') {
+    return <Moves onBack={() => setScreen(null)} />
+  }
   if (screen !== null && screen.kind === 'workout') {
     return (
       <WorkoutDetails me={me} workoutId={screen.id} onBack={() => setScreen(null)} />
@@ -330,6 +335,21 @@ export function Fitness({
       </div>
 
       <AllWorkouts me={me} onOpen={(id) => setScreen({ kind: 'workout', id })} />
+
+      <button
+        type="button"
+        className="t-card mb-3 block w-full text-left"
+        onClick={() => setScreen({ kind: 'moves' })}
+      >
+        <span className="t-section">
+          <StretchHorizontal className="h-4 w-4 shrink-0 text-muted" strokeWidth={2} />
+          <span className="min-w-0 flex-1">Stretches and moves</span>
+          <ChevronRight className="h-4 w-4 shrink-0 text-muted" strokeWidth={2} />
+        </span>
+        <span className="mt-1 block text-sm text-muted">
+          Gentle stretches and bodyweight moves, with the steps for each.
+        </span>
+      </button>
     </>
   )
 }
