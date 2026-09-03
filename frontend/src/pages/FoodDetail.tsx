@@ -191,6 +191,11 @@ export function FoodDetail({
   }
 
   const shared = food !== null && food.status === 'approved'
+  // The request that made a shared food shared, when it was this account's.
+  // The page says so in one line; the full history lives on the Food tab.
+  const offered = shared
+    ? food.submissions.find((row) => row.kind === 'new' && row.status === 'approved')
+    : undefined
   // A shared food already reported by this account. One at a time, so the
   // button says it has been done rather than offering to do it again.
   const reported = food?.submissions.find(
@@ -250,6 +255,16 @@ export function FoodDetail({
               <p className="min-w-0 flex-1 text-sm">{food.description}</p>
             )}
           </div>
+          {offered && (
+            <p className="mb-3 text-xs text-muted">
+              You submitted this food. {offered.edited ? 'Approved with edits' : 'Approved'}{' '}
+              {dayLabel(
+                dayOf(me.timezone, offered.decided_at ?? offered.created_at),
+                today(me.timezone)
+              ).toLowerCase()}
+              .
+            </p>
+          )}
 
           <NutritionLabel food={food} />
 
@@ -276,7 +291,7 @@ export function FoodDetail({
               )}
               {food.pinned ? 'Unpin' : 'Pin to Repeat'}
             </button>
-            {(food.mine || (me.is_admin && shared)) && (
+            {((food.mine && !shared) || (me.is_admin && shared)) && (
               <button
                 className="t-btn flex-1 min-[640px]:flex-none"
                 type="button"
@@ -291,22 +306,6 @@ export function FoodDetail({
           {shared && (
             <div className="t-card mb-3">
               <p className="t-micro mb-2">Help improve Tare</p>
-              {food.submissions.map((row) => (
-                <div key={row.id}>
-                  <div className="t-row min-h-9 text-sm">
-                    <span className="min-w-0 flex-1">
-                      {KIND_LABEL[row.kind] ?? row.kind} ·{' '}
-                      {dayLabel(dayOf(me.timezone, row.created_at), today(me.timezone))}
-                    </span>
-                    <span className="t-chip shrink-0">
-                      {statusLabel(row.status, row.edited, row.kind)}
-                    </span>
-                  </div>
-                  {row.decision_note && (
-                    <p className="mb-2 text-xs text-muted">{row.decision_note}</p>
-                  )}
-                </div>
-              ))}
               <div className="t-actions">
                 <button
                   className="t-btn flex-1"
@@ -381,7 +380,7 @@ export function FoodDetail({
 
           {/* Last on the page and quiet with it: deleting a food is a thing
               somebody comes here to do, not a thing they meet on the way. */}
-          {food.mine && (
+          {food.mine && food.status === 'custom' && (
             <button
               className="mb-3 flex min-h-11 w-full items-center text-sm text-danger"
               type="button"

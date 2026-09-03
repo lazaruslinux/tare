@@ -401,6 +401,8 @@ def submissions_for(
             "kind": row.kind,
             "status": row.status,
             "created_at": row.created_at,
+            # When it was answered, for the one line the page says about it.
+            "decided_at": row.decided_at,
             "decision_note": row.decision_note,
             # What a reviewer changed on the way through, and whether this
             # account has read that yet.

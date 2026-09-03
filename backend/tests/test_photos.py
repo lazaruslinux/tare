@@ -13,6 +13,7 @@ from PIL import Image
 
 from app import models, photos
 from app.models import now_utc
+from app.routers import photos as photos_router
 from tests.conftest import PASSWORD
 
 
@@ -62,13 +63,27 @@ def test_a_photo_is_stored_as_a_webp_this_server_built(client, db_session, signe
     assert stored[8:12] == b"WEBP"
 
 
-def test_a_photo_is_scaled_down_to_something_worth_serving(client, db_session, signed_in):
-    response = upload(client, picture(size=(2400, 1200)))
+def test_a_front_photo_is_scaled_down_to_something_worth_serving(
+    client, db_session, signed_in
+):
+    response = upload(client, picture(size=(2000, 1000)))
     row = db_session.get(models.FoodPhoto, response.json()["photo_id"])
 
     with Image.open(photos.path_for(row.path)) as stored:
-        assert max(stored.size) == photos.MAX_EDGE
-        # The shape is kept: a label squashed to fit is a label nobody can read.
+        assert max(stored.size) <= photos.MAX_EDGES["front"]
+        # The shape is kept: a picture squashed to fit is not the food.
+        assert stored.size == (1200, 600)
+
+
+def test_a_label_photo_keeps_the_detail_its_small_print_needs(
+    client, db_session, signed_in
+):
+    response = upload(client, picture(size=(2000, 1000)), purpose="label")
+    row = db_session.get(models.FoodPhoto, response.json()["photo_id"])
+
+    with Image.open(photos.path_for(row.path)) as stored:
+        assert max(stored.size) <= photos.MAX_EDGES["label"]
+        # Bigger than a front of the same photo, which is the whole point.
         assert stored.size == (1600, 800)
 
 
@@ -265,3 +280,47 @@ def test_a_label_photo_a_request_still_needs_is_not_swept_up(
     assert db_session.get(models.FoodPhoto, kept_id) is not None
     assert db_session.get(models.FoodPhoto, loose_id) is None
     assert not on_disk(loose_name)
+
+
+def test_a_label_photo_under_an_old_decision_is_let_go(client, db_session, signed_in):
+    """Evidence outlives the answer long enough to be questioned, then goes."""
+    food = models.Food(status="pending", owner_id=signed_in.id, name="A bar", base_unit="g")
+    db_session.add(food)
+    db_session.commit()
+
+    spent_id = upload(client, purpose="label").json()["photo_id"]
+    recent_id = upload(client, purpose="label").json()["photo_id"]
+    waiting_id = upload(client, purpose="label").json()["photo_id"]
+    decided = [
+        (spent_id, photos_router.LABEL_KEEP_DAYS + 1),
+        (recent_id, photos_router.LABEL_KEEP_DAYS - 1),
+    ]
+    for photo_id, days in decided:
+        db_session.add(
+            models.FoodSubmission(
+                kind="new",
+                status="rejected",
+                food_id=food.id,
+                label_photo_id=photo_id,
+                submitted_by_id=signed_in.id,
+                decided_at=now_utc() - dt.timedelta(days=days),
+            )
+        )
+    db_session.add(
+        models.FoodSubmission(
+            kind="new",
+            status="pending",
+            food_id=food.id,
+            label_photo_id=waiting_id,
+            submitted_by_id=signed_in.id,
+        )
+    )
+    db_session.commit()
+    spent_name = db_session.get(models.FoodPhoto, spent_id).path
+
+    upload(client)
+
+    assert db_session.get(models.FoodPhoto, spent_id) is None
+    assert not on_disk(spent_name)
+    assert db_session.get(models.FoodPhoto, recent_id) is not None
+    assert db_session.get(models.FoodPhoto, waiting_id) is not None

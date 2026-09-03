@@ -130,13 +130,39 @@ function Rings({ rings }: { rings: RingSpec[] }) {
   )
 }
 
+// How many dates fit under a line on a phone without touching each other.
+const MAX_TICKS = 5
+
+// Which readings get a date under them: all of them while there are few, and
+// past that the first, the last, and evenly spaced ones between.
+function ticked(count: number): number[] {
+  if (count <= 6) return Array.from({ length: count }, (_, index) => index)
+  const step = (count - 1) / (MAX_TICKS - 1)
+  const picked = new Set<number>()
+  for (let i = 0; i < MAX_TICKS; i += 1) picked.add(Math.round(i * step))
+  return [...picked].sort((a, b) => a - b)
+}
+
+// "Aug 30". No year: a line this short never crosses one the reader is unsure
+// about, and the year would cost the room the next date needs.
+const tickText = (iso: string): string =>
+  new Date(`${iso}T00:00:00Z`).toLocaleDateString(undefined, {
+    timeZone: 'UTC',
+    month: 'short',
+    day: 'numeric',
+  })
+
 // The readings, joined by straight lines, each one a round dot. Percent
 // coordinates keep the dots round whatever width the card is, because
 // nothing here is scaled: the browser lays the box out and the marks sit
 // where they are told.
-function Spark({ points, tall }: {
+//
+// With an axis the line gets a ground to stand on and its dots get dates, so
+// that a weight line is not read as whatever number happens to sit beside it.
+function Spark({ points, tall, axis }: {
   points: { date: string; value: number }[]
   tall?: boolean
+  axis?: boolean
 }) {
   const sorted = [...points].sort((a, b) => (a.date < b.date ? -1 : 1))
   if (sorted.length < 2) return null
@@ -154,9 +180,10 @@ function Spark({ points, tall }: {
     y: 100 - inset - ((values[index] - low) / range) * (100 - inset * 2),
   })
   const spots = sorted.map((_, index) => at(index))
+  const dated = axis === true ? ticked(sorted.length) : []
 
-  return (
-    <svg className={`mt-3 w-full ${tall ? 'h-22' : 'h-11'}`} aria-hidden="true">
+  const line = (
+    <svg className={`w-full ${tall ? 'h-22' : 'h-11'}`} aria-hidden="true">
       {spots.slice(1).map((spot, index) => (
         <line
           key={sorted[index + 1].date}
@@ -179,6 +206,44 @@ function Spark({ points, tall }: {
         />
       ))}
     </svg>
+  )
+
+  if (axis !== true) return <div className="mt-3">{line}</div>
+
+  return (
+    <div className="mt-3">
+      {line}
+      {/* The ground is a border rather than a stroke, so it lands on a whole
+          pixel in both themes and the ticks hang off it. */}
+      <div className="relative border-t border-line">
+        {spots.map((spot, index) => (
+          <span
+            key={sorted[index].date}
+            className="absolute top-0 h-1 w-px bg-line-strong"
+            style={{ left: `${spot.x}%` }}
+          />
+        ))}
+        {/* The row keeps its height whether or not a date sits in it, so the
+            card does not jump when the readings change. */}
+        <div className="relative h-4">
+          {dated.map((index) => (
+            <span
+              key={sorted[index].date}
+              className="absolute top-0.5 text-[10px] leading-none text-muted"
+              style={
+                index === dated[0]
+                  ? { left: 0 }
+                  : index === dated[dated.length - 1]
+                    ? { right: 0 }
+                    : { left: `${spots[index].x}%`, transform: 'translateX(-50%)' }
+              }
+            >
+              {tickText(sorted[index].date)}
+            </span>
+          ))}
+        </div>
+      </div>
+    </div>
   )
 }
 
@@ -511,6 +576,17 @@ export function Dashboard({
   const latest = rows[0] ?? null
   // Each number's own newest reading, so the card can say how old it is.
   const stamps = history?.latest ?? null
+  // Whether the card has any of them to show, which is what the rule above
+  // them is for.
+  const scaleRows =
+    stamps !== null &&
+    [
+      stamps.body_fat_pct,
+      stamps.body_water_pct,
+      stamps.muscle_pct,
+      stamps.bone_pct,
+      stamps.visceral_fat,
+    ].some((one) => one !== null)
   const trend = (history?.trend ?? []).slice(-SPARK_DAYS)
   const spots = rows.filter((row) => trend.some((point) => point.date === row.date))
   // What a personal number is still waiting on, and where to hand it over.
@@ -608,7 +684,11 @@ export function Dashboard({
                 {changeText(line, me.units, over)}
                 {goalMonth}
               </span>
-              <Spark points={recorded.map((row) => ({ date: row.date, value: row.weight_kg }))} tall />
+              <Spark
+                points={recorded.map((row) => ({ date: row.date, value: row.weight_kg }))}
+                tall
+                axis
+              />
             </>
           )}
           <div className="mt-2">
@@ -775,16 +855,9 @@ export function Dashboard({
           onOpen={() => setScreen('progress')}
           onAdd={() => setMeasuring(todayIso)}
         />
-        {/* The scale's own number leads and the trend rides the line under it,
-            so one card carries both without two big numbers on one screen. */}
-        <button
-          type="button"
-          className="t-micro t-tap44 mb-1 flex items-center gap-1"
-          onClick={() => setScreen('progress')}
-        >
-          Biometrics
-          <ChevronRight className="h-3.5 w-3.5" strokeWidth={2.5} />
-        </button>
+        {/* One head on the card. The scale's own number leads and the trend
+            rides the line under it, so one card carries both without two big
+            numbers on one screen. */}
         {latest === null ? (
           <p className="text-sm text-muted">No biometrics yet.</p>
         ) : (
@@ -805,51 +878,58 @@ export function Dashboard({
                   {changeText(trend, me.units, WINDOWS[0].over)}
                   {goalMonth}
                 </span>
-                <Spark points={spots.map((row) => ({ date: row.date, value: row.weight_kg }))} />
+                <Spark
+                  points={spots.map((row) => ({ date: row.date, value: row.weight_kg }))}
+                  axis
+                />
               </>
             )}
-            <div className="mt-1">
-              {stamps?.body_fat_pct && (
-                <Dated
-                  label="Body fat"
-                  value={`${round1(stamps.body_fat_pct.value)}%`}
-                  date={stamps.body_fat_pct.date}
-                  todayIso={todayIso}
-                />
-              )}
-              {stamps?.body_water_pct && (
-                <Dated
-                  label="Body water"
-                  value={`${round1(stamps.body_water_pct.value)}%`}
-                  date={stamps.body_water_pct.date}
-                  todayIso={todayIso}
-                />
-              )}
-              {stamps?.muscle_pct && (
-                <Dated
-                  label="Muscle"
-                  value={shareText(stamps.muscle_pct, me.units)}
-                  date={stamps.muscle_pct.date}
-                  todayIso={todayIso}
-                />
-              )}
-              {stamps?.bone_pct && (
-                <Dated
-                  label="Bone"
-                  value={shareText(stamps.bone_pct, me.units)}
-                  date={stamps.bone_pct.date}
-                  todayIso={todayIso}
-                />
-              )}
-              {stamps?.visceral_fat && (
-                <Dated
-                  label="Visceral rating"
-                  value={String(stamps.visceral_fat.value)}
-                  date={stamps.visceral_fat.date}
-                  todayIso={todayIso}
-                />
-              )}
-            </div>
+            {/* The dated readings are their own block: without the rule the
+                first of them reads as a label on the end of the line. */}
+            {scaleRows && (
+              <div className="mt-3 border-t border-line pt-2">
+                {stamps?.body_fat_pct && (
+                  <Dated
+                    label="Body fat"
+                    value={`${round1(stamps.body_fat_pct.value)}%`}
+                    date={stamps.body_fat_pct.date}
+                    todayIso={todayIso}
+                  />
+                )}
+                {stamps?.body_water_pct && (
+                  <Dated
+                    label="Body water"
+                    value={`${round1(stamps.body_water_pct.value)}%`}
+                    date={stamps.body_water_pct.date}
+                    todayIso={todayIso}
+                  />
+                )}
+                {stamps?.muscle_pct && (
+                  <Dated
+                    label="Muscle"
+                    value={shareText(stamps.muscle_pct, me.units)}
+                    date={stamps.muscle_pct.date}
+                    todayIso={todayIso}
+                  />
+                )}
+                {stamps?.bone_pct && (
+                  <Dated
+                    label="Bone"
+                    value={shareText(stamps.bone_pct, me.units)}
+                    date={stamps.bone_pct.date}
+                    todayIso={todayIso}
+                  />
+                )}
+                {stamps?.visceral_fat && (
+                  <Dated
+                    label="Visceral rating"
+                    value={String(stamps.visceral_fat.value)}
+                    date={stamps.visceral_fat.date}
+                    todayIso={todayIso}
+                  />
+                )}
+              </div>
+            )}
           </>
         )}
         <div className="mt-3 border-t border-line pt-3">

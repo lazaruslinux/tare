@@ -23,7 +23,7 @@ import os
 
 from fastapi import APIRouter, Depends, File, Form, HTTPException, UploadFile, status
 from fastapi.responses import FileResponse
-from sqlalchemy import select, update
+from sqlalchemy import or_, select, update
 from sqlalchemy.orm import Session
 
 from app import models, photos
@@ -42,6 +42,10 @@ BAD_PURPOSE = "A photo is of the front or of the label."
 # that somebody who filled a form in, went away, and came back still has their
 # picture; short enough that the directory is not a graveyard.
 ORPHAN_HOURS = 24
+
+# How long a label photo outlives the decision it was evidence for: long enough
+# that a member can still question the answer, and then gone.
+LABEL_KEEP_DAYS = 30
 
 
 def readable_photo(db: Session, user: models.User, photo_id: int) -> models.FoodPhoto:
@@ -122,6 +126,39 @@ def discard(db: Session, photo: models.FoodPhoto) -> None:
     photos.remove(name)
 
 
+def _spent_labels(db: Session) -> list[models.FoodPhoto]:
+    """Label photos under decisions old enough to be settled.
+
+    A label is evidence for one request. Once that request has been answered
+    and the answer has stood for LABEL_KEEP_DAYS, the picture has done its job.
+    A photo is only let go when every request pointing at it is that old.
+    """
+    settled = now_utc() - dt.timedelta(days=LABEL_KEEP_DAYS)
+    aged = select(models.FoodSubmission.label_photo_id).where(
+        models.FoodSubmission.label_photo_id.is_not(None),
+        models.FoodSubmission.status != "pending",
+        models.FoodSubmission.decided_at.is_not(None),
+        models.FoodSubmission.decided_at < settled,
+    )
+    still_needed = select(models.FoodSubmission.label_photo_id).where(
+        models.FoodSubmission.label_photo_id.is_not(None),
+        or_(
+            models.FoodSubmission.status == "pending",
+            models.FoodSubmission.decided_at.is_(None),
+            models.FoodSubmission.decided_at >= settled,
+        ),
+    )
+    return list(
+        db.execute(
+            select(models.FoodPhoto).where(
+                models.FoodPhoto.purpose == "label",
+                models.FoodPhoto.id.in_(aged),
+                models.FoodPhoto.id.not_in(still_needed),
+            )
+        ).scalars().all()
+    )
+
+
 def _sweep(db: Session) -> None:
     """Drop the uploads nobody ever sent, on the way past.
 
@@ -147,6 +184,8 @@ def _sweep(db: Session) -> None:
     ).scalars().all()
     for photo in stale:
         discard(db, photo)
+    for photo in _spent_labels(db):
+        discard(db, photo)
 
 
 @router.post("", status_code=status.HTTP_201_CREATED)
@@ -170,7 +209,7 @@ def upload_photo(
         raise HTTPException(status.HTTP_413_CONTENT_TOO_LARGE, TOO_LARGE)
 
     try:
-        name = photos.store(raw)
+        name = photos.store(raw, purpose)
     except photos.RejectedImage as refused:
         raise HTTPException(status.HTTP_400_BAD_REQUEST, str(refused)) from None
 

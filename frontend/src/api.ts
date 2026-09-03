@@ -267,6 +267,8 @@ export type FoodSubmissionRow = {
   kind: string
   status: string
   created_at: string
+  // Null until a reviewer answers.
+  decided_at: string | null
   decision_note: string
   // Whether the reviewer changed anything before saying yes, and what they
   // changed, in the words it is read in.

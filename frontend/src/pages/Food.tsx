@@ -1,4 +1,5 @@
 import {
+  ChevronDown,
   ChevronRight,
   CookingPot,
   Pin,
@@ -42,6 +43,9 @@ import { KIND_LABEL, changeLine, statusLabel } from '../lib/community'
 // starts being a list. Five is what fits above the fold beside four other
 // cards; the rest are one tap away on a screen built to search them.
 const SHOWN = 5
+// Submissions are fewer and older ones are history, so that card shows three
+// and folds the rest away in place rather than sending anybody to a screen.
+const SENT_SHOWN = 3
 // How long something taken back can be put back. Short enough that nobody is
 // waiting on it, long enough to notice the mistake.
 const UNDO = 6000
@@ -114,6 +118,9 @@ export function FoodTab({
   // The food a repeat row is being logged at, which is the picker's own sheet.
   const [logging, setLogging] = useState<FoodItem | null>(null)
   const [submissions, setSubmissions] = useState<MySubmission[]>([])
+  // Whether the older submissions are unfolded. Collapsed on every visit: the
+  // three newest are what somebody came back to check.
+  const [allSent, setAllSent] = useState(false)
   const [error, setError] = useState('')
 
   // The list is the tab's root, and its header carries the way to a new food.
@@ -213,6 +220,12 @@ export function FoodTab({
       .then(setSubmissions)
       .catch(() => {})
   }, [unread, onSeen])
+
+  // Newest first, sorted here rather than trusted to whichever request last
+  // filled the list. The card shows the top of it and folds the rest away.
+  const sent = [...submissions].sort((a, b) => (a.created_at < b.created_at ? 1 : -1))
+  const older = Math.max(sent.length - SENT_SHOWN, 0)
+  const shownSent = allSent ? sent : sent.slice(0, SENT_SHOWN)
 
   const remove = (food: FoodItem) => {
     setFoods((rows) => rows.filter((row) => row.id !== food.id))
@@ -693,69 +706,85 @@ export function FoodTab({
         )}
       </div>
 
-      <div className="t-card mb-3" ref={submittedRef}>
-        <p className="t-section mb-1">
-          <Send className="h-4 w-4" strokeWidth={2} />
-          Submitted
-        </p>
-        {submissions.length === 0 ? (
-          <p className="text-sm text-muted">
-            Foods you submit to the Tare database show up here.
+      <div className="mb-3" ref={submittedRef}>
+        <div className={`t-card${older > 0 ? ' t-card-tabbed' : ''}`}>
+          <p className="t-section mb-1">
+            <Send className="h-4 w-4" strokeWidth={2} />
+            View submissions
           </p>
-        ) : (
-          submissions.map((row) => {
-            // The food this row is about: the one that was submitted, or the
-            // shared one a correction or a picture is for. Gone with the food.
-            const foodId = row.food_id
-            const said = (
-              <>
-                <span className="flex items-center gap-2">
-                  <span className="truncate text-sm">
-                    {row.target_name ?? row.name ?? 'A deleted food'}
+          {sent.length === 0 ? (
+            <p className="text-sm text-muted">
+              Foods you submit to the Tare database show up here.
+            </p>
+          ) : (
+            shownSent.map((row) => {
+              // The food this row is about: the one that was submitted, or the
+              // shared one a correction or a picture is for. Gone with the food.
+              const foodId = row.food_id
+              const said = (
+                <>
+                  <span className="flex items-center gap-2">
+                    <span className="truncate text-sm">
+                      {row.target_name ?? row.name ?? 'A deleted food'}
+                    </span>
+                    <span className="t-chip shrink-0">
+                      {statusLabel(row.status, row.edited, row.kind)}
+                    </span>
                   </span>
-                  <span className="t-chip shrink-0">
-                    {statusLabel(row.status, row.edited, row.kind)}
+                  <span className="block text-xs text-muted">
+                    {KIND_LABEL[row.kind] ?? row.kind} ·{' '}
+                    {dayLabel(dayOf(me.timezone, row.created_at), today(me.timezone))}
                   </span>
-                </span>
-                <span className="block text-xs text-muted">
-                  {KIND_LABEL[row.kind] ?? row.kind} ·{' '}
-                  {dayLabel(dayOf(me.timezone, row.created_at), today(me.timezone))}
-                </span>
-                {row.changes.length > 0 && (
-                  <span className="block text-xs text-muted">{changeLine(row.changes)}</span>
-                )}
-                {row.status === 'rejected' && row.decision_note && (
-                  <span className="block text-xs text-muted">Reason: {row.decision_note}</span>
-                )}
-              </>
-            )
-            return (
-              <div key={row.id} className="t-row">
-                {foodId === null ? (
-                  <span className="min-w-0 flex-1">{said}</span>
-                ) : (
-                  <button
-                    type="button"
-                    className="min-w-0 flex-1 text-left"
-                    onClick={() =>
-                      setView({ at: 'detail', id: foodId, from: { at: 'list' } })
-                    }
-                  >
-                    {said}
-                  </button>
-                )}
-                {row.status === 'pending' && (
-                  <button
-                    type="button"
-                    className="shrink-0 text-sm font-semibold text-muted"
-                    onClick={() => withdraw(row)}
-                  >
-                    Withdraw
-                  </button>
-                )}
-              </div>
-            )
-          })
+                  {row.changes.length > 0 && (
+                    <span className="block text-xs text-muted">{changeLine(row.changes)}</span>
+                  )}
+                  {row.status === 'rejected' && row.decision_note && (
+                    <span className="block text-xs text-muted">Reason: {row.decision_note}</span>
+                  )}
+                </>
+              )
+              return (
+                <div key={row.id} className="t-row">
+                  {foodId === null ? (
+                    <span className="min-w-0 flex-1">{said}</span>
+                  ) : (
+                    <button
+                      type="button"
+                      className="min-w-0 flex-1 text-left"
+                      onClick={() =>
+                        setView({ at: 'detail', id: foodId, from: { at: 'list' } })
+                      }
+                    >
+                      {said}
+                    </button>
+                  )}
+                  {row.status === 'pending' && (
+                    <button
+                      type="button"
+                      className="shrink-0 text-sm font-semibold text-muted"
+                      onClick={() => withdraw(row)}
+                    >
+                      Withdraw
+                    </button>
+                  )}
+                </div>
+              )
+            })
+          )}
+        </div>
+        {older > 0 && (
+          <button
+            type="button"
+            className="t-tab t-micro t-tap44 text-accent"
+            aria-expanded={allSent}
+            onClick={() => setAllSent(!allSent)}
+          >
+            {allSent ? 'Show fewer' : `Show ${older} more`}
+            <ChevronDown
+              className={`h-3.5 w-3.5 ${allSent ? 'rotate-180' : ''}`}
+              strokeWidth={2.5}
+            />
+          </button>
         )}
       </div>
 

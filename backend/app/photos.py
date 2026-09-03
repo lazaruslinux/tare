@@ -31,9 +31,12 @@ MAX_UPLOAD_BYTES = 10 * 1024 * 1024
 MAX_PIXELS = 25_000_000
 Image.MAX_IMAGE_PIXELS = MAX_PIXELS
 
-# A label has to be readable, not framed. Beyond this is bytes nobody looks at.
-MAX_EDGE = 1600
-QUALITY = 82
+# How large a stored picture is allowed to be, by what it is for. A label has
+# small print somebody has to read, so it keeps its detail; a front is a pack
+# on a shelf at thumbnail size and does not. Beyond this is bytes nobody looks
+# at.
+MAX_EDGES = {"front": 1200, "label": 1600}
+QUALITY = 78
 
 SUFFIX = ".webp"
 MEDIA_TYPE = "image/webp"
@@ -95,22 +98,22 @@ def _decoded(raw: bytes) -> Image.Image:
     return ImageOps.exif_transpose(image).convert("RGB")
 
 
-def _fitted(image: Image.Image) -> Image.Image:
-    """Scaled so the longest edge is at most MAX_EDGE, never enlarged: growing a
+def _fitted(image: Image.Image, max_edge: int) -> Image.Image:
+    """Scaled so the longest edge is at most max_edge, never enlarged: growing a
     small picture invents detail and pays bytes for it."""
     width, height = image.size
     longest = max(width, height)
-    if longest <= MAX_EDGE:
+    if longest <= max_edge:
         return image
-    factor = MAX_EDGE / longest
+    factor = max_edge / longest
     return image.resize(
         (max(1, round(width * factor)), max(1, round(height * factor))), Image.Resampling.LANCZOS
     )
 
 
-def encode(raw: bytes) -> bytes:
+def encode(raw: bytes, max_edge: int) -> bytes:
     """The webp this server will serve, built from the bytes that arrived."""
-    fitted = _fitted(_decoded(raw))
+    fitted = _fitted(_decoded(raw), max_edge)
     # Pasted onto a blank canvas rather than converted: a converted image keeps
     # its source's info dictionary and Pillow writes parts of it back out. A
     # fresh canvas has nothing to carry, so the camera model, the timestamp and
@@ -122,14 +125,14 @@ def encode(raw: bytes) -> bytes:
     return out.getvalue()
 
 
-def store(raw: bytes) -> str:
+def store(raw: bytes, purpose: str) -> str:
     """Encode an upload, write it, and answer with the name it was given.
 
     The name is random rather than derived from a row id: the file is written
     before the row exists, so that an upload this server will not store never
     leaves an id behind.
     """
-    encoded = encode(raw)
+    encoded = encode(raw, MAX_EDGES[purpose])
     folder = directory()
     os.makedirs(folder, exist_ok=True)
     name = f"{secrets.token_hex(16)}{SUFFIX}"

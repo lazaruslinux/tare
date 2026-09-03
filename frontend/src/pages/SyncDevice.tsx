@@ -1,3 +1,4 @@
+import { KeyRound } from 'lucide-react'
 import { type ChangeEvent, useEffect, useId, useState } from 'react'
 
 import {
@@ -23,6 +24,13 @@ const WHAT_THIS_IS =
 // The two things this screen asks before it does them. A new key silently
 // breaking a working automation, and numbers going away, are both worth a
 // question first.
+// What the key card says, before there is a key and after there is one.
+const SHOWN_ONCE =
+  'The key is shown once. Copy both lines into your phone before you leave this screen.'
+const ALREADY_MADE =
+  "You've already created a key, which was only shown once. To make a new one, " +
+  'click below. Creating a new key will disable the old one.'
+
 const NEW_KEY_ASK =
   'This will create a new sync key that must be replaced in your export app. Continue?'
 const WIPE_ASK = 'Remove every number that came from a file? Synced data stays.'
@@ -268,9 +276,7 @@ export function SyncDevice() {
         {minted === null ? (
           <>
             <p className="mb-3 text-sm text-muted">
-              {status?.connected === true
-                ? 'A new key replaces the one this account has, and the old one stops working straight away.'
-                : 'The key is shown once. Copy both lines into your phone before you leave this screen.'}
+              {status?.connected === true ? ALREADY_MADE : SHOWN_ONCE}
             </p>
             <button
               type="button"
@@ -278,6 +284,7 @@ export function SyncDevice() {
               disabled={working}
               onClick={() => (status?.connected === true ? setAsking(true) : void make())}
             >
+              <KeyRound className="h-4 w-4" strokeWidth={2} />
               {status?.connected === true ? 'New key' : 'Make my sync key'}
             </button>
           </>
