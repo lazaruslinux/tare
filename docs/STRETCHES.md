@@ -18,7 +18,8 @@ Items marked UNVERIFIED were not confirmed against a primary source at the time 
 
 3. Each item is a row: name, place chip, and a one-line "For". Tapping opens a detail: the steps as a numbered list, a "How much" line (hold or count, and how many times), the "For" line, and one "Skip it if" line only where the source gives a specific caution. No photo yet; a photo slot is reserved at the top of the detail for later (his call: photos come later).
 
-4. No anatomy words in the steps: "the back of your thigh", never "hamstring"; "the muscle at the back of your lower leg", never "calf" where it can be avoided. Where a source names a muscle, the name goes in this document, not on the screen. Plain-language table at the end.
+4. Plain words lead, and the medical term follows in parentheses on first mention where it helps: "the back of your thigh (hamstring)", "the band under the foot (plantar fascia)". The steps themselves stay plain; the term rides the "For" line. Plain-language table at the end.
+   Why: his 2026-09-03 call. Someone who knows the term finds it; someone who does not is not made to learn it.
 
 5. No logging, no streak, no reminder, no timer in this version. The screen remembers only the last filter chip. Photos, a timer, and "add to today" are later decisions.
    Why: his 2026-09-02 call ("no logging in v1") and the no-medals, no-XP rule.
@@ -53,7 +54,7 @@ Items marked UNVERIFIED were not confirmed against a primary source at the time 
 
 7. Head turn. Sit tall, shoulders down. Slowly turn your head towards one shoulder as far as is comfortable, hold five seconds, return, then the other side. Three each side. For: turning further, more easily. [24]
 8. Head tilt. Sit tall. Hold one shoulder down with the opposite hand and slowly tilt your head away from it. Hold five seconds. Three each side. For: the sides of the neck. [24]
-9. Chin nod. Sit tall, breastbone lifted a little, shoulder blades drawn gently back. Nod your chin down as far as you can without bending the neck; only the head moves. Hold five seconds. Five to ten. For: the small muscles at the top of the neck that hold your head up. [13]
+9. Chin nod. Sit tall, breastbone lifted a little, shoulder blades drawn gently back. Nod your chin down as far as you can without bending the neck; only the head moves. Hold five seconds. Five to ten. For: the small muscles at the top of the neck (deep neck flexors) that hold your head up. [13]
 10. Chin to chest. Slowly tilt your head down to rest your chin on your chest, gently tense, hold five seconds. Five times. For: the back of the neck. [14]
 
 **Shoulders**
@@ -68,25 +69,25 @@ Items marked UNVERIFIED were not confirmed against a primary source at the time 
 
 16. Knee to chest. Lie on your back. Pull one knee towards your chest with the other leg straight, to the point you feel a pull. Hold 20 to 30 seconds. Two to three times each side. For: the front of the hip and the lower back. [17]
 17. Knee drop-outs. Lie on your back, knees bent, feet flat and hip-width apart. Let one knee drop out to the side as far as is comfortable, keeping your back flat, then bring it back. Five to ten each side. For: turning the hip outward. [17]
-18. Half-kneeling lunge. Kneel on one knee with the other foot in front. Lift the back knee slightly, look forward, and push your hips forward with your upper body upright. Hold five seconds. Three each side. For: the front of the hip that shortens from sitting. [18]
+18. Half-kneeling lunge. Kneel on one knee with the other foot in front. Lift the back knee slightly, look forward, and push your hips forward with your upper body upright. Hold five seconds. Three each side. For: the front of the hip (hip flexors) that shortens from sitting. [18]
 
 **Legs**
 
 19. Heel slide. Lie with both legs straight. Slowly bend one knee by sliding the heel towards you as far as is comfortable, hold two seconds, slide back. Five to ten each side. For: bending the knee further. [10]
-20. Back-of-thigh stretch. Steady yourself and rest one heel on a low chair, leg straight. Bend the standing knee a little and lean forward from the hips until you feel a pull behind the raised thigh. Hold 20 to 30 seconds. Two to three times each side. Skip it if: you have pain running down the leg; it can pull on the nerve. [18] For: the back of the thigh.
-21. Front-of-thigh stretch. Stand holding a wall, bend one knee and hold the foot behind you, knees together, kneecap pointing at the floor. Hold 20 to 30 seconds. Two to three times each side. For: the front of the thigh. [18]
+20. Back-of-thigh stretch. Steady yourself and rest one heel on a low chair, leg straight. Bend the standing knee a little and lean forward from the hips until you feel a pull behind the raised thigh. Hold 20 to 30 seconds. Two to three times each side. Skip it if: you have pain running down the leg; it can pull on the nerve. [18] For: the back of the thigh (hamstring).
+21. Front-of-thigh stretch. Stand holding a wall, bend one knee and hold the foot behind you, knees together, kneecap pointing at the floor. Hold 20 to 30 seconds. Two to three times each side. For: the front of the thigh (quadriceps). [18]
 
 **Feet**
 
-22. Calf stretch at the wall. Face a wall, hands on it. Put one foot behind the other, back leg straight and heel down, front knee bent, and lean in until you feel a pull in the back of the lower leg. Hold 20 to 30 seconds. Three times each side. For: the muscle at the back of the lower leg that pulls on the heel. [20][24]
-23. Bent-knee calf stretch. The same, with the back knee slightly bent. Hold 20 to 30 seconds. Three times each side. For: the deeper part of the same muscle. [20]
-24. Toe pull. Sit and cross one foot over the other knee. Hold your toes and gently pull them back towards the shin until you feel a pull in the arch. Hold 20 to 30 seconds. Three times. For: the band under the foot that is tight in the morning. [20]
+22. Calf stretch at the wall. Face a wall, hands on it. Put one foot behind the other, back leg straight and heel down, front knee bent, and lean in until you feel a pull in the back of the lower leg. Hold 20 to 30 seconds. Three times each side. For: the muscle at the back of the lower leg (calf) that pulls on the heel. [20][24]
+23. Bent-knee calf stretch. The same, with the back knee slightly bent. Hold 20 to 30 seconds. Three times each side. For: the deeper part of the same muscle (soleus). [20]
+24. Toe pull. Sit and cross one foot over the other knee. Hold your toes and gently pull them back towards the shin until you feel a pull in the arch. Hold 20 to 30 seconds. Three times. For: the band under the foot (plantar fascia) that is tight in the morning. [20]
 25. Towel stretch. Sit with the leg straight, a towel looped around the ball of the foot, knee straight, and pull the towel towards you. Hold 20 seconds. Three times. Best first thing in the morning. [21] For: the same band, before the day's first steps.
 26. Rolling. Roll the underside of the foot over a tennis ball or a bottle for one to two minutes. For: easing the sole. [20]
 
 **Hands**
 
-27. Tendon glides. Start with the fingers straight. Make a hook (bend the fingertips and middle joints, knuckles straight), open; make a full fist, open; make a flat fist (fingers bent at the knuckles, straight beyond), open. Five to ten rounds. For: letting the finger cords slide freely. [22]
+27. Tendon glides. Start with the fingers straight. Make a hook (bend the fingertips and middle joints, knuckles straight), open; make a full fist, open; make a flat fist (fingers bent at the knuckles, straight beyond), open. Five to ten rounds. For: letting the finger cords (flexor tendons) slide freely. [22]
 28. Thumb across. Hold your hand up as if saying stop. Move the thumb across the palm to the base of the little finger, then back. Five to ten. For: the thumb's reach. [22]
 29. Hand lift. Rest the forearm on the table with the hand over the edge, palm down. Lift the hand up until you feel a gentle pull, hold 20 to 30 seconds, return. Two to three times. For: the top of the forearm. [22]
 30. Palm turn. Elbow bent to a right angle, turn the forearm so the palm faces up, then down. Five to ten. For: turning the wrist, like a key. [22]
@@ -96,27 +97,27 @@ Items marked UNVERIFIED were not confirmed against a primary source at the time 
 
 **Back**
 
-32. Bird dog. On hands and knees, back straight. Tighten your stomach and raise one arm straight forward, hold ten seconds, lower. Ten times each side. When that is easy, lift one leg straight behind you instead. For: the muscles that hold the lower back steady. [18]
-33. Bridge. Lie on your back, knees bent, feet flat. Lift your hips and lower back off the floor, hold five seconds, lower slowly. Five to ten. For: the muscles in your buttocks and the back of your thighs that carry the hip and back. [10][17]
-34. Belly draw-in. Lie on your front, arms at your sides. Pull your stomach in around your belly button and hold five seconds, breathing the whole time. Three times, building to ten seconds. For: the deep stomach muscles that support the back. [18]
+32. Bird dog. On hands and knees, back straight. Tighten your stomach and raise one arm straight forward, hold ten seconds, lower. Ten times each side. When that is easy, lift one leg straight behind you instead. For: the muscles that hold the lower back steady (the core). [18]
+33. Bridge. Lie on your back, knees bent, feet flat. Lift your hips and lower back off the floor, hold five seconds, lower slowly. Five to ten. For: the muscles in your buttocks (glutes) and the back of your thighs (hamstrings) that carry the hip and back. [10][17]
+34. Belly draw-in. Lie on your front, arms at your sides. Pull your stomach in around your belly button and hold five seconds, breathing the whole time. Three times, building to ten seconds. For: the deep stomach muscles (transverse abdominis) that support the back. [18]
 
 **Shoulders and arms**
 
 35. Wall press-up. Stand an arm's length from a wall, hands flat on it at chest height, fingers pointing up. Back straight, slowly bend your arms with elbows by your sides until your face nears the wall, then push back. Five to ten. Rest a minute and go again, up to three sets. For: the chest, shoulders and arms without the floor. [23]
 36. Backwards table press. Stand with your back to a table, palms on its edge. Gently press your shoulder blades back and your hands into the table, hold five seconds. Five to ten. For: the muscles around the shoulder. [15]
-37. Bottle curls. Hold a water bottle in each hand, arms at your sides. Slowly bend the elbows until the bottles reach your shoulders, then lower. Five, up to three sets. Sitting is fine. For: the front of the arms. [23]
+37. Bottle curls. Hold a water bottle in each hand, arms at your sides. Slowly bend the elbows until the bottles reach your shoulders, then lower. Five, up to three sets. Sitting is fine. For: the front of the arms (biceps). [23]
 
 **Hips**
 
-38. Standing leg back. Hold a counter. Move one leg straight back, knee straight, clench the buttock; do not lean forward. Hold five seconds. Five each side. For: the muscles behind the hip. [17][23]
-39. Standing leg out. Hold a counter. Lift one leg straight out to the side, body upright, hold five seconds, lower slowly. Five each side. For: the muscles on the outside of the hip that steady you when you walk. [17][23]
+38. Standing leg back. Hold a counter. Move one leg straight back, knee straight, clench the buttock; do not lean forward. Hold five seconds. Five each side. For: the muscles behind the hip (glutes). [17][23]
+39. Standing leg out. Hold a counter. Lift one leg straight out to the side, body upright, hold five seconds, lower slowly. Five each side. For: the muscles on the outside of the hip (hip abductors) that steady you when you walk. [17][23]
 40. March on the spot. Hold a counter and march, bringing the knees up in turn. Twenty steps. For: lifting the knee and warming up the hips. [17]
 
 **Legs**
 
 41. Sit to stand. Sit on the edge of a chair, feet hip-width apart, lean slightly forward. Stand up slowly using your legs, look forward, then sit back down slowly with as little help from your hands as you can. Five, slower is better. Start with a cushion on the seat if the chair is low. For: getting out of chairs without pain. [23][19]
 42. Mini squat. Hands on the back of a chair, feet hip-width apart. Slowly bend the knees as far as is comfortable, keeping them over your big toes and your back straight, then stand and squeeze your buttocks. Five to ten. For: the thighs and buttocks. [23]
-43. Thigh squeeze. Lie or sit with the leg straight. Tighten the muscle at the front of your thigh and gently push the back of the knee down. Hold ten seconds, relax. Five to ten each side. For: the front-of-thigh muscle that steadies the knee. [10]
+43. Thigh squeeze. Lie or sit with the leg straight. Tighten the muscle at the front of your thigh and gently push the back of the knee down. Hold ten seconds, relax. Five to ten each side. For: the front-of-thigh muscle (quadriceps) that steadies the knee. [10]
 44. Straight leg raise. Lie with one leg bent and the other straight. Lift the straight leg a few inches, hold five seconds, lower slowly. Five to ten each side. For: strength without bending the knee. [10]
 45. Step up. Stand at the bottom step, near a rail. Step up with one leg, bring the other up to join it, step down, slowly and in control. Up to five each leg. For: stairs and balance. [25][10]
 46. Heel raises. Hands on the back of a chair. Slowly rise onto your toes, then lower. Five to ten. Let go of the chair when it is easy. For: the lower leg, which takes load off the heel. [23][20]
@@ -129,15 +130,18 @@ Items marked UNVERIFIED were not confirmed against a primary source at the time 
 
 ## Plain-language phrasing
 
-| On screen | Instead of |
+| On screen | Term in parentheses |
 |---|---|
 | the back of your thigh | hamstring |
-| the muscle at the back of your lower leg | calf, gastrocnemius, soleus |
+| the muscle at the back of your lower leg | calf; the deeper part is the soleus |
 | the band under the foot | plantar fascia |
 | the front-of-thigh muscle | quadriceps |
 | the muscles in your buttocks | glutes |
+| the muscles on the outside of the hip | hip abductors |
+| the front of the hip | hip flexors |
 | the finger cords | flexor tendons |
-| clinician | GP, doctor, physio |
+| the deep stomach muscles | transverse abdominis |
+| clinician | (no term; GP, doctor and physio are all clinicians) |
 | move | exercise |
 
 ## Open questions
