@@ -370,6 +370,23 @@ def rejection_note(db: Session, user: models.User, food: models.Food) -> str:
 SUBMISSION_HISTORY = 5
 
 
+def label_on_file(db: Session, food: models.Food) -> str | None:
+    """The newest label photograph any request about this food still carries."""
+    label_id = db.execute(
+        select(models.FoodSubmission.label_photo_id)
+        .where(
+            or_(
+                models.FoodSubmission.food_id == food.id,
+                models.FoodSubmission.target_food_id == food.id,
+            ),
+            models.FoodSubmission.label_photo_id.is_not(None),
+        )
+        .order_by(models.FoodSubmission.created_at.desc(), models.FoodSubmission.id.desc())
+        .limit(1)
+    ).scalar_one_or_none()
+    return None if label_id is None else photo_url(label_id)
+
+
 def submissions_for(
     db: Session, user: models.User, food: models.Food
 ) -> list[dict[str, object]]:
@@ -445,6 +462,9 @@ def food_detail(db: Session, food: models.Food, user: models.User) -> dict[str, 
         # says instead of one line about the last answer. Empty for everybody
         # else.
         "submissions": submissions_for(db, user, food),
+        # The nutrition label on file, for a reviewer correcting a shared food
+        # to check the numbers against. Nobody else is served it.
+        "label_photo_url": label_on_file(db, food) if user.is_admin else None,
         "density_g_per_ml": food.density_g_per_ml,
         # What it was scanned from, where it was. On the packaging either way,
         # and it is what decides whether offering this food needs a photograph
@@ -979,7 +999,9 @@ def attach_front_photo(
     """
     from app.routers.photos import discard, front_photo
 
-    food = changeable_food(db, user, food_id, ("custom", "pending"), ())
+    # An administrator may also swap the picture on a shared food: the rows
+    # everybody eats out of are theirs to keep right, photograph included.
+    food = changeable_food(db, user, food_id, ("custom", "pending"), ("approved",))
     photo = db.get(models.FoodPhoto, body.photo_id)
     if (
         photo is None
@@ -989,9 +1011,19 @@ def attach_front_photo(
     ):
         raise HTTPException(status.HTTP_400_BAD_REQUEST, MISSING_PHOTO_TO_ATTACH)
 
+    if food.status == "approved":
+        # Published in place of the one showing, the way an approved photo
+        # proposal lands. Imported here: admin imports this module.
+        from app.routers.admin import publish_front
+
+        photo.food_id = food.id
+        publish_front(db, food, photo)
+        db.commit()
+        return
+
     standing = front_photo(db, food.id)
     # Only one that is still waiting. A published picture belongs to the shared
-    # database, and this route never reaches a food that has one.
+    # database, and this route reaches a food that has one only for an admin.
     if standing is not None and standing.status == "pending":
         discard(db, standing)
     photo.food_id = food.id

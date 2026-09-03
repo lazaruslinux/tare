@@ -1126,3 +1126,51 @@ def test_every_administration_route_needs_a_session(client):
     assert client.get("/api/admin/invites").status_code == 401
     assert client.post("/api/admin/invites", json={}).status_code == 401
     assert client.get("/api/admin/users").status_code == 401
+
+
+def test_an_administrator_swaps_the_front_of_a_shared_food_and_sees_the_label_on_file(
+    client, db_session, make_user
+):
+    member = make_user("member")
+    reviewer = make_user("reviewer", admin=True)
+    food = shared(db_session)
+    sign_in(client, "member")
+    # The label the member sent with their request stays on file with it.
+    out = io.BytesIO()
+    Image.new("RGB", (160, 120), (90, 90, 90)).save(out, format="JPEG")
+    label_id = client.post(
+        "/api/photos",
+        files={"file": ("label.jpg", out.getvalue(), "image/jpeg")},
+        data={"purpose": "label"},
+    ).json()["photo_id"]
+    db_session.add(
+        models.FoodSubmission(
+            kind="new",
+            status="approved",
+            food_id=food.id,
+            submitted_by_id=member.id,
+            decided_by_id=reviewer.id,
+            decided_at=models.now_utc(),
+            label_photo_id=label_id,
+        )
+    )
+    db_session.commit()
+
+    # A member is refused the swap and is not shown the label.
+    mine = a_photo(client)
+    assert client.post(f"/api/foods/{food.id}/photo", json={"photo_id": mine}).status_code == 403
+    assert client.get(f"/api/foods/{food.id}").json()["label_photo_url"] is None
+
+    sign_in(client, "reviewer")
+    first = a_photo(client)
+    assert client.post(f"/api/foods/{food.id}/photo", json={"photo_id": first}).status_code == 204
+    page = client.get(f"/api/foods/{food.id}").json()
+    assert page["photo_url"] == f"/api/photos/{first}.webp"
+    assert page["label_photo_url"] == f"/api/photos/{label_id}.webp"
+
+    # A second swap replaces the first, row and all.
+    second = a_photo(client)
+    assert client.post(f"/api/foods/{food.id}/photo", json={"photo_id": second}).status_code == 204
+    assert client.get(f"/api/foods/{food.id}").json()["photo_url"] == f"/api/photos/{second}.webp"
+    assert db_session.get(models.FoodPhoto, first) is None
+    assert db_session.get(models.FoodPhoto, second).status == "approved"

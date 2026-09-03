@@ -279,6 +279,10 @@ export function FoodForm({
   // nothing to send until that one is answered or taken back.
   const offerable = creating || (own && food.status !== 'pending')
   const scannable = onOpenFood !== undefined && food === null
+  // A shared food, which only an administrator gets this far with. Its
+  // pictures are shown so the numbers can be checked against them; the front
+  // can be swapped on the food itself, the label is on file and stays put.
+  const shared = food !== null && food.status === 'approved' && review === undefined
 
   const heading = title ?? (food ? 'Edit food' : 'New food')
   useTopBar(inSheet ? null : { title: heading, back: { label: backLabel, onBack: onCancel } })
@@ -459,6 +463,11 @@ export function FoodForm({
         if (labelPhotoId !== null) await review.onPhoto('label', labelPhotoId)
         onSaved(await api<Food>(`/foods/${food.id}`))
         return
+      }
+      if (shared && food !== null && photoId !== null) {
+        // The new front goes on the shared food itself, published at once.
+        await api(`/foods/${food.id}/photo`, { method: 'POST', body: { photo_id: photoId } })
+        saved = await api<Food>(`/foods/${food.id}`)
       }
       if (creating && photoId !== null) {
         // The food is written by now. A picture that will not go on is worth
@@ -735,7 +744,7 @@ export function FoodForm({
           </div>
         )}
 
-        {(creating || own || review !== undefined) && (
+        {(creating || own || review !== undefined || shared) && (
           <>
             <PhotoSlots
               front={{
@@ -743,7 +752,12 @@ export function FoodForm({
                 url: review === undefined ? food?.photo_url : review.frontPhotoUrl,
                 required: submitOn,
               }}
-              label={{ id: labelPhotoId, url: review?.labelPhotoUrl, required: submitOn }}
+              label={{
+                id: labelPhotoId,
+                url: review === undefined ? food?.label_photo_url : review.labelPhotoUrl,
+                required: submitOn,
+                still: shared,
+              }}
               busy={saving}
               onFront={(id) => {
                 setPhotoId(id)

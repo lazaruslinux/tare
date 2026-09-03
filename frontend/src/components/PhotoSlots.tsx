@@ -14,7 +14,9 @@ import { MAX_PHOTO_BYTES, PHOTO_TOO_LARGE } from '../lib/community'
 
 // A slot holds either a picture this step uploaded, which can be taken back,
 // or one the food already carries, which is shown and left alone.
-export type Slot = { id: number | null; url?: string | null; required: boolean }
+// A still slot is shown and nothing else: the picture on file for a food
+// somebody is correcting, where there is no request to put a new one on.
+export type Slot = { id: number | null; url?: string | null; required: boolean; still?: boolean }
 
 function Tile({
   photoId,
@@ -23,6 +25,7 @@ function Tile({
   note,
   busy,
   purpose,
+  still,
   onPicked,
   onCleared,
   onFailed,
@@ -33,6 +36,7 @@ function Tile({
   note: string
   busy: boolean
   purpose: PhotoPurpose
+  still?: boolean
   onPicked: (id: number) => void
   onCleared: () => void
   onFailed: (message: string) => void
@@ -62,7 +66,9 @@ function Tile({
 
   return (
     <div className="min-w-0 flex-1">
-      {shown === null ? (
+      {shown === null && still ? (
+        <div className="t-phototile h-24 w-24 rounded-xl text-xs">None</div>
+      ) : shown === null ? (
         <label className="t-phototile h-24 w-24 cursor-pointer rounded-xl" htmlFor={field}>
           <Camera className="h-6 w-6" strokeWidth={1.75} />
           <span className="sr-only">{title}</span>
@@ -88,17 +94,21 @@ function Tile({
           )}
         </div>
       )}
-      <input
-        id={field}
-        className="sr-only"
-        type="file"
-        accept="image/*"
-        capture="environment"
-        disabled={busy || uploading}
-        onChange={take}
-      />
+      {!still && (
+        <input
+          id={field}
+          className="sr-only"
+          type="file"
+          accept="image/*"
+          capture="environment"
+          disabled={busy || uploading}
+          onChange={take}
+        />
+      )}
       <p className="mt-2 text-sm">{title}</p>
-      <p className="text-xs text-muted">{uploading ? 'Adding' : note}</p>
+      <p className="text-xs text-muted">
+        {uploading ? 'Adding' : still ? (shown === null ? 'None on file' : 'On file') : note}
+      </p>
     </div>
   )
 }
@@ -136,6 +146,7 @@ export function PhotoSlots({
         <Tile
           photoId={label.id}
           standing={label.url}
+          still={label.still}
           title="Nutrition Label"
           note={label.required ? 'Required' : 'Optional'}
           busy={Boolean(busy)}

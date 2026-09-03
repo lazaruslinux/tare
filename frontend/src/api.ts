@@ -282,6 +282,8 @@ export type FoodSubmissionRow = {
 // label never said rather than none of it.
 export type Food = FoodRow & {
   density_g_per_ml: number | null
+  // The label on file, sent to an administrator and nobody else.
+  label_photo_url?: string | null
   // The code on the packet, where there was one. A food with one is held to
   // both photographs when it is offered to everybody.
   barcode: string | null
