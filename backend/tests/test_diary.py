@@ -408,3 +408,151 @@ def test_a_day_carries_what_was_weighed_on_it(client, signed_in):
     assert read["measurement"]["weight_kg"] == 80.0
     assert read["measurement"]["lean_kg"] == 64.0
     assert day(client, "2026-08-31")["measurement"] is None
+
+
+# ---- A run of days, and where the day's own number comes from.
+
+
+@pytest.fixture()
+def frozen(monkeypatch):
+    """The day the cases below are written against, so none of them is a
+    different case tomorrow. The route ends on today and takes no date."""
+    monkeypatch.setattr(
+        clock, "now_utc", lambda: dt.datetime(2026, 9, 1, 12, 0, tzinfo=dt.timezone.utc)
+    )
+
+
+def days(client, **params):
+    return client.get("/api/diary/days", params=params).json()
+
+
+def quick(client, date, calories):
+    return client.post(
+        "/api/diary",
+        json={"date": date, "slot": "breakfast", "name": "Quick add", "calories": calories},
+    )
+
+
+def personal(client):
+    """The four details a worked-out day needs, so a budget is a personal one."""
+    assert client.put(f"/api/health/measurements/{TODAY}", json={"weight_kg": 80}).status_code == 200
+    assert client.put("/api/health/profile", json={"sex": "male", "height_cm": 180}).status_code == 200
+
+
+def test_a_run_of_days_ends_today_and_reads_oldest_first(client, signed_in, frozen):
+    assert quick(client, TODAY, 500).status_code == 201
+    assert quick(client, "2026-08-30", 700).status_code == 201
+
+    rows = days(client)["days"]
+    assert len(rows) == 7
+    assert [row["date"] for row in rows] == [
+        "2026-08-26",
+        "2026-08-27",
+        "2026-08-28",
+        "2026-08-29",
+        "2026-08-30",
+        "2026-08-31",
+        "2026-09-01",
+    ]
+    assert rows[-1]["calories"] == 500
+    assert rows[4]["calories"] == 700
+    assert all(row["budget"] == rows[0]["budget"] for row in rows)
+
+
+def test_a_day_nobody_logged_reads_as_nothing_consumed(client, signed_in, frozen):
+    assert quick(client, TODAY, 500).status_code == 201
+
+    rows = days(client)["days"]
+    assert rows[-1]["logged"] is True
+    assert [(row["calories"], row["logged"]) for row in rows[:-1]] == [(0, False)] * 6
+
+
+def test_a_workout_is_credited_against_the_day_it_was_done_on(client, signed_in, frozen):
+    made = client.post(
+        "/api/health/exercise",
+        json={"date_for": "2026-08-31", "activity": "walking", "effort": "moderate", "minutes": 30},
+    )
+    assert made.status_code == 201
+
+    rows = days(client)["days"]
+    assert rows[-2]["exercise_kcal"] == 100
+    assert rows[-1]["exercise_kcal"] == 0
+
+
+def test_a_run_of_days_stops_at_ninety(client, signed_in, frozen):
+    assert len(days(client, days=400)["days"]) == 90
+    assert len(days(client, days=0)["days"]) == 1
+    assert len(days(client, days=1)["days"]) == 1
+
+
+def test_the_days_of_one_diary_are_nobody_else_s(client, signed_in, make_user, frozen):
+    assert quick(client, TODAY, 500).status_code == 201
+    make_user("other")
+    sign_in(client, "other")
+
+    assert all(row["calories"] == 0 for row in days(client)["days"])
+
+
+def test_the_day_says_what_its_budget_is_made_of(client, signed_in, frozen):
+    personal(client)
+    made = client.post(
+        "/api/health/exercise",
+        json={"date_for": TODAY, "activity": "walking", "effort": "moderate", "minutes": 40},
+    )
+    assert made.status_code == 201
+
+    read = day(client)
+    energy = read["energy"]
+    assert energy["level"] == "not_much"
+    assert energy["exercise"] == read["exercise_kcal"]
+    assert energy["adjustment"] == 0
+    assert energy["budget"] == read["budget"]["calories"] + read["exercise_kcal"]
+    # Each of the five rounds to the nearest ten on its own (decision 28), so
+    # they add up to the budget give or take one rounding step each.
+    total = energy["resting"] + energy["activity"] + energy["exercise"] + energy["adjustment"]
+    assert abs(total - energy["budget"]) <= 20
+
+
+def test_a_losing_day_carries_a_negative_adjustment(client, signed_in, frozen):
+    personal(client)
+    assert client.put("/api/health/profile", json={"goal_weight_kg": 70}).status_code == 200
+
+    energy = day(client)["energy"]
+    assert energy["adjustment"] < 0
+    total = energy["resting"] + energy["activity"] + energy["exercise"] + energy["adjustment"]
+    assert abs(total - energy["budget"]) <= 20
+
+
+def test_a_budget_set_by_hand_is_not_made_of_anything(client, signed_in, frozen):
+    personal(client)
+    assert day(client)["energy"] is not None
+
+    typed = client.put(
+        "/api/health/targets",
+        json={"mode": "grams", "calories": 2000, "protein_g": 150, "carbs_g": 200, "fat_g": 60},
+    )
+    assert typed.status_code == 200
+    assert day(client)["energy"] is None
+
+
+def test_a_day_without_the_four_details_is_not_made_of_anything(client, signed_in, frozen):
+    assert day(client)["energy"] is None
+
+
+def test_a_day_counts_the_minutes_that_were_worked(client, signed_in, frozen):
+    for minutes in (30, 45):
+        made = client.post(
+            "/api/health/exercise",
+            json={
+                "date_for": TODAY,
+                "activity": "walking",
+                "effort": "moderate",
+                "minutes": minutes,
+            },
+        )
+        assert made.status_code == 201
+
+    read = day(client)
+    assert read["exercise_minutes"] == 75
+    assert read["exercise_minutes_goal"] == 30
+    assert day(client, "2026-08-31")["exercise_minutes"] == 0

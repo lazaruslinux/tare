@@ -47,6 +47,10 @@ export type Profile = {
   rate_kg_per_week: number | null
   rate_steps: number[]
   goal_weight_kg: number | null
+  // What a day of movement aims at. Both always carry a number: a ring with no
+  // goal has nothing to fill.
+  exercise_minutes_goal: number
+  step_goal: number
   // Whether sex, height, weight and age are all there. Without all four the
   // published general targets stand.
   complete: boolean
@@ -130,6 +134,8 @@ export type Targets = {
   rate_kg_per_week: number | null
   rate_steps: number[]
   goal_weight_kg: number | null
+  exercise_minutes_goal: number
+  step_goal: number
   weekly_rate: number
   // Plain sentences from the server. Screens print them as they stand, and
   // the keys beside them say which screen each one belongs on.
@@ -452,6 +458,30 @@ export type DiaryEntry = {
 // Null is a nutrient no entry on the day carried, which is not none of it.
 export type Totals = Record<string, number | null>
 
+// The five figures a day's budget is made of, for the fold that shows them.
+// The adjustment is signed, and the level is the key its name is looked up by.
+export type DayEnergy = {
+  resting: number
+  activity: number
+  level: ActivityLevel
+  exercise: number
+  adjustment: number
+  budget: number
+}
+
+// One day in a run of them: what was consumed against what was budgeted.
+// A day nobody logged is nothing consumed rather than a day with no answer.
+export type DayRow = {
+  date: string
+  calories: number
+  budget: number
+  exercise_kcal: number
+  logged: boolean
+}
+
+// A run of days ending today, oldest first.
+export type DiaryDays = { days: DayRow[] }
+
 export type DiaryDay = {
   date: string
   totals: Totals
@@ -460,7 +490,16 @@ export type DiaryDay = {
   // is left. All four arrive with the day so the Journal reads it in one call.
   budget: { calories: number; protein_g: number; carbs_g: number; fat_g: number }
   exercise_kcal: number
+  // What was worked today, against what a day aims at.
+  exercise_minutes: number
+  exercise_minutes_goal: number
   remaining_calories: number
+  // Where the day's own number came from. Null while the budget is typed in by
+  // hand or the profile is short of a detail.
+  energy: DayEnergy | null
+  // What a phone counted. Not sent yet: the ring it fills appears with device
+  // sync, and until then the day carries no steps at all.
+  steps?: number | null
   measurement: Measurement | null
   exercise: Exercise[]
 }

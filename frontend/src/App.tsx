@@ -16,7 +16,7 @@ import { useWaitingCount } from './hooks/useWaitingCount'
 import { useWideLayout } from './hooks/useWideLayout'
 import { slotByTime, today, type Slot } from './lib/day'
 import { Birthdate } from './pages/Birthdate'
-import { Dashboard } from './pages/Dashboard'
+import { Dashboard, type DashScreen } from './pages/Dashboard'
 import { FirstRun } from './pages/FirstRun'
 import { FoodTab } from './pages/Food'
 import { Journal } from './pages/Journal'
@@ -63,7 +63,7 @@ export default function App() {
   // Which screen each of those two is really showing. Reported upward so the
   // rail can light the row that leads to it rather than the page holding it.
   const [moreScreen, setMoreScreen] = useState<Screen>(null)
-  const [dashScreen, setDashScreen] = useState<'measurements' | null>(null)
+  const [dashScreen, setDashScreen] = useState<DashScreen>(null)
   // The day the Journal is showing, so the centre control adds to the day
   // being read rather than always to today.
   const [journalDay, setJournalDay] = useState('')

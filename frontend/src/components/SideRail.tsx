@@ -1,6 +1,7 @@
 import { Plus } from 'lucide-react'
 import { useRef } from 'react'
 
+import type { DashScreen } from '../pages/Dashboard'
 import type { Screen } from '../pages/More'
 import { TABS, type Page, type RailTarget, type Tab } from './TabBar'
 
@@ -21,7 +22,7 @@ export function SideRail({
   // Which screen More and the Dashboard are showing, so a row is lit by what
   // is really on screen rather than by which page holds it.
   moreScreen: Screen
-  dashScreen: 'measurements' | null
+  dashScreen: DashScreen
   // Submissions waiting on an administrator, counted on the row that leads to
   // them the same way the tab bar counts them.
   waiting: number

@@ -659,6 +659,10 @@ class HealthProfile(Base):
     # is not stored, because the two weights already say it.
     rate_kg_per_week: Mapped[float | None] = mapped_column(Float, nullable=True)
     goal_weight_kg: Mapped[float | None] = mapped_column(Float, nullable=True)
+    # What a day of movement is aimed at. Both carry a default rather than a
+    # null, because a ring drawn against no goal has nothing to fill.
+    exercise_minutes_goal: Mapped[int] = mapped_column(Integer, nullable=False, default=30)
+    step_goal: Mapped[int] = mapped_column(Integer, nullable=False, default=8000)
     pregnant_or_breastfeeding: Mapped[bool] = mapped_column(
         Boolean, nullable=False, default=False
     )

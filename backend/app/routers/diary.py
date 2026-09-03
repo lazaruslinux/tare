@@ -15,10 +15,10 @@ from __future__ import annotations
 import datetime as dt
 
 from fastapi import APIRouter, Depends, HTTPException, status
-from sqlalchemy import select
+from sqlalchemy import func, select
 from sqlalchemy.orm import Session
 
-from app import clock, models, schemas, units
+from app import clock, health, models, schemas, units
 from app.db import get_db
 from app.deps import require_user
 from app.models import DIARY_SLOTS, NUTRIENTS, SERVING_UNIT
@@ -54,6 +54,10 @@ BOTH_KINDS = "Log a food or a recipe, not both."
 
 # How a serving is asked for, as against a unit from a measure family.
 SERVING_PREFIX = "serving:"
+
+# How many days a run of them may ask for, and how many it asks for by default.
+DEFAULT_HISTORY = 7
+MAX_HISTORY = 90
 
 # What a quick add carries, and the only fields an unlinked entry may be given
 # by hand. The other six are never typed in.
@@ -224,6 +228,46 @@ def total(entries: list[models.DiaryEntry], field: str) -> float | None:
     return sum(carried) if carried else None
 
 
+def exercise_credit(kcal: float) -> int:
+    """Decision 7: what a day's workouts add back to that day's budget, and
+    only that day's. Rounded to the nearest ten, like every calorie shown."""
+    return round(kcal / 10) * 10
+
+
+def day_energy(
+    state: Reckoning, budget_calories: float, credit: float
+) -> dict[str, object] | None:
+    """The five figures a day's budget is made of, for the fold that shows them.
+
+    Nothing while the budget is typed in by hand: a number somebody set is not
+    made of anything. Nothing either while the profile is short of a detail,
+    because then the published general targets stand rather than a worked-out
+    day. Each figure rounds to the nearest ten on its own (decision 28), so the
+    five add up to the budget give or take one rounding step.
+    """
+    if state.profile.targets_mode != "auto":
+        return None
+    resting = state.rmr()
+    using = state.maintenance()
+    if resting is None or using is None:
+        return None
+    level = state.profile.activity_level
+    option = next(
+        (row for row in health.activity_options(resting) if row.level == level), None
+    )
+    adds = 0.0 if option is None or option.adds is None else option.adds
+    return {
+        "resting": health.round_for_display(resting, "calories"),
+        "activity": health.round_for_display(adds, "calories"),
+        "level": level,
+        "exercise": credit,
+        # Signed: below what the body uses on a losing day, above it on a
+        # gaining one, and nothing at all on a maintaining one.
+        "adjustment": health.round_for_display(budget_calories - using, "calories"),
+        "budget": round(budget_calories + credit),
+    }
+
+
 def own_entry(db: Session, user: models.User, entry_id: int) -> models.DiaryEntry:
     entry = db.get(models.DiaryEntry, entry_id)
     if entry is None or entry.user_id != user.id:
@@ -257,9 +301,7 @@ def read_day(
     state = Reckoning(db, user)
     budget = day_budget(state)
     workouts = exercise_on(db, user, day)
-    # Decision 7: a logged workout adds its calories to that day's budget, and
-    # only that day's.
-    credit = round(sum(row.kcal for row in workouts) / 10) * 10
+    credit = exercise_credit(sum(row.kcal for row in workouts))
     weighed = next((row for row in state.rows if row.date_for == day), None)
     eaten = total(entries, "calories") or 0.0
     db.commit()
@@ -281,10 +323,89 @@ def read_day(
             "fat_g": budget["fat_g"],
         },
         "exercise_kcal": credit,
+        "exercise_minutes": sum(row.minutes for row in workouts),
+        "exercise_minutes_goal": state.profile.exercise_minutes_goal,
         "remaining_calories": round(budget["calories"] + credit - eaten),
+        # Where the day's own number came from, in five lines that add up. Null
+        # when there is nothing to break down.
+        "energy": day_energy(state, budget["calories"], credit),
         "measurement": None if weighed is None else measurement_row(weighed),
         "exercise": [exercise_row(row) for row in workouts],
     }
+
+
+@router.get("/days")
+def read_days(
+    days: int = DEFAULT_HISTORY,
+    db: Session = Depends(get_db),
+    user: models.User = Depends(require_user),
+) -> dict[str, object]:
+    """A run of days ending today: what was consumed against what was budgeted.
+
+    One row per calendar day rather than one per day that was logged, because
+    the point of it is the days nobody logged. Two grouped queries and not one
+    per day: a month of days is one answer, not a month of round trips.
+
+    The budget is today's, the same one the day view reads a past day against
+    (Reckoning takes no date). A day-by-day history of somebody's profile is
+    not kept, so a past day is read against what is true now.
+    """
+    span = max(1, min(days, MAX_HISTORY))
+    today = clock.user_today(user)
+    first = today - dt.timedelta(days=span - 1)
+
+    eaten = {
+        row.date_for: row
+        for row in db.execute(
+            select(
+                models.DiaryEntry.date_for,
+                func.sum(func.coalesce(models.DiaryEntry.calories, 0.0)).label("calories"),
+                func.count(models.DiaryEntry.id).label("entries"),
+            )
+            .where(
+                models.DiaryEntry.user_id == user.id,
+                models.DiaryEntry.date_for >= first,
+                models.DiaryEntry.date_for <= today,
+            )
+            .group_by(models.DiaryEntry.date_for)
+        )
+    }
+    worked = {
+        row.date_for: row.kcal
+        for row in db.execute(
+            select(
+                models.ExerciseEntry.date_for,
+                func.sum(models.ExerciseEntry.kcal).label("kcal"),
+            )
+            .where(
+                models.ExerciseEntry.user_id == user.id,
+                models.ExerciseEntry.date_for >= first,
+                models.ExerciseEntry.date_for <= today,
+            )
+            .group_by(models.ExerciseEntry.date_for)
+        )
+    }
+
+    state = Reckoning(db, user)
+    budget = day_budget(state)["calories"]
+    db.commit()
+
+    run: list[dict[str, object]] = []
+    for step in range(span):
+        day = first + dt.timedelta(days=step)
+        food = eaten.get(day)
+        run.append(
+            {
+                "date": day.isoformat(),
+                # Nothing logged is nothing consumed, which is a bar of no
+                # height rather than a day with no answer.
+                "calories": 0 if food is None else round(food.calories),
+                "budget": budget,
+                "exercise_kcal": exercise_credit(worked.get(day, 0.0)),
+                "logged": food is not None,
+            }
+        )
+    return {"days": run}
 
 
 @router.post("", status_code=status.HTTP_201_CREATED)

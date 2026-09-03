@@ -1,16 +1,22 @@
 import { ChevronRight, Plus } from 'lucide-react'
-import { useEffect, useRef, useState } from 'react'
+import { useEffect, useRef, useState, type ReactNode } from 'react'
 
 import {
   api,
   errorText,
+  type DayRow,
   type DiaryDay,
+  type DiaryDays,
   type Me,
   type Measurement,
   type Measurements,
   type Stamp,
   type Profile,
+  type Targets,
+  type TrendPoint,
 } from '../api'
+import { DayBars } from '../components/DayBars'
+import { BreakdownButton, BreakdownFold, useBreakdown } from '../components/EnergyLines'
 import { ExerciseSheet } from '../components/ExerciseSheet'
 import { FoodPicker } from '../components/FoodPicker'
 import { MeasurementsSheet } from '../components/MeasurementsSheet'
@@ -18,14 +24,37 @@ import { MacroBar } from '../components/MacroBar'
 import { HEADLINE, nutrientText } from '../components/NutritionLabel'
 import { useTopBar } from '../hooks/useTopBar'
 import { dayLabel, slotByTime, today } from '../lib/day'
-import { personalNumber, calText } from '../lib/targets'
-import { round1, weightText } from '../lib/units'
+import { personalNumber, calText, monthText } from '../lib/targets'
+import { round1, weightIn, weightText, weightUnit } from '../lib/units'
 
 // How far back the weight line reaches, and how long a deleted reading can be
 // brought back.
 const SPARK_DAYS = 30
 const HISTORY_DAYS = 90
 const UNDO = 6000
+
+// How many days of eating the card shows and the Progress screen shows. Both
+// come from the one request, because a month of days is a few hundred bytes.
+const WEEK = 7
+const RUN_DAYS = 28
+
+// The windows the Progress screen offers for the weight line, and where the
+// chosen one is remembered.
+const WINDOWS = [
+  { days: 30, label: '30 days', over: 'over 30 days' },
+  { days: 90, label: '90 days', over: 'over 90 days' },
+  { days: 365, label: '1 year', over: 'over 1 year' },
+]
+const WINDOW_KEY = 'tare.progress.window'
+
+function rememberedWindow(): number {
+  try {
+    const kept = Number(window.localStorage.getItem(WINDOW_KEY))
+    return WINDOWS.some((row) => row.days === kept) ? kept : WINDOWS[0].days
+  } catch {
+    return WINDOWS[0].days
+  }
+}
 
 // The ring, drawn by hand: a circle whose stroke is dashed to the share of the
 // day that has been consumed. No library, and nothing that moves.
@@ -36,10 +65,16 @@ const ROUND = 2 * Math.PI * RADIUS
 // stylesheet, so it reads the same on a phone and on a desktop.
 const SPARK_W = 240
 const SPARK_H = 44
+const SPARK_TALL = 88
 const SPARK_PAD = 4
 
-function Ring({ consumed, budget }: { consumed: number; budget: number }) {
-  const share = budget <= 0 ? 0 : Math.min(Math.max(consumed / budget, 0), 1)
+// What one ring is filled to, what stands in its middle, and the words under
+// that. A ring is added by adding a spec: the steps one arrives that way, the
+// day a phone starts sending steps.
+type RingSpec = { key: string; filled: number; centre: string; caption: string }
+
+function Ring({ filled }: { filled: number }) {
+  const share = Math.min(Math.max(filled, 0), 1)
   return (
     <svg viewBox="0 0 100 100" className="h-28 w-28 -rotate-90" aria-hidden="true">
       <circle
@@ -64,12 +99,32 @@ function Ring({ consumed, budget }: { consumed: number; budget: number }) {
   )
 }
 
+// A row of them, side by side and the same size.
+function Rings({ rings }: { rings: RingSpec[] }) {
+  return (
+    <div className="flex items-center gap-4">
+      {rings.map((ring) => (
+        <div key={ring.key} className="relative shrink-0">
+          <Ring filled={ring.filled} />
+          <div className="absolute inset-0 flex flex-col items-center justify-center">
+            <span className="t-nums text-2xl font-semibold leading-none">{ring.centre}</span>
+            <span className="text-xs text-muted">{ring.caption}</span>
+          </div>
+        </div>
+      ))}
+    </div>
+  )
+}
+
 // The trend as a line, with the readings themselves as light points around it.
-function Spark({ trend, points }: {
-  trend: { date: string; kg: number }[]
+// Taller on the screen that is only about the weight.
+function Spark({ trend, points, tall }: {
+  trend: TrendPoint[]
   points: Measurement[]
+  tall?: boolean
 }) {
   if (trend.length < 2) return null
+  const height = tall ? SPARK_TALL : SPARK_H
   const days = trend.map((row) => Date.parse(`${row.date}T00:00:00Z`))
   const first = days[0]
   const last = days[days.length - 1]
@@ -82,7 +137,7 @@ function Spark({ trend, points }: {
 
   const at = (millis: number, kg: number) => ({
     x: SPARK_PAD + ((millis - first) / span) * (SPARK_W - SPARK_PAD * 2),
-    y: SPARK_H - SPARK_PAD - ((kg - low) / range) * (SPARK_H - SPARK_PAD * 2),
+    y: height - SPARK_PAD - ((kg - low) / range) * (height - SPARK_PAD * 2),
   })
 
   const line = trend
@@ -94,8 +149,8 @@ function Spark({ trend, points }: {
 
   return (
     <svg
-      viewBox={`0 0 ${SPARK_W} ${SPARK_H}`}
-      className="mt-3 h-11 w-full"
+      viewBox={`0 0 ${SPARK_W} ${height}`}
+      className={`mt-3 w-full ${tall ? 'h-22' : 'h-11'}`}
       preserveAspectRatio="none"
       aria-hidden="true"
     >
@@ -112,10 +167,13 @@ function Spark({ trend, points }: {
 
 // Every card wears the same head: the category, which is a way into it, and a
 // plus that adds to it.
-function CardHead({ label, onOpen, onAdd }: {
+function CardHead({ label, onOpen, onAdd, extra }: {
   label: string
   onOpen: () => void
-  onAdd: () => void
+  // A card that nothing is added to has no plus, and keeps the head the same
+  // height so the cards under each other still line up.
+  onAdd?: () => void
+  extra?: ReactNode
 }) {
   return (
     <div className="mb-2 flex items-center justify-between">
@@ -127,16 +185,33 @@ function CardHead({ label, onOpen, onAdd }: {
         {label}
         <ChevronRight className="h-3.5 w-3.5" strokeWidth={2.5} />
       </button>
-      <button
-        type="button"
-        className="t-topbar-icon -mr-2"
-        aria-label={`Add ${label.toLowerCase()}`}
-        onClick={onAdd}
-      >
-        <Plus className="h-5 w-5" strokeWidth={2} />
-      </button>
+      <span className="flex items-center gap-2">
+        {extra}
+        {onAdd === undefined ? (
+          <span className="t-topbar-icon -mr-2" aria-hidden="true" />
+        ) : (
+          <button
+            type="button"
+            className="t-topbar-icon -mr-2"
+            aria-label={`Add ${label.toLowerCase()}`}
+            onClick={onAdd}
+          >
+            <Plus className="h-5 w-5" strokeWidth={2} />
+          </button>
+        )}
+      </span>
     </div>
   )
+}
+
+// How far the weight has moved across a window, in the member's own units.
+// Under a tenth of a unit is not a change anybody can act on.
+function changeText(line: TrendPoint[], units: Me['units'], over: string): string {
+  const moved =
+    weightIn(line[line.length - 1].kg, units) - weightIn(line[0].kg, units)
+  const size = round1(Math.abs(moved))
+  if (size < 0.1) return `No change ${over}`
+  return `${moved < 0 ? '−' : '+'}${size} ${weightUnit(units)} ${over}`
 }
 
 // One measured number with the day it was last taken under it.
@@ -170,7 +245,7 @@ function shareText(stamp: Stamp, units: Me['units']): string {
     : `${round1(stamp.value)}% · ${weightText(mass, units)}`
 }
 
-type DashScreen = 'measurements' | null
+export type DashScreen = 'measurements' | 'progress' | null
 
 export function Dashboard({
   me,
@@ -199,6 +274,12 @@ export function Dashboard({
   const [day, setDay] = useState<DiaryDay | null>(null)
   const [profile, setProfile] = useState<Profile | null>(null)
   const [history, setHistory] = useState<Measurements | null>(null)
+  const [run, setRun] = useState<DayRow[]>([])
+  const [targets, setTargets] = useState<Targets | null>(null)
+  // The weight line for whichever window the Progress screen is on, which is
+  // its own request: a trend over a year is not a trend over a month cut short.
+  const [span, setSpan] = useState(rememberedWindow)
+  const [windowed, setWindowed] = useState<Measurements | null>(null)
   const [error, setError] = useState('')
   const [again, setAgain] = useState(0)
   const [screen, setScreen] = useState<DashScreen>(null)
@@ -207,14 +288,18 @@ export function Dashboard({
   const [exercising, setExercising] = useState(false)
   const [pending, setPending] = useState<Measurement | null>(null)
   const pendingRef = useRef<Measurement | null>(null)
+  const [open, toggleBreakdown] = useBreakdown()
 
   // The wordmark is the header here, and the rail's own name takes over
   // from it at the width the rail appears. The history is a sub-view, and it
   // names the way back.
   useTopBar(
-    screen === 'measurements'
-      ? { title: 'Biometrics', back: { label: 'Dashboard', onBack: () => setScreen(null) } }
-      : { title: 'Dashboard', left: 'wordmark' }
+    screen === null
+      ? { title: 'Dashboard', left: 'wordmark' }
+      : {
+          title: screen === 'measurements' ? 'Biometrics' : 'Progress',
+          back: { label: 'Dashboard', onBack: () => setScreen(null) },
+        }
   )
 
   // A screen asked for from outside is opened once, and then this tab owns
@@ -242,10 +327,28 @@ export function Dashboard({
     api<Measurements>(`/health/measurements?days=${HISTORY_DAYS}`)
       .then((loaded) => alive && setHistory(loaded))
       .catch(() => undefined)
+    api<DiaryDays>(`/diary/days?days=${RUN_DAYS}`)
+      .then((loaded) => alive && setRun(loaded.days))
+      .catch(() => undefined)
+    api<Targets>('/health/targets')
+      .then((loaded) => alive && setTargets(loaded))
+      .catch(() => undefined)
     return () => {
       alive = false
     }
   }, [me.timezone, todayIso, refresh, again])
+
+  // Only while that screen is open, and again whenever the window changes.
+  useEffect(() => {
+    if (screen !== 'progress') return
+    let alive = true
+    api<Measurements>(`/health/measurements?days=${span}`)
+      .then((loaded) => alive && setWindowed(loaded))
+      .catch(() => undefined)
+    return () => {
+      alive = false
+    }
+  }, [screen, span, refresh, again])
 
   const erase = (row: Measurement) => {
     pendingRef.current = null
@@ -269,6 +372,16 @@ export function Dashboard({
     },
     []
   )
+
+  // Remembered per device: somebody who reads their year does it again.
+  const pickWindow = (days: number) => {
+    setSpan(days)
+    try {
+      window.localStorage.setItem(WINDOW_KEY, String(days))
+    } catch {
+      // A browser that refuses storage still gets the window it picked.
+    }
+  }
 
   const reload = () => {
     setPicking(false)
@@ -310,6 +423,42 @@ export function Dashboard({
   const gap =
     profile === null || profile.complete ? null : personalNumber(profile.missing)
 
+  // The month the goal is reached at, said once and shown wherever the weight
+  // is. Nothing at all without a goal weight.
+  const goalMonth =
+    targets === null || targets.projection === null
+      ? ''
+      : ` · Goal about ${monthText(targets.projection.month)}`
+  const week = run.slice(-WEEK)
+
+  // The rings the Food card draws. The steps one is a spec like the others and
+  // waits only on a day that carries steps, which is device sync.
+  const ringBudget = (day?.budget.calories ?? 0) + (day?.exercise_kcal ?? 0)
+  const minutesGoal = day?.exercise_minutes_goal ?? 0
+  const rings: RingSpec[] = [
+    {
+      key: 'calories',
+      filled: ringBudget <= 0 ? 0 : (day?.totals.calories ?? 0) / ringBudget,
+      centre: day === null ? '-' : calText(day.remaining_calories),
+      caption: 'remaining',
+    },
+    {
+      key: 'exercise',
+      filled: minutesGoal <= 0 ? 0 : (day?.exercise_minutes ?? 0) / minutesGoal,
+      centre: day === null ? '-' : String(day.exercise_minutes),
+      caption: `of ${minutesGoal} min`,
+    },
+  ]
+  const steps = day?.steps ?? null
+  if (steps !== null && targets !== null) {
+    rings.push({
+      key: 'steps',
+      filled: targets.step_goal <= 0 ? 0 : steps / targets.step_goal,
+      centre: calText(steps),
+      caption: `of ${calText(targets.step_goal)} steps`,
+    })
+  }
+
   const snackbar = pending !== null && (
     <div className="pointer-events-none fixed inset-x-0 bottom-24 z-30 px-4">
       <div className="pointer-events-auto mx-auto flex w-full max-w-md items-center justify-between gap-3 rounded-xl border border-line bg-surface-2 px-4 py-3 text-sm">
@@ -320,6 +469,83 @@ export function Dashboard({
       </div>
     </div>
   )
+
+  if (screen === 'progress') {
+    const line = windowed?.trend ?? []
+    const marks = (windowed?.measurements ?? []).filter((row) =>
+      line.some((point) => point.date === row.date)
+    )
+    const over = WINDOWS.find((row) => row.days === span)?.over ?? ''
+    const now = line.length > 0 ? line[line.length - 1].kg : null
+    const newest = windowed?.latest.weight_kg ?? null
+    const logged = run.filter((row) => row.logged).length
+
+    return (
+      <>
+        <div className="t-card mb-3">
+          <div className="mb-2 flex flex-wrap gap-2">
+            {WINDOWS.map((row) => (
+              <button
+                key={row.days}
+                type="button"
+                aria-pressed={span === row.days}
+                className={`t-chip ${span === row.days ? 'border-accent text-accent' : ''}`}
+                onClick={() => pickWindow(row.days)}
+              >
+                {row.label}
+              </button>
+            ))}
+          </div>
+          {line.length < 2 ? (
+            <p className="text-sm text-muted">Weigh in a few more times to see a trend.</p>
+          ) : (
+            <>
+              <span className="t-nums block text-3xl font-semibold leading-tight">
+                {weightText(line[line.length - 1].kg, me.units)}
+              </span>
+              <span className="block text-xs text-muted">
+                {changeText(line, me.units, over)}
+                {goalMonth}
+              </span>
+              <Spark trend={line} points={marks} tall />
+            </>
+          )}
+          <div className="mt-2">
+            {newest !== null && (
+              <Dated
+                label="Latest weigh-in"
+                value={weightText(newest.value, me.units)}
+                date={newest.date}
+                todayIso={todayIso}
+              />
+            )}
+            <div className="t-row min-h-9 text-sm">
+              <span className="flex-1 text-muted">Trend now</span>
+              <span className="t-nums">
+                {now === null ? 'No trend yet' : weightText(now, me.units)}
+              </span>
+            </div>
+            <div className="t-row min-h-9 text-sm">
+              <span className="flex-1 text-muted">Goal weight</span>
+              <span className="t-nums">
+                {targets === null || targets.goal_weight_kg === null
+                  ? 'No goal yet'
+                  : weightText(targets.goal_weight_kg, me.units)}
+              </span>
+            </div>
+          </div>
+        </div>
+
+        <div className="t-card mb-3">
+          <p className="t-micro mb-2">Last {RUN_DAYS} days</p>
+          <DayBars days={run} todayIso={todayIso} height={72} mondaysOnly />
+          <p className="t-nums mt-1 text-xs text-muted">
+            Days logged {logged} of {RUN_DAYS}
+          </p>
+        </div>
+      </>
+    )
+  }
 
   if (screen === 'measurements') {
     return (
@@ -420,44 +646,46 @@ export function Dashboard({
       {error && <p className="t-error mb-3">{error}</p>}
 
       <div className="t-card mb-3">
-        <CardHead label="Food" onOpen={onOpenJournal} onAdd={() => setPicking(true)} />
-        <div className="flex items-center gap-4">
-          <div className="relative shrink-0">
-            <Ring
-              consumed={day?.totals.calories ?? 0}
-              budget={(day?.budget.calories ?? 0) + (day?.exercise_kcal ?? 0)}
-            />
-            <div className="absolute inset-0 flex flex-col items-center justify-center">
-              <span className="t-nums text-2xl font-semibold leading-none">
-                {day === null ? '-' : calText(day.remaining_calories)}
+        <CardHead
+          label="Food"
+          onOpen={onOpenJournal}
+          onAdd={() => setPicking(true)}
+          extra={
+            day?.energy != null && (
+              <BreakdownButton open={open} onToggle={toggleBreakdown} />
+            )
+          }
+        />
+        <div className="min-[900px]:flex min-[900px]:items-start min-[900px]:gap-5">
+          <div className="min-[900px]:shrink-0">
+            <Rings rings={rings} />
+            <div className="mt-3 min-w-0">
+              <span className="t-nums block text-sm">
+                {day === null ? '-' : nutrientText('calories', day.totals.calories ?? 0)}
+                <span className="text-muted"> consumed of {day === null ? '-' : calText(day.budget.calories + day.exercise_kcal)}</span>
               </span>
-              <span className="text-xs text-muted">remaining</span>
+              {day !== null && day.exercise_kcal > 0 && (
+                <span className="block text-xs text-muted">
+                  Includes exercise added: +{day.exercise_kcal} cal
+                </span>
+              )}
             </div>
           </div>
-          <div className="min-w-0 flex-1">
-            <span className="t-nums block text-sm">
-              {day === null ? '-' : nutrientText('calories', day.totals.calories ?? 0)}
-              <span className="text-muted"> consumed of {day === null ? '-' : calText(day.budget.calories)}</span>
-            </span>
-            {day !== null && day.exercise_kcal > 0 && (
-              <span className="block text-xs text-muted">
-                Includes exercise added: +{day.exercise_kcal} cal
-              </span>
-            )}
+
+          <div className="mt-4 flex flex-col gap-3 min-[900px]:mt-0 min-[900px]:flex-1">
+            {HEADLINE.slice(1).map((fact) => (
+              <MacroBar
+                key={fact.key}
+                label={fact.label}
+                value={day === null ? null : day.totals[fact.key]}
+                target={day?.budget[fact.key] ?? 0}
+                unit={fact.unit}
+              />
+            ))}
           </div>
         </div>
 
-        <div className="mt-4 flex flex-col gap-3">
-          {HEADLINE.slice(1).map((fact) => (
-            <MacroBar
-              key={fact.key}
-              label={fact.label}
-              value={day === null ? null : day.totals[fact.key]}
-              target={day?.budget[fact.key] ?? 0}
-              unit={fact.unit}
-            />
-          ))}
-        </div>
+        {day?.energy != null && <BreakdownFold open={open} energy={day.energy} />}
 
         {gap !== null && (
           <button
@@ -498,6 +726,37 @@ export function Dashboard({
       </div>
 
       <div className="t-card mb-3">
+        <CardHead label="Progress" onOpen={() => setScreen('progress')} />
+        <p className="t-micro mb-1">Weight</p>
+        {trendKg === null ? (
+          <p className="text-sm text-muted">Weigh in a few more times to see a trend.</p>
+        ) : (
+          <>
+            <span className="t-nums block text-3xl font-semibold leading-tight">
+              {weightText(trendKg, me.units)}
+            </span>
+            {trend.length < 2 ? (
+              <span className="block text-xs text-muted">
+                Weigh in a few more times to see a trend.
+              </span>
+            ) : (
+              <>
+                <span className="block text-xs text-muted">
+                  {changeText(trend, me.units, WINDOWS[0].over)}
+                  {goalMonth}
+                </span>
+                <Spark trend={trend} points={spots} />
+              </>
+            )}
+          </>
+        )}
+        <div className="mt-3 border-t border-line pt-3">
+          <p className="t-micro mb-2">Last {WEEK} days</p>
+          <DayBars days={week} todayIso={todayIso} />
+        </div>
+      </div>
+
+      <div className="t-card mb-3">
         <CardHead
           label="Biometrics"
           onOpen={() => setScreen('measurements')}
@@ -514,7 +773,6 @@ export function Dashboard({
               {dayLabel(latest.date, todayIso)}
               {trendKg === null ? '' : ` · your trend ${weightText(trendKg, me.units)}`}
             </span>
-            <Spark trend={trend} points={spots} />
             <div className="mt-1">
               {stamps?.body_fat_pct && (
                 <Dated

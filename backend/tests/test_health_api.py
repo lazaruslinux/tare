@@ -11,7 +11,16 @@ import datetime as dt
 import pytest
 
 from app import clock, models
-from app.routers.health import BAD_RATE, NO_GRAMS, NOTE_TEXT, NUDGE_TEXT, PCT_RANGE, PCT_SUM
+from app.routers.health import (
+    BAD_MINUTES_GOAL,
+    BAD_RATE,
+    BAD_STEP_GOAL,
+    NO_GRAMS,
+    NOTE_TEXT,
+    NUDGE_TEXT,
+    PCT_RANGE,
+    PCT_SUM,
+)
 from tests.conftest import PASSWORD
 
 TODAY = dt.date(2026, 9, 2)
@@ -493,3 +502,35 @@ def test_too_many_minutes_is_refused_in_plain_words(client, case_a):
     )
     assert answer.status_code == 400
     assert answer.json() == {"detail": "Minutes must be between 1 and 720."}
+
+
+def test_a_day_of_movement_has_two_goals_with_defaults(client, member):
+    read = client.get("/api/health/profile").json()
+    assert read["exercise_minutes_goal"] == 30
+    assert read["step_goal"] == 8000
+    targets = client.get("/api/health/targets").json()
+    assert targets["exercise_minutes_goal"] == 30
+    assert targets["step_goal"] == 8000
+
+
+def test_the_two_goals_can_be_set(client, member):
+    answer = profile(client, exercise_minutes_goal=45, step_goal=12000)
+    assert answer.status_code == 200
+    assert answer.json()["exercise_minutes_goal"] == 45
+    assert answer.json()["step_goal"] == 12000
+
+
+@pytest.mark.parametrize("minutes", [4, 601])
+def test_a_minutes_goal_outside_the_offered_range_is_refused(client, member, minutes):
+    answer = profile(client, exercise_minutes_goal=minutes)
+    assert answer.status_code == 400
+    assert answer.json()["detail"] == BAD_MINUTES_GOAL
+    assert client.get("/api/health/profile").json()["exercise_minutes_goal"] == 30
+
+
+@pytest.mark.parametrize("steps", [999, 50001])
+def test_a_step_goal_outside_the_offered_range_is_refused(client, member, steps):
+    answer = profile(client, step_goal=steps)
+    assert answer.status_code == 400
+    assert answer.json()["detail"] == BAD_STEP_GOAL
+    assert client.get("/api/health/profile").json()["step_goal"] == 8000

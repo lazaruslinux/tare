@@ -71,6 +71,15 @@ MAX_HEIGHT_CM = 250.0
 MAX_MINUTES = 720
 BAD_MINUTES = f"Minutes must be between 1 and {MAX_MINUTES}."
 
+# What a day of movement may be aimed at. Wide enough for anybody's day and
+# narrow enough to catch a figure typed with a digit too many.
+MIN_MINUTES_GOAL = 5
+MAX_MINUTES_GOAL = 600
+MIN_STEP_GOAL = 1000
+MAX_STEP_GOAL = 50000
+BAD_MINUTES_GOAL = f"Pick a goal between {MIN_MINUTES_GOAL} and {MAX_MINUTES_GOAL} minutes."
+BAD_STEP_GOAL = f"Pick a goal between {MIN_STEP_GOAL:,} and {MAX_STEP_GOAL:,} steps."
+
 # The plain sentences behind app.health's note keys. The words are the doc's,
 # and no formula name appears in any of them (decision 29).
 NOTE_TEXT = {
@@ -126,6 +135,8 @@ class ProfileIn(BaseModel):
     activity_level: str | None = None
     rate_kg_per_week: float | None = None
     goal_weight_kg: float | None = None
+    exercise_minutes_goal: int | None = None
+    step_goal: int | None = None
 
 
 class TargetsIn(BaseModel):
@@ -551,6 +562,8 @@ def read_profile(
         "rate_kg_per_week": profile.rate_kg_per_week,
         "rate_steps": list(health.steps_for(state.direction)),
         "goal_weight_kg": profile.goal_weight_kg,
+        "exercise_minutes_goal": profile.exercise_minutes_goal,
+        "step_goal": profile.step_goal,
         "complete": state.complete,
         # Which of the four a personal number is still waiting on, worked out
         # here so no screen has to know the rule.
@@ -625,6 +638,18 @@ def write_profile(
             if body.rate_kg_per_week not in steps:
                 raise HTTPException(status.HTTP_400_BAD_REQUEST, BAD_RATE)
         profile.rate_kg_per_week = body.rate_kg_per_week
+
+    if "exercise_minutes_goal" in sent:
+        minutes = body.exercise_minutes_goal
+        if minutes is None or not (MIN_MINUTES_GOAL <= minutes <= MAX_MINUTES_GOAL):
+            raise HTTPException(status.HTTP_400_BAD_REQUEST, BAD_MINUTES_GOAL)
+        profile.exercise_minutes_goal = minutes
+
+    if "step_goal" in sent:
+        steps_a_day = body.step_goal
+        if steps_a_day is None or not (MIN_STEP_GOAL <= steps_a_day <= MAX_STEP_GOAL):
+            raise HTTPException(status.HTTP_400_BAD_REQUEST, BAD_STEP_GOAL)
+        profile.step_goal = steps_a_day
 
     profile.updated_at = now_utc()
     db.commit()
@@ -764,6 +789,8 @@ def read_targets(
         ),
         "rate_steps": list(health.steps_for(state.direction)),
         "goal_weight_kg": profile.goal_weight_kg,
+        "exercise_minutes_goal": profile.exercise_minutes_goal,
+        "step_goal": profile.step_goal,
         "weekly_rate": round(weekly_rate, 2),
         "notes": [NOTE_TEXT[key] for key in note_keys],
         # The same sentences by their keys, in the same order, so a screen can

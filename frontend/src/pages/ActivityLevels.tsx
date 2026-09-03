@@ -1,13 +1,36 @@
-import { Check } from 'lucide-react'
+import { Check, ChevronRight } from 'lucide-react'
 import { useState } from 'react'
 
 import type { Me, RestingInputs, Targets as TargetsRow } from '../api'
 import { ExerciseSheet } from '../components/ExerciseSheet'
 import { SaveMarks, useSavedChip } from '../components/SaveMarks'
+import { Sheet } from '../components/Sheet'
 import { today } from '../lib/day'
-import { LEVELS, LEVEL_INTRO, calText, personalNumber } from '../lib/targets'
+import { LEVELS, LEVEL_INTRO, asNumber, calText, personalNumber } from '../lib/targets'
 import { heightText, round1, weightText } from '../lib/units'
 import type { Save } from './Targets'
+
+// Which goal is being typed, if either.
+type Goal = 'minutes' | 'steps' | null
+
+// What each of the two is called, and what its field asks for.
+const GOALS = {
+  minutes: { label: 'Exercise a day', field: 'Minutes', key: 'exercise_minutes_goal' },
+  steps: { label: 'Steps a day', field: 'Steps', key: 'step_goal' },
+} as const
+
+// The same two-line row the Targets list uses.
+function Row({ label, value, onOpen }: { label: string; value: string; onOpen: () => void }) {
+  return (
+    <button type="button" className="t-row w-full text-left" onClick={onOpen}>
+      <span className="min-w-0 flex-1">
+        <span className="block text-sm">{label}</span>
+        <span className="t-nums block truncate text-sm text-muted">{value}</span>
+      </span>
+      <ChevronRight className="h-4 w-4 shrink-0 text-muted" strokeWidth={2.5} />
+    </button>
+  )
+}
 
 // The ring, drawn by hand: one circle whose stroke is cut into three arcs. No
 // library, and nothing that moves.
@@ -84,6 +107,9 @@ export function ActivityLevels({
 }) {
   const [logging, setLogging] = useState(false)
   const [saved, markSaved] = useSavedChip()
+  const [goal, setGoal] = useState<Goal>(null)
+  const [typed, setTyped] = useState('')
+  const [savedGoal, markGoalSaved] = useSavedChip()
 
   const options = new Map(targets.activity_options.map((row) => [row.level, row]))
   const chosen = options.get(targets.activity_level)
@@ -94,6 +120,24 @@ export function ActivityLevels({
 
   const pick = async (level: string) => {
     if (await onSaveProfile({ activity_level: level })) markSaved()
+  }
+
+  const goals = {
+    minutes: targets.exercise_minutes_goal,
+    steps: targets.step_goal,
+  }
+
+  const openGoal = (which: Exclude<Goal, null>) => {
+    setTyped(String(goals[which]))
+    setGoal(which)
+  }
+
+  const wanted = asNumber(typed)
+  const goalDirty = goal !== null && wanted !== null && Math.round(wanted) !== goals[goal]
+
+  const saveGoal = async () => {
+    if (goal === null || wanted === null) return
+    if (await onSaveProfile({ [GOALS[goal].key]: Math.round(wanted) })) markGoalSaved()
   }
 
   const slices: Slice[] = [
@@ -226,6 +270,55 @@ export function ActivityLevels({
           </span>
         </button>
       </div>
+
+      <div className="t-card mb-3">
+        <p className="t-micro mb-2">Activity goals</p>
+        <Row
+          label={GOALS.minutes.label}
+          value={`${goals.minutes} min`}
+          onOpen={() => openGoal('minutes')}
+        />
+        <Row
+          label={GOALS.steps.label}
+          value={goals.steps.toLocaleString()}
+          onOpen={() => openGoal('steps')}
+        />
+      </div>
+
+      <Sheet
+        open={goal !== null}
+        label={goal === null ? '' : GOALS[goal].label}
+        onClose={() => setGoal(null)}
+      >
+        {goal !== null && (
+          <>
+            <p className="t-micro mb-2">{GOALS[goal].label}</p>
+            <label className="t-label" htmlFor="activity-goal">
+              {GOALS[goal].field}
+            </label>
+            <input
+              id="activity-goal"
+              className="t-input"
+              type="number"
+              inputMode="numeric"
+              step="1"
+              value={typed}
+              onChange={(event) => setTyped(event.target.value)}
+            />
+            <div className="mt-3 flex items-center gap-3">
+              <button
+                type="button"
+                className="t-btn t-btn-primary"
+                disabled={busy || !goalDirty}
+                onClick={() => void saveGoal()}
+              >
+                Save
+              </button>
+              <SaveMarks dirty={goalDirty} saved={savedGoal} />
+            </div>
+          </>
+        )}
+      </Sheet>
 
       {logging && (
         <ExerciseSheet
