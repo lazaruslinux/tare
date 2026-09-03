@@ -68,6 +68,7 @@ def proposed(food: models.Food) -> dict[str, object]:
         "id": food.id,
         "name": food.name,
         "brand": food.brand,
+        "description": food.description,
         "barcode": food.barcode,
         "base_unit": food.base_unit,
         "density_g_per_ml": food.density_g_per_ml,
@@ -213,6 +214,7 @@ def approve_edit(
 
     target.name = shadow.name
     target.brand = shadow.brand
+    target.description = shadow.description
     # The unit the panel and the servings are both counted in, so it travels
     # with them or the numbers underneath it change meaning.
     target.base_unit = shadow.base_unit

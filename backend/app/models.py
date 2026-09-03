@@ -207,6 +207,9 @@ class Food(Base):
 
     name: Mapped[str] = mapped_column(String(200), nullable=False)
     brand: Mapped[str] = mapped_column(String(120), nullable=False, default="")
+    # What it is, in a few words: "King Size", "Blueberry flavor". Not the
+    # brand and not the panel, just what tells two rows of one food apart.
+    description: Mapped[str] = mapped_column(String(60), nullable=False, default="")
     # 'g' or 'ml'. Every number below is per 100 of this.
     base_unit: Mapped[str] = mapped_column(String(2), nullable=False, default="g")
     # What one millilitre of it weighs, when the label gave enough to work it

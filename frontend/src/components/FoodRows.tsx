@@ -8,6 +8,13 @@ import { nutrientText } from './NutritionLabel'
 // Food page's cards and the list screen behind them show the same rows and
 // must not drift apart.
 
+// The line under a food's name: who makes it and what it is, whichever of the
+// two it carries. Every list reads it the same way, so a food looks like itself
+// wherever it turns up.
+export function subline(row: FoodRow): string {
+  return [row.brand, row.description].filter(Boolean).join(' \u00b7 ')
+}
+
 // Where a food stands with the shared database, as one dot before its name.
 // A word for each of these on every row would be a column of shouting; the
 // colour carries it and the label is there for anybody reading with their ears.
@@ -69,7 +76,9 @@ export function FoodLine({ row, onOpen }: { row: FoodRow; onOpen: () => void }) 
           <Dot state={row.community} />
           <span className="truncate text-sm">{row.name}</span>
         </span>
-        {row.brand && <span className="block truncate text-xs text-muted">{row.brand}</span>}
+        {subline(row) && (
+          <span className="block truncate text-xs text-muted">{subline(row)}</span>
+        )}
       </span>
       <Calories row={row} />
     </button>

@@ -712,14 +712,35 @@ export function Dashboard({
       </div>
 
       <div className="t-card mb-3">
-        <CardHead label="Progress" onOpen={() => setScreen('progress')} />
-        <p className="t-micro mb-1">Weight</p>
-        {trendKg === null ? (
-          <p className="text-sm text-muted">Weigh in a few more times to see a trend.</p>
+        <CardHead
+          label="Progress"
+          onOpen={() => setScreen('progress')}
+          onAdd={() => setMeasuring(todayIso)}
+        />
+        {/* The scale's own number leads and the trend rides the line under it,
+            so one card carries both without two big numbers on one screen. */}
+        <button
+          type="button"
+          className="t-micro t-tap44 mb-1 flex items-center gap-1"
+          onClick={() => setScreen('measurements')}
+        >
+          Biometrics
+          <ChevronRight className="h-3.5 w-3.5" strokeWidth={2.5} />
+        </button>
+        {latest === null ? (
+          <p className="text-sm text-muted">No biometrics yet.</p>
         ) : (
           <>
             <span className="t-nums block text-3xl font-semibold leading-tight">
-              {weightText(trendKg, me.units)}
+              {weightText(latest.weight_kg, me.units)}
+            </span>
+            <span className="block text-xs text-muted">
+              {dayLabel(latest.date, todayIso)}
+              {/* One weigh-in is not a trend, and reading the same number
+                  twice on one line says the opposite. */}
+              {trendKg === null || trend.length < 2
+                ? ''
+                : ` · trend ${weightText(trendKg, me.units)}`}
             </span>
             {trend.length < 2 ? (
               <span className="block text-xs text-muted">
@@ -734,31 +755,6 @@ export function Dashboard({
                 <Spark trend={trend} points={spots} />
               </>
             )}
-          </>
-        )}
-        <div className="mt-3 border-t border-line pt-3">
-          <p className="t-micro mb-2">Food, last {WEEK} days</p>
-          <DayBars days={week} todayIso={todayIso} />
-        </div>
-      </div>
-
-      <div className="t-card mb-3">
-        <CardHead
-          label="Biometrics"
-          onOpen={() => setScreen('measurements')}
-          onAdd={() => setMeasuring(todayIso)}
-        />
-        {latest === null ? (
-          <p className="text-sm text-muted">No biometrics yet.</p>
-        ) : (
-          <>
-            <span className="t-nums block text-3xl font-semibold leading-tight">
-              {weightText(latest.weight_kg, me.units)}
-            </span>
-            <span className="block text-xs text-muted">
-              {dayLabel(latest.date, todayIso)}
-              {trendKg === null ? '' : ` · your trend ${weightText(trendKg, me.units)}`}
-            </span>
             <div className="mt-1">
               {stamps?.body_fat_pct && (
                 <Dated
@@ -811,6 +807,10 @@ export function Dashboard({
             </div>
           </>
         )}
+        <div className="mt-3 border-t border-line pt-3">
+          <p className="t-micro mb-2">Food, last {WEEK} days</p>
+          <DayBars days={week} todayIso={todayIso} />
+        </div>
       </div>
 
       {picking && (

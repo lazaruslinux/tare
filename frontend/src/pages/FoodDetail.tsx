@@ -226,25 +226,25 @@ export function FoodDetail({
               disabled={sending}
               onChange={(event) => takePhoto(event, food)}
             />
-            <p className="min-w-0 flex-1 text-xs text-muted">
-              {food.mine
-                ? 'Front of item. Change it under Edit.'
-                : 'Submit a picture of the front. An administrator decides whether it is published.'}
-            </p>
+            {food.description && (
+              <p className="min-w-0 flex-1 text-sm">{food.description}</p>
+            )}
           </div>
 
           <NutritionLabel food={food} />
 
-          <div className="t-actions mb-3">
+          {/* One row across the whole card rather than the capped one every
+              other screen uses: these three belong to the panel above them. */}
+          <div className="mb-3 flex flex-wrap gap-3">
             <button
-              className="t-btn t-btn-primary flex-1"
+              className="t-btn t-btn-primary w-full min-[640px]:w-auto min-[640px]:flex-1"
               type="button"
               onClick={() => setLogging(true)}
             >
               Log
             </button>
             <button
-              className="t-btn"
+              className="t-btn flex-1 min-[640px]:flex-none"
               type="button"
               aria-pressed={food.pinned}
               onClick={() => togglePin(food)}
@@ -256,29 +256,21 @@ export function FoodDetail({
               )}
               {food.pinned ? 'Unpin' : 'Pin to Repeat'}
             </button>
-          </div>
-
-          {(food.mine || (me.is_admin && shared)) && (
-            <div className="t-actions mb-3">
-              <button className="t-btn flex-1" type="button" onClick={() => onEdit(food)}>
+            {(food.mine || (me.is_admin && shared)) && (
+              <button
+                className="t-btn flex-1 min-[640px]:flex-none"
+                type="button"
+                onClick={() => onEdit(food)}
+              >
                 <Pencil className="h-4 w-4" strokeWidth={2} />
                 Edit
               </button>
-              {food.mine && (
-                <button
-                  className="t-btn text-danger"
-                  type="button"
-                  onClick={() => onDelete(food)}
-                >
-                  Delete
-                </button>
-              )}
-            </div>
-          )}
+            )}
+          </div>
 
           {shared && (
             <div className="t-card mb-3">
-              <p className="t-micro mb-2">Something wrong with it</p>
+              <p className="t-micro mb-2">Help improve Tare</p>
               <div className="t-actions">
                 <button
                   className="t-btn flex-1"
@@ -286,11 +278,11 @@ export function FoodDetail({
                   disabled={sending}
                   onClick={() => setSuggesting(true)}
                 >
-                  Suggest edit
+                  Report an issue
                 </button>
               </div>
               <p className="mt-2 text-xs text-muted">
-                It goes to an administrator. Nothing changes here until it is approved.
+                Your response goes straight to the administrators.
               </p>
             </div>
           )}
@@ -346,6 +338,18 @@ export function FoodDetail({
             <p className="mb-3 text-sm text-muted">
               This is waiting for approval. It is still yours to log in the meantime.
             </p>
+          )}
+
+          {/* Last on the page and quiet with it: deleting a food is a thing
+              somebody comes here to do, not a thing they meet on the way. */}
+          {food.mine && (
+            <button
+              className="mb-3 flex min-h-11 w-full items-center text-sm text-danger"
+              type="button"
+              onClick={() => onDelete(food)}
+            >
+              Delete this food
+            </button>
           )}
 
           {notice && (

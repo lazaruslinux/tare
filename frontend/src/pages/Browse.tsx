@@ -1,7 +1,7 @@
 import { useEffect, useRef, useState } from 'react'
 
 import { api, errorText, type BrowsePage, type FoodRow } from '../api'
-import { Calories, PhotoThumb } from '../components/FoodRows'
+import { Calories, PhotoThumb, subline } from '../components/FoodRows'
 import { useTopBar } from '../hooks/useTopBar'
 
 // The shared database, as a place to look something up rather than a wall to
@@ -24,7 +24,9 @@ function Row({ row, onOpen }: { row: FoodRow; onOpen: () => void }) {
       <PhotoThumb url={row.photo_url} />
       <span className="min-w-0 flex-1">
         <span className="block truncate text-sm">{row.name}</span>
-        {row.brand && <span className="block truncate text-xs text-muted">{row.brand}</span>}
+        {subline(row) && (
+          <span className="block truncate text-xs text-muted">{subline(row)}</span>
+        )}
       </span>
       <Calories row={row} />
     </button>

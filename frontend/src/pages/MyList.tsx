@@ -83,9 +83,13 @@ export function MyList({
 
   const shown = rows.filter((row) => {
     const name = folded(row.name)
-    // Only a food has a brand, and a search reads it as part of the name.
-    const brand = listed.kind === 'foods' ? folded((row as MyFoodRow).brand) : ''
-    if (needle && !name.includes(needle) && !brand.includes(needle)) return false
+    // Only a food has a brand and a description, and a search reads both as
+    // part of the name.
+    const about =
+      listed.kind === 'foods'
+        ? folded(`${(row as MyFoodRow).brand} ${(row as MyFoodRow).description}`)
+        : ''
+    if (needle && !name.includes(needle) && !about.includes(needle)) return false
     if (letter && !name.startsWith(letter.toLowerCase())) return false
     if (listed.kind === 'foods' && chip !== 'all') {
       return (row as MyFoodRow).community === chip

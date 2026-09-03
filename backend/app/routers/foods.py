@@ -33,6 +33,9 @@ MISSING_PHOTO_TO_ATTACH = "That photo is not there to attach."
 
 MAX_NAME = 200
 MAX_BRAND = 120
+# Long enough for "King Size" or "Blueberry flavor" and short enough that it
+# still reads as one line under a name in a list.
+MAX_DESCRIPTION = 60
 MAX_SERVING_NAME = 60
 
 # A serving is measured in the food's own family or not at all: a cup of a
@@ -230,6 +233,8 @@ def food_row(
         "id": food.id,
         "name": food.name,
         "brand": food.brand,
+        # The short line under the name, empty on most foods.
+        "description": food.description,
         "calories": food.calories,
         "base_unit": food.base_unit,
         "status": food.status,
@@ -537,6 +542,15 @@ def apply_body(food: models.Food, body: schemas.FoodIn) -> None:
         raise HTTPException(
             status.HTTP_400_BAD_REQUEST, f"A brand must be at most {MAX_BRAND} characters."
         )
+    # One line, whatever arrived: split with no argument breaks on every kind
+    # of whitespace, so a pasted paragraph comes back as words with one space
+    # between them and nothing to trim off either end.
+    description = " ".join(body.description.split())
+    if len(description) > MAX_DESCRIPTION:
+        raise HTTPException(
+            status.HTTP_400_BAD_REQUEST,
+            f"A description must be at most {MAX_DESCRIPTION} characters.",
+        )
     if any(getattr(body, field) is None for field in REQUIRED):
         raise HTTPException(
             status.HTTP_400_BAD_REQUEST, "Calories, protein, carbs, and fat are required."
@@ -544,6 +558,7 @@ def apply_body(food: models.Food, body: schemas.FoodIn) -> None:
 
     food.name = name
     food.brand = brand
+    food.description = description
     food.base_unit = body.base_unit
     food.density_g_per_ml = body.density_g_per_ml
     food.ingredients_text = body.ingredients_text.strip()

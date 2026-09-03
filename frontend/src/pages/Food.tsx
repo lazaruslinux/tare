@@ -26,7 +26,7 @@ import {
   type RepeatRow,
 } from '../api'
 import { FoodForm } from '../components/FoodForm'
-import { Calories, FoodLine, MealLine, RecipeLine } from '../components/FoodRows'
+import { Calories, FoodLine, MealLine, RecipeLine, subline } from '../components/FoodRows'
 import { PortionSheet } from '../components/PortionSheet'
 import { useTopBar } from '../hooks/useTopBar'
 import { dayLabel, slotByTime, today, dayOf } from '../lib/day'
@@ -634,8 +634,8 @@ export function FoodTab({
                     )}
                     <span className="truncate text-sm">{row.name}</span>
                   </span>
-                  {row.brand && (
-                    <span className="block truncate text-xs text-muted">{row.brand}</span>
+                  {subline(row) && (
+                    <span className="block truncate text-xs text-muted">{subline(row)}</span>
                   )}
                 </span>
                 <Calories row={row} />

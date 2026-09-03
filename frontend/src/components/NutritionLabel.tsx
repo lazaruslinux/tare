@@ -54,12 +54,24 @@ export function nutrientText(key: Nutrient, value: number | null): string {
 // The figures themselves: the four anybody reads, the line saying what they
 // are for, and the six behind "More". Everything that shows a panel goes
 // through this, so a food and a recipe are read the same way.
-export function PanelFacts({ values, note }: { values: Panel; note: string }) {
+export function PanelFacts({
+  values,
+  note,
+  // Where the screen above puts the note instead. The food page reads it on the
+  // chips line once there is room, so its copy here is the narrow one.
+  noteClass = '',
+}: {
+  values: Panel
+  note: string
+  noteClass?: string
+}) {
   const [more, setMore] = useState(false)
 
   return (
     <>
-      <div className="grid grid-cols-4 gap-2">
+      {/* Natural width rather than four stretched columns, so the figures read
+          as one group on a wide screen and still wrap on a phone. */}
+      <div className="flex flex-wrap gap-x-8 gap-y-3">
         {HEADLINE.map((fact) => (
           <div key={fact.key}>
             <span className="t-nums block text-xl font-semibold">
@@ -71,11 +83,11 @@ export function PanelFacts({ values, note }: { values: Panel; note: string }) {
         ))}
       </div>
 
-      <p className="mt-2 text-xs text-muted">{note}</p>
+      <p className={`mt-2 text-xs text-muted ${noteClass}`}>{note}</p>
 
       <button
         type="button"
-        className="t-micro mt-3 flex items-center gap-1"
+        className="t-micro mt-2 flex items-center gap-1"
         aria-expanded={more}
         onClick={() => setMore(!more)}
       >
@@ -116,36 +128,45 @@ export function NutritionLabel({ food }: { food: Food }) {
 
   const baseAmount = perServing && serving ? serving.base_amount : 100
 
+  const note =
+    perServing && serving
+      ? `${serving.name}, ${serving.amount} ${UNIT_LABEL[serving.unit]}`
+      : `100 ${food.base_unit}`
+
   return (
-    <div className="t-card mb-3">
-      <div className="mb-3 flex flex-wrap items-center gap-2">
-        {serving && (
+    <div className="t-card mb-3 py-3">
+      {/* The chips and the line saying what the figures are for sit together
+          once there is room for both, and stack under each other before that. */}
+      <div className="mb-2 flex flex-wrap items-center gap-x-3 gap-y-2 min-[640px]:flex-nowrap">
+        <div className="flex flex-wrap items-center gap-2">
+          {serving && (
+            <button
+              type="button"
+              aria-pressed={perServing}
+              className="t-chip aria-pressed:border-accent aria-pressed:text-text"
+              onClick={() => setPerServing(true)}
+            >
+              Per serving
+            </button>
+          )}
           <button
             type="button"
-            aria-pressed={perServing}
+            aria-pressed={!perServing}
             className="t-chip aria-pressed:border-accent aria-pressed:text-text"
-            onClick={() => setPerServing(true)}
+            onClick={() => setPerServing(false)}
           >
-            Per serving
+            Per 100 {food.base_unit}
           </button>
-        )}
-        <button
-          type="button"
-          aria-pressed={!perServing}
-          className="t-chip aria-pressed:border-accent aria-pressed:text-text"
-          onClick={() => setPerServing(false)}
-        >
-          Per 100 {food.base_unit}
-        </button>
+        </div>
+        <p className="t-nums hidden text-xs text-muted min-[640px]:ml-auto min-[640px]:block">
+          {note}
+        </p>
       </div>
 
       <PanelFacts
         values={panelAt(food, baseAmount)}
-        note={
-          perServing && serving
-            ? `${serving.name}, ${serving.amount} ${UNIT_LABEL[serving.unit]}`
-            : `100 ${food.base_unit}`
-        }
+        note={note}
+        noteClass="min-[640px]:hidden"
       />
     </div>
   )

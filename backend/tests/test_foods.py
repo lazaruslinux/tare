@@ -62,6 +62,35 @@ def test_the_name_is_trimmed_and_a_blank_one_is_refused(client, signed_in):
     assert response.json() == {"detail": "A food needs a name."}
 
 
+def test_a_description_is_kept_and_read_back(client, signed_in):
+    made = create(client, description="King Size").json()
+    assert made["description"] == "King Size"
+    # And a food nobody described says so with an empty string rather than a
+    # missing key, so a list row has nothing to guess about.
+    assert create(client).json()["description"] == ""
+
+
+def test_a_description_is_trimmed_onto_one_line(client, signed_in):
+    made = create(client, description="  Blueberry\n flavor  ").json()
+    assert made["description"] == "Blueberry flavor"
+
+
+def test_a_description_longer_than_sixty_characters_is_refused(client, signed_in):
+    response = create(client, description="x" * 61)
+    assert response.status_code == 400
+    assert response.json() == {"detail": "A description must be at most 60 characters."}
+    assert create(client, description="x" * 60).status_code == 201
+
+
+def test_an_edit_changes_the_description(client, signed_in):
+    made = create(client, description="King Size").json()
+    edited = client.patch(
+        f"/api/foods/{made['id']}", json=body(description="Blueberry flavor")
+    )
+    assert edited.status_code == 200
+    assert edited.json()["description"] == "Blueberry flavor"
+
+
 def test_the_four_headline_numbers_are_required(client, signed_in):
     response = create(client, fat_g=None)
     assert response.status_code == 400

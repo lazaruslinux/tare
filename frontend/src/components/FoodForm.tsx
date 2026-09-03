@@ -38,6 +38,10 @@ const DENSITY_MIN = 0.2
 const DENSITY_MAX = 3
 const DENSITY_HINT = `A milliliter weighs between ${DENSITY_MIN} and ${DENSITY_MAX} grams.`
 
+// What the server holds a description to. Held here as well, so the box stops
+// taking letters rather than the save coming back with a sentence about it.
+const MAX_DESCRIPTION = 60
+
 // A serving as somebody types it: the words for it, the number, and the
 // unit that number is in. What it comes to in the food's base unit is
 // worked out from those, never typed.
@@ -186,6 +190,9 @@ export function FoodForm({
   const opening = food ?? prefill ?? null
   const [name, setName] = useState(opening?.name ?? '')
   const [brand, setBrand] = useState(opening?.brand ?? '')
+  // Only a food carries one. A barcode lookup has nothing to say here, so a
+  // scanned form opens with it blank.
+  const [description, setDescription] = useState(food?.description ?? '')
   const [baseUnit, setBaseUnit] = useState<BaseUnit>(opening?.base_unit ?? 'g')
   const [ingredients, setIngredients] = useState(opening?.ingredients_text ?? '')
   const [serving, setServingRow] = useState<ServingDraft>(() =>
@@ -363,6 +370,7 @@ export function FoodForm({
     const body: Record<string, unknown> = {
       name,
       brand,
+      description,
       base_unit: baseUnit,
       density_g_per_ml: weight,
       ingredients_text: ingredients,
@@ -530,7 +538,7 @@ export function FoodForm({
               onChange={(event) => setName(event.target.value)}
             />
           </div>
-          <div>
+          <div className="mb-3">
             <label className="t-label" htmlFor="food-brand">
               Brand (optional)
             </label>
@@ -539,6 +547,19 @@ export function FoodForm({
               className="t-input"
               value={brand}
               onChange={(event) => setBrand(event.target.value)}
+            />
+          </div>
+          <div>
+            <label className="t-label" htmlFor="food-description">
+              Description (optional)
+            </label>
+            <input
+              id="food-description"
+              className="t-input"
+              maxLength={MAX_DESCRIPTION}
+              placeholder="King Size, Blueberry flavor"
+              value={description}
+              onChange={(event) => setDescription(event.target.value)}
             />
           </div>
           {source && (

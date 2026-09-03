@@ -218,6 +218,9 @@ export type FoodRow = {
   id: number
   name: string
   brand: string
+  // What it is in a few words: "King Size", "Blueberry flavor". Empty on most
+  // foods, which is a food whose name already says everything.
+  description: string
   calories: number | null
   base_unit: BaseUnit
   status: string
@@ -355,6 +358,7 @@ export type Proposed = Panel & {
   id: number
   name: string
   brand: string
+  description: string
   barcode: string | null
   base_unit: BaseUnit
   density_g_per_ml: number | null

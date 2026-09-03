@@ -35,6 +35,11 @@ function comparison(now: Proposed, proposed: Proposed): Line[] {
   const lines: Line[] = [
     { label: 'Name', now: now.name, proposed: proposed.name },
     { label: 'Brand', now: now.brand || '-', proposed: proposed.brand || '-' },
+    {
+      label: 'Description',
+      now: now.description || '-',
+      proposed: proposed.description || '-',
+    },
     { label: 'Measured in', now: now.base_unit, proposed: proposed.base_unit },
   ]
   for (const fact of SHARED_FACTS) {

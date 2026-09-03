@@ -89,6 +89,7 @@ def proposal(**overrides):
     sent = {
         "name": "Milk chocolate bar",
         "brand": "Hershey",
+        "description": "King Size",
         "base_unit": "g",
         "servings": [{"name": "1 bar", "amount": 45, "unit": "g", "position": 0}],
         **FULL,
@@ -239,6 +240,9 @@ def test_the_queue_shows_a_correction_beside_what_it_would_replace(
         {"name": "1 bar", "amount": 45, "unit": "g", "base_amount": 45, "position": 0}
     ]
     assert item["note"] == "The bar got smaller."
+    # The short line under the name is a correction like any other, so both
+    # sides of the diff carry it.
+    assert (item["current"]["description"], item["food"]["description"]) == ("", "King Size")
 
 
 def test_a_reviewer_may_correct_a_proposal_before_deciding_it(
@@ -308,6 +312,7 @@ def test_approving_a_correction_moves_it_onto_the_shared_food(
     db_session.expire_all()
     after = db_session.get(models.Food, target.id)
     assert (after.calories, after.sodium_mg, after.brand) == (500, 90, "Hershey")
+    assert after.description == "King Size"
     assert [(row.name, row.base_amount) for row in after.servings] == [("1 bar", 45)]
     # Still shared, still nobody's, still the same row.
     assert (after.status, after.owner_id, after.barcode) == ("approved", None, CODE)

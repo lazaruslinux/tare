@@ -44,6 +44,9 @@ class FoodIn(BaseModel):
 
     name: str
     brand: str = ""
+    # The short line under the name. Left out is the same as blank: most foods
+    # have nothing to add to their own name.
+    description: str = ""
     base_unit: Literal["g", "ml"] = "g"
     density_g_per_ml: float | None = Field(default=None, ge=DENSITY_MIN, le=DENSITY_MAX)
     # The code the form was filled in from, kept with the food so the next scan
