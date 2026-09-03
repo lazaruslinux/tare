@@ -2,6 +2,7 @@ import { useState, type FormEvent } from 'react'
 
 import { api, errorText, type Me } from '../api'
 import { strength } from '../lib/password'
+import { TareMark } from '../components/TareMark'
 
 // Spends the link from the reset mail. Asked twice, because there is no old
 // password to fall back on if the new one was mistyped: the answer to this
@@ -37,7 +38,10 @@ export function ResetPassword({
   return (
     <div className="t-center">
       <div className="w-full max-w-sm">
-        <p className="mb-1 text-center text-2xl font-semibold tracking-tight">Tare</p>
+        <p className="mb-1 flex items-center justify-center gap-2 text-center text-2xl font-semibold tracking-tight">
+          <TareMark className="h-8 w-8" />
+          Tare
+        </p>
         <p className="mb-5 text-center text-sm text-muted">Choose a new password.</p>
         <form className="t-card flex flex-col gap-3" onSubmit={submit}>
           <div>

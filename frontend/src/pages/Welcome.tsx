@@ -3,6 +3,7 @@ import { useEffect, useState, type FormEvent } from 'react'
 import { api, errorText } from '../api'
 import { AboutTare } from '../components/AboutTare'
 import { strength } from '../lib/password'
+import { TareMark } from '../components/TareMark'
 
 type Invite = { inviter_display_name: string }
 type Registration = { state: 'ready' | 'check_email' }
@@ -101,7 +102,10 @@ export function Welcome({ code, onReady }: { code: string; onReady: () => void }
   return (
     <div className="t-center">
       <div className="w-full max-w-sm">
-        <p className="mb-1 text-center text-2xl font-semibold tracking-tight">Tare</p>
+        <p className="mb-1 flex items-center justify-center gap-2 text-center text-2xl font-semibold tracking-tight">
+          <TareMark className="h-8 w-8" />
+          Tare
+        </p>
         <p className="text-center text-sm text-muted">
           {invite.inviter_display_name} has invited you to Tare.
         </p>
