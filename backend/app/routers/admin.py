@@ -263,6 +263,10 @@ def approve_edit(
     photo = db.get(models.FoodPhoto, submission.photo_id) if submission.photo_id else None
     if photo is not None and photo.status == "pending":
         publish_front(db, target, photo)
+    # And the panel the correction was read against becomes the food's own, in
+    # place of whatever it was keeping. The same row, not a second file.
+    if submission.label_photo_id is not None:
+        target.label_photo_id = submission.label_photo_id
 
     drop_shadow(db, submission)
     stamp(submission, admin, "approved", "")
@@ -370,6 +374,11 @@ def approve(
             photo.status = "approved"
         else:
             discard(db, photo)
+
+    # The panel it was offered with stays with the food rather than with the
+    # request, so a reviewer correcting it later has something to read.
+    if submission.label_photo_id is not None:
+        food.label_photo_id = submission.label_photo_id
 
     stamp(submission, admin, "approved", "")
     db.commit()

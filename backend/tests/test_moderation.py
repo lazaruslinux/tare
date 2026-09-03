@@ -56,11 +56,13 @@ def offline(monkeypatch):
     )
 
 
-def a_photo(client):
+def a_photo(client, purpose="front"):
     out = io.BytesIO()
     Image.new("RGB", (160, 120), (200, 180, 120)).save(out, format="JPEG")
     response = client.post(
-        "/api/photos", files={"file": ("label.jpg", out.getvalue(), "image/jpeg")}
+        "/api/photos",
+        files={"file": ("label.jpg", out.getvalue(), "image/jpeg")},
+        data={"purpose": purpose},
     )
     assert response.status_code == 201
     return response.json()["photo_id"]
@@ -1135,14 +1137,9 @@ def test_an_administrator_swaps_the_front_of_a_shared_food_and_sees_the_label_on
     reviewer = make_user("reviewer", admin=True)
     food = shared(db_session)
     sign_in(client, "member")
-    # The label the member sent with their request stays on file with it.
-    out = io.BytesIO()
-    Image.new("RGB", (160, 120), (90, 90, 90)).save(out, format="JPEG")
-    label_id = client.post(
-        "/api/photos",
-        files={"file": ("label.jpg", out.getvalue(), "image/jpeg")},
-        data={"purpose": "label"},
-    ).json()["photo_id"]
+    # The panel the member sent with their request, which approval left on the
+    # food itself.
+    label_id = a_photo(client, "label")
     db_session.add(
         models.FoodSubmission(
             kind="new",
@@ -1154,6 +1151,7 @@ def test_an_administrator_swaps_the_front_of_a_shared_food_and_sees_the_label_on
             label_photo_id=label_id,
         )
     )
+    food.label_photo_id = label_id
     db_session.commit()
 
     # A member is refused the swap and is not shown the label.
@@ -1174,3 +1172,108 @@ def test_an_administrator_swaps_the_front_of_a_shared_food_and_sees_the_label_on
     assert client.get(f"/api/foods/{food.id}").json()["photo_url"] == f"/api/photos/{second}.webp"
     assert db_session.get(models.FoodPhoto, first) is None
     assert db_session.get(models.FoodPhoto, second).status == "approved"
+
+
+def test_an_administrator_replaces_and_removes_both_photos_of_a_shared_food(
+    client, db_session, make_user
+):
+    """The same two tiles as the review editor, on a food already shared."""
+    make_user("member")
+    make_user("reviewer", admin=True)
+    food = shared(db_session)
+
+    sign_in(client, "reviewer")
+    front_id = a_photo(client)
+    label_id = a_photo(client, "label")
+    assert (
+        client.post(f"/api/foods/{food.id}/photo", json={"photo_id": front_id}).status_code
+        == 204
+    )
+    put = client.post(
+        f"/api/foods/{food.id}/photo", json={"photo_id": label_id, "purpose": "label"}
+    )
+    assert put.status_code == 204
+    page = client.get(f"/api/foods/{food.id}").json()
+    assert page["photo_url"] == f"/api/photos/{front_id}.webp"
+    assert page["label_photo_url"] == f"/api/photos/{label_id}.webp"
+
+    # A second panel takes the first away: nothing else was holding it.
+    later_id = a_photo(client, "label")
+    client.post(f"/api/foods/{food.id}/photo", json={"photo_id": later_id, "purpose": "label"})
+    db_session.expire_all()
+    assert db_session.get(models.FoodPhoto, label_id) is None
+    assert db_session.get(models.Food, food.id).label_photo_id == later_id
+
+    label_file = photos.path_for(db_session.get(models.FoodPhoto, later_id).path)
+    assert client.delete(f"/api/foods/{food.id}/photo?purpose=label").status_code == 204
+    db_session.expire_all()
+    assert db_session.get(models.Food, food.id).label_photo_id is None
+    assert not os.path.isfile(label_file)
+    assert client.get(f"/api/foods/{food.id}").json()["label_photo_url"] is None
+
+    assert client.delete(f"/api/foods/{food.id}/photo?purpose=front").status_code == 204
+    db_session.expire_all()
+    assert db_session.get(models.FoodPhoto, front_id) is None
+    assert client.get(f"/api/foods/{food.id}").json()["photo_url"] is None
+
+    # And neither tile is a member's to touch.
+    sign_in(client, "member")
+    theirs = a_photo(client, "label")
+    refused = client.post(
+        f"/api/foods/{food.id}/photo", json={"photo_id": theirs, "purpose": "label"}
+    )
+    assert refused.status_code == 403
+    assert client.delete(f"/api/foods/{food.id}/photo?purpose=front").status_code == 403
+    assert client.delete(f"/api/foods/{food.id}/photo?purpose=label").status_code == 403
+
+
+def test_approving_a_food_keeps_its_panel_on_the_food(client, db_session, make_user):
+    """The label is evidence for one request and the food's own thereafter."""
+    people(client, make_user)
+    front_id = a_photo(client)
+    label_id = a_photo(client, "label")
+    made = client.post(
+        "/api/submissions/food",
+        json={
+            **proposal(barcode=None),
+            "photo_id": front_id,
+            "label_photo_id": label_id,
+        },
+    )
+    assert made.status_code == 201
+
+    sign_in(client, "reviewer")
+    approved = client.post(
+        f"/api/admin/queue/{made.json()['submission_id']}/approve", json={}
+    )
+    assert approved.status_code == 200
+
+    db_session.expire_all()
+    food_id = approved.json()["food"]["id"]
+    assert db_session.get(models.Food, food_id).label_photo_id == label_id
+    assert client.get(f"/api/foods/{food_id}").json()["label_photo_url"] == (
+        f"/api/photos/{label_id}.webp"
+    )
+
+
+def test_approving_a_correction_hands_its_panel_to_the_shared_food(
+    client, db_session, make_user
+):
+    reviewers(client, make_user)
+    target = shared(db_session)
+    made = suggest(client, target.id)
+    submission_id = made.json()["submission_id"]
+
+    sign_in(client, "reviewer")
+    label_id = a_photo(client, "label")
+    assert (
+        client.post(
+            f"/api/admin/queue/{submission_id}/photo",
+            json={"photo_id": label_id, "purpose": "label"},
+        ).status_code
+        == 204
+    )
+    assert client.post(f"/api/admin/queue/{submission_id}/approve", json={}).status_code == 200
+
+    db_session.expire_all()
+    assert db_session.get(models.Food, target.id).label_photo_id == label_id

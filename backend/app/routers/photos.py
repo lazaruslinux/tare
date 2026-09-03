@@ -23,7 +23,7 @@ import os
 
 from fastapi import APIRouter, Depends, File, Form, HTTPException, UploadFile, status
 from fastapi.responses import FileResponse
-from sqlalchemy import or_, select, update
+from sqlalchemy import Select, or_, select, update
 from sqlalchemy.orm import Session
 
 from app import models, photos
@@ -122,8 +122,22 @@ def discard(db: Session, photo: models.FoodPhoto) -> None:
         .where(models.FoodSubmission.label_photo_id == photo.id)
         .values(label_photo_id=None)
     )
+    db.execute(
+        update(models.Food)
+        .where(models.Food.label_photo_id == photo.id)
+        .values(label_photo_id=None)
+    )
     db.delete(photo)
     photos.remove(name)
+
+
+def kept_by_a_food() -> Select[tuple[int | None]]:
+    """The labels shared foods are holding, which nothing ever sweeps up.
+
+    A food keeps one panel for life. It is the picture a reviewer checks a
+    correction against, so it outlives every request that ever carried it.
+    """
+    return select(models.Food.label_photo_id).where(models.Food.label_photo_id.is_not(None))
 
 
 def _spent_labels(db: Session) -> list[models.FoodPhoto]:
@@ -131,7 +145,8 @@ def _spent_labels(db: Session) -> list[models.FoodPhoto]:
 
     A label is evidence for one request. Once that request has been answered
     and the answer has stood for LABEL_KEEP_DAYS, the picture has done its job.
-    A photo is only let go when every request pointing at it is that old.
+    A photo is only let go when every request pointing at it is that old, and
+    when no food is keeping it as its own panel.
     """
     settled = now_utc() - dt.timedelta(days=LABEL_KEEP_DAYS)
     aged = select(models.FoodSubmission.label_photo_id).where(
@@ -154,6 +169,7 @@ def _spent_labels(db: Session) -> list[models.FoodPhoto]:
                 models.FoodPhoto.purpose == "label",
                 models.FoodPhoto.id.in_(aged),
                 models.FoodPhoto.id.not_in(still_needed),
+                models.FoodPhoto.id.not_in(kept_by_a_food()),
             )
         ).scalars().all()
     )
@@ -180,6 +196,9 @@ def _sweep(db: Session) -> None:
             models.FoodPhoto.status == "pending",
             models.FoodPhoto.created_at < cutoff,
             models.FoodPhoto.id.not_in(spoken_for),
+            # A panel an administrator put straight on a shared food never
+            # reaches a food_id either, and the food is what holds it.
+            models.FoodPhoto.id.not_in(kept_by_a_food()),
         )
     ).scalars().all()
     for photo in stale:

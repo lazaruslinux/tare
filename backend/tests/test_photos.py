@@ -324,3 +324,29 @@ def test_a_label_photo_under_an_old_decision_is_let_go(client, db_session, signe
     assert not on_disk(spent_name)
     assert db_session.get(models.FoodPhoto, recent_id) is not None
     assert db_session.get(models.FoodPhoto, waiting_id) is not None
+
+
+def test_the_panel_a_shared_food_keeps_is_never_swept_up(client, db_session, signed_in):
+    """A food holds one label for life, whatever became of the request."""
+    food = models.Food(status="approved", name="A bar", base_unit="g")
+    db_session.add(food)
+    db_session.commit()
+
+    kept_id = upload(client, purpose="label").json()["photo_id"]
+    db_session.get(models.FoodPhoto, kept_id).created_at = now_utc() - dt.timedelta(hours=25)
+    db_session.add(
+        models.FoodSubmission(
+            kind="new",
+            status="approved",
+            food_id=food.id,
+            label_photo_id=kept_id,
+            submitted_by_id=signed_in.id,
+            decided_at=now_utc() - dt.timedelta(days=photos_router.LABEL_KEEP_DAYS + 1),
+        )
+    )
+    food.label_photo_id = kept_id
+    db_session.commit()
+
+    upload(client)
+
+    assert db_session.get(models.FoodPhoto, kept_id) is not None

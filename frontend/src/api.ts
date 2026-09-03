@@ -598,6 +598,19 @@ export async function upload<T>(
   return send<T>(path, { method: 'POST', body: form })
 }
 
+// A picture on a food itself, which is how an administrator keeps a shared row
+// right: an id puts one on, null takes the standing one off. The queue has its
+// own pair of these, because a request's pictures belong to the request.
+export function foodPhoto(
+  foodId: number,
+  purpose: PhotoPurpose,
+  photoId: number | null
+): Promise<unknown> {
+  return photoId === null
+    ? api(`/foods/${foodId}/photo?purpose=${purpose}`, { method: 'DELETE' })
+    : api(`/foods/${foodId}/photo`, { method: 'POST', body: { photo_id: photoId, purpose } })
+}
+
 // A file and nothing else, which is what the health export upload sends.
 export async function uploadFile<T>(path: string, file: File): Promise<T> {
   const form = new FormData()

@@ -94,9 +94,14 @@ class SubmissionIn(FoodIn):
 
 
 class FoodPhotoIn(BaseModel):
-    """A picture of the front of the pack, put on one of your own foods."""
+    """A picture put on a food: the front of the pack, or its panel.
+
+    The front is what anybody may attach to a food of their own. The panel is
+    an administrator's, on a food everybody eats out of.
+    """
 
     photo_id: int
+    purpose: str = "front"
 
 
 class SubmitIn(BaseModel):

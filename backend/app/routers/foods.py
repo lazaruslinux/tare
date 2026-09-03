@@ -30,6 +30,7 @@ router = APIRouter(prefix="/foods", tags=["foods"])
 MISSING_FOOD = "There is no such food."
 NOT_YOURS = "This food is not yours to change."
 MISSING_PHOTO_TO_ATTACH = "That photo is not there to attach."
+BAD_PURPOSE = "A photo is of the front or of the label."
 
 MAX_NAME = 200
 MAX_BRAND = 120
@@ -370,23 +371,6 @@ def rejection_note(db: Session, user: models.User, food: models.Food) -> str:
 SUBMISSION_HISTORY = 5
 
 
-def label_on_file(db: Session, food: models.Food) -> str | None:
-    """The newest label photograph any request about this food still carries."""
-    label_id = db.execute(
-        select(models.FoodSubmission.label_photo_id)
-        .where(
-            or_(
-                models.FoodSubmission.food_id == food.id,
-                models.FoodSubmission.target_food_id == food.id,
-            ),
-            models.FoodSubmission.label_photo_id.is_not(None),
-        )
-        .order_by(models.FoodSubmission.created_at.desc(), models.FoodSubmission.id.desc())
-        .limit(1)
-    ).scalar_one_or_none()
-    return None if label_id is None else photo_url(label_id)
-
-
 def submissions_for(
     db: Session, user: models.User, food: models.Food
 ) -> list[dict[str, object]]:
@@ -464,7 +448,11 @@ def food_detail(db: Session, food: models.Food, user: models.User) -> dict[str, 
         "submissions": submissions_for(db, user, food),
         # The nutrition label on file, for a reviewer correcting a shared food
         # to check the numbers against. Nobody else is served it.
-        "label_photo_url": label_on_file(db, food) if user.is_admin else None,
+        "label_photo_url": (
+            photo_url(food.label_photo_id)
+            if user.is_admin and food.label_photo_id is not None
+            else None
+        ),
         "density_g_per_ml": food.density_g_per_ml,
         # What it was scanned from, where it was. On the packaging either way,
         # and it is what decides whether offering this food needs a photograph
@@ -983,8 +971,36 @@ def read_food(
     return food_detail(db, readable_food(db, user, food_id), user)
 
 
+def set_label_photo(db: Session, food: models.Food, photo: models.FoodPhoto | None) -> None:
+    """Give a shared food its nutrition panel, or take the one it has away.
+
+    The picture it was keeping goes with it, unless a waiting request is still
+    offering that one as its evidence, in which case the food simply lets go.
+    """
+    from app.routers.photos import discard
+
+    standing = (
+        db.get(models.FoodPhoto, food.label_photo_id)
+        if food.label_photo_id is not None
+        else None
+    )
+    food.label_photo_id = None if photo is None else photo.id
+    # Written down before the old one is taken away, so nothing unpicks the row
+    # that now points at its replacement.
+    db.flush()
+    if standing is None or (photo is not None and standing.id == photo.id):
+        return
+    held = db.execute(
+        select(models.FoodSubmission.id).where(
+            models.FoodSubmission.label_photo_id == standing.id
+        )
+    ).first()
+    if held is None:
+        discard(db, standing)
+
+
 @router.post("/{food_id}/photo", status_code=status.HTTP_204_NO_CONTENT)
-def attach_front_photo(
+def attach_food_photo(
     food_id: int,
     body: schemas.FoodPhotoIn,
     db: Session = Depends(get_db),
@@ -996,20 +1012,32 @@ def attach_front_photo(
     nobody else's business. It rides along if the food is ever submitted.
     Attaching a second one replaces the first, file and all: a food shows one
     picture, and a stack of replaced attempts is a directory nobody empties.
+
+    The panel is the other case, and it is an administrator's: a food everybody
+    eats out of keeps one, so whoever corrects it next has the label to read.
     """
     from app.routers.photos import discard, front_photo
 
+    if body.purpose not in models.PHOTO_PURPOSES:
+        raise HTTPException(status.HTTP_400_BAD_REQUEST, BAD_PURPOSE)
     # An administrator may also swap the picture on a shared food: the rows
     # everybody eats out of are theirs to keep right, photograph included.
     food = changeable_food(db, user, food_id, ("custom", "pending"), ("approved",))
+    if body.purpose == "label" and not (user.is_admin and food.status == "approved"):
+        raise HTTPException(status.HTTP_403_FORBIDDEN, NOT_YOURS)
     photo = db.get(models.FoodPhoto, body.photo_id)
     if (
         photo is None
         or photo.uploaded_by_id != user.id
         or photo.food_id is not None
-        or photo.purpose != "front"
+        or photo.purpose != body.purpose
     ):
         raise HTTPException(status.HTTP_400_BAD_REQUEST, MISSING_PHOTO_TO_ATTACH)
+
+    if body.purpose == "label":
+        set_label_photo(db, food, photo)
+        db.commit()
+        return
 
     if food.status == "approved":
         # Published in place of the one showing, the way an approved photo
@@ -1027,6 +1055,34 @@ def attach_front_photo(
     if standing is not None and standing.status == "pending":
         discard(db, standing)
     photo.food_id = food.id
+    db.commit()
+
+
+@router.delete("/{food_id}/photo", status_code=status.HTTP_204_NO_CONTENT)
+def remove_food_photo(
+    food_id: int,
+    purpose: str,
+    db: Session = Depends(get_db),
+    user: models.User = Depends(require_user),
+) -> None:
+    """Take a picture off a shared food, row and file both.
+
+    An administrator's, and only on the shared database: a food of somebody's
+    own carries the picture they attached, and they replace it rather than
+    empty it.
+    """
+    from app.routers.photos import discard, published
+
+    if purpose not in models.PHOTO_PURPOSES:
+        raise HTTPException(status.HTTP_400_BAD_REQUEST, BAD_PURPOSE)
+    food = changeable_food(db, user, food_id, (), ("approved",))
+
+    if purpose == "label":
+        set_label_photo(db, food, None)
+    else:
+        standing = published(db, food.id)
+        if standing is not None:
+            discard(db, standing)
     db.commit()
 
 

@@ -228,6 +228,13 @@ class Food(Base):
     sugar_g: Mapped[float | None] = mapped_column(Float, nullable=True)
 
     ingredients_text: Mapped[str] = mapped_column(Text, nullable=False, default="")
+    # The nutrition panel this food keeps, once a reviewer has approved
+    # something that carried one. One file for the life of the food, served to
+    # administrators and nobody else. use_alter because food_photos points back
+    # at foods: the two tables are a cycle, and create_all has to be told.
+    label_photo_id: Mapped[int | None] = mapped_column(
+        ForeignKey("food_photos.id", ondelete="SET NULL", use_alter=True), nullable=True
+    )
     fetched_at: Mapped[dt.datetime | None] = mapped_column(UtcDateTime, nullable=True)
     created_at: Mapped[dt.datetime] = mapped_column(UtcDateTime, nullable=False, default=now_utc)
 

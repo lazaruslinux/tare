@@ -260,6 +260,11 @@ export function FoodForm({
   const [submitOn, setSubmitOn] = useState(submitDefault ?? food === null)
   const [photoId, setPhotoId] = useState<number | null>(null)
   const [labelPhotoId, setLabelPhotoId] = useState<number | null>(null)
+  // Whether the X was pressed on a picture that was already on file. Taking one
+  // off is written down at save, the same as putting one on, so nothing changes
+  // under somebody who then cancels.
+  const [frontRemoved, setFrontRemoved] = useState(false)
+  const [labelRemoved, setLabelRemoved] = useState(false)
   const [conflicted, setConflicted] = useState(false)
   // Where a lookup filled the boxes in, so they can be checked against the
   // packaging they claim to describe.
@@ -279,10 +284,6 @@ export function FoodForm({
   // nothing to send until that one is answered or taken back.
   const offerable = creating || (own && food.status !== 'pending')
   const scannable = onOpenFood !== undefined && food === null
-  // A shared food, which only an administrator gets this far with. Its
-  // pictures are shown so the numbers can be checked against them; the front
-  // can be swapped on the food itself, the label is on file and stays put.
-  const shared = food !== null && food.status === 'approved' && review === undefined
 
   const heading = title ?? (food ? 'Edit food' : 'New food')
   useTopBar(inSheet ? null : { title: heading, back: { label: backLabel, onBack: onCancel } })
@@ -456,18 +457,16 @@ export function FoodForm({
         return
       }
       if (review !== undefined && food !== null) {
-        // The corrections are written by now. Anything taken in this form goes
-        // on the request the reviewer is holding, not on the food, and the food
-        // is read back so the queue behind this shows what it says now.
+        // The corrections are written by now. What either tile says goes back
+        // through whoever opened this form, a new picture or the removal of the
+        // one that was there, and the food is read back so the screen behind
+        // this shows what it says now.
         if (photoId !== null) await review.onPhoto('front', photoId)
+        else if (frontRemoved) await review.onPhoto('front', null)
         if (labelPhotoId !== null) await review.onPhoto('label', labelPhotoId)
+        else if (labelRemoved) await review.onPhoto('label', null)
         onSaved(await api<Food>(`/foods/${food.id}`))
         return
-      }
-      if (shared && food !== null && photoId !== null) {
-        // The new front goes on the shared food itself, published at once.
-        await api(`/foods/${food.id}/photo`, { method: 'POST', body: { photo_id: photoId } })
-        saved = await api<Food>(`/foods/${food.id}`)
       }
       if (creating && photoId !== null) {
         // The food is written by now. A picture that will not go on is worth
@@ -744,27 +743,42 @@ export function FoodForm({
           </div>
         )}
 
-        {(creating || own || review !== undefined || shared) && (
+        {(creating || own || review !== undefined) && (
           <>
             <PhotoSlots
               front={{
                 id: photoId,
-                url: review === undefined ? food?.photo_url : review.frontPhotoUrl,
+                url: frontRemoved
+                  ? null
+                  : review === undefined
+                    ? food?.photo_url
+                    : review.frontPhotoUrl,
                 required: submitOn,
+                onRemove:
+                  review === undefined ? undefined : () => setFrontRemoved(true),
               }}
               label={{
                 id: labelPhotoId,
-                url: review === undefined ? food?.label_photo_url : review.labelPhotoUrl,
+                url: labelRemoved
+                  ? null
+                  : review === undefined
+                    ? food?.label_photo_url
+                    : review.labelPhotoUrl,
                 required: submitOn,
-                still: shared,
+                onRemove:
+                  review === undefined ? undefined : () => setLabelRemoved(true),
               }}
               busy={saving}
               onFront={(id) => {
                 setPhotoId(id)
+                // A picture put in the slot answers the removal that was
+                // waiting to be written.
+                setFrontRemoved(false)
                 setPhotoError('')
               }}
               onLabel={(id) => {
                 setLabelPhotoId(id)
+                setLabelRemoved(false)
                 setPhotoError('')
               }}
               onFailed={setError}

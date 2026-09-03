@@ -16,6 +16,7 @@ import { useEffect, useRef, useState } from 'react'
 import {
   api,
   errorText,
+  foodPhoto,
   type Food as FoodItem,
   type Meal,
   type MealRow,
@@ -477,11 +478,24 @@ export function FoodTab({
 
   if (view.at === 'form') {
     const editing = view.food
+    // A shared food open in front of an administrator. Both its pictures are
+    // theirs to replace or take off, which is the review queue's editor exactly.
+    const correcting = me.is_admin && editing !== null && editing.status === 'approved'
     return (
       <FoodForm
         food={editing}
         notice={view.notice}
         submitDefault={view.submitDefault}
+        title={correcting ? 'Edit this food' : undefined}
+        review={
+          correcting && editing !== null
+            ? {
+                frontPhotoUrl: editing.photo_url,
+                labelPhotoUrl: editing.label_photo_url ?? null,
+                onPhoto: (purpose, photoId) => foodPhoto(editing.id, purpose, photoId),
+              }
+            : undefined
+        }
         backLabel={editing === null ? 'Food' : editing.name}
         onOpenFood={(id) => setView({ at: 'detail', id, from: { at: 'list' } })}
         onSaved={(saved) => {

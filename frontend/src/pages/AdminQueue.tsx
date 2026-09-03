@@ -4,6 +4,7 @@ import {
   ApiError,
   api,
   errorText,
+  foodPhoto,
   upload,
   type Food,
   type PhotoPurpose,
@@ -420,7 +421,14 @@ export function AdminQueue({
         complete
         review={
           request === null
-            ? undefined
+            ? {
+                // A report opens the shared row itself, so both tiles write to
+                // the food rather than to a request waiting on a decision.
+                frontPhotoUrl: adjusting.food.photo_url,
+                labelPhotoUrl: adjusting.food.label_photo_url ?? null,
+                onPhoto: (purpose, photoId) =>
+                  foodPhoto(adjusting.food.id, purpose, photoId),
+              }
             : {
                 frontPhotoUrl: request.photo_url,
                 labelPhotoUrl: request.label_photo_url,
