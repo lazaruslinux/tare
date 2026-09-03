@@ -118,11 +118,12 @@ export function ScanFlow({
   if (stage.at === 'sent') {
     const sent = stage.food
     return (
-      <Sheet open label="Sent for approval" onClose={onClose}>
-        <p className="t-micro mb-1">Sent</p>
-        <p className="text-base font-semibold tracking-tight">{sent.name}</p>
+      <Sheet open center label="Thanks for submitting" onClose={onClose}>
+        <p className="text-base font-semibold tracking-tight">Thanks for submitting!</p>
+        <p className="mt-1 text-sm">{sent.name}</p>
         <p className="mt-2 text-sm text-muted">
-          It is yours to log now. It reaches everyone once an administrator approves it.
+          This item is still yours to log and track. It will be available for everyone on
+          Tare to track once it is approved.
         </p>
         <div className="mt-4 flex gap-3">
           <button

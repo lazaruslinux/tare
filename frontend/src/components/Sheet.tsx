@@ -12,6 +12,7 @@ export function Sheet({
   open,
   label,
   tall,
+  center,
   onClose,
   children,
 }: {
@@ -21,6 +22,9 @@ export function Sheet({
   // much of the screen as it can and stays a sheet, because what opened it was
   // a scan and going back to it is one gesture.
   tall?: boolean
+  // A short message that should sit in the middle of the screen at every
+  // width, the way a thank-you does, rather than rise from the bottom.
+  center?: boolean
   onClose: () => void
   children: ReactNode
 }) {
@@ -29,7 +33,9 @@ export function Sheet({
     <AnimatePresence>
       {open && (
         <motion.div
-          className="fixed inset-0 z-40 flex items-end justify-center bg-black/50 min-[900px]:items-center"
+          className={`fixed inset-0 z-40 flex justify-center bg-black/50 ${
+            center ? 'items-center px-4' : 'items-end min-[900px]:items-center'
+          }`}
           initial={{ opacity: 0 }}
           animate={{ opacity: 1 }}
           exit={{ opacity: 0 }}
@@ -41,9 +47,13 @@ export function Sheet({
             aria-label={label}
             // Capped and scrollable: a long list inside must not push the
             // controls at the bottom off the screen.
-            className={`w-full max-w-md overflow-y-auto rounded-t-2xl border-t border-line bg-surface px-4 pt-4 pb-[calc(1rem+env(safe-area-inset-bottom))] min-[900px]:rounded-2xl min-[900px]:border min-[900px]:pb-4 ${
-              tall ? 'max-h-[94svh] min-[900px]:max-w-md' : 'max-h-[86svh] min-[900px]:max-w-sm'
-            }`}
+            className={
+              center
+                ? 'w-full max-w-sm overflow-y-auto rounded-2xl border border-line bg-surface p-4 max-h-[86svh]'
+                : `w-full max-w-md overflow-y-auto rounded-t-2xl border-t border-line bg-surface px-4 pt-4 pb-[calc(1rem+env(safe-area-inset-bottom))] min-[900px]:rounded-2xl min-[900px]:border min-[900px]:pb-4 ${
+                    tall ? 'max-h-[94svh] min-[900px]:max-w-md' : 'max-h-[86svh] min-[900px]:max-w-sm'
+                  }`
+            }
             initial={{ y: reduced ? 0 : 24, opacity: 0 }}
             animate={{ y: 0, opacity: 1 }}
             exit={{ y: reduced ? 0 : 24, opacity: 0 }}

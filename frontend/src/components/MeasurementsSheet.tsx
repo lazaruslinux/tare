@@ -68,6 +68,7 @@ export function MeasurementsSheet({
   date,
   onClose,
   onSaved,
+  onDelete,
 }: {
   me: Me
   // The day being recorded. The Journal hands over the day on screen, and
@@ -75,6 +76,9 @@ export function MeasurementsSheet({
   date: string
   onClose: () => void
   onSaved: () => void
+  // Only the screens that list past days hand this over; today from the
+  // Dashboard has nothing to take back.
+  onDelete?: () => void
 }) {
   const units = me.units
   const day = date
@@ -111,10 +115,6 @@ export function MeasurementsSheet({
   }, [day, units])
 
   const weightKg = asNumber(weight)
-  const fat = asNumber(fields.body_fat_pct ?? '')
-  // Shown rather than asked for: it is the weight with the fat taken off it.
-  const lean =
-    weightKg === null || fat === null ? null : weightFrom(weightKg, units) * (1 - fat / 100)
 
   const submit = async (event: FormEvent) => {
     event.preventDefault()
@@ -221,17 +221,20 @@ export function MeasurementsSheet({
           </>
         )}
 
-        {lean !== null && (
-          <p className="mt-2 text-xs text-muted">
-            Lean weight: {weightIn(lean, units)} {weightUnit(units)}
-          </p>
-        )}
-
         {error && <p className="t-error mt-3">{error}</p>}
 
         <button className="t-btn t-btn-primary mt-4 w-full" type="submit" disabled={saving}>
           {existing ? 'Replace weigh-in' : 'Log weigh-in'}
         </button>
+        {existing && onDelete !== undefined && (
+          <button
+            type="button"
+            className="mt-2 flex min-h-11 w-full items-center justify-center text-sm text-danger"
+            onClick={onDelete}
+          >
+            Delete this weigh-in
+          </button>
+        )}
       </form>
     </Sheet>
   )

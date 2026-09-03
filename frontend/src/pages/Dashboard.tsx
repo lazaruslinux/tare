@@ -64,10 +64,6 @@ const ROUND = 2 * Math.PI * RADIUS
 
 // The sparkline's own box. Drawn in its own coordinates and scaled by the
 // stylesheet, so it reads the same on a phone and on a desktop.
-const SPARK_W = 240
-const SPARK_H = 44
-const SPARK_TALL = 88
-const SPARK_PAD = 4
 
 // What one ring is filled to, what stands in its middle, and the words under
 // that. A ring is added by adding a spec: the steps one arrives that way, the
@@ -134,51 +130,54 @@ function Rings({ rings }: { rings: RingSpec[] }) {
   )
 }
 
-// The trend as a line, with the readings themselves as light points around it.
-// Taller on the screen that is only about the weight.
-function Spark({ trend, points, tall }: {
-  trend: TrendPoint[]
-  points: Measurement[]
+// The readings, joined by straight lines, each one a round dot. Percent
+// coordinates keep the dots round whatever width the card is, because
+// nothing here is scaled: the browser lays the box out and the marks sit
+// where they are told.
+function Spark({ points, tall }: {
+  points: { date: string; value: number }[]
   tall?: boolean
 }) {
-  if (trend.length < 2) return null
-  const height = tall ? SPARK_TALL : SPARK_H
-  const days = trend.map((row) => Date.parse(`${row.date}T00:00:00Z`))
+  const sorted = [...points].sort((a, b) => (a.date < b.date ? -1 : 1))
+  if (sorted.length < 2) return null
+  const days = sorted.map((row) => Date.parse(`${row.date}T00:00:00Z`))
   const first = days[0]
-  const last = days[days.length - 1]
-  const span = Math.max(last - first, 1)
-  const values = [...trend.map((row) => row.kg), ...points.map((row) => row.weight_kg)]
+  const span = Math.max(days[days.length - 1] - first, 1)
+  const values = sorted.map((row) => row.value)
   const low = Math.min(...values)
   const high = Math.max(...values)
   // A flat run must not divide by nothing, and it should sit in the middle.
   const range = high - low || 1
-
-  const at = (millis: number, kg: number) => ({
-    x: SPARK_PAD + ((millis - first) / span) * (SPARK_W - SPARK_PAD * 2),
-    y: height - SPARK_PAD - ((kg - low) / range) * (height - SPARK_PAD * 2),
+  const inset = 6
+  const at = (index: number) => ({
+    x: inset + ((days[index] - first) / span) * (100 - inset * 2),
+    y: 100 - inset - ((values[index] - low) / range) * (100 - inset * 2),
   })
-
-  const line = trend
-    .map((row, index) => {
-      const spot = at(days[index], row.kg)
-      return `${index === 0 ? 'M' : 'L'}${spot.x.toFixed(1)} ${spot.y.toFixed(1)}`
-    })
-    .join(' ')
+  const spots = sorted.map((_, index) => at(index))
 
   return (
-    <svg
-      viewBox={`0 0 ${SPARK_W} ${height}`}
-      className={`mt-3 w-full ${tall ? 'h-22' : 'h-11'}`}
-      preserveAspectRatio="none"
-      aria-hidden="true"
-    >
-      {points.map((row) => {
-        const spot = at(Date.parse(`${row.date}T00:00:00Z`), row.weight_kg)
-        return (
-          <circle key={row.date} cx={spot.x} cy={spot.y} r="1.8" fill="var(--muted)" />
-        )
-      })}
-      <path d={line} fill="none" stroke="var(--accent)" strokeWidth="2" />
+    <svg className={`mt-3 w-full ${tall ? 'h-22' : 'h-11'}`} aria-hidden="true">
+      {spots.slice(1).map((spot, index) => (
+        <line
+          key={sorted[index + 1].date}
+          x1={`${spots[index].x}%`}
+          y1={`${spots[index].y}%`}
+          x2={`${spot.x}%`}
+          y2={`${spot.y}%`}
+          stroke="var(--accent)"
+          strokeWidth="2"
+          strokeLinecap="round"
+        />
+      ))}
+      {spots.map((spot, index) => (
+        <circle
+          key={sorted[index].date}
+          cx={`${spot.x}%`}
+          cy={`${spot.y}%`}
+          r="3.5"
+          fill="var(--accent)"
+        />
+      ))}
     </svg>
   )
 }
@@ -281,22 +280,15 @@ function WeighIn({
   units,
   todayIso,
   onOpen,
-  onDelete,
 }: {
   row: Measurement
   units: Me['units']
   todayIso: string
   onOpen: () => void
-  onDelete: () => void
 }) {
   return (
     <div>
-      <div className="mb-1 flex items-center justify-between">
-        <p className="t-micro">{dayLabel(row.date, todayIso)}</p>
-        <button type="button" className="t-tap44 text-xs text-muted" onClick={onDelete}>
-          Delete
-        </button>
-      </div>
+      <p className="t-micro mb-1">{dayLabel(row.date, todayIso)}</p>
       <button type="button" className="w-full text-left" onClick={onOpen}>
         <div className="t-row min-h-9 text-sm">
           <span className="flex-1 text-muted">Weight</span>
@@ -334,12 +326,6 @@ function WeighIn({
           <div className="t-row min-h-9 text-sm">
             <span className="flex-1 text-muted">Visceral rating</span>
             <span className="t-nums">{row.visceral_fat}</span>
-          </div>
-        )}
-        {row.lean_kg !== null && (
-          <div className="t-row min-h-9 text-sm">
-            <span className="flex-1 text-muted">Lean weight</span>
-            <span className="t-nums">{weightText(row.lean_kg, units)}</span>
           </div>
         )}
       </button>
@@ -581,9 +567,6 @@ export function Dashboard({
 
   if (screen === 'progress') {
     const line = windowed?.trend ?? []
-    const marks = (windowed?.measurements ?? []).filter((row) =>
-      line.some((point) => point.date === row.date)
-    )
     const over = WINDOWS.find((row) => row.days === span)?.over ?? ''
     // The rows this window holds, and the body fat inside them read oldest
     // first, which is the order a line is drawn in.
@@ -625,7 +608,7 @@ export function Dashboard({
                 {changeText(line, me.units, over)}
                 {goalMonth}
               </span>
-              <Spark trend={line} points={marks} tall />
+              <Spark points={recorded.map((row) => ({ date: row.date, value: row.weight_kg }))} tall />
             </>
           )}
           <div className="mt-2">
@@ -637,6 +620,12 @@ export function Dashboard({
                   : weightText(targets.goal_weight_kg, me.units)}
               </span>
             </div>
+            {recorded[0]?.lean_kg != null && (
+              <div className="t-row min-h-9 text-sm">
+                <span className="flex-1 text-muted">Lean weight</span>
+                <span className="t-nums">{weightText(recorded[0].lean_kg, me.units)}</span>
+              </div>
+            )}
           </div>
         </div>
 
@@ -653,7 +642,7 @@ export function Dashboard({
           {fatLine.length > 1 && (
             <div className="mb-3">
               <p className="t-micro">Body fat</p>
-              <Spark trend={fatLine} points={[]} />
+              <Spark points={fatLine.map((row) => ({ date: row.date, value: row.kg }))} />
             </div>
           )}
           {recorded.length === 0 ? (
@@ -678,7 +667,6 @@ export function Dashboard({
                   units={me.units}
                   todayIso={todayIso}
                   onOpen={() => setMeasuring(row.date)}
-                  onDelete={() => removeMeasurement(row)}
                 />
               </div>
             ))
@@ -691,6 +679,11 @@ export function Dashboard({
             date={measuring}
             onClose={() => setMeasuring(null)}
             onSaved={reload}
+            onDelete={() => {
+              const row = rows.find((one) => one.date === measuring)
+              setMeasuring(null)
+              if (row) removeMeasurement(row)
+            }}
           />
         )}
         {snackbar}
@@ -812,7 +805,7 @@ export function Dashboard({
                   {changeText(trend, me.units, WINDOWS[0].over)}
                   {goalMonth}
                 </span>
-                <Spark trend={trend} points={spots} />
+                <Spark points={spots.map((row) => ({ date: row.date, value: row.weight_kg }))} />
               </>
             )}
             <div className="mt-1">
@@ -853,14 +846,6 @@ export function Dashboard({
                   label="Visceral rating"
                   value={String(stamps.visceral_fat.value)}
                   date={stamps.visceral_fat.date}
-                  todayIso={todayIso}
-                />
-              )}
-              {latest.lean_kg !== null && (
-                <Dated
-                  label="Lean weight"
-                  value={weightText(latest.lean_kg, me.units)}
-                  date={latest.date}
                   todayIso={todayIso}
                 />
               )}

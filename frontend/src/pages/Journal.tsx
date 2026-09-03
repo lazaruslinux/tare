@@ -432,12 +432,6 @@ export function Journal({
                   <span className="t-nums">{weighed.visceral_fat}</span>
                 </div>
               )}
-              {weighed.lean_kg !== null && (
-                <div className="t-row min-h-9 text-sm">
-                  <span className="flex-1 text-muted">Lean weight</span>
-                  <span className="t-nums">{weightText(weighed.lean_kg, me.units)}</span>
-                </div>
-              )}
             </>
           )}
           <button
