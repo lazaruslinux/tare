@@ -1,7 +1,8 @@
 import { ChevronDown } from 'lucide-react'
 import { useState, type ReactNode } from 'react'
 
-import type { BudgetFigures, Goal, TargetMode, Targets as TargetsRow } from '../api'
+import type { BudgetFigures, DayEnergy, Goal, TargetMode, Targets as TargetsRow } from '../api'
+import { BreakdownCard } from '../components/BreakdownCard'
 import { SaveMarks, useSavedChip } from '../components/SaveMarks'
 import { SPLIT_NOTES, asNumber, calText, notesFor, personalNumber } from '../lib/targets'
 import type { Save } from './Targets'
@@ -143,49 +144,38 @@ export function DailyBudget({
   )
 
   const breakdown = targets.breakdown
+  // The same five figures the Journal folds out, from what this screen was
+  // sent. Exercise is added back on the last line so the four above it add up.
+  const energy: DayEnergy | null =
+    view === 'auto' && targets.complete && breakdown !== null
+      ? {
+          resting: targets.resting ?? 0,
+          activity:
+            targets.activity_options.find((option) => option.level === targets.activity_level)
+              ?.adds ?? 0,
+          level: targets.activity_level,
+          exercise: targets.exercise_today,
+          adjustment: breakdown.adjustment,
+          budget: breakdown.budget + targets.exercise_today,
+        }
+      : null
   const notes = notesFor(targets.note_keys, targets.notes, SPLIT_NOTES)
-  const gaining = targets.goal === 'gain'
 
   return (
     <>
       {error && <p className="t-error mb-3">{error}</p>}
 
-      <div className="t-card mb-3">
+      <BreakdownCard energy={energy}>
         <p className="t-micro mb-1">Your daily budget</p>
         <span className="t-nums block text-3xl font-semibold leading-tight">
           {calText(targets.budget.calories)}
         </span>
         <span className="block text-xs text-muted">cal a day</span>
 
-        <Fold label="How this is worked out">
-          {breakdown === null || targets.mode === 'grams' ? (
-            <p className="t-note">
-              {breakdown === null
-                ? `${personalNumber(missing).label}.`
-                : 'You set this number yourself, so there is nothing to work out.'}
-            </p>
-          ) : (
-            <>
-              <div className="t-row min-h-9 text-sm">
-                <span className="flex-1 text-muted">About what you use</span>
-                <span className="t-nums">{calText(breakdown.use)}</span>
-              </div>
-              {breakdown.adjustment !== 0 && (
-                <div className="t-row min-h-9 text-sm">
-                  <span className="flex-1 text-muted">
-                    Eating a bit {gaining ? 'more' : 'less'}
-                  </span>
-                  <span className="t-nums">{calText(Math.abs(breakdown.adjustment))}</span>
-                </div>
-              )}
-              <div className="t-row min-h-9 text-sm">
-                <span className="flex-1 text-muted">Your budget</span>
-                <span className="t-nums">{calText(breakdown.budget)}</span>
-              </div>
-            </>
-          )}
-        </Fold>
-      </div>
+        {breakdown === null && (
+          <p className="t-note mt-2">{personalNumber(missing).label}.</p>
+        )}
+      </BreakdownCard>
 
       <div className="t-card mb-3">
         <p className="t-micro mb-2">Set Protein, Carbs and Fat by</p>

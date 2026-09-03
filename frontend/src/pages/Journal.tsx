@@ -10,7 +10,7 @@ import {
   type Headline,
   type Me,
 } from '../api'
-import { BreakdownButton, BreakdownFold, useBreakdown } from '../components/EnergyLines'
+import { BreakdownCard } from '../components/BreakdownCard'
 import { ExerciseSheet } from '../components/ExerciseSheet'
 import { FoodPicker } from '../components/FoodPicker'
 import { LogSheet } from '../components/LogSheet'
@@ -115,7 +115,6 @@ export function Journal({
   const [servings, setServings] = useState<{ entry: DiaryEntry; slot: Slot } | null>(null)
   const [saving, setSaving] = useState(false)
   const [refusal, setRefusal] = useState('')
-  const [open, toggleBreakdown] = useBreakdown()
 
   // The day chooser is this tab's header, so the day is picked in one place
   // and the page below is only the day itself. The plus adds to the day on
@@ -242,22 +241,17 @@ export function Journal({
       {error && <p className="t-error mb-3">{error}</p>}
 
       {day !== null && (
-        <div className="t-card mb-3">
+        <BreakdownCard energy={day.energy}>
           <div className="mb-1 flex items-center justify-between">
             <p className="t-micro">Remaining today</p>
-            <span className="flex items-center gap-3">
-              {day.energy !== null && (
-                <BreakdownButton open={open} onToggle={toggleBreakdown} />
-              )}
-              <button
-                type="button"
-                className="t-micro t-tap44 flex items-center gap-1"
-                onClick={onOpenTargets}
-              >
-                Targets
-                <ChevronRight className="h-3.5 w-3.5" strokeWidth={2.5} />
-              </button>
-            </span>
+            <button
+              type="button"
+              className="t-micro t-tap44 flex items-center gap-1"
+              onClick={onOpenTargets}
+            >
+              Targets
+              <ChevronRight className="h-3.5 w-3.5" strokeWidth={2.5} />
+            </button>
           </div>
           <span className="t-nums block text-3xl font-semibold leading-tight">
             {calText(day.remaining_calories)}
@@ -283,8 +277,7 @@ export function Journal({
               />
             ))}
           </div>
-          {day.energy !== null && <BreakdownFold open={open} energy={day.energy} />}
-        </div>
+        </BreakdownCard>
       )}
 
       {day !== null && empty && (
@@ -435,7 +428,7 @@ export function Journal({
             className="t-row w-full text-left text-sm text-muted"
             onClick={() => setMeasuring(true)}
           >
-            {weighed === null ? '+ Add' : '+ Edit'}
+            {weighed === null ? '+ Log weigh-in' : '+ Update'}
           </button>
         </div>
       )}

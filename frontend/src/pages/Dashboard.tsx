@@ -1,5 +1,5 @@
 import { ChevronRight, Plus } from 'lucide-react'
-import { useEffect, useRef, useState, type ReactNode } from 'react'
+import { useEffect, useRef, useState } from 'react'
 
 import {
   api,
@@ -16,7 +16,7 @@ import {
   type TrendPoint,
 } from '../api'
 import { DayBars } from '../components/DayBars'
-import { BreakdownButton, BreakdownFold, useBreakdown } from '../components/EnergyLines'
+import { BreakdownCard } from '../components/BreakdownCard'
 import { ExerciseSheet } from '../components/ExerciseSheet'
 import { FoodPicker } from '../components/FoodPicker'
 import { MeasurementsSheet } from '../components/MeasurementsSheet'
@@ -167,13 +167,12 @@ function Spark({ trend, points, tall }: {
 
 // Every card wears the same head: the category, which is a way into it, and a
 // plus that adds to it.
-function CardHead({ label, onOpen, onAdd, extra }: {
+function CardHead({ label, onOpen, onAdd }: {
   label: string
   onOpen: () => void
   // A card that nothing is added to has no plus, and keeps the head the same
   // height so the cards under each other still line up.
   onAdd?: () => void
-  extra?: ReactNode
 }) {
   return (
     <div className="mb-2 flex items-center justify-between">
@@ -186,7 +185,6 @@ function CardHead({ label, onOpen, onAdd, extra }: {
         <ChevronRight className="h-3.5 w-3.5" strokeWidth={2.5} />
       </button>
       <span className="flex items-center gap-2">
-        {extra}
         {onAdd === undefined ? (
           <span className="t-topbar-icon -mr-2" aria-hidden="true" />
         ) : (
@@ -288,7 +286,6 @@ export function Dashboard({
   const [exercising, setExercising] = useState(false)
   const [pending, setPending] = useState<Measurement | null>(null)
   const pendingRef = useRef<Measurement | null>(null)
-  const [open, toggleBreakdown] = useBreakdown()
 
   // The wordmark is the header here, and the rail's own name takes over
   // from it at the width the rail appears. The history is a sub-view, and it
@@ -537,7 +534,7 @@ export function Dashboard({
         </div>
 
         <div className="t-card mb-3">
-          <p className="t-micro mb-2">Last {RUN_DAYS} days</p>
+          <p className="t-micro mb-2">Food, last {RUN_DAYS} days</p>
           <DayBars days={run} todayIso={todayIso} height={72} mondaysOnly />
           <p className="t-nums mt-1 text-xs text-muted">
             Days logged {logged} of {RUN_DAYS}
@@ -645,17 +642,8 @@ export function Dashboard({
     <>
       {error && <p className="t-error mb-3">{error}</p>}
 
-      <div className="t-card mb-3">
-        <CardHead
-          label="Food"
-          onOpen={onOpenJournal}
-          onAdd={() => setPicking(true)}
-          extra={
-            day?.energy != null && (
-              <BreakdownButton open={open} onToggle={toggleBreakdown} />
-            )
-          }
-        />
+      <BreakdownCard energy={day?.energy ?? null}>
+        <CardHead label="Food" onOpen={onOpenJournal} onAdd={() => setPicking(true)} />
         <div className="min-[900px]:flex min-[900px]:items-start min-[900px]:gap-5">
           <div className="min-[900px]:shrink-0">
             <Rings rings={rings} />
@@ -685,8 +673,6 @@ export function Dashboard({
           </div>
         </div>
 
-        {day?.energy != null && <BreakdownFold open={open} energy={day.energy} />}
-
         {gap !== null && (
           <button
             type="button"
@@ -698,7 +684,7 @@ export function Dashboard({
             {gap.label}
           </button>
         )}
-      </div>
+      </BreakdownCard>
 
       <div className="t-card mb-3">
         <CardHead
@@ -751,7 +737,7 @@ export function Dashboard({
           </>
         )}
         <div className="mt-3 border-t border-line pt-3">
-          <p className="t-micro mb-2">Last {WEEK} days</p>
+          <p className="t-micro mb-2">Food, last {WEEK} days</p>
           <DayBars days={week} todayIso={todayIso} />
         </div>
       </div>

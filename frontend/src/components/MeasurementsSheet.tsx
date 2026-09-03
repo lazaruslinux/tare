@@ -10,6 +10,7 @@ import {
 } from '../api'
 import { round1, weightFrom, weightIn, weightUnit } from '../lib/units'
 import { Sheet } from './Sheet'
+import { dayLabel, today } from '../lib/day'
 
 // How far back the sheet looks for a reading already on the chosen day, which
 // is the same window the history list reads.
@@ -76,7 +77,8 @@ export function MeasurementsSheet({
   onSaved: () => void
 }) {
   const units = me.units
-  const [day, setDay] = useState(date)
+  const day = date
+  const [existing, setExisting] = useState(false)
   const [weight, setWeight] = useState('')
   const [fields, setFields] = useState<Fields>({})
   const [modes, setModes] = useState<Record<string, Mode>>(readModes)
@@ -94,6 +96,7 @@ export function MeasurementsSheet({
       .then((history) => {
         if (!alive) return
         const found = history.measurements.find((row) => row.date === day)
+        setExisting(found !== undefined)
         setWeight(found === undefined ? '' : String(weightIn(found.weight_kg, units)))
         setFields(found === undefined ? {} : filled(found, units, modes))
         if (hasExtras(found) || hasExtras(history.measurements[0])) setMore(true)
@@ -140,22 +143,10 @@ export function MeasurementsSheet({
   }
 
   return (
-    <Sheet open label="Biometrics" tall onClose={onClose}>
+    <Sheet open label="Log weigh-in" tall onClose={onClose}>
       <form onSubmit={submit}>
-        <p className="mb-3 text-base font-semibold">Biometrics</p>
-
-        <div className="mb-3">
-          <label className="t-label" htmlFor="measure-date">
-            Day
-          </label>
-          <input
-            id="measure-date"
-            className="t-input"
-            type="date"
-            value={day}
-            onChange={(event) => setDay(event.target.value)}
-          />
-        </div>
+        <p className="text-base font-semibold">Log weigh-in</p>
+        <p className="mb-3 text-xs text-muted">{dayLabel(day, today(me.timezone))}</p>
 
         <div className="mb-3">
           <label className="t-label" htmlFor="measure-weight">
@@ -239,7 +230,7 @@ export function MeasurementsSheet({
         {error && <p className="t-error mt-3">{error}</p>}
 
         <button className="t-btn t-btn-primary mt-4 w-full" type="submit" disabled={saving}>
-          Save
+          {existing ? 'Replace weigh-in' : 'Log weigh-in'}
         </button>
       </form>
     </Sheet>
