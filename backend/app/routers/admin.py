@@ -59,6 +59,9 @@ NO_PHOTO = "The photo this was about is gone."
 # A picture offered on its own is the picture: there is nothing to swap it for
 # that would not simply be a different request.
 PHOTO_KIND = "A picture is kept or turned down as it is."
+# A report proposes nothing, so there is nothing on it to correct. What it asks
+# for is done to the food itself, on the food's own page.
+REPORT_KIND = "A report is resolved or dismissed as it is."
 BAD_PURPOSE = "A photo is of the front or of the label."
 
 # How many links one administrator may have out at a time. An unclaimed link is
@@ -163,9 +166,15 @@ def queue_item(
     if submission.kind == "photo":
         if target is None or photo is None:
             return None
+    elif submission.kind == "report":
+        if target is None:
+            return None
     elif food is None or (submission.kind == "edit" and target is None):
         return None
 
+    # What the food says now. A correction is read beside the thing it would
+    # replace; a report is read against the row somebody says is wrong.
+    beside = target is not None and submission.kind in ("edit", "report")
     current = published(db, target.id) if submission.kind == "photo" and target else None
     return {
         "id": submission.id,
@@ -182,9 +191,7 @@ def queue_item(
         "label_photo_url": None if label is None else photo_url(label.id),
         "food": None if food is None else proposed(food),
         "target": None if target is None else named(target),
-        # What the shared food says now, so a correction is read beside the
-        # thing it would replace rather than on its own.
-        "current": proposed(target) if submission.kind == "edit" and target else None,
+        "current": proposed(target) if beside and target else None,
         "current_photo_url": None if current is None else photo_url(current.id),
     }
 
@@ -286,6 +293,20 @@ def approve_photo(
     return {"food": proposed(target)}
 
 
+def resolve_report(
+    db: Session, submission: models.FoodSubmission, admin: models.User, note: str
+) -> dict[str, object]:
+    """Say the report has been dealt with. It changes nothing on the food.
+
+    Whatever the reviewer did about it, they did to the food itself before they
+    came back here, and a note is how they say so if it is worth saying.
+    """
+    target = shared_target(db, submission)
+    stamp(submission, admin, "approved", note)
+    db.commit()
+    return {"food": proposed(target)}
+
+
 @router.post("/queue/{submission_id}/approve")
 def approve(
     submission_id: int,
@@ -299,6 +320,8 @@ def approve(
         return approve_edit(db, submission, admin)
     if submission.kind == "photo":
         return approve_photo(db, submission, admin)
+    if submission.kind == "report":
+        return resolve_report(db, submission, admin, body.note.strip())
 
     # A new food, published. From here it is everybody's and nobody's.
     food = offered_food(db, submission)
@@ -354,6 +377,8 @@ def adjustable(db: Session, submission_id: int) -> models.FoodSubmission:
     submission = waiting(db, submission_id)
     if submission.kind == "photo":
         raise HTTPException(status.HTTP_400_BAD_REQUEST, PHOTO_KIND)
+    if submission.kind == "report":
+        raise HTTPException(status.HTTP_400_BAD_REQUEST, REPORT_KIND)
     return submission
 
 

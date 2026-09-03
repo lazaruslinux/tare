@@ -499,7 +499,7 @@ def test_somebody_else_s_food_cannot_be_photographed(client, db_session, make_us
     assert response.status_code == 404
 
 
-def test_a_correction_may_carry_the_panel_it_was_read_off(client, db_session, signed_in):
+def test_a_correction_may_carry_the_panel_it_was_read_off(client, db_session, admin_client):
     shared = models.Food(
         status="approved", name="Shared bar", base_unit="g", **FULL
     )

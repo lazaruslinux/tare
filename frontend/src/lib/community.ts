@@ -72,8 +72,19 @@ export const STATUS_LABEL: Record<string, string> = {
 // food is in, and it is not word for word what was offered.
 export const EDITED_LABEL = 'Approved with edits'
 
-export const statusLabel = (status: string, edited: boolean): string =>
-  status === 'approved' && edited ? EDITED_LABEL : (STATUS_LABEL[status] ?? status)
+// A report is answered rather than published, so the same three states read as
+// something else: it is looked at, and then the food is either put right or it
+// is left as it was.
+export const REPORT_STATUS_LABEL: Record<string, string> = {
+  pending: 'Waiting',
+  approved: 'Resolved',
+  rejected: 'Not changed',
+}
+
+export const statusLabel = (status: string, edited: boolean, kind?: string): string => {
+  if (kind === 'report') return REPORT_STATUS_LABEL[status] ?? status
+  return status === 'approved' && edited ? EDITED_LABEL : (STATUS_LABEL[status] ?? status)
+}
 
 // What a reviewer changed, as one line under the chip that says they did.
 export const changeLine = (changes: string[]): string => `Changed: ${changes.join(', ')}`
@@ -83,4 +94,5 @@ export const KIND_LABEL: Record<string, string> = {
   new: 'New food',
   edit: 'Edit',
   photo: 'Photo',
+  report: 'Report',
 }

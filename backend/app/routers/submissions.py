@@ -54,6 +54,16 @@ NOT_WITHDRAWABLE = "That submission has already been decided."
 ALREADY_OFFERED = "This food is already waiting for a decision."
 ALREADY_EDITING = "You already have an edit waiting on this food."
 ALREADY_PICTURING = "You already have a photo waiting on this food."
+ALREADY_REPORTED = "You already reported this food."
+# A report with nothing in it is a food put back in the queue with no way of
+# telling what for.
+NO_ISSUE = "Say what is wrong."
+# What a member is told instead of an edit form. An approved food is the Tare
+# database's row rather than anybody's, and the way to change one is to say
+# what is wrong with it and let a reviewer do it.
+MEMBER_MAY_NOT_EDIT = (
+    "Approved foods are corrected by an administrator. Report an issue instead."
+)
 NOT_YOURS_TO_OFFER = "Only your own foods can be submitted to the Tare database."
 MISSING_PHOTO = "That photo is not there to attach."
 # What a food everybody will eat out of has to be photographed from. The front
@@ -313,11 +323,18 @@ def suggest_edit(
 ) -> dict[str, object]:
     """A correction to a food everybody eats out of, offered as a whole panel.
 
+    A reviewer's route now. A member reports what is wrong with a shared food
+    instead; the answer to a bad row is an administrator fixing it, not a
+    second version of it written by whoever noticed.
+
     The proposal is written down as a food of its own, owned by whoever wrote
     it, rather than held as a patch on the shared row. It is the same shape a
     reviewer already reads, it can be corrected in place before it is decided,
-    and nothing about the shared food changes until somebody says so.
+    and nothing about the shared food changes until somebody says so. That is
+    what still decides the corrections already waiting in the queue.
     """
+    if not user.is_admin:
+        raise HTTPException(status.HTTP_403_FORBIDDEN, MEMBER_MAY_NOT_EDIT)
     target = shared_food(db, body.target_food_id)
     if open_request(db, user, target.id, "edit") is not None:
         raise HTTPException(status.HTTP_409_CONFLICT, ALREADY_EDITING)
@@ -371,6 +388,36 @@ def suggest_photo(
         photo_id=photo_id,
         submitted_by_id=user.id,
         note=body.note.strip(),
+    )
+    db.add(submission)
+    db.commit()
+    return {"submission_id": submission.id}
+
+
+@router.post("/submissions/report", status_code=status.HTTP_201_CREATED)
+def report_food(
+    body: schemas.ReportIn,
+    db: Session = Depends(get_db),
+    user: models.User = Depends(require_user),
+) -> dict[str, object]:
+    """Something is wrong with a food everybody eats out of, said in words.
+
+    Nothing about the food moves. The request is the food put back in front of
+    a reviewer with a sentence attached, and what comes of it is theirs to
+    decide: they fix the row, or they say why they have not.
+    """
+    target = shared_food(db, body.target_food_id)
+    issue = body.note.strip()
+    if not issue:
+        raise HTTPException(status.HTTP_400_BAD_REQUEST, NO_ISSUE)
+    if open_request(db, user, target.id, "report") is not None:
+        raise HTTPException(status.HTTP_409_CONFLICT, ALREADY_REPORTED)
+
+    submission = offering(
+        "report",
+        target_food_id=target.id,
+        submitted_by_id=user.id,
+        note=issue,
     )
     db.add(submission)
     db.commit()

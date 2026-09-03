@@ -6,6 +6,10 @@ eats out of changes until a person says so. A picture replaces the one before
 it, file and all, because two published pictures of one food is a state nothing
 can render. And approving either of them never reaches back into a diary: the
 day somebody already ate is theirs, not the database's.
+
+A correction is a reviewer's tool. A member who finds something wrong with a
+shared food reports it, which is a sentence and not a second panel, so the
+cases below write one as whoever would be deciding it.
 """
 
 import io
@@ -119,13 +123,30 @@ def people(client, make_user):
     sign_in(client, "member")
 
 
+def reviewers(client, make_user):
+    """The same instance, with the reviewer signed in and a second one behind.
+
+    Corrections are written by whoever reviews them now, and two of them are
+    needed to show that one person's open correction is not everybody's.
+    """
+    people(client, make_user)
+    make_user("second", admin=True)
+    sign_in(client, "reviewer")
+
+
+def report(client, target_id, note="The bar got smaller."):
+    return client.post(
+        "/api/submissions/report", json={"target_food_id": target_id, "note": note}
+    )
+
+
 # ---- Suggesting a correction ----
 
 
 def test_a_correction_is_written_down_as_a_copy_nobody_else_can_see(
     client, db_session, make_user
 ):
-    people(client, make_user)
+    reviewers(client, make_user)
     target = shared(db_session)
     before = target.calories
 
@@ -155,7 +176,7 @@ def test_a_correction_is_absent_from_every_list_it_could_appear_in(
     client, db_session, make_user, monkeypatch
 ):
     offline(monkeypatch)
-    people(client, make_user)
+    reviewers(client, make_user)
     target = shared(db_session)
     shadow_id = suggest(client, target.id, name="Matrix shadow").json()["food"]["id"]
 
@@ -176,7 +197,7 @@ def test_a_correction_is_absent_from_every_list_it_could_appear_in(
 def test_a_correction_may_leave_a_number_blank_and_still_needs_a_serving(
     client, db_session, make_user
 ):
-    people(client, make_user)
+    reviewers(client, make_user)
     target = shared(db_session)
 
     response = suggest(client, target.id, fiber_g=None)
@@ -189,13 +210,13 @@ def test_a_correction_may_leave_a_number_blank_and_still_needs_a_serving(
 
 
 def test_nought_is_an_answer_in_a_correction_too(client, db_session, make_user):
-    people(client, make_user)
+    reviewers(client, make_user)
     target = shared(db_session)
     assert suggest(client, target.id, fiber_g=0, sugar_g=0).status_code == 201
 
 
 def test_only_a_shared_food_can_be_corrected(client, db_session, make_user):
-    people(client, make_user)
+    reviewers(client, make_user)
     member = db_session.execute(
         models.User.__table__.select().where(models.User.__table__.c.username == "member")
     ).first()
@@ -208,7 +229,7 @@ def test_only_a_shared_food_can_be_corrected(client, db_session, make_user):
 
 
 def test_one_correction_at_a_time_per_person_per_food(client, db_session, make_user):
-    people(client, make_user)
+    reviewers(client, make_user)
     target = shared(db_session)
     assert suggest(client, target.id).status_code == 201
 
@@ -216,8 +237,8 @@ def test_one_correction_at_a_time_per_person_per_food(client, db_session, make_u
     assert again.status_code == 409
     assert again.json() == {"detail": "You already have an edit waiting on this food."}
 
-    # Somebody else may still offer their own correction to the same food.
-    sign_in(client, "stranger")
+    # Another reviewer may still write their own correction to the same food.
+    sign_in(client, "second")
     assert suggest(client, target.id).status_code == 201
 
 
@@ -227,14 +248,14 @@ def test_one_correction_at_a_time_per_person_per_food(client, db_session, make_u
 def test_the_queue_shows_a_correction_beside_what_it_would_replace(
     client, db_session, make_user
 ):
-    people(client, make_user)
+    reviewers(client, make_user)
     target = shared(db_session)
     suggest(client, target.id)
 
     sign_in(client, "reviewer")
     item = client.get("/api/admin/queue").json()[0]
     assert item["kind"] == "edit"
-    assert item["submitted_by"] == "member"
+    assert item["submitted_by"] == "reviewer"
     assert item["target"] == {"id": target.id, "name": target.name, "brand": target.brand}
     assert item["current"]["calories"] == 535
     assert item["current"]["servings"] == [
@@ -253,7 +274,7 @@ def test_the_queue_shows_a_correction_beside_what_it_would_replace(
 def test_a_reviewer_may_correct_a_proposal_before_deciding_it(
     client, db_session, make_user
 ):
-    people(client, make_user)
+    reviewers(client, make_user)
     target = shared(db_session)
     shadow_id = suggest(client, target.id).json()["food"]["id"]
 
@@ -276,7 +297,7 @@ def test_a_reviewer_may_correct_a_proposal_before_deciding_it(
 def test_a_number_the_reviewer_blanked_lands_on_the_shared_food(
     client, db_session, make_user
 ):
-    people(client, make_user)
+    reviewers(client, make_user)
     target = shared(db_session)
     made = suggest(client, target.id)
     shadow_id = made.json()["food"]["id"]
@@ -304,7 +325,7 @@ def test_a_number_the_reviewer_blanked_lands_on_the_shared_food(
 def test_a_proposal_left_without_a_serving_cannot_be_approved(
     client, db_session, make_user
 ):
-    people(client, make_user)
+    reviewers(client, make_user)
     target = shared(db_session)
     before = target.sodium_mg
     made = suggest(client, target.id)
@@ -334,7 +355,7 @@ def test_a_proposal_left_without_a_serving_cannot_be_approved(
 def test_approving_a_correction_moves_it_onto_the_shared_food(
     client, db_session, make_user
 ):
-    people(client, make_user)
+    reviewers(client, make_user)
     target = shared(db_session)
     made = suggest(client, target.id, brand="Hershey")
 
@@ -362,7 +383,7 @@ def test_approving_a_correction_moves_it_onto_the_shared_food(
 def test_what_was_already_logged_is_untouched_by_a_correction(
     client, db_session, make_user
 ):
-    people(client, make_user)
+    reviewers(client, make_user)
     target = shared(db_session)
     logged = client.post(
         "/api/diary",
@@ -381,14 +402,13 @@ def test_what_was_already_logged_is_untouched_by_a_correction(
     sign_in(client, "reviewer")
     client.post(f"/api/admin/queue/{made.json()['submission_id']}/approve", json={})
 
-    sign_in(client, "member")
     after = client.get("/api/diary/day?date=2026-09-01").json()
     assert after == before
     assert after["slots"]["snack"]["entries"][0]["food_id"] == target.id
 
 
 def test_rejecting_a_correction_throws_the_copy_away(client, db_session, make_user):
-    people(client, make_user)
+    reviewers(client, make_user)
     target = shared(db_session)
     made = suggest(client, target.id)
     shadow_id = made.json()["food"]["id"]
@@ -404,7 +424,6 @@ def test_rejecting_a_correction_throws_the_copy_away(client, db_session, make_us
     assert db_session.get(models.Food, shadow_id) is None
     assert db_session.get(models.Food, target.id).calories == 535
 
-    sign_in(client, "member")
     row = client.get("/api/submissions/mine").json()[0]
     assert (row["kind"], row["status"]) == ("edit", "rejected")
     assert row["target_name"] == "Milk chocolate bar"
@@ -414,7 +433,7 @@ def test_rejecting_a_correction_throws_the_copy_away(client, db_session, make_us
 
 
 def test_withdrawing_a_correction_throws_the_copy_away(client, db_session, make_user):
-    people(client, make_user)
+    reviewers(client, make_user)
     target = shared(db_session)
     made = suggest(client, target.id)
     shadow_id = made.json()["food"]["id"]
@@ -425,6 +444,219 @@ def test_withdrawing_a_correction_throws_the_copy_away(client, db_session, make_
     assert db_session.get(models.Food, target.id).calories == 535
     # And the same food can be corrected again straight away.
     assert suggest(client, target.id).status_code == 201
+
+
+# ---- Reporting a food ----
+
+
+def test_a_member_may_not_correct_a_shared_food_any_more(client, db_session, make_user):
+    people(client, make_user)
+    target = shared(db_session)
+
+    refused = suggest(client, target.id)
+    assert refused.status_code == 403
+    assert refused.json() == {
+        "detail": "Approved foods are corrected by an administrator. Report an issue instead."
+    }
+    # Nothing was written on the way to the refusal: no copy, no request.
+    assert db_session.query(models.FoodSubmission).count() == 0
+    assert db_session.query(models.Food).filter_by(status="shadow").count() == 0
+
+
+def test_a_report_says_what_is_wrong_and_moves_nothing(client, db_session, make_user):
+    people(client, make_user)
+    target = shared(db_session)
+    before = target.calories
+
+    response = report(client, target.id, note="The bar is 45 g now.")
+    assert response.status_code == 201
+
+    submission = db_session.get(models.FoodSubmission, response.json()["submission_id"])
+    assert (submission.kind, submission.status) == ("report", "pending")
+    assert (submission.food_id, submission.target_food_id) == (None, target.id)
+    assert submission.note == "The bar is 45 g now."
+
+    db_session.expire_all()
+    assert db_session.get(models.Food, target.id).calories == before
+
+    # And the food's own page says the report is waiting on it.
+    rows = client.get(f"/api/foods/{target.id}").json()["submissions"]
+    assert [(row["kind"], row["status"]) for row in rows] == [("report", "pending")]
+
+
+def test_a_report_with_nothing_in_it_is_refused(client, db_session, make_user):
+    people(client, make_user)
+    target = shared(db_session)
+
+    for note in ("", "   "):
+        refused = report(client, target.id, note=note)
+        assert refused.status_code == 400
+        assert refused.json() == {"detail": "Say what is wrong."}
+    assert db_session.query(models.FoodSubmission).count() == 0
+
+
+def test_only_a_shared_food_can_be_reported(client, db_session, make_user):
+    people(client, make_user)
+    member = db_session.execute(
+        models.User.__table__.select().where(models.User.__table__.c.username == "member")
+    ).first()
+    mine = put_food(db_session, status="custom", owner=member, name="My own")
+
+    for food_id in (mine.id, 999999):
+        refused = report(client, food_id)
+        assert refused.status_code == 404
+        assert refused.json() == {"detail": "There is no such food."}
+
+
+def test_one_report_at_a_time_per_person_per_food(client, db_session, make_user):
+    people(client, make_user)
+    target = shared(db_session)
+    assert report(client, target.id).status_code == 201
+
+    again = report(client, target.id)
+    assert again.status_code == 409
+    assert again.json() == {"detail": "You already reported this food."}
+
+    # Somebody else has their own say about the same food.
+    sign_in(client, "stranger")
+    assert report(client, target.id).status_code == 201
+
+
+def test_the_queue_reads_a_report_against_the_food_it_is_about(
+    client, db_session, make_user
+):
+    people(client, make_user)
+    target = shared(db_session)
+    made = report(client, target.id, note="The sodium is ten times too high.")
+
+    sign_in(client, "reviewer")
+    item = client.get("/api/admin/queue").json()[0]
+    assert item["kind"] == "report"
+    assert item["submitted_by"] == "member"
+    assert item["note"] == "The sodium is ten times too high."
+    assert item["target"] == {"id": target.id, "name": target.name, "brand": target.brand}
+    # The panel it is about, so the reviewer reads the numbers being complained
+    # of. A report proposes nothing, so there is no second panel and no photo.
+    assert item["current"]["calories"] == 535
+    assert item["current"]["description"] == ""
+    assert item["food"] is None
+    assert (item["photo_url"], item["label_photo_url"]) == (None, None)
+
+    # And there is nothing on it to correct: what it asks for is done to the
+    # food itself.
+    refused = client.post(
+        f"/api/admin/queue/{made.json()['submission_id']}/photo",
+        json={"photo_id": a_photo(client), "purpose": "front"},
+    )
+    assert refused.status_code == 400
+    assert refused.json() == {"detail": "A report is resolved or dismissed as it is."}
+
+
+def test_an_administrator_fixes_a_reported_food_on_the_food_itself(
+    client, db_session, make_user
+):
+    people(client, make_user)
+    target = shared(db_session)
+    report(client, target.id)
+
+    # The member has no way in at all, however plainly they can read it.
+    refused = client.patch(
+        f"/api/foods/{target.id}", json={"name": "Mine now", "base_unit": "g", **FULL}
+    )
+    assert refused.status_code == 403
+
+    sign_in(client, "reviewer")
+    fixed = client.patch(
+        f"/api/foods/{target.id}",
+        json={
+            "name": "Milk chocolate bar",
+            "brand": "Hershey's",
+            "base_unit": "g",
+            "servings": [{"name": "1 bar", "amount": 45, "unit": "g", "position": 0}],
+            **FULL,
+            "sodium_mg": 8,
+        },
+    )
+    assert fixed.status_code == 200
+
+    db_session.expire_all()
+    after = db_session.get(models.Food, target.id)
+    assert (after.sodium_mg, after.status, after.owner_id) == (8, "approved", None)
+
+
+def test_resolving_a_report_changes_nothing_and_may_carry_a_word_back(
+    client, db_session, make_user
+):
+    people(client, make_user)
+    target = shared(db_session)
+    made = report(client, target.id)
+    before = target.calories
+
+    sign_in(client, "reviewer")
+    resolved = client.post(
+        f"/api/admin/queue/{made.json()['submission_id']}/approve",
+        json={"note": "Fixed, thank you."},
+    )
+    assert resolved.status_code == 200
+
+    db_session.expire_all()
+    assert db_session.get(models.Food, target.id).calories == before
+    submission = db_session.get(models.FoodSubmission, made.json()["submission_id"])
+    assert submission.status == "approved"
+    assert submission.decision_note == "Fixed, thank you."
+    assert submission.decided_by_id is not None
+    assert submission.decided_at is not None
+    assert client.get("/api/admin/queue").json() == []
+
+    sign_in(client, "member")
+    row = client.get("/api/submissions/mine").json()[0]
+    assert (row["kind"], row["status"]) == ("report", "approved")
+    assert row["target_name"] == "Milk chocolate bar"
+    # A report opens the food it was about.
+    assert row["food_id"] == target.id
+    # The answer is news until the page that lists it has been read.
+    assert row["seen_at"] is None
+    assert client.post("/api/submissions/seen").status_code == 204
+    assert client.get("/api/submissions/mine").json()[0]["seen_at"] is not None
+
+
+def test_dismissing_a_report_says_why(client, db_session, make_user):
+    people(client, make_user)
+    target = shared(db_session)
+    made = report(client, target.id)
+
+    sign_in(client, "reviewer")
+    silent = client.post(
+        f"/api/admin/queue/{made.json()['submission_id']}/reject", json={"note": "  "}
+    )
+    assert silent.status_code == 400
+    assert silent.json() == {"detail": "Give a reason."}
+
+    dismissed = client.post(
+        f"/api/admin/queue/{made.json()['submission_id']}/reject",
+        json={"note": "The label really does say that."},
+    )
+    assert dismissed.status_code == 200
+
+    db_session.expire_all()
+    assert db_session.get(models.Food, target.id).calories == 535
+
+    sign_in(client, "member")
+    row = client.get("/api/submissions/mine").json()[0]
+    assert (row["kind"], row["status"]) == ("report", "rejected")
+    assert row["decision_note"] == "The label really does say that."
+
+
+def test_a_report_can_be_taken_back(client, db_session, make_user):
+    people(client, make_user)
+    target = shared(db_session)
+    made = report(client, target.id)
+
+    assert client.delete(f"/api/submissions/{made.json()['submission_id']}").status_code == 204
+    assert db_session.get(models.FoodSubmission, made.json()["submission_id"]) is None
+    assert db_session.get(models.Food, target.id).calories == 535
+    # And the same food can be reported again straight away.
+    assert report(client, target.id).status_code == 201
 
 
 # ---- Offering a picture ----
@@ -579,7 +811,7 @@ def test_a_picture_proposal_is_decided_as_it_is(client, db_session, make_user):
 def test_a_photo_a_reviewer_puts_on_a_correction_is_published_with_it(
     client, db_session, make_user
 ):
-    people(client, make_user)
+    reviewers(client, make_user)
     target = shared(db_session)
     made = suggest(client, target.id)
 
@@ -852,8 +1084,8 @@ def test_the_member_list_counts_what_each_person_has_offered(
 ):
     people(client, make_user)
     target = shared(db_session)
-    first = suggest(client, target.id)
-    second = suggest(client, put_food(db_session, name="Another shared").id)
+    first = report(client, target.id)
+    second = report(client, put_food(db_session, name="Another shared").id, note="Wrong brand.")
 
     sign_in(client, "reviewer")
     client.post(f"/api/admin/queue/{first.json()['submission_id']}/approve", json={})

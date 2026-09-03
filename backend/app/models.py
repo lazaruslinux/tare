@@ -264,13 +264,15 @@ class FoodServing(Base):
 # a deleted file.
 PHOTO_STATUSES = ("pending", "approved")
 
-# What somebody is asking for. Only 'new' is written this round; the other two
-# are the kinds a shared database needs, named here so the column is ready and
-# a later round adds behaviour rather than another migration on this table.
+# What somebody is asking for.
 #   new     a food that is not in the shared database yet
-#   edit    a correction to one that is
+#   edit    a correction to one that is, written as a copy a reviewer reads
+#           beside it. An administrator's tool now: a shared food is corrected
+#           by whoever reviews it, and a member reports it instead.
 #   photo   a picture for one that has none
-SUBMISSION_KINDS = ("new", "edit", "photo")
+#   report  something wrong with a shared food, said in words. It changes
+#           nothing by itself; it puts the food back in front of a reviewer.
+SUBMISSION_KINDS = ("new", "edit", "photo", "report")
 
 # Where a submission has got to. Withdrawing one deletes it rather than adding
 # a fourth state: nobody has judged it, so there is nothing to keep.
@@ -366,7 +368,19 @@ class FoodSubmission(Base):
     )
 
     id: Mapped[int] = mapped_column(Integer, primary_key=True)
-    kind: Mapped[str] = mapped_column(String(8), nullable=False, default="new")
+    kind: Mapped[str] = mapped_column(
+        # The one enum here the database is asked to hold to as well. It grew a
+        # value, and a column that says which four words it takes is the check
+        # a wrong one fails on rather than a row nothing downstream can decide.
+        Enum(
+            *SUBMISSION_KINDS,
+            name="submission_kind",
+            native_enum=False,
+            create_constraint=True,
+        ),
+        nullable=False,
+        default="new",
+    )
     # The food being offered. SET NULL so a submission that has been decided
     # still reads as history after its food is deleted.
     food_id: Mapped[int | None] = mapped_column(

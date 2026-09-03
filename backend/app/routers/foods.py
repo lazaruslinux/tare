@@ -373,13 +373,15 @@ SUBMISSION_HISTORY = 5
 def submissions_for(
     db: Session, user: models.User, food: models.Food
 ) -> list[dict[str, object]]:
-    """What this account has asked about this food of theirs, newest first.
+    """What this account has asked about this food, newest first.
 
-    Only the owner's own, because a request is between one member and whoever
-    reviews it and nobody else is in it. Newest first and capped: the page is
-    about where the food stands now, with enough behind it to read as history.
+    Only their own, because a request is between one member and whoever reviews
+    it and nobody else is in it. Their own food, where the record is how far it
+    has got towards being shared; and a shared food, where it is what they have
+    reported about it. Newest first and capped: the page is about where the
+    food stands now, with enough behind it to read as history.
     """
-    if food.owner_id != user.id:
+    if food.owner_id != user.id and food.status != "approved":
         return []
     rows = db.execute(
         select(models.FoodSubmission)

@@ -283,6 +283,9 @@ export function AdminQueue({
   const [rejecting, setRejecting] = useState<number | null>(null)
   const [reason, setReason] = useState('')
   const [keepPhoto, setKeepPhoto] = useState<Record<number, boolean>>({})
+  // What a member is told when their report is resolved, per report. Optional:
+  // a food that has been put right is usually its own answer.
+  const [answer, setAnswer] = useState<Record<number, string>>({})
   const [showAll, setShowAll] = useState<Record<number, boolean>>({})
   // The proposal being corrected before it is decided, loaded whole so the
   // form has its servings as well as its panel.
@@ -376,7 +379,9 @@ export function AdminQueue({
     return (
       <FoodForm
         food={adjusting}
-        title="Edit before approving"
+        // A report is about a food that is already shared, so what this opens
+        // is the row itself rather than a proposal waiting on a decision.
+        title={adjusting.status === 'approved' ? 'Edit this food' : 'Edit before approving'}
         backLabel="Review queue"
         complete
         onSaved={() => {
@@ -412,6 +417,9 @@ export function AdminQueue({
                   {about?.name ?? 'A deleted food'}
                 </p>
                 <p className="truncate text-sm text-muted">{about?.brand || 'No brand'}</p>
+                {item.kind === 'report' && item.current?.description && (
+                  <p className="text-xs text-muted">{item.current.description}</p>
+                )}
                 {item.kind === 'new' && item.food?.barcode && (
                   <p className="t-nums text-xs text-muted">{item.food.barcode}</p>
                 )}
@@ -452,6 +460,32 @@ export function AdminQueue({
                 >
                   Edit before approving
                 </button>
+              </>
+            )}
+
+            {item.kind === 'report' && item.current && (
+              <>
+                <Panel food={item.current} />
+                <button
+                  type="button"
+                  className="t-btn mt-3 w-full"
+                  disabled={busy}
+                  onClick={() => adjust((item.current as Proposed).id)}
+                >
+                  Fix it
+                </button>
+                <label className="t-label mt-3 block" htmlFor={`answer-${item.id}`}>
+                  What to tell them (optional)
+                </label>
+                <input
+                  id={`answer-${item.id}`}
+                  className="t-input"
+                  maxLength={500}
+                  value={answer[item.id] ?? ''}
+                  onChange={(event) =>
+                    setAnswer({ ...answer, [item.id]: event.target.value })
+                  }
+                />
               </>
             )}
 
@@ -513,7 +547,9 @@ export function AdminQueue({
             {rejecting === item.id ? (
               <div className="mt-3">
                 <label className="t-label" htmlFor={`reject-${item.id}`}>
-                  Why not, in a sentence
+                  {item.kind === 'report'
+                    ? 'Why it stays as it is, in a sentence'
+                    : 'Why not, in a sentence'}
                 </label>
                 <input
                   id={`reject-${item.id}`}
@@ -529,7 +565,7 @@ export function AdminQueue({
                     disabled={busy || reason.trim() === ''}
                     onClick={() => decide(item.id, 'reject', { note: reason })}
                   >
-                    Reject
+                    {item.kind === 'report' ? 'Dismiss' : 'Reject'}
                   </button>
                   <button
                     type="button"
@@ -553,11 +589,15 @@ export function AdminQueue({
                     decide(
                       item.id,
                       'approve',
-                      item.kind === 'new' ? { keep_photo: keepPhoto[item.id] ?? true } : {}
+                      item.kind === 'new'
+                        ? { keep_photo: keepPhoto[item.id] ?? true }
+                        : item.kind === 'report'
+                          ? { note: answer[item.id] ?? '' }
+                          : {}
                     )
                   }
                 >
-                  Approve
+                  {item.kind === 'report' ? 'Resolve' : 'Approve'}
                 </button>
                 <button
                   type="button"
@@ -567,7 +607,7 @@ export function AdminQueue({
                     setReason('')
                   }}
                 >
-                  Reject
+                  {item.kind === 'report' ? 'Dismiss' : 'Reject'}
                 </button>
               </div>
             )}

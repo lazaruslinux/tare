@@ -55,6 +55,10 @@ def test_upgrade_head_builds_the_identity_schema(tmp_path):
         submission_columns = {
             column["name"] for column in inspector.get_columns("food_submissions")
         }
+        submission_checks = " ".join(
+            str(check["sqltext"])
+            for check in inspector.get_check_constraints("food_submissions")
+        )
         log_columns = {column["name"] for column in inspector.get_columns("ingest_log")}
         daily_columns = {column["name"] for column in inspector.get_columns("fitness_daily")}
         intraday_columns = {
@@ -103,6 +107,9 @@ def test_upgrade_head_builds_the_identity_schema(tmp_path):
     assert "label_photo_id" in submission_columns
     # What a reviewer changed before approving, and whether it has been read.
     assert {"edited", "changes", "seen_at"} <= submission_columns
+    # And the four things a request can be, the newest of which is a report.
+    for kind in ("new", "edit", "photo", "report"):
+        assert f"'{kind}'" in submission_checks
     # And the pair that stops one food being pinned twice.
     assert "uq_saved_foods_user_food" in saved_unique
     # And the one that holds a member to a single weigh-in a day.

@@ -153,13 +153,11 @@ export function FoodForm({
   notice,
   title,
   backLabel,
-  sharing,
   complete,
   submitDefault,
   inSheet,
   prefill,
   scannedBarcode,
-  onSubmit,
   onSaved,
   onCancel,
   onOpenFood,
@@ -174,9 +172,6 @@ export function FoodForm({
   // list, from a food, and from the queue, and each of them is a different
   // place to be sent back to.
   backLabel: string
-  // Sent to whoever reviews it rather than saved: the note goes with it, and
-  // the pictures are the evidence it is judged on.
-  sharing?: boolean
   // Every box is going to be looked at, so none of them opens behind a fold.
   // What a reviewer adjusting a proposal wants.
   complete?: boolean
@@ -190,9 +185,6 @@ export function FoodForm({
   prefill?: Prefill | null
   // The code that scan read, held still the way an in-form scan holds one.
   scannedBarcode?: string | null
-  // Where the filled-in form goes. Left out, it writes the food itself, which
-  // is what every screen that keeps one of your own wants.
-  onSubmit?: (payload: Record<string, unknown>) => Promise<Food>
   onSaved: (food: Food) => void
   onCancel: () => void
   // Where a scanned code that is already in tare sends somebody. Given only
@@ -226,7 +218,7 @@ export function FoodForm({
   // Opened when every box is going to be asked for anyway, so nothing that is
   // needed is behind a fold.
   const [more, setMore] = useState(
-    Boolean(notice) || Boolean(sharing) || Boolean(complete) || Boolean(submitDefault)
+    Boolean(notice) || Boolean(complete) || Boolean(submitDefault)
   )
   const [error, setError] = useState('')
   // Said under the tiles rather than with the rest, because that is where the
@@ -259,11 +251,11 @@ export function FoodForm({
 
   // A food being entered for the first time. Everywhere else this form is
   // opened on a food that already exists, or on a proposal about one.
-  const creating = food === null && onSubmit === undefined
+  const creating = food === null
   // One of your own foods, open to be changed. This is where its pictures and
   // the switch live: it is the only screen that has both the panel and them,
   // so submitting again is the same form as correcting it.
-  const own = food !== null && onSubmit === undefined && food.mine
+  const own = food !== null && food.mine
   // The switch is not offered while a decision is outstanding: there is
   // nothing to send until that one is answered or taken back.
   const offerable = creating || (own && food.status !== 'pending')
@@ -405,7 +397,7 @@ export function FoodForm({
     // Only on a food being entered for the first time. The code is what this
     // row was scanned from, and an edit never moves it.
     if (creating && barcode.trim()) body.barcode = barcode.trim()
-    if (sharing || (creating && on)) body.note = note
+    if (creating && on) body.note = note
 
     try {
       if (creating && on) {
@@ -416,13 +408,11 @@ export function FoodForm({
         onSaved(answer.food)
         return
       }
-      const write =
-        onSubmit ??
-        ((payload: Record<string, unknown>) =>
-          api<Food>(food ? `/foods/${food.id}` : '/foods', {
-            method: food ? 'PATCH' : 'POST',
-            body: payload,
-          }))
+      const write = (payload: Record<string, unknown>) =>
+        api<Food>(food ? `/foods/${food.id}` : '/foods', {
+          method: food ? 'PATCH' : 'POST',
+          body: payload,
+        })
       let saved = await write(body)
       if (own && food !== null) {
         // The corrections first, then the picture, then the offer: what goes
@@ -483,9 +473,8 @@ export function FoodForm({
 
   // What the button does, said in the word for it: a food that has been offered
   // before is being offered again.
-  const action = sharing
-    ? 'Send'
-    : offerable && submitOn
+  const action =
+    offerable && submitOn
       ? food !== null && food.submissions.length > 0
         ? 'Resubmit'
         : 'Submit'
@@ -738,7 +727,7 @@ export function FoodForm({
           </>
         )}
 
-        {(sharing || (offerable && submitOn)) && (
+        {offerable && submitOn && (
           <div className="t-card mb-3">
             <label className="t-label" htmlFor="food-note">
               Comment (optional)

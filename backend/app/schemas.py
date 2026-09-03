@@ -130,10 +130,28 @@ class PhotoIn(BaseModel):
     note: str = Field(default="", max_length=MAX_NOTE)
 
 
+class ReportIn(BaseModel):
+    """Something wrong with a food that is already shared, said in words.
+
+    No panel and no picture. A member holding the packet knows what is wrong
+    with the row long before they know what the row should say instead, and
+    asking them to rewrite ten numbers to report one of them is what put an
+    edit form in front of them in the first place.
+    """
+
+    target_food_id: int
+    # Held to a length here and to having something in it in the route, so the
+    # refusal for an empty box is a sentence rather than a type error.
+    note: str = Field(default="", max_length=MAX_NOTE)
+
+
 class ApproveIn(BaseModel):
     """Publishing a submission. The photo is kept unless it is said otherwise."""
 
     keep_photo: bool = True
+    # What the member is told when a report is resolved. Optional: a fixed food
+    # is usually its own answer.
+    note: str = Field(default="", max_length=MAX_NOTE)
 
 
 class QueuePhotoIn(BaseModel):

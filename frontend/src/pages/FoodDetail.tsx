@@ -2,9 +2,9 @@ import { Camera, Pencil, Pin, PinOff } from 'lucide-react'
 import { useEffect, useState, type ChangeEvent } from 'react'
 
 import { api, errorText, upload, type Food, type Me } from '../api'
-import { FoodForm } from '../components/FoodForm'
 import { NutritionLabel } from '../components/NutritionLabel'
 import { PortionSheet } from '../components/PortionSheet'
+import { Sheet } from '../components/Sheet'
 import { useTopBar } from '../hooks/useTopBar'
 import {
   KIND_LABEL,
@@ -54,15 +54,13 @@ export function FoodDetail({
   const [error, setError] = useState('')
   const [logging, setLogging] = useState(false)
   const [sending, setSending] = useState(false)
-  // The correction form, open over this screen rather than in place of it, so
-  // going back lands on the food it is about.
-  const [suggesting, setSuggesting] = useState(false)
+  // Saying what is wrong with a food everybody eats out of, over this screen
+  // rather than in place of it.
+  const [reporting, setReporting] = useState(false)
+  const [issue, setIssue] = useState('')
   const [notice, setNotice] = useState('')
 
-  // The correction form names itself while it is open.
-  useTopBar(
-    suggesting ? null : { title: food?.name ?? 'Food', back: { label: backLabel, onBack } }
-  )
+  useTopBar({ title: food?.name ?? 'Food', back: { label: backLabel, onBack } })
 
   useEffect(() => {
     let alive = true
@@ -171,32 +169,33 @@ export function FoodDetail({
     setSending(false)
   }
 
-  if (suggesting && food !== null) {
-    return (
-      <FoodForm
-        food={food}
-        title="Suggest edit"
-        backLabel={food.name}
-        sharing
-        onSubmit={async (payload) => {
-          const { note, ...proposed } = payload
-          const answer = await api<{ food: Food }>('/submissions/edit', {
-            method: 'POST',
-            body: { target_food_id: food.id, proposed, note },
-          })
-          return answer.food
-        }}
-        onSaved={() => {
-          setSuggesting(false)
-          setNotice(SENT_FOR_REVIEW)
-          onSubmitted()
-        }}
-        onCancel={() => setSuggesting(false)}
-      />
-    )
+  // Say what is wrong with a shared food. Nothing about the food moves: the
+  // request is the food put back in front of whoever reviews it.
+  const send = async (current: Food) => {
+    setSending(true)
+    setError('')
+    try {
+      await api('/submissions/report', {
+        method: 'POST',
+        body: { target_food_id: current.id, note: issue },
+      })
+      setReporting(false)
+      setIssue('')
+      setFood(await api<Food>(`/foods/${current.id}`))
+      setNotice(SENT_FOR_REVIEW)
+      onSubmitted()
+    } catch (failure) {
+      setError(errorText(failure))
+    }
+    setSending(false)
   }
 
   const shared = food !== null && food.status === 'approved'
+  // A shared food already reported by this account. One at a time, so the
+  // button says it has been done rather than offering to do it again.
+  const reported = food?.submissions.find(
+    (row) => row.kind === 'report' && row.status === 'pending'
+  )
   // The newest request about this food, which is what the card's one button
   // answers: a decision that has not been made yet can be taken back, and
   // anything else is offered again.
@@ -292,19 +291,35 @@ export function FoodDetail({
           {shared && (
             <div className="t-card mb-3">
               <p className="t-micro mb-2">Help improve Tare</p>
+              {food.submissions.map((row) => (
+                <div key={row.id}>
+                  <div className="t-row min-h-9 text-sm">
+                    <span className="min-w-0 flex-1">
+                      {KIND_LABEL[row.kind] ?? row.kind} ·{' '}
+                      {dayLabel(dayOf(me.timezone, row.created_at), today(me.timezone))}
+                    </span>
+                    <span className="t-chip shrink-0">
+                      {statusLabel(row.status, row.edited, row.kind)}
+                    </span>
+                  </div>
+                  {row.decision_note && (
+                    <p className="mb-2 text-xs text-muted">{row.decision_note}</p>
+                  )}
+                </div>
+              ))}
               <div className="t-actions">
                 <button
                   className="t-btn flex-1"
                   type="button"
-                  disabled={sending}
-                  onClick={() => setSuggesting(true)}
+                  disabled={sending || reported !== undefined}
+                  onClick={() => {
+                    setIssue('')
+                    setReporting(true)
+                  }}
                 >
-                  Report an issue
+                  {reported === undefined ? 'Report an issue' : 'Reported'}
                 </button>
               </div>
-              <p className="mt-2 text-xs text-muted">
-                Your response goes straight to the administrators.
-              </p>
             </div>
           )}
 
@@ -322,7 +337,7 @@ export function FoodDetail({
                         {dayLabel(dayOf(me.timezone, row.created_at), today(me.timezone))}
                       </span>
                       <span className="t-chip shrink-0">
-                        {statusLabel(row.status, row.edited)}
+                        {statusLabel(row.status, row.edited, row.kind)}
                       </span>
                     </div>
                     {row.changes.length > 0 && (
@@ -383,6 +398,42 @@ export function FoodDetail({
               </div>
             </div>
           )}
+
+          <Sheet
+            open={reporting}
+            label="Report an issue"
+            onClose={() => setReporting(false)}
+          >
+            <p className="mb-1 text-base font-semibold tracking-tight">Report an issue</p>
+            <p className="mb-3 text-sm text-muted">{food.name}</p>
+            <label className="t-micro mb-2 block" htmlFor="report-issue">
+              What is wrong with it?
+            </label>
+            <textarea
+              id="report-issue"
+              className="t-input"
+              rows={4}
+              maxLength={500}
+              value={issue}
+              onChange={(event) => setIssue(event.target.value)}
+            />
+            <p className="mt-2 text-xs text-muted">
+              Your response goes straight to the administrators.
+            </p>
+            <div className="mt-3 flex gap-3">
+              <button
+                className="t-btn t-btn-primary flex-1"
+                type="button"
+                disabled={sending || issue.trim() === ''}
+                onClick={() => void send(food)}
+              >
+                Send
+              </button>
+              <button className="t-btn" type="button" onClick={() => setReporting(false)}>
+                Cancel
+              </button>
+            </div>
+          </Sheet>
 
           {logging && (
             <PortionSheet

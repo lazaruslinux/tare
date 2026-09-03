@@ -693,7 +693,7 @@ export function FoodTab({
                     {row.target_name ?? row.name ?? 'A deleted food'}
                   </span>
                   <span className="t-chip shrink-0">
-                    {statusLabel(row.status, row.edited)}
+                    {statusLabel(row.status, row.edited, row.kind)}
                   </span>
                 </span>
                 <span className="block text-xs text-muted">
