@@ -72,6 +72,8 @@ def test_upgrade_head_builds_the_identity_schema(tmp_path):
     # The two purposes a picture has, and the panel a request carries.
     assert "purpose" in photo_columns
     assert "label_photo_id" in submission_columns
+    # What a reviewer changed before approving, and whether it has been read.
+    assert {"edited", "changes", "seen_at"} <= submission_columns
     # And the pair that stops one food being pinned twice.
     assert "uq_saved_foods_user_food" in saved_unique
     # And the one that holds a member to a single weigh-in a day.

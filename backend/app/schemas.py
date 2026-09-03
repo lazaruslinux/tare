@@ -136,6 +136,13 @@ class ApproveIn(BaseModel):
     keep_photo: bool = True
 
 
+class QueuePhotoIn(BaseModel):
+    """A picture a reviewer puts on a waiting request in place of what it had."""
+
+    photo_id: int
+    purpose: str
+
+
 class RejectIn(BaseModel):
     """Turning one down, and what the submitter is told about why."""
 

@@ -79,7 +79,7 @@ export default function App() {
   const wide = useWideLayout()
   const reduced = useReducedMotion()
   const bar = useTopBarState()
-  const { waiting, refresh: refreshWaiting } = useWaitingCount(me)
+  const { waiting, queue, refresh: refreshWaiting } = useWaitingCount(me)
 
   useEffect(() => {
     if (phase !== 'loading') return
@@ -229,7 +229,7 @@ export default function App() {
                       me={me}
                       onChange={setMe}
                       onSignedOut={leave}
-                      waiting={waiting}
+                      waiting={queue}
                       onReviewed={refreshWaiting}
                       onOpenSubmissions={() => {
                         setFoodView('submissions')
@@ -245,6 +245,7 @@ export default function App() {
                       start={foodView}
                       onStarted={() => setFoodView('list')}
                       onScan={() => setScanning({})}
+                      onSeen={refreshWaiting}
                     />
                   ) : page === 'journal' ? (
                     <Journal

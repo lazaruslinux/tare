@@ -399,6 +399,14 @@ class FoodSubmission(Base):
     )
     decided_at: Mapped[dt.datetime | None] = mapped_column(UtcDateTime, nullable=True)
     decision_note: Mapped[str] = mapped_column(String(500), nullable=False, default="")
+    # Whether a reviewer changed the proposal before saying yes to it, and what
+    # they changed, in the words the submitter is told it in. An approval with
+    # nothing in here is the thing exactly as it was offered.
+    edited: Mapped[bool] = mapped_column(Boolean, nullable=False, default=False)
+    changes: Mapped[list[Any]] = mapped_column(JSON, nullable=False, default=list)
+    # When the submitter last read the answer. Null while a decision is still
+    # news to them, which is what the badge counts.
+    seen_at: Mapped[dt.datetime | None] = mapped_column(UtcDateTime, nullable=True)
     created_at: Mapped[dt.datetime] = mapped_column(UtcDateTime, nullable=False, default=now_utc)
 
 

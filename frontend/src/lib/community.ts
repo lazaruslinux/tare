@@ -1,10 +1,9 @@
 // What a food has to carry before it can be offered to everybody, and when its
 // numbers are worth a second look.
 //
-// The first rule is the server's, repeated here so the form can say what is
-// missing while somebody is still filling it in rather than after they send it.
-// The sentences are the server's own, word for word: two wordings for one rule
-// is how a client and a server end up disagreeing in front of a person.
+// A blank is a number the label did not print, and nothing here asks anybody to
+// invent one. What is still asked for is a serving, said in the words of the
+// two boxes it is typed in rather than in the rule behind them.
 
 import { HEADLINE, MORE_FACTS, type Nutrient } from '../components/NutritionLabel'
 
@@ -30,29 +29,9 @@ export const PHOTO_TOO_LARGE = 'A photo must be at most 10 MB.'
 // What every screen says when something has gone to the review queue.
 export const SENT_FOR_REVIEW = 'Sent for review'
 
-export const needed = (label: string): string =>
-  `${label} is required before this can be shared.`
-
 // Said where a serving is entered rather than where it is refused, so it names
 // the two boxes instead of the rule behind them.
 export const NO_SERVING = 'Give the serving a name and a size.'
-
-// What the first empty box is, if there is one. Zero is an answer: a food with
-// no fibre in it says nought, and that is a number somebody read off a label.
-export function firstMissing(values: Values): Nutrient | null {
-  for (const fact of SHARED_FACTS) {
-    if (values[fact.key] === null) return fact.key
-  }
-  return null
-}
-
-export function missingSentence(values: Values, servings: number): string | null {
-  const missing = firstMissing(values)
-  if (missing !== null) {
-    return needed(SHARED_FACTS.find((fact) => fact.key === missing)!.label)
-  }
-  return servings > 0 ? null : NO_SERVING
-}
 
 // Said when the panel contradicts itself rather than when it is incomplete.
 export const MACRO_WARNING = 'These numbers do not add up; check them against the label.'
@@ -88,6 +67,16 @@ export const STATUS_LABEL: Record<string, string> = {
   rejected: 'Not approved',
   withdrawn: 'Withdrawn',
 }
+
+// An approval somebody corrected on the way through is its own answer: the
+// food is in, and it is not word for word what was offered.
+export const EDITED_LABEL = 'Approved with edits'
+
+export const statusLabel = (status: string, edited: boolean): string =>
+  status === 'approved' && edited ? EDITED_LABEL : (STATUS_LABEL[status] ?? status)
+
+// What a reviewer changed, as one line under the chip that says they did.
+export const changeLine = (changes: string[]): string => `Changed: ${changes.join(', ')}`
 
 // What a submission is called in the queue and in a member's own list.
 export const KIND_LABEL: Record<string, string> = {

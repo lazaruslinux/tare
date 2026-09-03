@@ -1,9 +1,18 @@
-import { useEffect, useState } from 'react'
+import { useEffect, useId, useState, type ChangeEvent } from 'react'
 
-import { ApiError, api, errorText, type Food, type Proposed, type QueueItem } from '../api'
+import {
+  ApiError,
+  api,
+  errorText,
+  upload,
+  type Food,
+  type PhotoPurpose,
+  type Proposed,
+  type QueueItem,
+} from '../api'
 import { FoodForm } from '../components/FoodForm'
 import { useTopBar } from '../hooks/useTopBar'
-import { KIND_LABEL, SHARED_FACTS } from '../lib/community'
+import { KIND_LABEL, MAX_PHOTO_BYTES, PHOTO_TOO_LARGE, SHARED_FACTS } from '../lib/community'
 import { scale } from '../lib/units'
 
 // The queue, which is the only door into the shared database. It is read dense
@@ -63,45 +72,101 @@ function comparison(now: Proposed, proposed: Proposed): Line[] {
 // What a request is judged against, beside the numbers. The front of the pack
 // is what it looks like; the label is what the panel below can be checked
 // against, and it is never served to anybody but an administrator and whoever
-// took it.
+// took it. A reviewer may put their own picture in place of either, which is
+// the same job as correcting a number somebody misread.
 function Evidence({
   item,
   name,
+  busy,
   onLook,
+  onReplace,
+  onRemove,
 }: {
   item: QueueItem
   name: string
+  busy: boolean
   onLook: (url: string) => void
+  // Given on the kinds a reviewer may change. A picture offered on its own is
+  // kept or turned down as it is.
+  onReplace?: (purpose: PhotoPurpose, file: File) => void
+  onRemove?: (purpose: PhotoPurpose) => void
 }) {
-  const shots: { url: string; alt: string; label: string }[] = []
-  if (item.photo_url) {
-    shots.push({ url: item.photo_url, alt: `The front of ${name}`, label: 'Front' })
-  }
-  if (item.label_photo_url) {
-    shots.push({
+  const field = useId()
+  const shots: { url: string | null; alt: string; label: string; purpose: PhotoPurpose }[] = [
+    {
+      url: item.photo_url,
+      alt: `The front of ${name}`,
+      label: 'Front',
+      purpose: 'front',
+    },
+    {
       url: item.label_photo_url,
       alt: `The nutrition label for ${name}`,
       label: 'Label',
-    })
+      purpose: 'label',
+    },
+  ]
+  const editable = onReplace !== undefined && onRemove !== undefined
+  const shown = editable ? shots : shots.filter((shot) => shot.url !== null)
+  if (shown.length === 0) return null
+
+  const take = (purpose: PhotoPurpose) => (event: ChangeEvent<HTMLInputElement>) => {
+    const file = event.target.files?.[0]
+    // Cleared either way, so choosing the same file twice still fires.
+    event.target.value = ''
+    if (file) onReplace?.(purpose, file)
   }
-  if (shots.length === 0) return null
+
   return (
     <div className="mt-3 flex gap-3">
-      {shots.map((shot) => (
-        <button
-          key={shot.url}
-          type="button"
-          className="block text-left"
-          aria-label={`Look at the ${shot.label.toLowerCase()}`}
-          onClick={() => onLook(shot.url)}
-        >
-          <img
-            src={shot.url}
-            alt={shot.alt}
-            className="h-24 w-24 rounded-lg border border-line object-cover"
-          />
+      {shown.map((shot) => (
+        <div key={shot.purpose} className="min-w-0">
+          {shot.url === null ? (
+            <div className="t-phototile h-24 w-24 rounded-lg text-xs">None</div>
+          ) : (
+            <button
+              type="button"
+              className="block text-left"
+              aria-label={`Look at the ${shot.label.toLowerCase()}`}
+              onClick={() => onLook(shot.url as string)}
+            >
+              <img
+                src={shot.url}
+                alt={shot.alt}
+                className="h-24 w-24 rounded-lg border border-line object-cover"
+              />
+            </button>
+          )}
           <span className="t-micro mt-1 block">{shot.label}</span>
-        </button>
+          {editable && (
+            <div className="flex items-center gap-3">
+              <label
+                className="t-tap44 cursor-pointer text-xs font-semibold text-accent"
+                htmlFor={`${field}-${shot.purpose}`}
+              >
+                Replace
+              </label>
+              <input
+                id={`${field}-${shot.purpose}`}
+                className="sr-only"
+                type="file"
+                accept="image/*"
+                disabled={busy}
+                onChange={take(shot.purpose)}
+              />
+              {shot.url !== null && (
+                <button
+                  type="button"
+                  className="t-tap44 text-xs font-semibold text-muted"
+                  disabled={busy}
+                  onClick={() => onRemove?.(shot.purpose)}
+                >
+                  Remove
+                </button>
+              )}
+            </div>
+          )}
+        </div>
       ))}
     </div>
   )
@@ -109,12 +174,13 @@ function Evidence({
 
 // The panel as the person who filled it in read it: per the serving the label
 // prints, which is what the photograph beside it shows. Position 0 is that
-// serving. A proposal without one is read per 100, which is how it is stored.
+// serving. A proposal without one is read per the 100 it is stored in, named
+// as the serving it stands in for.
 function Panel({ food }: { food: Proposed }) {
   const serving = food.servings[0] ?? null
   const per =
     serving === null
-      ? `Per 100 ${food.base_unit}`
+      ? `Per serving (100 ${food.base_unit})`
       : `Per ${serving.name} (${serving.base_amount} ${food.base_unit})`
   const each = (value: number | null): number | null =>
     serving === null ? value : scale(value, serving.base_amount)
@@ -263,6 +329,38 @@ export function AdminQueue({
     setBusy(false)
   }
 
+  const replacePhoto = async (id: number, purpose: PhotoPurpose, file: File) => {
+    if (file.size > MAX_PHOTO_BYTES) {
+      setError(PHOTO_TOO_LARGE)
+      return
+    }
+    setBusy(true)
+    setError('')
+    try {
+      const { photo_id } = await upload<{ photo_id: number }>('/photos', file, purpose)
+      await api(`/admin/queue/${id}/photo`, {
+        method: 'POST',
+        body: { photo_id, purpose },
+      })
+      await load()
+    } catch (failure) {
+      setError(errorText(failure))
+    }
+    setBusy(false)
+  }
+
+  const removePhoto = async (id: number, purpose: PhotoPurpose) => {
+    setBusy(true)
+    setError('')
+    try {
+      await api(`/admin/queue/${id}/photo?purpose=${purpose}`, { method: 'DELETE' })
+      await load()
+    } catch (failure) {
+      setError(errorText(failure))
+    }
+    setBusy(false)
+  }
+
   const adjust = async (foodId: number) => {
     setBusy(true)
     setError('')
@@ -278,7 +376,7 @@ export function AdminQueue({
     return (
       <FoodForm
         food={adjusting}
-        title="Adjust proposal"
+        title="Edit before approving"
         backLabel="Review queue"
         complete
         onSaved={() => {
@@ -326,29 +424,33 @@ export function AdminQueue({
             </p>
             {item.note && <p className="mt-1 text-sm">{item.note}</p>}
 
-            {item.kind === 'new' && proposal && (
+            {proposal && (item.kind === 'new' || item.current) && (
               <>
-                <Evidence item={item} name={proposal.name} onLook={setLooking} />
-                <Panel food={proposal} />
-              </>
-            )}
-
-            {item.kind === 'edit' && proposal && item.current && (
-              <>
-                <Evidence item={item} name={proposal.name} onLook={setLooking} />
-                <Comparison
-                  now={item.current}
-                  proposed={proposal}
-                  showAll={showAll[item.id] ?? false}
-                  onShowAll={() => setShowAll({ ...showAll, [item.id]: true })}
+                <Evidence
+                  item={item}
+                  name={proposal.name}
+                  busy={busy}
+                  onLook={setLooking}
+                  onReplace={(purpose, file) => void replacePhoto(item.id, purpose, file)}
+                  onRemove={(purpose) => void removePhoto(item.id, purpose)}
                 />
+                {item.kind === 'new' ? (
+                  <Panel food={proposal} />
+                ) : (
+                  <Comparison
+                    now={item.current as Proposed}
+                    proposed={proposal}
+                    showAll={showAll[item.id] ?? false}
+                    onShowAll={() => setShowAll({ ...showAll, [item.id]: true })}
+                  />
+                )}
                 <button
                   type="button"
                   className="t-btn mt-3 w-full"
                   disabled={busy}
                   onClick={() => adjust(proposal.id)}
                 >
-                  Adjust
+                  Edit before approving
                 </button>
               </>
             )}

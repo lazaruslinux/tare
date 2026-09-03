@@ -29,12 +29,20 @@ from app.db import get_db
 from app.deps import require_admin
 from app.models import NUTRIENTS, SUBMISSION_STATUSES, now_utc
 from app.routers import invites
-from app.routers.foods import photo_url
+from app.routers.foods import (
+    FRONT_LABEL,
+    LABEL_LABEL,
+    photo_url,
+    record_changes,
+)
 from app.routers.photos import discard, published
 from app.routers.submissions import (
     ALREADY_SHARED,
+    MISSING_PHOTO,
     MISSING_SUBMISSION,
-    check_complete,
+    attach,
+    attach_label,
+    check_serving,
     drop_shadow,
 )
 
@@ -48,6 +56,10 @@ NOT_WAITING = "That submission has already been decided."
 NO_REASON = "Give a reason."
 NO_FOOD = "The food this was about is gone."
 NO_PHOTO = "The photo this was about is gone."
+# A picture offered on its own is the picture: there is nothing to swap it for
+# that would not simply be a different request.
+PHOTO_KIND = "A picture is kept or turned down as it is."
+BAD_PURPOSE = "A photo is of the front or of the label."
 
 # How many links one administrator may have out at a time. An unclaimed link is
 # a way in, and a handful of them is a handful of doors left open.
@@ -209,8 +221,9 @@ def approve_edit(
     target = shared_target(db, submission)
     shadow = offered_food(db, submission)
     # A reviewer may have adjusted the copy since it was checked on the way
-    # in, and an empty box must not travel onto the shared row.
-    check_complete(shadow, shadow.servings)
+    # in, and a correction that says nothing about the size of a serving is
+    # one nobody can read the numbers against.
+    check_serving(shadow.servings)
 
     target.name = shadow.name
     target.brand = shadow.brand
@@ -234,10 +247,28 @@ def approve_edit(
         for serving in shadow.servings
     ]
 
+    # A reviewer may have photographed the pack while reading the correction.
+    # A picture that arrived that way is published with it.
+    photo = db.get(models.FoodPhoto, submission.photo_id) if submission.photo_id else None
+    if photo is not None and photo.status == "pending":
+        publish_front(db, target, photo)
+
     drop_shadow(db, submission)
     stamp(submission, admin, "approved", "")
     db.commit()
     return {"food": proposed(target)}
+
+
+def publish_front(db: Session, target: models.Food, photo: models.FoodPhoto) -> None:
+    """Give a shared food this picture, in place of whatever it was showing."""
+    standing = published(db, target.id)
+    if standing is not None and standing.id != photo.id:
+        # Taken away and written out before the new one takes its place. One
+        # food has one published picture, and the two would otherwise both
+        # claim that for the length of the transaction.
+        discard(db, standing)
+        db.flush()
+    photo.status = "approved"
 
 
 def approve_photo(
@@ -249,15 +280,7 @@ def approve_photo(
     if photo is None:
         raise HTTPException(status.HTTP_400_BAD_REQUEST, NO_PHOTO)
 
-    standing = published(db, target.id)
-    if standing is not None and standing.id != photo.id:
-        # Taken away and written out before the new one takes its place. One
-        # food has one published picture, and the two would otherwise both
-        # claim that for the length of the transaction.
-        discard(db, standing)
-        db.flush()
-    photo.status = "approved"
-
+    publish_front(db, target, photo)
     stamp(submission, admin, "approved", "")
     db.commit()
     return {"food": proposed(target)}
@@ -279,9 +302,9 @@ def approve(
 
     # A new food, published. From here it is everybody's and nobody's.
     food = offered_food(db, submission)
-    # The owner could edit it while it waited, so the panel is checked again
-    # at the moment it becomes everybody's.
-    check_complete(food, food.servings)
+    # The owner could edit it while it waited, so the one thing everybody
+    # needs is checked again at the moment it becomes everybody's.
+    check_serving(food.servings)
 
     if food.barcode:
         clash = db.execute(
@@ -324,6 +347,88 @@ def approve(
     stamp(submission, admin, "approved", "")
     db.commit()
     return {"food": proposed(food)}
+
+
+def adjustable(db: Session, submission_id: int) -> models.FoodSubmission:
+    """A waiting request a reviewer may still change before deciding it."""
+    submission = waiting(db, submission_id)
+    if submission.kind == "photo":
+        raise HTTPException(status.HTTP_400_BAD_REQUEST, PHOTO_KIND)
+    return submission
+
+
+@router.post("/queue/{submission_id}/photo", status_code=status.HTTP_204_NO_CONTENT)
+def replace_queue_photo(
+    submission_id: int,
+    body: schemas.QueuePhotoIn,
+    db: Session = Depends(get_db),
+    admin: models.User = Depends(require_admin),
+) -> None:
+    """Put a reviewer's own picture on a waiting request, in place of its own.
+
+    The front of a new food is the picture that food is offered with. The front
+    of a correction is a picture nothing is showing yet, so it waits with the
+    correction and is published when that is.
+    """
+    if body.purpose not in models.PHOTO_PURPOSES:
+        raise HTTPException(status.HTTP_400_BAD_REQUEST, BAD_PURPOSE)
+    submission = adjustable(db, submission_id)
+
+    if body.purpose == "front":
+        about = submission.food_id if submission.kind == "new" else submission.target_food_id
+        if about is None:
+            raise HTTPException(status.HTTP_400_BAD_REQUEST, NO_FOOD)
+        standing = (
+            db.get(models.FoodPhoto, submission.photo_id) if submission.photo_id else None
+        )
+        submission.photo_id = attach(db, admin, body.photo_id, about)
+        label = FRONT_LABEL
+    else:
+        standing = (
+            db.get(models.FoodPhoto, submission.label_photo_id)
+            if submission.label_photo_id
+            else None
+        )
+        submission.label_photo_id = attach_label(db, admin, body.photo_id)
+        label = LABEL_LABEL
+
+    # The new one is written down first, so taking the old one away cannot
+    # unpick the row that now points at its replacement.
+    db.flush()
+    if standing is not None and standing.status == "pending":
+        discard(db, standing)
+    record_changes(submission, [label])
+    db.commit()
+
+
+@router.delete("/queue/{submission_id}/photo", status_code=status.HTTP_204_NO_CONTENT)
+def remove_queue_photo(
+    submission_id: int,
+    purpose: str,
+    db: Session = Depends(get_db),
+    admin: models.User = Depends(require_admin),
+) -> None:
+    """Take a picture off a waiting request, row and file both."""
+    if purpose not in models.PHOTO_PURPOSES:
+        raise HTTPException(status.HTTP_400_BAD_REQUEST, BAD_PURPOSE)
+    submission = adjustable(db, submission_id)
+
+    held = submission.photo_id if purpose == "front" else submission.label_photo_id
+    photo = db.get(models.FoodPhoto, held) if held else None
+    if photo is None:
+        raise HTTPException(status.HTTP_400_BAD_REQUEST, NO_PHOTO)
+    if photo.status == "approved":
+        # Published already, which means it belongs to the shared database
+        # rather than to this request.
+        raise HTTPException(status.HTTP_400_BAD_REQUEST, MISSING_PHOTO)
+
+    discard(db, photo)
+    if purpose == "front":
+        submission.photo_id = None
+    else:
+        submission.label_photo_id = None
+    record_changes(submission, [FRONT_LABEL if purpose == "front" else LABEL_LABEL])
+    db.commit()
 
 
 @router.post("/queue/{submission_id}/reject")

@@ -95,6 +95,10 @@ def test_the_queue_is_not_for_ordinary_accounts(client, make_user, signed_in):
         lambda: client.get("/api/admin/queue"),
         lambda: client.post("/api/admin/queue/1/approve", json={}),
         lambda: client.post("/api/admin/queue/1/reject", json={"note": "no"}),
+        lambda: client.post(
+            "/api/admin/queue/1/photo", json={"photo_id": 1, "purpose": "front"}
+        ),
+        lambda: client.delete("/api/admin/queue/1/photo?purpose=front"),
     ):
         response = call()
         assert response.status_code == 403
@@ -489,3 +493,187 @@ def test_a_scanned_food_offered_from_the_form_carries_its_code_through(
     )
     assert response.status_code == 409
     assert response.json() == {"detail": "This barcode is already in the Tare database."}
+
+
+# ---- Approving with edits ----
+
+
+def adjusted(client, food_id, **overrides):
+    """The whole form again, as the reviewer's screen sends it."""
+    sent = {
+        "name": "Milk chocolate bar",
+        "brand": "Hershey's",
+        "base_unit": "g",
+        "servings": SERVINGS,
+        **FULL,
+    }
+    sent.update(overrides)
+    return client.patch(f"/api/foods/{food_id}", json=sent)
+
+
+def test_a_reviewer_may_correct_a_waiting_food_and_what_they_changed_is_kept(
+    client, db_session, make_user
+):
+    made = member_and_admin(client, make_user)
+
+    sign_in(client, "reviewer")
+    response = adjusted(client, made["food"]["id"], calories=500, name="Milk chocolate")
+    assert response.status_code == 200
+
+    db_session.expire_all()
+    submission = db_session.get(models.FoodSubmission, made["submission_id"])
+    assert submission.edited is True
+    assert submission.changes == ["Name", "Calories"]
+
+    # And approving carries the reviewer's own numbers into the shared row.
+    assert client.post(
+        f"/api/admin/queue/{made['submission_id']}/approve", json={}
+    ).status_code == 200
+    db_session.expire_all()
+    assert db_session.get(models.Food, made["food"]["id"]).calories == 500
+
+
+def test_what_the_reviewer_changed_reads_on_the_submitter_s_own_list(
+    client, make_user
+):
+    made = member_and_admin(client, make_user)
+
+    sign_in(client, "reviewer")
+    adjusted(client, made["food"]["id"], sugar_g=None)
+    client.post(f"/api/admin/queue/{made['submission_id']}/approve", json={})
+
+    sign_in(client, "member")
+    row = client.get("/api/submissions/mine").json()[0]
+    assert (row["status"], row["edited"], row["changes"]) == ("approved", True, ["Sugar"])
+    assert row["seen_at"] is None
+
+
+def test_a_food_nobody_touched_is_approved_without_an_edit_on_it(client, make_user):
+    made = member_and_admin(client, make_user)
+
+    sign_in(client, "reviewer")
+    client.post(f"/api/admin/queue/{made['submission_id']}/approve", json={})
+
+    sign_in(client, "member")
+    row = client.get("/api/submissions/mine").json()[0]
+    assert (row["edited"], row["changes"]) == (False, [])
+
+
+def test_only_a_reviewer_writing_on_a_waiting_food_counts_as_an_edit(
+    client, db_session, make_user
+):
+    """The owner correcting their own offer is the food, not a review of it."""
+    made = member_and_admin(client, make_user)
+    assert adjusted(client, made["food"]["id"], calories=505).status_code == 200
+
+    db_session.expire_all()
+    submission = db_session.get(models.FoodSubmission, made["submission_id"])
+    assert (submission.edited, submission.changes) == (False, [])
+
+
+# ---- The pictures a reviewer changes ----
+
+
+def test_a_reviewer_may_replace_the_front_photo_of_a_waiting_food(
+    client, db_session, make_user
+):
+    make_user("member")
+    make_user("reviewer", admin=True)
+    sign_in(client, "member")
+    photo_id = a_photo(client)
+    made = offer(client, photo_id=photo_id)
+    was = db_session.get(models.FoodPhoto, photo_id).path
+
+    sign_in(client, "reviewer")
+    theirs = a_photo(client)
+    response = client.post(
+        f"/api/admin/queue/{made['submission_id']}/photo",
+        json={"photo_id": theirs, "purpose": "front"},
+    )
+    assert response.status_code == 204
+
+    db_session.expire_all()
+    submission = db_session.get(models.FoodSubmission, made["submission_id"])
+    assert submission.photo_id == theirs
+    assert submission.changes == ["Front photo"]
+    # The one it replaced is gone from the database and off the disk.
+    assert db_session.get(models.FoodPhoto, photo_id) is None
+    assert not os.path.isfile(photos.path_for(was))
+    # And the queue shows the reviewer's own.
+    assert client.get("/api/admin/queue").json()[0]["photo_url"].endswith(f"{theirs}.webp")
+
+
+def test_a_reviewer_may_take_the_label_photo_off_a_waiting_food(
+    client, db_session, make_user
+):
+    make_user("member")
+    make_user("reviewer", admin=True)
+    sign_in(client, "member")
+    label_id = a_photo(client, "label")
+    made = offer(client, label_photo_id=label_id)
+    was = db_session.get(models.FoodPhoto, label_id).path
+
+    sign_in(client, "reviewer")
+    response = client.delete(f"/api/admin/queue/{made['submission_id']}/photo?purpose=label")
+    assert response.status_code == 204
+
+    db_session.expire_all()
+    submission = db_session.get(models.FoodSubmission, made["submission_id"])
+    assert submission.label_photo_id is None
+    assert submission.changes == ["Label photo"]
+    assert db_session.get(models.FoodPhoto, label_id) is None
+    assert not os.path.isfile(photos.path_for(was))
+
+
+def test_a_picture_that_is_not_there_cannot_be_taken_off(client, make_user):
+    made = member_and_admin(client, make_user)
+    sign_in(client, "reviewer")
+    client.delete(f"/api/admin/queue/{made['submission_id']}/photo?purpose=front")
+
+    again = client.delete(f"/api/admin/queue/{made['submission_id']}/photo?purpose=front")
+    assert again.status_code == 400
+    assert again.json() == {"detail": "The photo this was about is gone."}
+
+
+def test_a_purpose_that_is_neither_is_refused(client, make_user):
+    made = member_and_admin(client, make_user)
+    sign_in(client, "reviewer")
+    response = client.delete(f"/api/admin/queue/{made['submission_id']}/photo?purpose=side")
+    assert response.status_code == 400
+    assert response.json() == {"detail": "A photo is of the front or of the label."}
+
+
+# ---- Reading the answer ----
+
+
+def test_a_decision_is_unread_until_the_submitter_says_otherwise(client, make_user):
+    made = member_and_admin(client, make_user)
+    second = offer(client, barcode="034000002412")
+
+    sign_in(client, "reviewer")
+    client.post(f"/api/admin/queue/{made['submission_id']}/approve", json={})
+
+    sign_in(client, "member")
+    unread = [
+        row
+        for row in client.get("/api/submissions/mine").json()
+        if row["status"] != "pending" and row["seen_at"] is None
+    ]
+    assert len(unread) == 1
+
+    assert client.post("/api/submissions/seen").status_code == 204
+    rows = {row["id"]: row for row in client.get("/api/submissions/mine").json()}
+    assert rows[made["submission_id"]]["seen_at"] is not None
+    # The one still waiting is not an answer, so it is not marked as read.
+    assert rows[second["submission_id"]]["seen_at"] is None
+
+
+def test_nobody_else_s_answers_are_marked_read(client, make_user):
+    made = member_and_admin(client, make_user)
+    sign_in(client, "reviewer")
+    client.post(f"/api/admin/queue/{made['submission_id']}/approve", json={})
+
+    # The reviewer reading their own list leaves the member's answer unread.
+    assert client.post("/api/submissions/seen").status_code == 204
+    sign_in(client, "member")
+    assert client.get("/api/submissions/mine").json()[0]["seen_at"] is None

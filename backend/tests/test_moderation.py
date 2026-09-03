@@ -173,14 +173,19 @@ def test_a_correction_is_absent_from_every_list_it_could_appear_in(
     assert client.get(f"/api/foods/{shadow_id}").status_code == 404
 
 
-def test_a_correction_needs_the_whole_panel(client, db_session, make_user):
+def test_a_correction_may_leave_a_number_blank_and_still_needs_a_serving(
+    client, db_session, make_user
+):
     people(client, make_user)
     target = shared(db_session)
 
     response = suggest(client, target.id, fiber_g=None)
-    assert response.status_code == 400
-    assert response.json() == {"detail": "Fiber is required before this can be shared."}
-    assert suggest(client, target.id, servings=[]).status_code == 400
+    assert response.status_code == 201
+    assert response.json()["food"]["fiber_g"] is None
+
+    refused = suggest(client, shared(db_session, barcode=None).id, servings=[])
+    assert refused.status_code == 400
+    assert refused.json() == {"detail": "A serving is required."}
 
 
 def test_nought_is_an_answer_in_a_correction_too(client, db_session, make_user):
@@ -268,7 +273,35 @@ def test_a_reviewer_may_correct_a_proposal_before_deciding_it(
     assert refused.status_code == 404
 
 
-def test_a_proposal_a_reviewer_left_half_filled_cannot_be_approved(
+def test_a_number_the_reviewer_blanked_lands_on_the_shared_food(
+    client, db_session, make_user
+):
+    people(client, make_user)
+    target = shared(db_session)
+    made = suggest(client, target.id)
+    shadow_id = made.json()["food"]["id"]
+
+    sign_in(client, "reviewer")
+    blanked = client.patch(
+        f"/api/foods/{shadow_id}",
+        json={
+            "name": "Milk chocolate bar",
+            "base_unit": "g",
+            "servings": [{"name": "1 bar", "amount": 45, "unit": "g", "position": 0}],
+            **FULL,
+            "sodium_mg": None,
+        },
+    )
+    assert blanked.status_code == 200
+
+    approved = client.post(f"/api/admin/queue/{made.json()['submission_id']}/approve", json={})
+    assert approved.status_code == 200
+
+    db_session.expire_all()
+    assert db_session.get(models.Food, target.id).sodium_mg is None
+
+
+def test_a_proposal_left_without_a_serving_cannot_be_approved(
     client, db_session, make_user
 ):
     people(client, make_user)
@@ -278,15 +311,15 @@ def test_a_proposal_a_reviewer_left_half_filled_cannot_be_approved(
     shadow_id = made.json()["food"]["id"]
 
     sign_in(client, "reviewer")
-    blanked = client.patch(
+    stripped = client.patch(
         f"/api/foods/{shadow_id}",
-        json={"name": "Milk chocolate bar", "base_unit": "g", **FULL, "sodium_mg": None},
+        json={"name": "Milk chocolate bar", "base_unit": "g", "servings": [], **FULL},
     )
-    assert blanked.status_code == 200
+    assert stripped.status_code == 200
 
     refused = client.post(f"/api/admin/queue/{made.json()['submission_id']}/approve", json={})
     assert refused.status_code == 400
-    assert refused.json()["detail"] == "Sodium is required before this can be shared."
+    assert refused.json()["detail"] == "A serving is required."
 
     # Nothing moved: the shared row still says what it said, and the request
     # is still waiting.
@@ -528,6 +561,41 @@ def test_keeping_the_photo_is_asked_about_for_a_new_food_only(
     )
     db_session.expire_all()
     assert db_session.get(models.FoodPhoto, offered).status == "approved"
+
+
+def test_a_picture_proposal_is_decided_as_it_is(client, db_session, make_user):
+    people(client, make_user)
+    target = shared(db_session)
+    made = offer_photo(client, target.id, a_photo(client))
+
+    sign_in(client, "reviewer")
+    response = client.delete(
+        f"/api/admin/queue/{made.json()['submission_id']}/photo?purpose=front"
+    )
+    assert response.status_code == 400
+    assert response.json() == {"detail": "A picture is kept or turned down as it is."}
+
+
+def test_a_photo_a_reviewer_puts_on_a_correction_is_published_with_it(
+    client, db_session, make_user
+):
+    people(client, make_user)
+    target = shared(db_session)
+    made = suggest(client, target.id)
+
+    sign_in(client, "reviewer")
+    theirs = a_photo(client)
+    assert client.post(
+        f"/api/admin/queue/{made.json()['submission_id']}/photo",
+        json={"photo_id": theirs, "purpose": "front"},
+    ).status_code == 204
+    assert client.post(
+        f"/api/admin/queue/{made.json()['submission_id']}/approve", json={}
+    ).status_code == 200
+
+    db_session.expire_all()
+    photo = db_session.get(models.FoodPhoto, theirs)
+    assert (photo.status, photo.food_id) == ("approved", target.id)
 
 
 def test_rejecting_a_picture_takes_the_row_and_the_file(client, db_session, make_user):

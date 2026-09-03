@@ -264,6 +264,12 @@ export type FoodSubmissionRow = {
   status: string
   created_at: string
   decision_note: string
+  // Whether the reviewer changed anything before saying yes, and what they
+  // changed, in the words it is read in.
+  edited: boolean
+  changes: string[]
+  // Null while the answer is still news to whoever asked.
+  seen_at: string | null
 }
 
 // The whole food. Every nutrient is per 100 of base_unit, and null is what a
@@ -349,6 +355,11 @@ export type MySubmission = {
   target_name: string | null
   note: string
   decision_note: string
+  // Whether the reviewer changed anything before saying yes, and what.
+  edited: boolean
+  changes: string[]
+  // Null while the answer is still news, which is what the badge counts.
+  seen_at: string | null
   decided_at: string | null
   created_at: string
 }

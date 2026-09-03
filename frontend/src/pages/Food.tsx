@@ -36,7 +36,7 @@ import { MealDetail } from './MealDetail'
 import { MyList, LIST_TITLE, type ListKind } from './MyList'
 import { PartsForm } from './PartsForm'
 import { RecipeDetail } from './RecipeDetail'
-import { KIND_LABEL, STATUS_LABEL } from '../lib/community'
+import { KIND_LABEL, changeLine, statusLabel } from '../lib/community'
 
 // How many rows a card on this page shows before it stops being a card and
 // starts being a list. Five is what fits above the fold beside four other
@@ -86,6 +86,7 @@ export function FoodTab({
   start,
   onStarted,
   onScan,
+  onSeen,
 }: {
   me: Me
   // Which card to open on, when something outside sent somebody here.
@@ -94,6 +95,9 @@ export function FoodTab({
   // The scanner, which lives above this tab because the centre control opens
   // it too. Offered here where an empty shared database is the thing on screen.
   onScan: () => void
+  // The answers on this screen have been read, so the badge that counted them
+  // is worth asking again.
+  onSeen: () => void
 }) {
   const [view, setView] = useState<View>({ at: 'list' })
   const [foods, setFoods] = useState<MyFoodRow[]>([])
@@ -188,6 +192,20 @@ export function FoodTab({
     submittedRef.current?.scrollIntoView({ block: 'start' })
     onStarted()
   }, [start, onStarted])
+
+  // The card is on this screen, so a decision listed on it has been seen. Once
+  // per set of unread ones, and the badge is asked again after.
+  const unread = submissions.some((row) => row.status !== 'pending' && row.seen_at === null)
+  useEffect(() => {
+    if (!unread) return
+    api('/submissions/seen', { method: 'POST' })
+      .then(() => {
+        onSeen()
+        return api<MySubmission[]>('/submissions/mine')
+      })
+      .then(setSubmissions)
+      .catch(() => {})
+  }, [unread, onSeen])
 
   const remove = (food: FoodItem) => {
     setFoods((rows) => rows.filter((row) => row.id !== food.id))
@@ -346,6 +364,7 @@ export function FoodTab({
           void load()
           void loadSubmissions()
         }}
+        onSeen={onSeen}
         onChanged={() => void loadRepeat()}
       />
     )
@@ -673,12 +692,17 @@ export function FoodTab({
                   <span className="truncate text-sm">
                     {row.target_name ?? row.name ?? 'A deleted food'}
                   </span>
-                  <span className="t-chip shrink-0">{STATUS_LABEL[row.status]}</span>
+                  <span className="t-chip shrink-0">
+                    {statusLabel(row.status, row.edited)}
+                  </span>
                 </span>
                 <span className="block text-xs text-muted">
                   {KIND_LABEL[row.kind] ?? row.kind} ·{' '}
                   {dayLabel(dayOf(me.timezone, row.created_at), today(me.timezone))}
                 </span>
+                {row.changes.length > 0 && (
+                  <span className="block text-xs text-muted">{changeLine(row.changes)}</span>
+                )}
                 {row.status === 'rejected' && row.decision_note && (
                   <span className="block text-xs text-muted">Reason: {row.decision_note}</span>
                 )}

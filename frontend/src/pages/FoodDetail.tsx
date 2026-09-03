@@ -11,7 +11,8 @@ import {
   MAX_PHOTO_BYTES,
   PHOTO_TOO_LARGE,
   SENT_FOR_REVIEW,
-  STATUS_LABEL,
+  changeLine,
+  statusLabel,
 } from '../lib/community'
 import { dayLabel, dayOf, slotByTime, today } from '../lib/day'
 
@@ -26,6 +27,7 @@ export function FoodDetail({
   onEdit,
   onDelete,
   onSubmitted,
+  onSeen,
   onChanged,
 }: {
   id: number
@@ -40,6 +42,9 @@ export function FoodDetail({
   onEdit: (food: Food, opened?: { notice?: string; submitDefault?: boolean }) => void
   onDelete: (food: Food) => void
   onSubmitted: () => void
+  // The answers on this page have been read, so the badge that counted them is
+  // worth asking again.
+  onSeen: () => void
   // Something about this food changed that a screen behind this one shows too.
   // Repeat is the one that does: pinning puts a food on it and unpinning takes
   // it off, and the list was read once when that screen opened.
@@ -74,6 +79,22 @@ export function FoodDetail({
     const timer = window.setTimeout(() => setNotice(''), NOTICE)
     return () => window.clearTimeout(timer)
   }, [notice])
+
+  // The card on this page lists the answers, so reading the page is reading
+  // them. Once, and the badge is asked again after.
+  const unread = (food?.submissions ?? []).some(
+    (row) => row.status !== 'pending' && row.seen_at === null
+  )
+  useEffect(() => {
+    if (!unread) return
+    api('/submissions/seen', { method: 'POST' })
+      .then(() => {
+        onSeen()
+        return api<Food>(`/foods/${id}`)
+      })
+      .then(setFood)
+      .catch(() => {})
+  }, [unread, id, onSeen])
 
   const togglePin = async (current: Food) => {
     // Shown as done before it is: pinning is idempotent both ways, so a request
@@ -301,9 +322,12 @@ export function FoodDetail({
                         {dayLabel(dayOf(me.timezone, row.created_at), today(me.timezone))}
                       </span>
                       <span className="t-chip shrink-0">
-                        {STATUS_LABEL[row.status] ?? row.status}
+                        {statusLabel(row.status, row.edited)}
                       </span>
                     </div>
+                    {row.changes.length > 0 && (
+                      <p className="mb-2 text-xs text-muted">{changeLine(row.changes)}</p>
+                    )}
                     {row.status === 'rejected' && row.decision_note && (
                       <p className="mb-2 text-xs text-muted">Reason: {row.decision_note}</p>
                     )}

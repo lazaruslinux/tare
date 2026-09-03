@@ -11,11 +11,11 @@ otherwise. That is the whole point of the arrangement. The alternative is a
 database that fills up with whatever the first person to scan something
 happened to type.
 
-What a submission is held to is stricter than what a private food is held to. A
-food kept for yourself needs four numbers, because the other six are on the
-label or they are not and nobody else is relying on them. A food everybody will
-eat out of needs the whole panel and at least one serving, because the person
-filling it in is looking at the packet and nobody after them will be.
+What a submission is held to is one thing more than what a private food is held
+to: a serving. Both need the four numbers anybody reads, and neither needs the
+other six. A box left empty is a number the label did not give, and a person
+holding the packet is worth more than a form that will not send until they
+invent one. A reviewer sees the blanks and fills them in or asks.
 """
 
 from __future__ import annotations
@@ -24,13 +24,13 @@ from collections.abc import Sequence
 from typing import Any
 
 from fastapi import APIRouter, Depends, HTTPException, status
-from sqlalchemy import select
+from sqlalchemy import select, update
 from sqlalchemy.orm import Session, aliased
 
 from app import models, schemas
 from app.db import get_db
 from app.deps import require_user
-from app.models import NUTRIENTS
+from app.models import now_utc
 from app.routers.foods import (
     ALREADY_MINE,
     ALREADY_SHARED,
@@ -40,6 +40,7 @@ from app.routers.foods import (
     MISSING_FOOD,
     apply_body,
     food_detail,
+    open_submission,
     readable_food,
 )
 from app.routers.photos import discard, front_photo
@@ -63,38 +64,15 @@ MISSING_PHOTO = "That photo is not there to attach."
 NO_FRONT = "Add a photo of the front of the pack."
 NO_LABEL = "Add a photo of the nutrition label."
 
-# What each nutrient is called when a sentence has to name the missing one.
-NUTRIENT_LABELS = {
-    "calories": "Calories",
-    "protein_g": "Protein",
-    "carbs_g": "Carbs",
-    "fat_g": "Fat",
-    "saturated_fat_g": "Saturated fat",
-    "trans_fat_g": "Trans fat",
-    "cholesterol_mg": "Cholesterol",
-    "sodium_mg": "Sodium",
-    "fiber_g": "Fiber",
-    "sugar_g": "Sugar",
-}
+def check_serving(servings: Sequence[object] | None) -> None:
+    """Refuse a food nobody has said the size of.
 
-
-def check_complete(panel: object, servings: Sequence[object] | None) -> None:
-    """Refuse a half-filled panel, naming the first thing that is not there.
-
-    Zero is an answer: a food with no fibre in it says nought, and that is a
-    number somebody read off a label. An empty box is not an answer, and the
-    difference is the whole rule.
+    The one thing a shared food needs beyond what a private one needs. The
+    numbers may have blanks in them, because a label prints what it prints;
+    what they are per is the reader's only way to use any of them.
     """
-    for field in NUTRIENTS:
-        if getattr(panel, field) is None:
-            raise HTTPException(
-                status.HTTP_400_BAD_REQUEST,
-                f"{NUTRIENT_LABELS[field]} is required before this can be shared.",
-            )
     if not servings:
-        raise HTTPException(
-            status.HTTP_400_BAD_REQUEST, "A serving is required."
-        )
+        raise HTTPException(status.HTTP_400_BAD_REQUEST, "A serving is required.")
 
 
 def attach(db: Session, user: models.User, photo_id: int | None, food_id: int) -> int | None:
@@ -141,15 +119,6 @@ def check_photos(front: bool, label: bool) -> None:
         raise HTTPException(status.HTTP_400_BAD_REQUEST, NO_FRONT)
     if not label:
         raise HTTPException(status.HTTP_400_BAD_REQUEST, NO_LABEL)
-
-
-def open_submission(db: Session, food_id: int) -> models.FoodSubmission | None:
-    return db.execute(
-        select(models.FoodSubmission).where(
-            models.FoodSubmission.food_id == food_id,
-            models.FoodSubmission.status == "pending",
-        )
-    ).scalars().first()
 
 
 def open_request(
@@ -223,6 +192,12 @@ def submission_row(
         "target_name": target_name,
         "note": submission.note,
         "decision_note": submission.decision_note,
+        # Whether the reviewer changed anything on the way through, and what.
+        # Empty on everything except an approval somebody corrected first.
+        "edited": submission.edited,
+        "changes": submission.changes,
+        # Null while the answer is still news, which is what the badge counts.
+        "seen_at": submission.seen_at,
         "decided_at": submission.decided_at,
         "created_at": submission.created_at,
     }
@@ -263,7 +238,7 @@ def submit_new_food(
     # Both checks before anything is written, so a refusal leaves the upload
     # exactly where it was and the form can be sent again.
     check_photos(body.photo_id is not None, body.label_photo_id is not None)
-    check_complete(body, body.servings)
+    check_serving(body.servings)
     food = models.Food(
         status="pending",
         owner_id=user.id,
@@ -314,7 +289,7 @@ def submit_own_food(
         body.photo_id is not None or standing is not None,
         body.label_photo_id is not None,
     )
-    check_complete(food, food.servings)
+    check_serving(food.servings)
     food.status = "pending"
     submission = offering(
         "new",
@@ -346,7 +321,7 @@ def suggest_edit(
     target = shared_food(db, body.target_food_id)
     if open_request(db, user, target.id, "edit") is not None:
         raise HTTPException(status.HTTP_409_CONFLICT, ALREADY_EDITING)
-    check_complete(body.proposed, body.proposed.servings)
+    check_serving(body.proposed.servings)
 
     shadow = models.Food(
         status="shadow",
@@ -420,6 +395,27 @@ def list_my_submissions(
         submission_row(submission, name, target_name)
         for submission, name, target_name in rows
     ]
+
+
+@router.post("/submissions/seen", status_code=status.HTTP_204_NO_CONTENT)
+def mark_seen(
+    db: Session = Depends(get_db), user: models.User = Depends(require_user)
+) -> None:
+    """Say that this account has read the answers it has been given.
+
+    Every decided row at once rather than one at a time: what it turns off is a
+    badge that counts them all, and the screen that clears it shows them all.
+    """
+    db.execute(
+        update(models.FoodSubmission)
+        .where(
+            models.FoodSubmission.submitted_by_id == user.id,
+            models.FoodSubmission.status != "pending",
+            models.FoodSubmission.seen_at.is_(None),
+        )
+        .values(seen_at=now_utc())
+    )
+    db.commit()
 
 
 @router.delete("/submissions/{submission_id}", status_code=status.HTTP_204_NO_CONTENT)

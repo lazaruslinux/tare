@@ -52,8 +52,8 @@ export function PhotoThumb({ url }: { url: string | null }) {
 }
 
 // What a food is worth, per the thing somebody eats. The label serving where
-// there is one, and per 100 of the base unit where there is not, which is what
-// a food nobody has named a serving for can honestly say.
+// there is one; where there is not, the 100 it is stored in, named as the
+// serving it stands in for rather than as the way the row is kept.
 export function Calories({ row }: { row: FoodRow }) {
   const serving = row.serving
   const value = serving === null ? row.calories : scale(row.calories, serving.base_amount)
@@ -61,7 +61,7 @@ export function Calories({ row }: { row: FoodRow }) {
     <span className="shrink-0 text-right">
       <span className="t-nums block text-sm">{nutrientText('calories', value)} cal</span>
       <span className="block text-xs text-muted">
-        {serving === null ? `per 100 ${row.base_unit}` : `per ${serving.name}`}
+        {serving === null ? `per serving (100 ${row.base_unit})` : `per ${serving.name}`}
       </span>
     </span>
   )

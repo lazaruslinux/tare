@@ -81,10 +81,10 @@ LISTED = ("custom", "pending")
 # a food that is nobody else's business can simply go.
 OWNER_MAY_EDIT = OWNED
 OWNER_MAY_DELETE = ("custom",)
-# And what an administrator may do, which is the shared database plus the
-# corrections waiting on it: a reviewer fixing a typo in a proposal is doing
-# the same job as approving it.
-ADMIN_MAY_EDIT = ("approved", "shadow")
+# And what an administrator may do, which is the shared database plus
+# everything queued to change it: a reviewer fixing a typo in a proposal, new
+# or a correction, is doing the same job as approving it.
+ADMIN_MAY_EDIT = ("approved", "shadow", "pending")
 ADMIN_MAY_DELETE = ("approved",)
 
 # The ceiling on somebody's own list. High enough that nobody real reaches it,
@@ -400,6 +400,11 @@ def submissions_for(
             "status": row.status,
             "created_at": row.created_at,
             "decision_note": row.decision_note,
+            # What a reviewer changed on the way through, and whether this
+            # account has read that yet.
+            "edited": row.edited,
+            "changes": row.changes,
+            "seen_at": row.seen_at,
         }
         for row in rows
     ]
@@ -522,6 +527,84 @@ def like_literal(text: str) -> str:
     a question nobody asked.
     """
     return text.replace("\\", "\\\\").replace("%", "\\%").replace("_", "\\_")
+
+
+# What each nutrient is called when the list of what a reviewer changed has to
+# name one. The panel fields first, in the order a label prints them.
+NUTRIENT_LABELS = {
+    "calories": "Calories",
+    "protein_g": "Protein",
+    "carbs_g": "Carbs",
+    "fat_g": "Fat",
+    "saturated_fat_g": "Saturated fat",
+    "trans_fat_g": "Trans fat",
+    "cholesterol_mg": "Cholesterol",
+    "sodium_mg": "Sodium",
+    "fiber_g": "Fiber",
+    "sugar_g": "Sugar",
+}
+
+# Everything a reviewer can change about a waiting proposal, in the words the
+# person who offered it reads afterwards. The servings are a list rather than a
+# column, so they are compared whole under one word.
+EDIT_LABELS = {"name": "Name", "brand": "Brand", "description": "Description"}
+EDIT_LABELS.update(NUTRIENT_LABELS)
+SERVING_LABEL = "Serving"
+FRONT_LABEL = "Front photo"
+LABEL_LABEL = "Label photo"
+
+
+def open_submission(db: Session, food_id: int) -> models.FoodSubmission | None:
+    """The request still waiting on this food, if there is one."""
+    return db.execute(
+        select(models.FoodSubmission).where(
+            models.FoodSubmission.food_id == food_id,
+            models.FoodSubmission.status == "pending",
+        )
+    ).scalars().first()
+
+
+def review_snapshot(food: models.Food) -> dict[str, object]:
+    """A proposal as it stands, keyed by what each part is called on screen."""
+    shot: dict[str, object] = {
+        label: getattr(food, field) for field, label in EDIT_LABELS.items()
+    }
+    shot[SERVING_LABEL] = [
+        (serving.name, serving.amount, serving.unit, serving.position)
+        for serving in food.servings
+    ]
+    return shot
+
+
+def record_changes(submission: models.FoodSubmission, labels: Sequence[str]) -> None:
+    """Add what a reviewer changed to what they had already changed.
+
+    Written as a new list rather than appended to: a JSON column holds a plain
+    list, and a list changed in place is a change the session never sees.
+    """
+    fresh = [label for label in labels if label not in submission.changes]
+    if not fresh:
+        return
+    submission.edited = True
+    submission.changes = [*submission.changes, *fresh]
+
+
+def note_edit(
+    db: Session, user: models.User, food: models.Food, before: dict[str, object]
+) -> None:
+    """Write down a reviewer's changes to something that is still waiting.
+
+    Only a reviewer's, and only while the thing is still a proposal. What the
+    owner does to their own food before anybody has looked at it is the food,
+    not a change to what they asked for.
+    """
+    if not user.is_admin or food.status not in ("pending", "shadow"):
+        return
+    submission = open_submission(db, food.id)
+    if submission is None:
+        return
+    after = review_snapshot(food)
+    record_changes(submission, [key for key, was in before.items() if after[key] != was])
 
 
 def apply_body(food: models.Food, body: schemas.FoodIn) -> None:
@@ -1003,9 +1086,14 @@ def update_food(
     user: models.User = Depends(require_user),
 ) -> dict[str, object]:
     food = changeable_food(db, user, food_id, OWNER_MAY_EDIT, ADMIN_MAY_EDIT)
+    # Read before the form lands on it, so a reviewer's corrections to a
+    # waiting proposal can be told from what was offered.
+    before = review_snapshot(food)
     # The barcode is not among what an edit changes. It is what the row was
     # scanned from, and a code that moves is a code the scanner cannot trust.
     apply_body(food, body)
+    db.flush()
+    note_edit(db, user, food, before)
     db.commit()
     return food_detail(db, food, user)
 

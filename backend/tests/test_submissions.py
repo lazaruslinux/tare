@@ -91,28 +91,28 @@ def a_photo(client, purpose="front"):
 # ---- What a submission has to carry ----
 
 
-def test_every_number_on_the_label_is_needed(client, signed_in):
-    for field, label in (
-        ("calories", "Calories"),
-        ("saturated_fat_g", "Saturated fat"),
-        ("cholesterol_mg", "Cholesterol"),
-        ("fiber_g", "Fiber"),
-        ("sugar_g", "Sugar"),
+def test_a_number_the_label_does_not_give_may_be_left_blank(client, signed_in):
+    for number, field in enumerate(
+        ("saturated_fat_g", "cholesterol_mg", "fiber_g", "sugar_g")
     ):
-        response = offer(client, **{field: None})
-        assert response.status_code == 400
-        assert response.json() == {
-            "detail": f"{label} is required before this can be shared."
-        }
+        # A code of its own each time: one account may not hold the same
+        # barcode twice, and that is a different rule from this one.
+        response = offer(client, barcode=f"0340000024{number:02d}", **{field: None})
+        assert response.status_code == 201
+        assert response.json()["food"][field] is None
 
 
-def test_the_first_thing_missing_is_the_one_named(client, signed_in):
-    response = offer(client, protein_g=None, sodium_mg=None)
-    assert response.json() == {"detail": "Protein is required before this can be shared."}
+def test_the_four_anybody_reads_are_still_required(client, signed_in):
+    response = offer(client, protein_g=None)
+    assert response.status_code == 400
+    assert response.json() == {"detail": "Calories, protein, carbs, and fat are required."}
 
 
-def test_nought_is_an_answer_and_an_empty_box_is_not(client, signed_in):
-    assert offer(client, fiber_g=0, sugar_g=0).status_code == 201
+def test_a_blank_is_not_read_as_nought(client, db_session, signed_in):
+    made = offer(client, fiber_g=0, sugar_g=None)
+    assert made.status_code == 201
+    food = db_session.get(models.Food, made.json()["food"]["id"])
+    assert (food.fiber_g, food.sugar_g) == (0, None)
 
 
 def test_a_serving_is_needed(client, signed_in):
@@ -223,7 +223,7 @@ def test_a_food_you_already_keep_can_be_offered_as_it_stands(client, db_session,
     assert db_session.get(models.Food, made["id"]).status == "pending"
 
 
-def test_offering_one_you_keep_is_held_to_the_same_whole_label(client, signed_in):
+def test_offering_one_you_keep_carries_the_blanks_it_has(client, signed_in):
     made = client.post(
         "/api/foods",
         json={"name": "Half a label", "base_unit": "g", "calories": 100, "protein_g": 1,
@@ -234,8 +234,22 @@ def test_offering_one_you_keep_is_held_to_the_same_whole_label(client, signed_in
     response = client.post(
         f"/api/foods/{made['id']}/submit", json={"label_photo_id": a_photo(client, "label")}
     )
+    assert response.status_code == 201
+    assert response.json()["food"]["saturated_fat_g"] is None
+
+
+def test_offering_one_you_keep_still_needs_a_serving(client, signed_in):
+    made = client.post(
+        "/api/foods",
+        json={"name": "No serving", "base_unit": "g", **FULL},
+    ).json()
+
+    attach_front(client, made["id"])
+    response = client.post(
+        f"/api/foods/{made['id']}/submit", json={"label_photo_id": a_photo(client, "label")}
+    )
     assert response.status_code == 400
-    assert response.json() == {"detail": "Saturated fat is required before this can be shared."}
+    assert response.json() == {"detail": "A serving is required."}
 
 
 def test_somebody_else_s_food_cannot_be_offered(client, db_session, make_user, signed_in):

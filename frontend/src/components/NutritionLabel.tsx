@@ -122,50 +122,28 @@ function panelAt(food: Food, baseAmount: number): Panel {
 
 export function NutritionLabel({ food }: { food: Food }) {
   const serving = food.servings[0]
-  // A food with a serving is read a serving at a time. One without has only the
-  // per-100 figures it was stored with, so that is what opens.
-  const [perServing, setPerServing] = useState(Boolean(serving))
+  // One reading, and it is the serving. A food kept without a serving of its
+  // own is read per the 100 it is stored in, said in the same words: what the
+  // figures are per is a size, not a rule about storage.
+  const baseAmount = serving ? serving.base_amount : 100
 
-  const baseAmount = perServing && serving ? serving.base_amount : 100
-
-  const note =
-    perServing && serving
-      ? `${serving.name}, ${serving.amount} ${UNIT_LABEL[serving.unit]}`
-      : `100 ${food.base_unit}`
+  // Beside the chip, so the two read as one line: Per serving, 100 g.
+  const size = serving
+    ? `${serving.name}, ${serving.amount} ${UNIT_LABEL[serving.unit]}`
+    : `100 ${food.base_unit}`
 
   return (
     <div className="t-card mb-3 py-3">
-      {/* The chips and the line saying what the figures are for sit together
-          once there is room for both, and stack under each other before that. */}
       <div className="mb-2 flex flex-wrap items-center gap-x-3 gap-y-2 min-[640px]:flex-nowrap">
-        <div className="flex flex-wrap items-center gap-2">
-          {serving && (
-            <button
-              type="button"
-              aria-pressed={perServing}
-              className="t-chip aria-pressed:border-accent aria-pressed:text-text"
-              onClick={() => setPerServing(true)}
-            >
-              Per serving
-            </button>
-          )}
-          <button
-            type="button"
-            aria-pressed={!perServing}
-            className="t-chip aria-pressed:border-accent aria-pressed:text-text"
-            onClick={() => setPerServing(false)}
-          >
-            Per 100 {food.base_unit}
-          </button>
-        </div>
+        <span className="t-chip">Per serving</span>
         <p className="t-nums hidden text-xs text-muted min-[640px]:ml-auto min-[640px]:block">
-          {note}
+          {size}
         </p>
       </div>
 
       <PanelFacts
         values={panelAt(food, baseAmount)}
-        note={note}
+        note={size}
         noteClass="min-[640px]:hidden"
       />
     </div>
