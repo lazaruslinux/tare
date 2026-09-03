@@ -61,9 +61,9 @@ export function FoodDetail({
   // The correction form, open over this screen rather than in place of it, so
   // going back lands on the food it is about.
   const [suggesting, setSuggesting] = useState(false)
-  // The photos step of offering a food, which is the one thing the page cannot
-  // already answer: a packaged food needs its panel photographed, and that
-  // picture belongs to the request rather than to the food.
+  // The photos step of submitting a food, which is the one thing the page
+  // cannot already answer: a packaged food needs its panel photographed, and
+  // that picture belongs to the request rather than to the food.
   const [offering, setOffering] = useState(false)
   const [labelPhotoId, setLabelPhotoId] = useState<number | null>(null)
   const [notice, setNotice] = useState('')
@@ -131,7 +131,7 @@ export function FoodDetail({
     setSending(false)
   }
 
-  // Put a picture on one of your own foods. It is not offered to anybody: it
+  // Put a picture on one of your own foods. It is not submitted to anybody: it
   // stays with the food, and goes with it if the food is ever shared.
   const attachFront = async (current: Food, photoId: number) => {
     setSending(true)
@@ -146,8 +146,9 @@ export function FoodDetail({
   }
 
   // One control, two meanings, and which one it is follows who owns the food.
-  // Your own: the picture goes straight on it and rides along if you ever offer
-  // it. Everybody's: a picture of a shared food is a proposal like any other.
+  // Your own: the picture goes straight on it and rides along if you ever
+  // submit it. Everybody's: a picture of a shared food is a proposal like any
+  // other.
   const takePhoto = async (event: ChangeEvent<HTMLInputElement>, current: Food) => {
     const file = event.target.files?.[0]
     // Cleared either way, so choosing the same file twice still fires.
@@ -236,7 +237,7 @@ export function FoodDetail({
                 <Camera className="h-6 w-6" strokeWidth={1.75} />
               )}
               <span className="sr-only">
-                {food.mine ? 'Add a photo of the front' : 'Offer a photo of the front'}
+                {food.mine ? 'Add a photo of the front' : 'Submit a photo of the front'}
               </span>
             </label>
             <input
@@ -250,8 +251,8 @@ export function FoodDetail({
             />
             <p className="min-w-0 flex-1 text-xs text-muted">
               {food.mine
-                ? 'A picture of the front of the pack. It goes with this food if you ever offer it.'
-                : 'Offer a picture of the front. An administrator decides whether it is published.'}
+                ? 'A picture of the front of the pack. It goes with this food if you ever submit it.'
+                : 'Submit a picture of the front. An administrator decides whether it is published.'}
             </p>
           </div>
 
@@ -317,20 +318,40 @@ export function FoodDetail({
             </div>
           )}
 
-          {food.mine && food.status === 'custom' && (
+          {food.mine && food.status === 'custom' && food.community !== 'rejected' && (
             <div className="t-card mb-3">
               <div className="t-actions mb-2">
-              <button
+                <button
                   className="t-btn flex-1"
                   type="button"
                   disabled={sending}
                   onClick={() => offer(food)}
                 >
-                  Submit to community
+                  Submit to Tare database
                 </button>
               </div>
               <p className="mt-2 text-xs text-muted">
                 It stays yours until an administrator approves it. Then everyone has it.
+              </p>
+            </div>
+          )}
+
+          {food.mine && food.status === 'custom' && food.community === 'rejected' && (
+            <div className="t-card mb-3">
+              <p className="t-micro mb-1">Not approved</p>
+              {food.decision_note && <p className="mb-3 text-sm">{food.decision_note}</p>}
+              <div className="t-actions">
+                <button
+                  className="t-btn flex-1"
+                  type="button"
+                  disabled={sending}
+                  onClick={() => offer(food)}
+                >
+                  Submit again
+                </button>
+              </div>
+              <p className="mt-2 text-xs text-muted">
+                It is still yours to log. Fix what the note says and send it back.
               </p>
             </div>
           )}
@@ -351,13 +372,8 @@ export function FoodDetail({
 
           {offering && (
             <Sheet open tall label="Photos" onClose={() => setOffering(false)}>
-              <p className="t-micro mb-1">Offering</p>
-              <p className="text-base font-semibold tracking-tight">{food.name}</p>
-              <p className="mt-2 mb-3 text-sm text-muted">
-                {food.barcode === null
-                  ? 'A picture of the front is needed. The nutrition label is worth adding if you have it to hand.'
-                  : 'A packaged food needs both photos: the front of the pack, and the nutrition label the reviewer checks the numbers against.'}
-              </p>
+              <p className="t-micro mb-1">Submitting</p>
+              <p className="mb-3 text-base font-semibold tracking-tight">{food.name}</p>
 
               <PhotoSlots
                 front={{ id: null, url: food.photo_url, required: true }}

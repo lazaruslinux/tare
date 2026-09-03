@@ -43,6 +43,9 @@ router = APIRouter(prefix="/admin", tags=["admin"])
 # One already decided is not in the queue, so it reads the same as one that was
 # never there.
 NOT_WAITING = "That submission has already been decided."
+# A no is the one decision somebody has to be able to answer, so it carries a
+# reason or it is not made.
+NO_REASON = "Give a reason."
 NO_FOOD = "The food this was about is gone."
 NO_PHOTO = "The photo this was about is gone."
 
@@ -318,7 +321,7 @@ def reject(
     db: Session = Depends(get_db),
     admin: models.User = Depends(require_admin),
 ) -> dict[str, object]:
-    """Say no, with a reason. Nothing shared changes either way.
+    """Say no, with a reason, which is not optional. Nothing shared changes.
 
     A food that was offered goes back to being its submitter's own, privately.
     A correction and a picture leave nothing behind: neither of them was ever
@@ -326,6 +329,11 @@ def reject(
     file rather than a state.
     """
     submission = waiting(db, submission_id)
+    reason = body.note.strip()
+    # Turning something down without saying why is the one decision that leaves
+    # somebody with nothing to do about it.
+    if not reason:
+        raise HTTPException(status.HTTP_400_BAD_REQUEST, NO_REASON)
     if submission.kind == "edit":
         drop_shadow(db, submission)
     else:
@@ -337,7 +345,7 @@ def reject(
     if photo is not None and photo.status == "pending":
         discard(db, photo)
 
-    stamp(submission, admin, "rejected", body.note.strip())
+    stamp(submission, admin, "rejected", reason)
     db.commit()
     return {"id": submission.id, "status": submission.status}
 

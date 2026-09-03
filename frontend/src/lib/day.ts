@@ -49,6 +49,9 @@ function inZone(timezone: string, when: Date): { day: string; hour: number } {
 
 export const today = (timezone: string): string => inZone(timezone, new Date()).day
 
+// The member's calendar day for a timestamp the API wrote in UTC.
+export const dayOf = (timezone: string, iso: string): string => inZone(timezone, new Date(iso)).day
+
 export function slotByTime(timezone: string): Slot {
   const { hour } = inZone(timezone, new Date())
   if (hour < BREAKFAST_UNTIL) return 'breakfast'

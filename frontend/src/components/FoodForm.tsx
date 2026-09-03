@@ -1,26 +1,32 @@
-import { ChevronDown, Plus, ScanLine, X } from 'lucide-react'
+import { ChevronDown, ScanLine } from 'lucide-react'
 import { useState, type FormEvent } from 'react'
 
-import { api, errorText, type Food, type Prefill, type Scanned } from '../api'
+import { ApiError, api, errorText, type Food, type Prefill, type Scanned } from '../api'
 import { useTopBar } from '../hooks/useTopBar'
-import { SHARED_FACTS, missingSentence, type Values } from '../lib/community'
-import type { BaseUnit } from '../lib/units'
+import { NO_SERVING, SHARED_FACTS, missingSentence, type Values } from '../lib/community'
+import { round1, scale, toPer100, type BaseUnit } from '../lib/units'
 import { BarcodeScanner } from './BarcodeScanner'
 import { HEADLINE, MORE_FACTS, type Nutrient } from './NutritionLabel'
+import { PhotoSlots } from './PhotoSlots'
+
+// The food form, worked the way a label is read: one serving at a time.
+//
+// A food is stored per 100 of its base unit, because that is the one figure
+// every portion can be worked out from. Nobody reads a package that way. So the
+// boxes here are the label's own column, per one serving of it, and the
+// arithmetic between the two happens on the way in and on the way out.
 
 // Two ways to measure a food, in the words somebody would use out loud.
 const BASES: { value: BaseUnit; title: string; note: string }[] = [
   { value: 'g', title: 'Grams', note: 'Solids, weighed' },
-  { value: 'ml', title: 'Millilitres', note: 'Liquids, poured' },
+  { value: 'ml', title: 'Milliliters', note: 'Liquids, poured' },
 ]
 
 // Matches the bounds the server holds a density to. Said on screen only when
 // somebody has gone outside them, because until then it is noise.
 const DENSITY_MIN = 0.2
 const DENSITY_MAX = 3
-const DENSITY_HINT = `A millilitre weighs between ${DENSITY_MIN} and ${DENSITY_MAX} grams.`
-
-const MAX_SERVINGS = 8
+const DENSITY_HINT = `A milliliter weighs between ${DENSITY_MIN} and ${DENSITY_MAX} grams.`
 
 type ServingDraft = { name: string; amount: string }
 
@@ -33,21 +39,59 @@ function num(raw: string): number | null {
   return Number.isFinite(parsed) ? parsed : null
 }
 
-function startingPanel(food: Food | null): Record<Nutrient, string> {
-  const panel = {} as Record<Nutrient, string>
-  for (const fact of [...HEADLINE, ...MORE_FACTS]) {
-    const value = food ? food[fact.key] : null
-    panel[fact.key] = value === null ? '' : String(value)
+// What is stored, as it reads for one serving of this size. Calories whole and
+// everything else to a tenth, which is how a label prints them.
+function perServingDraft(values: Values, amount: number): Record<Nutrient, string> {
+  const draft = {} as Record<Nutrient, string>
+  for (const fact of SHARED_FACTS) {
+    const each = scale(values[fact.key], amount)
+    draft[fact.key] =
+      each === null ? '' : String(fact.key === 'calories' ? Math.round(each) : round1(each))
   }
-  return panel
+  return draft
 }
 
-function startingServings(food: Food | null): ServingDraft[] {
-  if (!food || food.servings.length === 0) return []
-  return food.servings.map((serving) => ({
-    name: serving.name,
-    amount: String(serving.base_amount),
-  }))
+// The ten as they stand on a food or on a lookup, per 100 of the base unit.
+function panelOf(carrier: Food | Prefill | null): Values {
+  const values = {} as Values
+  for (const fact of SHARED_FACTS) values[fact.key] = carrier === null ? null : carrier[fact.key]
+  return values
+}
+
+// The serving the whole form is entered per. Position 0 is the label serving
+// everywhere in tare, so it is the one this edits. Anything that arrives
+// without one is entered per 100 of its base unit, which is what its numbers
+// already are.
+function startingServing(food: Food | null, prefill: Prefill | null): ServingDraft {
+  const first = food?.servings[0]
+  if (first) return { name: first.name, amount: String(first.base_amount) }
+  if (prefill) {
+    return prefill.serving
+      ? { name: prefill.serving.name, amount: String(prefill.serving.base_amount) }
+      : { name: `100 ${prefill.base_unit}`, amount: '100' }
+  }
+  if (food === null) return { name: '', amount: '' }
+  return { name: `100 ${food.base_unit}`, amount: '100' }
+}
+
+// Anything a food carries beyond the label serving. Not shown and not changed:
+// they are sent back as they came.
+function extraServings(food: Food | null): ServingDraft[] {
+  if (!food) return []
+  return food.servings
+    .slice(1)
+    .map((serving) => ({ name: serving.name, amount: String(serving.base_amount) }))
+}
+
+function startingPanel(
+  carrier: Food | Prefill | null,
+  serving: ServingDraft
+): Record<Nutrient, string> {
+  const amount = num(serving.amount)
+  if (carrier === null || amount === null || amount <= 0) {
+    return perServingDraft(panelOf(null), 100)
+  }
+  return perServingDraft(panelOf(carrier), amount)
 }
 
 export function FoodForm({
@@ -57,10 +101,15 @@ export function FoodForm({
   backLabel,
   sharing,
   complete,
+  submitDefault,
+  inSheet,
+  prefill,
+  scannedBarcode,
   onSubmit,
   onSaved,
   onCancel,
   onOpenFood,
+  onConflict,
 }: {
   food: Food | null
   // Why somebody was sent here, when something else sent them. Said at the top
@@ -71,13 +120,23 @@ export function FoodForm({
   // list, from a food, and from the queue, and each of them is a different
   // place to be sent back to.
   backLabel: string
-  // Held to what the shared database needs rather than what a private food
+  // Held to what the Tare database needs rather than what a private food
   // needs: the whole panel, a serving, and room to say something to whoever
   // reads it.
   sharing?: boolean
   // The whole panel is needed even though nothing is being sent for review,
   // as when a reviewer adjusts a proposal that is about to be shared.
   complete?: boolean
+  // Whether the switch starts on. A scan means somebody is holding a package
+  // nobody has entered yet, which is the case the database is built out of.
+  submitDefault?: boolean
+  // Drawn inside a sheet, which carries its own header and its own way out.
+  inSheet?: boolean
+  // What a lookup already answered, for a form opened by a scan rather than by
+  // somebody deciding to type a food in.
+  prefill?: Prefill | null
+  // The code that scan read, held still the way an in-form scan holds one.
+  scannedBarcode?: string | null
   // Where the filled-in form goes. Left out, it writes the food itself, which
   // is what every screen that keeps one of your own wants.
   onSubmit?: (payload: Record<string, unknown>) => Promise<Food>
@@ -87,43 +146,79 @@ export function FoodForm({
   // where scanning makes sense, which is a food being entered for the first
   // time, and it is what puts the scan button on the form.
   onOpenFood?: (id: number) => void
+  // The barcode was claimed by the Tare database while this was open. The scan
+  // is worth resolving again rather than arguing with.
+  onConflict?: () => void
 }) {
-  const [name, setName] = useState(food?.name ?? '')
-  const [brand, setBrand] = useState(food?.brand ?? '')
-  const [baseUnit, setBaseUnit] = useState<BaseUnit>(food?.base_unit ?? 'g')
-  const [panel, setPanel] = useState(() => startingPanel(food))
-  const [density, setDensity] = useState(
-    food === null || food.density_g_per_ml === null ? '' : String(food.density_g_per_ml)
+  // The food being changed, or the lookup a scan came back with, or neither.
+  const opening = food ?? prefill ?? null
+  const [name, setName] = useState(opening?.name ?? '')
+  const [brand, setBrand] = useState(opening?.brand ?? '')
+  const [baseUnit, setBaseUnit] = useState<BaseUnit>(opening?.base_unit ?? 'g')
+  const [ingredients, setIngredients] = useState(opening?.ingredients_text ?? '')
+  const [serving, setServingRow] = useState<ServingDraft>(() =>
+    startingServing(food, prefill ?? null)
   )
-  const [servings, setServings] = useState<ServingDraft[]>(() => startingServings(food))
+  const [extras] = useState<ServingDraft[]>(() => extraServings(food))
+  const [panel, setPanel] = useState(() =>
+    startingPanel(opening, startingServing(food, prefill ?? null))
+  )
+  const [density, setDensity] = useState(
+    opening === null || opening.density_g_per_ml === null ? '' : String(opening.density_g_per_ml)
+  )
   const [note, setNote] = useState('')
   // Opened when every box is going to be asked for anyway, so nothing that is
   // needed is behind a fold.
-  const [more, setMore] = useState(Boolean(notice) || Boolean(sharing) || Boolean(complete))
+  const [more, setMore] = useState(
+    Boolean(notice) || Boolean(sharing) || Boolean(complete) || Boolean(submitDefault)
+  )
   const [densityWrong, setDensityWrong] = useState(false)
   const [error, setError] = useState('')
   const [saving, setSaving] = useState(false)
   const [scanning, setScanning] = useState(false)
   const [looking, setLooking] = useState(false)
-  const [barcode, setBarcode] = useState('')
-  // A scanned code is the packet's own, so it is held still until somebody
+  const [barcode, setBarcode] = useState(scannedBarcode ?? '')
+  // A scanned code is the package's own, so it is held still until somebody
   // says otherwise.
-  const [locked, setLocked] = useState(false)
+  const [locked, setLocked] = useState(Boolean(scannedBarcode))
   // The food this code already is, when the scan turned one up. Nothing is
   // created for it: it is there to be opened.
   const [already, setAlready] = useState<{ id: number; name: string } | null>(null)
+  const [submitOn, setSubmitOn] = useState(Boolean(submitDefault))
+  const [photoId, setPhotoId] = useState<number | null>(null)
+  const [labelPhotoId, setLabelPhotoId] = useState<number | null>(null)
+  const [conflicted, setConflicted] = useState(false)
+  // Where a lookup filled the boxes in, so they can be checked against the
+  // packaging they claim to describe.
+  const [source, setSource] = useState(prefill?.source ?? '')
+  // What a lookup gave, per 100, kept so the boxes can follow the serving size
+  // while they are still nobody's own work. Null once somebody types.
+  const [basis, setBasis] = useState<Values | null>(prefill ? panelOf(prefill) : null)
 
-  // Only where a food is being entered for the first time. Everywhere else
-  // this form is opened on a food that already exists.
+  // A food being entered for the first time. Everywhere else this form is
+  // opened on a food that already exists, or on a proposal about one.
+  const creating = food === null && onSubmit === undefined
   const scannable = onOpenFood !== undefined && food === null
+  // Whether the whole panel is asked for rather than the four anybody reads.
+  const whole = Boolean(sharing) || Boolean(complete) || (creating && submitOn)
 
   const heading = title ?? (food ? 'Edit food' : 'New food')
-  useTopBar({ title: heading, back: { label: backLabel, onBack: onCancel } })
+  useTopBar(inSheet ? null : { title: heading, back: { label: backLabel, onBack: onCancel } })
 
-  const setFact = (key: Nutrient, value: string) => setPanel({ ...panel, [key]: value })
+  const setFact = (key: Nutrient, value: string) => {
+    setPanel({ ...panel, [key]: value })
+    // From here the numbers are somebody's own, and a serving size typed after
+    // them changes what they are per, not what they say.
+    setBasis(null)
+  }
 
-  const setServing = (index: number, draft: ServingDraft) =>
-    setServings(servings.map((row, at) => (at === index ? draft : row)))
+  const setServing = (draft: ServingDraft) => {
+    setServingRow(draft)
+    const amount = num(draft.amount)
+    // Still the lookup's numbers, so they follow the serving they are read
+    // against: a panel per 100 g reads per the slice as soon as it is named.
+    if (basis !== null && amount !== null && amount > 0) setPanel(perServingDraft(basis, amount))
+  }
 
   // What a lookup gives, put into the boxes it fills. Anything the reading did
   // not carry is left alone rather than blanked: an empty box is a number
@@ -132,18 +227,17 @@ export function FoodForm({
     setName(reading.name)
     setBrand(reading.brand)
     setBaseUnit(reading.base_unit)
+    setIngredients(reading.ingredients_text)
+    setSource(reading.source)
     setDensity(reading.density_g_per_ml === null ? '' : String(reading.density_g_per_ml))
-    const filled = {} as Record<Nutrient, string>
-    for (const fact of SHARED_FACTS) {
-      const value = reading[fact.key]
-      filled[fact.key] = value === null ? '' : String(value)
-    }
-    setPanel(filled)
-    if (reading.serving) {
-      setServings([
-        { name: reading.serving.name, amount: String(reading.serving.base_amount) },
-      ])
-    }
+    const read = {} as Values
+    for (const fact of SHARED_FACTS) read[fact.key] = reading[fact.key]
+    const seeded: ServingDraft = reading.serving
+      ? { name: reading.serving.name, amount: String(reading.serving.base_amount) }
+      : { name: `100 ${reading.base_unit}`, amount: '100' }
+    setServingRow(seeded)
+    setBasis(read)
+    setPanel(perServingDraft(read, num(seeded.amount) ?? 100))
     setMore(true)
   }
 
@@ -181,15 +275,20 @@ export function FoodForm({
       return
     }
 
-    // A row somebody added and left alone is not a serving.
-    const rows = servings.filter((row) => row.name.trim() || row.amount.trim())
+    const size = num(serving.amount)
+    if (!serving.name.trim() || size === null || size <= 0) {
+      setError(NO_SERVING)
+      return
+    }
+
+    // What is in the boxes, which is per one serving.
     const read = {} as Values
     for (const fact of SHARED_FACTS) read[fact.key] = num(panel[fact.key])
 
-    if (sharing || complete) {
+    if (whole) {
       // Checked here in the server's own words, so a half-filled panel is said
       // while somebody is still looking at the boxes.
-      const missing = missingSentence(read, rows.length)
+      const missing = missingSentence(read, 1)
       if (missing !== null) {
         setError(missing)
         setMore(true)
@@ -197,37 +296,71 @@ export function FoodForm({
       }
     }
 
+    // Untouched, so what the lookup gave is what is stored: rounding a panel
+    // to a tenth and back again is drift nobody asked for.
+    const stored = {} as Values
+    for (const fact of SHARED_FACTS) {
+      stored[fact.key] = basis === null ? toPer100(read[fact.key], size) : basis[fact.key]
+    }
+
     setSaving(true)
     setError('')
+    setConflicted(false)
     const body: Record<string, unknown> = {
       name,
       brand,
       base_unit: baseUnit,
       density_g_per_ml: weight,
-      servings: rows.map((row, position) => ({
-        name: row.name,
-        base_amount: num(row.amount) ?? 0,
-        position,
-      })),
-      ...read,
+      ingredients_text: ingredients,
+      servings: [
+        { name: serving.name, base_amount: size, position: 0 },
+        ...extras.map((row, index) => ({
+          name: row.name,
+          base_amount: num(row.amount) ?? 0,
+          position: index + 1,
+        })),
+      ],
+      ...stored,
     }
     // Only on a food being entered for the first time. The code is what this
     // row was scanned from, and an edit never moves it.
-    if (scannable && barcode.trim()) body.barcode = barcode.trim()
-    if (sharing) body.note = note
-
-    const write =
-      onSubmit ??
-      ((payload: Record<string, unknown>) =>
-        api<Food>(food ? `/foods/${food.id}` : '/foods', {
-          method: food ? 'PATCH' : 'POST',
-          body: payload,
-        }))
+    if (creating && barcode.trim()) body.barcode = barcode.trim()
+    if (sharing || (creating && submitOn)) body.note = note
 
     try {
-      onSaved(await write(body))
+      if (creating && submitOn) {
+        const answer = await api<{ food: Food }>('/submissions/food', {
+          method: 'POST',
+          body: { ...body, photo_id: photoId, label_photo_id: labelPhotoId },
+        })
+        onSaved(answer.food)
+        return
+      }
+      const write =
+        onSubmit ??
+        ((payload: Record<string, unknown>) =>
+          api<Food>(food ? `/foods/${food.id}` : '/foods', {
+            method: food ? 'PATCH' : 'POST',
+            body: payload,
+          }))
+      let saved = await write(body)
+      if (creating && photoId !== null) {
+        // The food is written by now. A picture that will not go on is worth
+        // less than the food, so it is not what somebody is told about: it can
+        // be taken again from the food's own page.
+        try {
+          await api(`/foods/${saved.id}/photo`, { method: 'POST', body: { photo_id: photoId } })
+          saved = await api<Food>(`/foods/${saved.id}`)
+        } catch {
+          // Left as it is.
+        }
+      }
+      onSaved(saved)
     } catch (failure) {
       setError(errorText(failure))
+      // Read off the status rather than the sentence: the wording is the
+      // server's to change.
+      setConflicted(failure instanceof ApiError && failure.status === 409)
       setSaving(false)
     }
   }
@@ -238,8 +371,15 @@ export function FoodForm({
     )
   }
 
+  const size = num(serving.amount)
+  const per =
+    serving.name.trim() && size !== null && size > 0
+      ? `Per ${serving.name.trim()} (${size} ${baseUnit})`
+      : 'Per serving'
+
   return (
     <>
+      {inSheet && <p className="t-micro mb-2">{heading}</p>}
       {notice && <p className="t-card mb-3 text-sm text-muted">{notice}</p>}
 
       {already !== null && (
@@ -318,6 +458,11 @@ export function FoodForm({
               onChange={(event) => setBrand(event.target.value)}
             />
           </div>
+          {source && (
+            <p className="mt-3 text-xs text-muted">
+              Filled in from {source}. Check every number against the package.
+            </p>
+          )}
         </div>
 
         <div className="mb-3">
@@ -339,7 +484,30 @@ export function FoodForm({
         </div>
 
         <div className="t-card mb-3">
-          <p className="t-micro mb-1">Per 100 {baseUnit}</p>
+          <p className="t-micro mb-1">Serving size</p>
+          <div className="t-row">
+            <input
+              className="t-input min-w-0 flex-1"
+              placeholder="1 slice"
+              aria-label="Serving name"
+              value={serving.name}
+              onChange={(event) => setServing({ ...serving, name: event.target.value })}
+            />
+            <input
+              className="t-input t-nums w-20 text-right"
+              inputMode="decimal"
+              placeholder="19"
+              aria-label="Serving size"
+              value={serving.amount}
+              onChange={(event) => setServing({ ...serving, amount: event.target.value })}
+            />
+            <span className="w-6 text-xs text-muted">{baseUnit}</span>
+          </div>
+          <p className="mt-2 mb-3 text-xs text-muted">
+            What the label calls one serving, and how much of it that is in {baseUnit}.
+          </p>
+
+          <p className="t-label mb-1">{per}</p>
           {HEADLINE.map((fact) => (
             <div key={fact.key} className="t-row">
               <label className="flex-1 text-sm" htmlFor={`food-${fact.key}`}>
@@ -402,52 +570,37 @@ export function FoodForm({
           )}
         </div>
 
-        <div className="t-card mb-3">
-          <p className="t-micro mb-1">Servings</p>
-          {servings.map((serving, index) => (
-            <div key={index} className="t-row">
+        {creating && (
+          <div className="t-card mb-3">
+            <label className="t-row text-sm">
+              <span className="flex-1">Submit to Tare database</span>
               <input
-                className="t-input min-w-0 flex-1"
-                placeholder="1 slice"
-                aria-label={`Serving ${index + 1} name`}
-                value={serving.name}
-                onChange={(event) => setServing(index, { ...serving, name: event.target.value })}
+                type="checkbox"
+                className="h-4 w-4 accent-accent"
+                checked={submitOn}
+                onChange={(event) => setSubmitOn(event.target.checked)}
               />
-              <input
-                className="t-input t-nums w-20 text-right"
-                inputMode="decimal"
-                placeholder="28"
-                aria-label={`Serving ${index + 1} amount`}
-                value={serving.amount}
-                onChange={(event) => setServing(index, { ...serving, amount: event.target.value })}
-              />
-              <span className="w-6 text-xs text-muted">{baseUnit}</span>
-              <button
-                type="button"
-                className="t-tap44 text-muted"
-                aria-label={`Remove serving ${index + 1}`}
-                onClick={() => setServings(servings.filter((_, at) => at !== index))}
-              >
-                <X className="h-4 w-4" strokeWidth={2.5} />
-              </button>
-            </div>
-          ))}
-          {servings.length < MAX_SERVINGS && (
-            <button
-              type="button"
-              className="t-micro mt-2 flex items-center gap-1"
-              onClick={() => setServings([...servings, { name: '', amount: '' }])}
-            >
-              <Plus className="h-3.5 w-3.5" strokeWidth={2.5} />
-              Add a serving
-            </button>
-          )}
-          <p className="mt-2 text-xs text-muted">
-            How much one of them is, in {baseUnit}. Up to {MAX_SERVINGS}.
-          </p>
-        </div>
+            </label>
+            {submitOn && (
+              <p className="mt-2 text-xs text-muted">
+                All ten numbers are required. Enter 0 for anything the label lists as none.
+              </p>
+            )}
+          </div>
+        )}
 
-        {sharing && (
+        {creating && (
+          <PhotoSlots
+            front={{ id: photoId, required: submitOn }}
+            label={{ id: labelPhotoId, required: submitOn && barcode.trim() !== '' }}
+            busy={saving}
+            onFront={setPhotoId}
+            onLabel={setLabelPhotoId}
+            onFailed={setError}
+          />
+        )}
+
+        {(sharing || (creating && submitOn)) && (
           <div className="t-card mb-3">
             <label className="t-label" htmlFor="food-note">
               Anything the reviewer should know (optional)
@@ -459,10 +612,6 @@ export function FoodForm({
               value={note}
               onChange={(event) => setNote(event.target.value)}
             />
-            <p className="mt-2 text-xs text-muted">
-              All ten numbers are needed. A food with none of something is a nought, not an
-              empty box.
-            </p>
           </div>
         )}
 
@@ -470,12 +619,18 @@ export function FoodForm({
 
         <div className="t-actions mb-3">
           <button className="t-btn t-btn-primary flex-1" type="submit" disabled={saving}>
-            {sharing ? 'Send' : 'Save'}
+            {creating && submitOn ? 'Submit' : sharing ? 'Send' : 'Save'}
           </button>
           <button className="t-btn" type="button" onClick={onCancel}>
             Cancel
           </button>
         </div>
+
+        {conflicted && onConflict && (
+          <button type="button" className="t-btn mb-3 w-full" onClick={onConflict}>
+            Look it up again
+          </button>
+        )}
       </form>
     </>
   )

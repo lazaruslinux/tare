@@ -1,7 +1,7 @@
 import { useEffect, useRef, useState } from 'react'
 
 import { api, errorText, type BrowsePage, type FoodRow } from '../api'
-import { PhotoThumb } from '../components/FoodRows'
+import { Calories, PhotoThumb } from '../components/FoodRows'
 import { useTopBar } from '../hooks/useTopBar'
 
 // The shared database, as a place to look something up rather than a wall to
@@ -26,12 +26,7 @@ function Row({ row, onOpen }: { row: FoodRow; onOpen: () => void }) {
         <span className="block truncate text-sm">{row.name}</span>
         {row.brand && <span className="block truncate text-xs text-muted">{row.brand}</span>}
       </span>
-      <span className="shrink-0 text-right">
-        <span className="t-nums block text-sm">
-          {row.calories === null ? '-' : Math.round(row.calories)} cal
-        </span>
-        <span className="block text-xs text-muted">per 100 {row.base_unit}</span>
-      </span>
+      <Calories row={row} />
     </button>
   )
 }

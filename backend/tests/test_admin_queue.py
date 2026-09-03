@@ -238,7 +238,7 @@ def test_a_barcode_conflict_changes_nothing_at_all(client, db_session, make_user
     sign_in(client, "reviewer")
     response = client.post(f"/api/admin/queue/{made['submission_id']}/approve", json={})
     assert response.status_code == 409
-    assert response.json() == {"detail": "This barcode is already in the shared database."}
+    assert response.json() == {"detail": "This barcode is already in the Tare database."}
 
     db_session.expire_all()
     food = db_session.get(models.Food, made["food"]["id"])
@@ -324,6 +324,23 @@ def test_rejecting_gives_the_food_back_privately_with_a_reason(
     assert rows[0]["decided_at"] is not None
     # And it is not in the shared database, however plainly they can still see it.
     assert client.get(f"/api/foods/{food.id}").json()["status"] == "custom"
+
+
+def test_a_no_without_a_reason_is_refused(client, db_session, make_user):
+    """Somebody who is told no is told why, so the submission stands until
+    whoever is reviewing it has written one."""
+    made = member_and_admin(client, make_user)
+
+    sign_in(client, "reviewer")
+    response = client.post(
+        f"/api/admin/queue/{made['submission_id']}/reject", json={"note": "   "}
+    )
+    assert response.status_code == 400
+    assert response.json() == {"detail": "Give a reason."}
+
+    db_session.expire_all()
+    assert db_session.get(models.Food, made["food"]["id"]).status == "pending"
+    assert len(client.get("/api/admin/queue").json()) == 1
 
 
 def test_rejecting_takes_the_photo_with_it(client, db_session, make_user):
@@ -469,4 +486,4 @@ def test_a_scanned_food_offered_from_the_form_carries_its_code_through(
         f"/api/admin/queue/{offered.json()['submission_id']}/approve", json={}
     )
     assert response.status_code == 409
-    assert response.json() == {"detail": "This barcode is already in the shared database."}
+    assert response.json() == {"detail": "This barcode is already in the Tare database."}

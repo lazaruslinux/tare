@@ -3,6 +3,7 @@ import { useEffect, useState, type FormEvent } from 'react'
 
 import { api, errorText, type Food, type FoodRow, type Me, type RepeatRow } from '../api'
 import { slotByTime, today, type Slot } from '../lib/day'
+import { Calories } from './FoodRows'
 import { PortionSheet } from './PortionSheet'
 import { Sheet } from './Sheet'
 
@@ -29,12 +30,7 @@ function Row({ row, onOpen }: { row: FoodRow & { pinned?: boolean }; onOpen: () 
         </span>
         {row.brand && <span className="block truncate text-xs text-muted">{row.brand}</span>}
       </span>
-      <span className="shrink-0 text-right">
-        <span className="t-nums block text-sm">
-          {row.calories === null ? '-' : Math.round(row.calories)} cal
-        </span>
-        <span className="block text-xs text-muted">per 100 {row.base_unit}</span>
-      </span>
+      <Calories row={row} />
     </button>
   )
 }
@@ -93,7 +89,7 @@ function QuickAdd({
 
       <div className="mb-3">
         <label className="t-label" htmlFor="quick-name">
-          What was it
+          Name
         </label>
         <input
           id="quick-name"
@@ -130,7 +126,8 @@ function QuickAdd({
         </div>
       ))}
       <p className="mt-2 text-xs text-muted">
-        Only the name and the calories are needed. This is logged, not kept as a food.
+        This only logs a journal entry and is not added to your foods. Only a name and
+        calories are required.
       </p>
 
       {error && <p className="t-error mt-3">{error}</p>}
@@ -158,7 +155,7 @@ export function FoodPicker({
   slot?: Slot
   onClose: () => void
   onLogged?: () => void
-  // The camera, which lives above this sheet. Offered here because a packet in
+  // The camera, which lives above this sheet. Offered here because a package in
   // somebody's hand is faster to scan than to spell.
   onScan?: () => void
   // Given instead when a food is being chosen for a recipe or a kept meal. The
@@ -258,7 +255,7 @@ export function FoodPicker({
               <p className="t-micro mb-1">Repeat</p>
               {repeat.length === 0 ? (
                 <p className="text-sm text-muted">
-                  The foods you pin and the ones you log will be offered here.
+                  The foods you pin and the ones you log will show up here.
                 </p>
               ) : (
                 repeat.map((row) => <Row key={row.id} row={row} onOpen={() => open(row.id)} />)
@@ -285,7 +282,7 @@ export function FoodPicker({
               className="t-row w-full text-left text-sm text-muted"
               onClick={() => setQuick(true)}
             >
-              Can&rsquo;t find it? Quick add
+              Quick add
             </button>
           )}
         </>

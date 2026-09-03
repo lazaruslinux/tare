@@ -1,7 +1,7 @@
 import { Camera } from 'lucide-react'
 
 import type { Community, FoodRow, MealRow, RecipeRow } from '../api'
-import { servingsText } from '../lib/units'
+import { scale, servingsText } from '../lib/units'
 import { nutrientText } from './NutritionLabel'
 
 // The three rows a member's own lists are made of, in one place because the
@@ -44,6 +44,22 @@ export function PhotoThumb({ url }: { url: string | null }) {
   )
 }
 
+// What a food is worth, per the thing somebody eats. The label serving where
+// there is one, and per 100 of the base unit where there is not, which is what
+// a food nobody has named a serving for can honestly say.
+export function Calories({ row }: { row: FoodRow }) {
+  const serving = row.serving
+  const value = serving === null ? row.calories : scale(row.calories, serving.base_amount)
+  return (
+    <span className="shrink-0 text-right">
+      <span className="t-nums block text-sm">{nutrientText('calories', value)} cal</span>
+      <span className="block text-xs text-muted">
+        {serving === null ? `per 100 ${row.base_unit}` : `per ${serving.name}`}
+      </span>
+    </span>
+  )
+}
+
 export function FoodLine({ row, onOpen }: { row: FoodRow; onOpen: () => void }) {
   return (
     <button type="button" className="t-row w-full text-left" onClick={onOpen}>
@@ -55,12 +71,7 @@ export function FoodLine({ row, onOpen }: { row: FoodRow; onOpen: () => void }) 
         </span>
         {row.brand && <span className="block truncate text-xs text-muted">{row.brand}</span>}
       </span>
-      <span className="shrink-0 text-right">
-        <span className="t-nums block text-sm">
-          {row.calories === null ? '-' : Math.round(row.calories)} cal
-        </span>
-        <span className="block text-xs text-muted">per 100 {row.base_unit}</span>
-      </span>
+      <Calories row={row} />
     </button>
   )
 }

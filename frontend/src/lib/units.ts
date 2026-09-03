@@ -35,7 +35,7 @@ export const UNIT_LABEL: Record<Unit, string> = {
   cup: 'cup',
   tbsp: 'tbsp',
   tsp: 'tsp',
-  l: 'litre',
+  l: 'liter',
   gal: 'gal',
 }
 
@@ -92,6 +92,12 @@ export function pickToBase(
 // nutrient the label never gave is not zero of it.
 export const scale = (per100: number | null, baseAmount: number): number | null =>
   per100 === null ? null : (per100 * baseAmount) / 100
+
+// The other way: a figure read off a label for one serving of this many base
+// units, as the per-100 the food is stored as. The backend needs no such
+// helper, because nothing per a serving ever reaches it.
+export const toPer100 = (value: number | null, baseAmount: number): number | null =>
+  value === null || baseAmount <= 0 ? null : (value * 100) / baseAmount
 
 export const round1 = (value: number): number => Math.round(value * 10) / 10
 

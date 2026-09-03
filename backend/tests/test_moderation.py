@@ -176,7 +176,7 @@ def test_a_correction_needs_the_whole_panel(client, db_session, make_user):
 
     response = suggest(client, target.id, fiber_g=None)
     assert response.status_code == 400
-    assert response.json() == {"detail": "Fibre is needed before this can be shared."}
+    assert response.json() == {"detail": "Fiber is required before this can be shared."}
     assert suggest(client, target.id, servings=[]).status_code == 400
 
 
@@ -276,7 +276,7 @@ def test_a_proposal_a_reviewer_left_half_filled_cannot_be_approved(
 
     refused = client.post(f"/api/admin/queue/{made.json()['submission_id']}/approve", json={})
     assert refused.status_code == 400
-    assert refused.json()["detail"] == "Sodium is needed before this can be shared."
+    assert refused.json()["detail"] == "Sodium is required before this can be shared."
 
     # Nothing moved: the shared row still says what it said, and the request
     # is still waiting.

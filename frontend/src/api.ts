@@ -209,6 +209,9 @@ export type FoodRow = {
   base_unit: BaseUnit
   status: string
   community: Community
+  // What the label calls one of them, so a row can read per the serving
+  // somebody eats. Null on a food nobody has named a serving for.
+  serving: { name: string; base_amount: number } | null
   // The picture the shared database publishes for it, when it has one. Null is
   // a food nobody has photographed, not a picture that failed to load.
   photo_url: string | null
@@ -242,6 +245,9 @@ export type Food = FoodRow & {
   mine: boolean
   // Whether this account keeps it to hand.
   pinned: boolean
+  // Why an administrator turned this account's own offer of it down. Empty
+  // unless that is what happened to it.
+  decision_note: string
   servings: FoodServing[]
   protein_g: number | null
   carbs_g: number | null

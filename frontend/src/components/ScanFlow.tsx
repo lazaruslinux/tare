@@ -3,15 +3,15 @@ import { useCallback, useState } from 'react'
 import { api, errorText, type Food, type Me, type Prefill, type Scanned } from '../api'
 import { slotByTime, today, type Slot } from '../lib/day'
 import { BarcodeScanner } from './BarcodeScanner'
+import { FoodForm } from './FoodForm'
 import { PortionSheet } from './PortionSheet'
 import { Sheet } from './Sheet'
-import { SubmitFoodSheet } from './SubmitFoodSheet'
 
-// What happens between pointing a camera at a packet and having eaten it.
+// What happens between pointing a camera at a package and having eaten it.
 //
 // The scan itself is one step of four, and which of the other three follows is
 // the server's answer rather than this component's guess. A food that is in the
-// shared database, or already yours, goes straight to the portion sheet: there
+// Tare database, or already yours, goes straight to the portion sheet: there
 // is nothing to review. Anything else goes to the form, filled in as far as the
 // lookup got.
 
@@ -20,6 +20,7 @@ type Stage =
   | { at: 'looking' }
   | { at: 'log'; food: Food }
   | { at: 'submit'; barcode: string | null; prefill: Prefill | null }
+  | { at: 'sent'; food: Food }
   | { at: 'failed'; message: string }
 
 export function ScanFlow({
@@ -112,13 +113,50 @@ export function ScanFlow({
     )
   }
 
+  // Sent, and still theirs to log. The food it became is what the portion
+  // sheet opens on, so nothing has to be looked up again.
+  if (stage.at === 'sent') {
+    const sent = stage.food
+    return (
+      <Sheet open label="Sent for approval" onClose={onClose}>
+        <p className="t-micro mb-1">Sent</p>
+        <p className="text-base font-semibold tracking-tight">{sent.name}</p>
+        <p className="mt-2 text-sm text-muted">
+          It is yours to log now. It reaches everyone once an administrator approves it.
+        </p>
+        <div className="mt-4 flex gap-3">
+          <button
+            type="button"
+            className="t-btn t-btn-primary flex-1"
+            onClick={() => setStage({ at: 'log', food: sent })}
+          >
+            Log it now
+          </button>
+          <button type="button" className="t-btn" onClick={onClose}>
+            Done
+          </button>
+        </div>
+      </Sheet>
+    )
+  }
+
+  // The form itself, inside the sheet the scan opened. The same form the Food
+  // tab uses, with the code held still and the switch already on: somebody
+  // holding a package nobody has entered is the case the database grows by.
   return (
-    <SubmitFoodSheet
-      barcode={stage.barcode}
-      prefill={stage.prefill}
-      onClose={onClose}
-      onLog={(food) => setStage({ at: 'log', food })}
-      onConflict={() => void resolve(code)}
-    />
+    <Sheet open tall label="Add a food" onClose={onClose}>
+      <FoodForm
+        food={null}
+        title="Add a food"
+        backLabel="Scan"
+        inSheet
+        submitDefault
+        prefill={stage.prefill}
+        scannedBarcode={stage.barcode}
+        onSaved={(food) => setStage({ at: 'sent', food })}
+        onCancel={onClose}
+        onConflict={() => void resolve(code)}
+      />
+    </Sheet>
   )
 }

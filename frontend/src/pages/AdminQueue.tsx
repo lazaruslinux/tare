@@ -4,6 +4,7 @@ import { ApiError, api, errorText, type Food, type Proposed, type QueueItem } fr
 import { FoodForm } from '../components/FoodForm'
 import { useTopBar } from '../hooks/useTopBar'
 import { KIND_LABEL, SHARED_FACTS } from '../lib/community'
+import { scale } from '../lib/units'
 
 // The queue, which is the only door into the shared database. It is read dense
 // on purpose: whoever is here is comparing ten numbers against a photograph of
@@ -101,16 +102,27 @@ function Evidence({
   )
 }
 
+// The panel as the person who filled it in read it: per the serving the label
+// prints, which is what the photograph beside it shows. Position 0 is that
+// serving. A proposal without one is read per 100, which is how it is stored.
 function Panel({ food }: { food: Proposed }) {
+  const serving = food.servings[0] ?? null
+  const per =
+    serving === null
+      ? `Per 100 ${food.base_unit}`
+      : `Per ${serving.name} (${serving.base_amount} ${food.base_unit})`
+  const each = (value: number | null): number | null =>
+    serving === null ? value : scale(value, serving.base_amount)
+
   return (
     <>
-      <p className="t-micro mt-3 mb-1">Per 100 {food.base_unit}</p>
+      <p className="t-micro mt-3 mb-1">{per}</p>
       <div className="grid grid-cols-2 gap-x-4">
         {SHARED_FACTS.map((fact) => (
           <div key={fact.key} className="t-row min-h-8 text-sm">
             <span className="flex-1 text-muted">{fact.label}</span>
             <span className="t-nums">
-              {nutrientText(fact.key, food[fact.key])} {fact.unit}
+              {nutrientText(fact.key, each(food[fact.key]))} {fact.unit}
             </span>
           </div>
         ))}
@@ -363,12 +375,12 @@ export function AdminQueue({
                     <button
                       type="button"
                       className="block w-full"
-                      aria-label="Look at the picture being offered"
+                      aria-label="Look at the picture being submitted"
                       onClick={() => setLooking(item.photo_url)}
                     >
                       <img
                         src={item.photo_url}
-                        alt="The picture being offered"
+                        alt="The picture being submitted"
                         className="h-36 w-full rounded-lg border border-line object-cover"
                       />
                     </button>
@@ -407,7 +419,7 @@ export function AdminQueue({
                   <button
                     type="button"
                     className="t-btn text-danger flex-1"
-                    disabled={busy}
+                    disabled={busy || reason.trim() === ''}
                     onClick={() => decide(item.id, 'reject', { note: reason })}
                   >
                     Reject

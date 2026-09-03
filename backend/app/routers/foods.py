@@ -42,7 +42,7 @@ MAX_SERVING_NAME = 60
 BARCODE_PATTERN = re.compile(r"^[0-9]{8,14}$")
 BAD_BARCODE = "That is not a barcode."
 ALREADY_MINE = "You already have a food with this barcode."
-ALREADY_SHARED = "This barcode is already in the shared database."
+ALREADY_SHARED = "This barcode is already in the Tare database."
 
 # The shortest thing worth searching for. One letter matches most of a database
 # and tells nobody anything.
@@ -181,8 +181,37 @@ def pictures_for(
     return shown
 
 
+def first_servings(
+    db: Session, foods: Sequence[models.Food]
+) -> dict[int, dict[str, object]]:
+    """The label serving of each of these foods, where it has one.
+
+    Position 0 is the serving the label prints, which is what every list reads
+    a food by. One query for the lot rather than a lazy load per row.
+    """
+    ids = [food.id for food in foods]
+    if not ids:
+        return {}
+    rows = db.execute(
+        select(
+            models.FoodServing.food_id,
+            models.FoodServing.name,
+            models.FoodServing.base_amount,
+        )
+        .where(models.FoodServing.food_id.in_(ids))
+        # Highest position first, so the lowest one is what is left in the map.
+        .order_by(models.FoodServing.position.desc())
+    ).all()
+    return {
+        food_id: {"name": name, "base_amount": amount} for food_id, name, amount in rows
+    }
+
+
 def food_row(
-    food: models.Food, picture: str | None = None, community: str = "none"
+    food: models.Food,
+    picture: str | None = None,
+    community: str = "none",
+    serving: dict[str, object] | None = None,
 ) -> dict[str, object]:
     """A food as it reads in a list: enough to pick it out, nothing else."""
     return {
@@ -196,6 +225,9 @@ def food_row(
         # Where this food stands with the shared database, from where the
         # person reading is standing.
         "community": community,
+        # What the label calls one of them, so a row reads per the serving
+        # somebody eats rather than per 100 of anything.
+        "serving": serving,
     }
 
 
@@ -246,7 +278,11 @@ def food_rows(
 ) -> list[dict[str, object]]:
     pictures = pictures_for(db, user, foods)
     states = community_states(db, user, foods)
-    return [food_row(food, pictures.get(food.id), states[food.id]) for food in foods]
+    servings = first_servings(db, foods)
+    return [
+        food_row(food, pictures.get(food.id), states[food.id], servings.get(food.id))
+        for food in foods
+    ]
 
 
 def last_logged_by(
@@ -292,6 +328,26 @@ def is_pinned(db: Session, user: models.User, food_id: int) -> bool:
     return db.execute(query).first() is not None
 
 
+def rejection_note(db: Session, user: models.User, food: models.Food) -> str:
+    """What an administrator said when they turned this account's offer down.
+
+    The newest rejected offer of this food, which is the one the food's own
+    page is about. Blank where there is nothing to say.
+    """
+    note = db.execute(
+        select(models.FoodSubmission.decision_note)
+        .where(
+            models.FoodSubmission.submitted_by_id == user.id,
+            models.FoodSubmission.kind == "new",
+            models.FoodSubmission.food_id == food.id,
+            models.FoodSubmission.status == "rejected",
+        )
+        .order_by(models.FoodSubmission.id.desc())
+        .limit(1)
+    ).scalar()
+    return note or ""
+
+
 def food_detail(db: Session, food: models.Food, user: models.User) -> dict[str, object]:
     """The whole food, its panel per 100 of its base unit, and its servings.
 
@@ -300,12 +356,20 @@ def food_detail(db: Session, food: models.Food, user: models.User) -> dict[str, 
     shows only what everybody can see; the page where somebody manages their
     own food has to show them what they put on it.
     """
+    state = community_states(db, user, [food])[food.id]
+    label_serving = food.servings[0] if food.servings else None
     detail: dict[str, object] = {
         **food_row(
             food,
             pictures_for(db, user, [food]).get(food.id),
-            community_states(db, user, [food])[food.id],
+            state,
+            None
+            if label_serving is None
+            else {"name": label_serving.name, "base_amount": label_serving.base_amount},
         ),
+        # Why it was turned down, for the one screen that says so. Empty
+        # unless this account's own offer of this food was rejected.
+        "decision_note": rejection_note(db, user, food) if state == "rejected" else "",
         "density_g_per_ml": food.density_g_per_ml,
         # What it was scanned from, where it was. On the packaging either way,
         # and it is what decides whether offering this food needs a photograph
@@ -412,7 +476,7 @@ def apply_body(food: models.Food, body: schemas.FoodIn) -> None:
         )
     if any(getattr(body, field) is None for field in REQUIRED):
         raise HTTPException(
-            status.HTTP_400_BAD_REQUEST, "Calories, protein, carbs, and fat are all needed."
+            status.HTTP_400_BAD_REQUEST, "Calories, protein, carbs, and fat are required."
         )
 
     food.name = name
@@ -608,12 +672,18 @@ def repeat_foods(
     }
     pictures = photo_urls(db, list(found))
     states = community_states(db, user, list(found.values()))
+    servings = first_servings(db, list(found.values()))
     for food_id in wanted:
         food = found.get(food_id)
         if food is None:
             continue
         rows.append(
-            {**food_row(food, pictures.get(food.id), states[food.id]), "pinned": False}
+            {
+                **food_row(
+                    food, pictures.get(food.id), states[food.id], servings.get(food.id)
+                ),
+                "pinned": False,
+            }
         )
         if len(rows) - len(kept) == RECENT_LIMIT:
             break
@@ -689,8 +759,14 @@ def browse_foods(
     rows = db.execute(query).all()
     page = rows[:BROWSE_PAGE]
     states = community_states(db, user, [food for food, _, _ in page])
+    servings = first_servings(db, [food for food, _, _ in page])
     items = [
-        food_row(food, None if photo_id is None else photo_url(photo_id), states[food.id])
+        food_row(
+            food,
+            None if photo_id is None else photo_url(photo_id),
+            states[food.id],
+            servings.get(food.id),
+        )
         for food, photo_id, _ in page
     ]
     more = len(rows) > BROWSE_PAGE

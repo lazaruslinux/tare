@@ -97,19 +97,19 @@ def test_every_number_on_the_label_is_needed(client, signed_in):
         ("calories", "Calories"),
         ("saturated_fat_g", "Saturated fat"),
         ("cholesterol_mg", "Cholesterol"),
-        ("fiber_g", "Fibre"),
+        ("fiber_g", "Fiber"),
         ("sugar_g", "Sugar"),
     ):
         response = offer(client, **{field: None})
         assert response.status_code == 400
         assert response.json() == {
-            "detail": f"{label} is needed before this can be shared."
+            "detail": f"{label} is required before this can be shared."
         }
 
 
 def test_the_first_thing_missing_is_the_one_named(client, signed_in):
     response = offer(client, protein_g=None, sodium_mg=None)
-    assert response.json() == {"detail": "Protein is needed before this can be shared."}
+    assert response.json() == {"detail": "Protein is required before this can be shared."}
 
 
 def test_nought_is_an_answer_and_an_empty_box_is_not(client, signed_in):
@@ -119,7 +119,7 @@ def test_nought_is_an_answer_and_an_empty_box_is_not(client, signed_in):
 def test_a_serving_is_needed(client, signed_in):
     response = offer(client, servings=[])
     assert response.status_code == 400
-    assert response.json() == {"detail": "A serving is needed before this can be shared."}
+    assert response.json() == {"detail": "A serving is required."}
 
 
 # ---- What a submission does ----
@@ -192,7 +192,7 @@ def test_a_barcode_already_in_the_shared_database_is_a_conflict(
 
     response = offer(client)
     assert response.status_code == 409
-    assert response.json() == {"detail": "This barcode is already in the shared database."}
+    assert response.json() == {"detail": "This barcode is already in the Tare database."}
 
 
 def test_something_that_is_not_a_barcode_is_refused(client, signed_in):
@@ -231,7 +231,7 @@ def test_offering_one_you_keep_is_held_to_the_same_whole_label(client, signed_in
     attach_front(client, made["id"])
     response = client.post(f"/api/foods/{made['id']}/submit", json={})
     assert response.status_code == 400
-    assert response.json() == {"detail": "Saturated fat is needed before this can be shared."}
+    assert response.json() == {"detail": "Saturated fat is required before this can be shared."}
 
 
 def test_somebody_else_s_food_cannot_be_offered(client, db_session, make_user, signed_in):

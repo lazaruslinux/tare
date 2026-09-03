@@ -31,9 +31,11 @@ export const PHOTO_TOO_LARGE = 'A photo must be at most 10 MB.'
 export const SENT_FOR_REVIEW = 'Sent for review'
 
 export const needed = (label: string): string =>
-  `${label} is needed before this can be shared.`
+  `${label} is required before this can be shared.`
 
-export const NO_SERVING = 'A serving is needed before this can be shared.'
+// Said where a serving is entered rather than where it is refused, so it names
+// the two boxes instead of the rule behind them.
+export const NO_SERVING = 'Give the serving a name and a size.'
 
 // What the first empty box is, if there is one. Zero is an answer: a food with
 // no fibre in it says nought, and that is a number somebody read off a label.

@@ -65,7 +65,7 @@ def test_the_name_is_trimmed_and_a_blank_one_is_refused(client, signed_in):
 def test_the_four_headline_numbers_are_required(client, signed_in):
     response = create(client, fat_g=None)
     assert response.status_code == 400
-    assert response.json() == {"detail": "Calories, protein, carbs, and fat are all needed."}
+    assert response.json() == {"detail": "Calories, protein, carbs, and fat are required."}
 
 
 def test_the_other_six_may_be_left_out(client, signed_in):
@@ -143,6 +143,25 @@ def test_deleting_a_food_takes_its_servings(client, db_session, signed_in):
     assert client.delete(f"/api/foods/{made['id']}").status_code == 204
     assert db_session.get(models.Food, made["id"]) is None
     assert db_session.query(models.FoodServing).count() == 0
+
+
+def test_a_list_row_carries_the_label_serving(client, signed_in):
+    """What the label calls one of them, so a row reads per that rather than
+    per 100 of anything. Position 0 is the label serving."""
+    create(
+        client,
+        name="Sliced cheese",
+        servings=[
+            {"name": "1 slice", "base_amount": 19, "position": 0},
+            {"name": "1 pack", "base_amount": 340, "position": 1},
+        ],
+    )
+    create(client, name="Loose rice")
+
+    listed = {row["name"]: row["serving"] for row in client.get("/api/foods/mine").json()}
+    assert listed["Sliced cheese"] == {"name": "1 slice", "base_amount": 19}
+    # A food nobody named a serving for reads per 100 of its base unit still.
+    assert listed["Loose rice"] is None
 
 
 def test_the_food_list_is_newest_first(client, signed_in):
@@ -337,7 +356,7 @@ def test_a_code_the_shared_database_answers_is_refused(client, db_session, signe
     put_food(db_session, None, name="Already shared", status="approved", barcode=CODE)
     response = create(client, barcode=CODE)
     assert response.status_code == 400
-    assert response.json() == {"detail": "This barcode is already in the shared database."}
+    assert response.json() == {"detail": "This barcode is already in the Tare database."}
 
 
 def test_something_that_is_not_a_barcode_is_refused(client, signed_in):

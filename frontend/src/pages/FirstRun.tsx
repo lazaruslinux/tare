@@ -9,7 +9,7 @@ import { heightParts, partsToCm, weightFrom, weightUnit } from '../lib/units'
 // stays changeable.
 const UNIT_CHOICES: { units: Units; title: string; note: string }[] = [
   { units: 'imperial', title: 'Pounds and ounces', note: 'lb, oz, fl oz' },
-  { units: 'metric', title: 'Grams and millilitres', note: 'g, ml' },
+  { units: 'metric', title: 'Grams and milliliters', note: 'g, ml' },
 ]
 
 const SEXES: { value: Sex; label: string }[] = [

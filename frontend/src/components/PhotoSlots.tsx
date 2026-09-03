@@ -4,13 +4,13 @@ import { useId, useState, type ChangeEvent } from 'react'
 import { errorText, upload, type PhotoPurpose } from '../api'
 import { MAX_PHOTO_BYTES, PHOTO_TOO_LARGE } from '../lib/community'
 
-// The two pictures a food offered to everybody carries: the front of the pack,
-// which is what somebody recognises it by, and the nutrition label, which is
-// what whoever reviews it checks the ten numbers against.
+// The two pictures a food submitted to everybody carries: the front of the
+// item, which is what somebody recognises it by, and the nutrition label,
+// which is what whoever reviews it checks the ten numbers against.
 //
-// The label one is never shown to anybody but its uploader and an
-// administrator, and the slot says so out loud rather than leaving somebody to
-// wonder where a photograph of their kitchen counter ends up.
+// The label one is served to nobody but its uploader and an administrator.
+// The tiles say what is required and nothing else: a slot with a paragraph
+// under it is a slot nobody reads.
 
 // A slot holds either a picture this step uploaded, which can be taken back,
 // or one the food already carries, which is shown and left alone.
@@ -125,8 +125,8 @@ export function PhotoSlots({
         <Tile
           photoId={front.id}
           standing={front.url}
-          title="Front of the pack"
-          note={front.required ? 'Needed' : 'Optional'}
+          title="Front of Item"
+          note={front.required ? 'Required' : 'Optional'}
           busy={Boolean(busy)}
           purpose="front"
           onPicked={onFront}
@@ -136,12 +136,8 @@ export function PhotoSlots({
         <Tile
           photoId={label.id}
           standing={label.url}
-          title="Nutrition label"
-          note={
-            label.required
-              ? 'Needed. Only admins see this one.'
-              : 'Optional. Only admins see this one.'
-          }
+          title="Nutrition Label"
+          note={label.required ? 'Required' : 'Optional'}
           busy={Boolean(busy)}
           purpose="label"
           onPicked={onLabel}

@@ -26,11 +26,10 @@ import {
   type RepeatRow,
 } from '../api'
 import { FoodForm } from '../components/FoodForm'
-import { FoodLine, MealLine, RecipeLine } from '../components/FoodRows'
+import { Calories, FoodLine, MealLine, RecipeLine } from '../components/FoodRows'
 import { PortionSheet } from '../components/PortionSheet'
-import { nutrientText } from '../components/NutritionLabel'
 import { useTopBar } from '../hooks/useTopBar'
-import { slotByTime, today } from '../lib/day'
+import { dayLabel, slotByTime, today, dayOf } from '../lib/day'
 import { Browse } from './Browse'
 import { FoodDetail } from './FoodDetail'
 import { MealDetail } from './MealDetail'
@@ -485,7 +484,7 @@ export function FoodTab({
           <>
             <p className="text-sm text-muted">
               Start here: scan a barcode or create a food, then submit it to add it to the
-              tare database for everyone.
+              Tare database for everyone.
             </p>
             <div className="t-actions mt-3">
               <button type="button" className="t-btn t-btn-primary flex-1" onClick={onScan}>
@@ -537,8 +536,8 @@ export function FoodTab({
         {meals.length === 0 ? (
           <>
             <p className="text-sm text-muted">
-              Meals log several foods in one line, like bread, cheese, mayo, lettuce, tomato
-              and turkey as one Turkey sandwich.
+              Meals turn several food items into one line. Example: cheese, bread, mayo,
+              turkey = "Turkey Sandwich"
             </p>
             <button
               type="button"
@@ -622,7 +621,7 @@ export function FoodTab({
         </p>
         {repeat.length === 0 ? (
           <p className="text-sm text-muted">
-            The foods you pin and the ones you log will be offered here.
+            The foods you pin and the ones you log will show up here.
           </p>
         ) : (
           repeat.map((row) => (
@@ -643,12 +642,7 @@ export function FoodTab({
                     <span className="block truncate text-xs text-muted">{row.brand}</span>
                   )}
                 </span>
-                <span className="shrink-0 text-right">
-                  <span className="t-nums block text-sm">
-                    {nutrientText('calories', row.calories)} cal
-                  </span>
-                  <span className="block text-xs text-muted">per 100 {row.base_unit}</span>
-                </span>
+                <Calories row={row} />
               </button>
               <button
                 type="button"
@@ -670,12 +664,15 @@ export function FoodTab({
         </p>
         {submissions.length === 0 ? (
           <p className="text-sm text-muted">
-            Foods you offer to the shared database are tracked here.
+            Foods you submit to the Tare database show up here.
           </p>
         ) : (
-          submissions.map((row) => (
-            <div key={row.id} className="t-row">
-              <span className="min-w-0 flex-1">
+          submissions.map((row) => {
+            // The food this row is about: the one that was submitted, or the
+            // shared one a correction or a picture is for. Gone with the food.
+            const foodId = row.food_id
+            const said = (
+              <>
                 <span className="flex items-center gap-2">
                   <span className="truncate text-sm">
                     {row.target_name ?? row.name ?? 'A deleted food'}
@@ -683,23 +680,41 @@ export function FoodTab({
                   <span className="t-chip shrink-0">{STATUS_LABEL[row.status]}</span>
                 </span>
                 <span className="block text-xs text-muted">
-                  {KIND_LABEL[row.kind] ?? row.kind}
+                  {KIND_LABEL[row.kind] ?? row.kind} ·{' '}
+                  {dayLabel(dayOf(me.timezone, row.created_at), today(me.timezone))}
                 </span>
                 {row.status === 'rejected' && row.decision_note && (
-                  <span className="block text-xs text-muted">{row.decision_note}</span>
+                  <span className="block text-xs text-muted">Reason: {row.decision_note}</span>
                 )}
-              </span>
-              {row.status === 'pending' && (
-                <button
-                  type="button"
-                  className="shrink-0 text-sm font-semibold text-muted"
-                  onClick={() => withdraw(row)}
-                >
-                  Withdraw
-                </button>
-              )}
-            </div>
-          ))
+              </>
+            )
+            return (
+              <div key={row.id} className="t-row">
+                {foodId === null ? (
+                  <span className="min-w-0 flex-1">{said}</span>
+                ) : (
+                  <button
+                    type="button"
+                    className="min-w-0 flex-1 text-left"
+                    onClick={() =>
+                      setView({ at: 'detail', id: foodId, from: { at: 'list' } })
+                    }
+                  >
+                    {said}
+                  </button>
+                )}
+                {row.status === 'pending' && (
+                  <button
+                    type="button"
+                    className="shrink-0 text-sm font-semibold text-muted"
+                    onClick={() => withdraw(row)}
+                  >
+                    Withdraw
+                  </button>
+                )}
+              </div>
+            )
+          })
         )}
       </div>
 

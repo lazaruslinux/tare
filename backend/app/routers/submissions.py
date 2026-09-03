@@ -53,7 +53,7 @@ NOT_WITHDRAWABLE = "That submission has already been decided."
 ALREADY_OFFERED = "This food is already waiting for a decision."
 ALREADY_EDITING = "You already have an edit waiting on this food."
 ALREADY_PICTURING = "You already have a photo waiting on this food."
-NOT_YOURS_TO_OFFER = "Only your own foods can be offered to the shared database."
+NOT_YOURS_TO_OFFER = "Only your own foods can be submitted to the Tare database."
 MISSING_PHOTO = "That photo is not there to attach."
 # What a food everybody will eat out of has to be photographed from. The front
 # is what somebody recognises it by on a shelf; the label is what a reviewer
@@ -73,7 +73,7 @@ NUTRIENT_LABELS = {
     "trans_fat_g": "Trans fat",
     "cholesterol_mg": "Cholesterol",
     "sodium_mg": "Sodium",
-    "fiber_g": "Fibre",
+    "fiber_g": "Fiber",
     "sugar_g": "Sugar",
 }
 
@@ -89,11 +89,11 @@ def check_complete(panel: object, servings: Sequence[object] | None) -> None:
         if getattr(panel, field) is None:
             raise HTTPException(
                 status.HTTP_400_BAD_REQUEST,
-                f"{NUTRIENT_LABELS[field]} is needed before this can be shared.",
+                f"{NUTRIENT_LABELS[field]} is required before this can be shared.",
             )
     if not servings:
         raise HTTPException(
-            status.HTTP_400_BAD_REQUEST, "A serving is needed before this can be shared."
+            status.HTTP_400_BAD_REQUEST, "A serving is required."
         )
 
 
