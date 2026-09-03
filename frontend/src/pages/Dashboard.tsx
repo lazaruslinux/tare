@@ -114,7 +114,7 @@ function Rings({ rings }: { rings: RingSpec[] }) {
       {rings.map((ring) => (
         <div key={ring.key} className="relative shrink-0">
           <Ring filled={ring.filled} small={tight} />
-          <div className="absolute inset-0 flex flex-col items-center justify-center px-2">
+          <div className={`absolute inset-0 flex flex-col items-center justify-center ${tight ? 'px-3' : 'px-2'}`}>
             <span
               className={`t-nums font-semibold leading-none ${tight ? 'text-xl' : 'text-2xl'}`}
             >
@@ -122,7 +122,7 @@ function Rings({ rings }: { rings: RingSpec[] }) {
             </span>
             <span
               className={`text-center leading-tight text-muted ${
-                tight ? 'text-[10px]' : 'text-xs'
+                tight ? 'max-w-[3.75rem] text-[10px]' : 'text-xs'
               }`}
             >
               {ring.caption}
@@ -451,9 +451,6 @@ export function Dashboard({
   const stamps = history?.latest ?? null
   const trend = (history?.trend ?? []).slice(-SPARK_DAYS)
   const spots = rows.filter((row) => trend.some((point) => point.date === row.date))
-  // The trend is the smoothed figure the goal is read against; the latest
-  // reading is what the scale said this morning.
-  const trendKg = trend.length > 0 ? trend[trend.length - 1].kg : null
   // What a personal number is still waiting on, and where to hand it over.
   // The server works the list out, so this never re-derives the rule.
   const gap =
@@ -556,7 +553,7 @@ export function Dashboard({
               />
             )}
             <div className="t-row min-h-9 text-sm">
-              <span className="flex-1 text-muted">Trend now</span>
+              <span className="flex-1 text-muted">Smoothed weight</span>
               <span className="t-nums">
                 {now === null ? 'No trend yet' : weightText(now, me.units)}
               </span>
@@ -570,6 +567,9 @@ export function Dashboard({
               </span>
             </div>
           </div>
+          <p className="mt-2 text-xs text-muted">
+            Weigh-ins bounce with water. Tare evens them out and reads your goal date from that smoothed line.
+          </p>
         </div>
 
         <div className="t-card mb-3">
@@ -744,9 +744,6 @@ export function Dashboard({
                 </span>
               </div>
             ))}
-            <p className="mt-2 text-xs text-muted">
-              Includes exercise added: +{day.exercise_kcal} cal
-            </p>
           </>
         )}
         {fitness !== null && fitness.connected && (
@@ -781,14 +778,9 @@ export function Dashboard({
             <span className="t-nums block text-3xl font-semibold leading-tight">
               {weightText(latest.weight_kg, me.units)}
             </span>
-            <span className="block text-xs text-muted">
-              {dayLabel(latest.date, todayIso)}
-              {/* One weigh-in is not a trend, and reading the same number
-                  twice on one line says the opposite. */}
-              {trendKg === null || trend.length < 2
-                ? ''
-                : ` · trend ${weightText(trendKg, me.units)}`}
-            </span>
+            {/* The smoothed figure stays off the card: the change and the goal
+                date underneath are read from it, and one number is enough. */}
+            <span className="block text-xs text-muted">{dayLabel(latest.date, todayIso)}</span>
             {trend.length < 2 ? (
               <span className="block text-xs text-muted">
                 Weigh in a few more times to see a trend.

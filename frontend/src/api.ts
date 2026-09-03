@@ -594,6 +594,13 @@ export async function upload<T>(
   return send<T>(path, { method: 'POST', body: form })
 }
 
+// A file and nothing else, which is what the health export upload sends.
+export async function uploadFile<T>(path: string, file: File): Promise<T> {
+  const form = new FormData()
+  form.append('file', file)
+  return send<T>(path, { method: 'POST', body: form })
+}
+
 async function send<T>(path: string, init: RequestInit): Promise<T> {
   let response: Response
   try {
@@ -709,3 +716,6 @@ export type SyncKey = {
 }
 
 export type MintedKey = SyncKey & { token: string }
+
+// What one export did, and the same four figures whichever way it arrived.
+export type Synced = { days: number; workouts: number; flagged: number; skipped: number }

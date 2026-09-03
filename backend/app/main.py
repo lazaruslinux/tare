@@ -46,9 +46,17 @@ MAX_UPLOAD_BYTES = 11 * 1024 * 1024
 INGEST_PATH = "/api/ingest/health"
 MAX_INGEST_BYTES = 15 * 1024 * 1024
 
+# And the same export again, picked as a file on the Sync a device screen. The
+# same ceiling: it is the same document, arriving inside a multipart wrapper.
+INGEST_UPLOAD_PATH = "/api/ingest/upload"
+
 # What each of them is held to. By exact path, so nothing underneath one
 # inherits its allowance.
-PATH_CEILINGS = {UPLOAD_PATH: MAX_UPLOAD_BYTES, INGEST_PATH: MAX_INGEST_BYTES}
+PATH_CEILINGS = {
+    UPLOAD_PATH: MAX_UPLOAD_BYTES,
+    INGEST_PATH: MAX_INGEST_BYTES,
+    INGEST_UPLOAD_PATH: MAX_INGEST_BYTES,
+}
 
 _TOO_LARGE = b'{"detail":"Request body is too large."}'
 

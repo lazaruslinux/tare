@@ -1,4 +1,4 @@
-"""The one address a phone posts to.
+"""The two addresses a health export arrives at.
 
 The order the checks run in is the whole design of this file, so it is written
 out once here and followed exactly below.
@@ -11,6 +11,10 @@ unauthorised caller never gets this server to parse fifteen megabytes for them.
 
 After that, one row at a time inside its own savepoint. A sync carrying a
 thousand days and one unreadable line writes the thousand days.
+
+The second address takes the same export as a file, picked by somebody already
+signed in, behind their session rather than a key. Same order, same caps, same
+import, same answer.
 """
 
 from __future__ import annotations
@@ -21,14 +25,16 @@ import json
 from fastapi import APIRouter, Depends, HTTPException, Request, status
 from sqlalchemy import delete
 from sqlalchemy.orm import Session
+from starlette.datastructures import UploadFile
 
-from app import clock, ingest_hae, ingest_hc, models
+from app import clock, ingest_hae, ingest_hc, models, throttle
 from app.db import get_db
-from app.deps import require_ingest_user
+from app.deps import require_ingest_user, require_user
 
 router = APIRouter(prefix="/ingest", tags=["ingest"])
 
 BAD_BODY = "Body must be JSON."
+NO_FILE = "Choose a file to upload."
 
 # How long the record of a sync is kept. Long enough to see a pattern in what a
 # phone keeps failing to send, short enough that the table stays small. Purged
@@ -47,13 +53,12 @@ def _refuse_constant(literal: str) -> float:
     raise ValueError(f"{literal} is not a number this address accepts")
 
 
-@router.post("/health")
-async def ingest_health(
-    request: Request,
-    db: Session = Depends(get_db),
-    user: models.User = Depends(require_ingest_user),
-) -> dict[str, int]:
-    raw = await request.body()
+def _receive(db: Session, user: models.User, raw: bytes) -> dict[str, int]:
+    """One export, from the moment its bytes are in hand.
+
+    Both ways in end here, so a file somebody picked can never be read by
+    slightly different rules than a phone's post.
+    """
     try:
         payload = json.loads(raw, parse_constant=_refuse_constant)
     except (ValueError, RecursionError):
@@ -87,6 +92,38 @@ async def ingest_health(
         "flagged": counts.flagged,
         "skipped": counts.skipped,
     }
+
+
+@router.post("/health")
+async def ingest_health(
+    request: Request,
+    db: Session = Depends(get_db),
+    user: models.User = Depends(require_ingest_user),
+) -> dict[str, int]:
+    return _receive(db, user, await request.body())
+
+
+@router.post("/upload")
+async def upload_export(
+    request: Request,
+    db: Session = Depends(get_db),
+    user: models.User = Depends(require_user),
+) -> dict[str, int]:
+    """The same export as a file, from somebody already signed in.
+
+    A session and never a sync key: this is a person at a screen, and the key
+    belongs to the phone. The form is read here rather than declared as a
+    parameter so the limiter and the session are both settled before this
+    server parses a file for anybody.
+    """
+    if throttle.ingest_limiter.hit(throttle.client_address(request)):
+        raise HTTPException(status.HTTP_429_TOO_MANY_REQUESTS, throttle.TOO_MANY)
+    async with request.form() as form:
+        picked = form.get("file")
+        if not isinstance(picked, UploadFile):
+            raise HTTPException(status.HTTP_400_BAD_REQUEST, NO_FILE)
+        raw = await picked.read()
+    return _receive(db, user, raw)
 
 
 def _log(

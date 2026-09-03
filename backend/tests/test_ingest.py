@@ -8,6 +8,7 @@ from app.deps import BAD_INGEST_TOKEN
 from app.models import now_utc
 
 PATH = "/api/ingest/health"
+UPLOAD = "/api/ingest/upload"
 
 
 def stamp(day: dt.date, hour: int, minute: int = 0) -> str:
@@ -126,6 +127,11 @@ def post(client, token, payload):
 
 def yesterday():
     return dt.date.today() - dt.timedelta(days=1)
+
+
+def pick(client, raw, name="export.json", kind="application/json", **headers):
+    """One file, chosen on the Sync a device screen."""
+    return client.post(UPLOAD, files={"file": (name, raw, kind)}, headers=headers)
 
 
 def test_an_export_lands_as_days_and_a_workout(client, db_session, make_user):
@@ -448,3 +454,55 @@ def test_a_sync_stamps_the_key_it_arrived_with(client, db_session, make_user):
 
     row = db_session.get(models.IngestToken, user.id)
     assert row.last_used_at is not None
+
+
+def test_a_picked_file_lands_the_way_a_sync_does(client, db_session, signed_in):
+    day = yesterday()
+
+    response = pick(client, json.dumps(export(day)).encode())
+
+    assert response.status_code == 200
+    body = response.json()
+    assert body["days"] == 9
+    assert body["workouts"] == 1
+    assert body["skipped"] == 0
+    steps = db_session.scalar(
+        select(models.FitnessDaily).where(models.FitnessDaily.metric == "step_count")
+    )
+    assert steps.value == 8500
+    assert db_session.scalar(select(models.Workout)).activity == "Outdoor Run"
+    row = db_session.scalar(select(models.IngestLog))
+    assert row.dialect == "hae"
+    assert row.user_id == signed_in.id
+
+
+def test_an_upload_needs_a_session(client, db_session, make_user):
+    make_user("nobody")
+
+    response = pick(client, json.dumps({"data": {"metrics": []}}).encode())
+
+    assert response.status_code == 401
+    assert response.json() == {"detail": "You are not signed in."}
+    assert db_session.scalar(select(models.IngestLog)) is None
+
+
+def test_a_picked_file_that_is_not_json_is_refused(client, signed_in):
+    response = pick(client, b"not an export at all", name="notes.txt", kind="text/plain")
+
+    assert response.status_code == 400
+    assert response.json() == {"detail": "Body must be JSON."}
+
+
+def test_a_sync_key_does_not_open_the_upload(client, db_session, make_user):
+    user = make_user("keyed")
+    token = token_for(db_session, user)
+
+    response = pick(
+        client,
+        json.dumps({"data": {"metrics": []}}).encode(),
+        authorization=f"Bearer {token}",
+    )
+
+    assert response.status_code == 401
+    assert response.json() == {"detail": "You are not signed in."}
+    assert db_session.scalar(select(models.IngestLog)) is None

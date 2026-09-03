@@ -1,6 +1,13 @@
-import { useEffect, useState } from 'react'
+import { type ChangeEvent, useEffect, useId, useState } from 'react'
 
-import { api, errorText, type MintedKey, type SyncKey } from '../api'
+import {
+  api,
+  errorText,
+  uploadFile,
+  type MintedKey,
+  type Synced,
+  type SyncKey,
+} from '../api'
 
 type Platform = 'iphone' | 'android'
 
@@ -12,6 +19,7 @@ const STEPS: Record<Platform, string[]> = {
     'Let it read Apple Health when it asks. Without that it has nothing to send.',
     'Go to Automations and add one. Set it to REST API, paste the address below into the URL, and add the header below.',
     'Set the data type to Workouts, turn on route data and workout metrics, and set it to run every 5 minutes.',
+    'For the first run, set Date Range to Previous 30 days, run it once, then set it back to Default.',
     'Add a second automation the same way, with the data type set to Health Metrics. Turn on the readings you want Tare to keep. Tare stores all of them.',
     'Run each one once by hand. This screen will say connected within a minute.',
   ],
@@ -64,6 +72,10 @@ export function SyncDevice() {
   const [minted, setMinted] = useState<MintedKey | null>(null)
   const [failed, setFailed] = useState('')
   const [working, setWorking] = useState(false)
+  const [uploading, setUploading] = useState(false)
+  const [added, setAdded] = useState('')
+  const [refused, setRefused] = useState('')
+  const field = useId()
 
   useEffect(() => {
     let alive = true
@@ -86,6 +98,24 @@ export function SyncDevice() {
       setFailed(errorText(failure))
     }
     setWorking(false)
+  }
+
+  const take = async (event: ChangeEvent<HTMLInputElement>) => {
+    const file = event.target.files?.[0]
+    // Cleared either way, so picking the same file twice still fires.
+    event.target.value = ''
+    if (!file) return
+    setUploading(true)
+    setAdded('')
+    setRefused('')
+    try {
+      const counts = await uploadFile<Synced>('/ingest/upload', file)
+      const skipped = counts.skipped > 0 ? ` ${counts.skipped} already synced.` : ''
+      setAdded(`Added ${counts.days} days and ${counts.workouts} workouts.${skipped}`)
+    } catch (failure) {
+      setRefused(errorText(failure))
+    }
+    setUploading(false)
   }
 
   const address = `${window.location.origin}${status?.path ?? '/api/ingest/health'}`
@@ -172,6 +202,27 @@ export function SyncDevice() {
           </>
         )}
         {failed !== '' && <p className="t-error mt-2">{failed}</p>}
+      </div>
+
+      <div className="t-card mb-3">
+        <p className="t-micro mb-2">Upload an export</p>
+        <p className="mb-3 text-sm text-muted">
+          Export the last 30 days from Health Auto Export as JSON and pick the file here.
+          Anything already synced is skipped.
+        </p>
+        <label className="t-btn cursor-pointer" htmlFor={field}>
+          {uploading ? 'Uploading...' : 'Choose a file'}
+        </label>
+        <input
+          id={field}
+          className="sr-only"
+          type="file"
+          accept=".json,application/json"
+          disabled={uploading}
+          onChange={take}
+        />
+        {added !== '' && <p className="mt-2 text-sm">{added}</p>}
+        {refused !== '' && <p className="t-error mt-2">{refused}</p>}
       </div>
 
       <div className="t-card mb-3">

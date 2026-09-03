@@ -43,7 +43,7 @@ schedule. You set up two automations: one for workouts, one for everything else.
 | Time Grouping | Minutes |
 | Export Format | JSON |
 | Export Version | v2 |
-| Date Range | Default |
+| Date Range | Default, and see The first run below |
 | Batch Requests | Off |
 | Sync Cadence | Every 5 minutes |
 
@@ -64,7 +64,7 @@ schedule. You set up two automations: one for workouts, one for everything else.
 | Time Grouping | Day, or Hour if you want the hour by hour bars |
 | Export Format | JSON |
 | Export Version | v2 |
-| Date Range | Previous 7 Days |
+| Date Range | Previous 7 Days, and see The first run below |
 | Batch Requests | Off |
 | Sync Cadence | Every 5 minutes |
 
@@ -74,6 +74,14 @@ schedule. You set up two automations: one for workouts, one for everything else.
 Include Route Data is what draws the line on a workout. Tare throws away every
 point within about 200 metres of where the workout started and where it ended
 before it stores anything, so the line it keeps never starts at your door.
+
+### The first run
+
+A new automation sends what its date range covers, which is a day or two rather
+than a history. To bring the last month in, set Date Range to Previous 30 Days
+on each automation, run it once by hand, then set it back to what the table
+above says. Nothing is sent twice: days that are already stored are recognised
+and left alone.
 
 ## Android
 
@@ -116,6 +124,20 @@ minutes come from how long each session lasted.
   thrown away for looking wrong.
 - If your phone is set to kilojoules or kilometres, Tare converts on the way in
   and shows you your own units.
+
+## Upload an export
+
+Sync a device takes a file as well, which is the other way to bring a month of
+history in. In Health Auto Export, export the range you want as JSON and save
+the file to your phone. Then open Tare, go to More, then Sync a device, pick
+your phone, and choose the file under Upload an export.
+
+It takes one JSON file, up to 15 MB, and reads it exactly as a sync from your
+phone is read. Anything already stored is skipped, and the line underneath says
+how many days and workouts it added.
+
+HC Webhook has no export to a file, so on Android the webhook above is the only
+way in.
 
 ## If it is not arriving
 

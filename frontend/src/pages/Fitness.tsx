@@ -263,16 +263,17 @@ export function Fitness({
       <div className="t-card mb-3">
         {summary.connected ? (
           <>
-            <p className="text-sm">
-              Connected
+            <p className="text-sm">Connected</p>
+            <p className="text-xs text-muted">
+              Last health data sync:{' '}
               {synced === null
-                ? ' · nothing has arrived yet'
-                : ` · last heard from ${synced.toLocaleString(undefined, {
+                ? 'nothing has arrived yet'
+                : synced.toLocaleString(undefined, {
                     month: 'short',
                     day: 'numeric',
                     hour: 'numeric',
                     minute: '2-digit',
-                  })}`}
+                  })}
             </p>
             <button
               type="button"
