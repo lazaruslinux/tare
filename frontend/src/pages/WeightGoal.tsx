@@ -13,7 +13,7 @@ import {
   PACE_NOTES,
   asNumber,
   calText,
-  monthText,
+  dateText,
   notesFor,
   rateReview,
   rateStepText,
@@ -213,7 +213,7 @@ export function WeightGoal({
           value={
             targets.projection === null
               ? 'No date yet'
-              : `About ${monthText(targets.projection.month)}`
+              : dateText(targets.projection.date)
           }
           muted={targets.projection === null}
         />

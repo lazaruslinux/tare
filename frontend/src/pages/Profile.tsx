@@ -1,4 +1,6 @@
 import { useEffect, useState, type FormEvent } from 'react'
+import { CircleHelp } from 'lucide-react'
+import { Sheet } from '../components/Sheet'
 
 import { api, errorText, type Me, type Profile as ProfileRow, type Sex } from '../api'
 import { dayLabel, today } from '../lib/day'
@@ -35,6 +37,7 @@ export function Profile({
   const [birthdate, setBirthdate] = useState('')
   const [location, setLocation] = useState('')
   const [expecting, setExpecting] = useState(false)
+  const [about, setAbout] = useState(false)
   const [error, setError] = useState('')
   const [saved, markSaved] = useSavedChip()
   const [saving, setSaving] = useState(false)
@@ -110,6 +113,7 @@ export function Profile({
   }
 
   return (
+    <>
     <form className="t-card mb-3" onSubmit={save}>
       <p className="t-label">Sex</p>
       <div className="mb-1 flex gap-3">
@@ -119,7 +123,11 @@ export function Profile({
             type="button"
             aria-pressed={sex === choice.value}
             className="t-choice"
-            onClick={() => setSex(sex === choice.value ? null : choice.value)}
+            onClick={() => {
+              const next = sex === choice.value ? null : choice.value
+              setSex(next)
+              if (next === 'male') setExpecting(false)
+            }}
           >
             <span className="block text-sm font-semibold">{choice.label}</span>
           </button>
@@ -191,18 +199,27 @@ export function Profile({
         />
       </div>
 
-      <div className="t-row">
-        <span className="flex-1 text-sm">Pregnant or breastfeeding</span>
-        <button
-          type="button"
-          role="switch"
-          aria-checked={expecting}
-          className="t-btn px-3 aria-checked:border-accent aria-checked:text-text"
-          onClick={() => setExpecting(!expecting)}
-        >
-          {expecting ? 'On' : 'Off'}
-        </button>
-      </div>
+      {sex !== 'male' && (
+        <div className="t-row">
+          <label className="flex min-w-0 flex-1 items-center gap-3 text-sm">
+            <input
+              type="checkbox"
+              className="h-4 w-4 shrink-0 accent-accent"
+              checked={expecting}
+              onChange={(event) => setExpecting(event.target.checked)}
+            />
+            <span className="min-w-0">Adjust calculations for pregnancy/breastfeeding</span>
+          </label>
+          <button
+            type="button"
+            className="t-tap44 shrink-0 text-muted"
+            aria-label="About this adjustment"
+            onClick={() => setAbout(true)}
+          >
+            <CircleHelp className="h-4 w-4" strokeWidth={2} />
+          </button>
+        </div>
+      )}
 
       <div className="t-row">
         <span className="flex-1 text-sm">Latest weight</span>
@@ -238,5 +255,14 @@ export function Profile({
         administrator can see it.
       </p>
     </form>
+
+      <Sheet open={about} label="Pregnancy and breastfeeding" onClose={() => setAbout(false)}>
+        <p className="text-sm">
+          While on, weight-loss goals pause and your budget matches what you use, with
+          no deficit. Nothing extra is added, since needs change by trimester and while
+          breastfeeding. Ask your clinician for the right number.
+        </p>
+      </Sheet>
+    </>
   )
 }

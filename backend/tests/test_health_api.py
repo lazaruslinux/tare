@@ -137,8 +137,9 @@ def test_a_man_gets_the_higher_added_sugars_ceiling(client, member):
     assert client.get("/api/health/targets").json()["budget"]["sugar_g_max"] == 36
 
 
-def test_a_goal_weight_gives_a_month_and_never_a_day(client, case_a):
-    assert client.get("/api/health/targets").json()["projection"] == {"month": "2026-11"}
+def test_a_goal_weight_gives_a_date(client, case_a):
+    projection = client.get("/api/health/targets").json()["projection"]
+    assert projection["date"].startswith("2026-11")
 
 
 def test_a_rate_off_the_steps_is_refused_with_the_reason(client, case_a):

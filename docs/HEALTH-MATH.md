@@ -137,7 +137,7 @@ Items marked UNVERIFIED were not confirmed against a primary source at the time 
 
    Why: for muscle gain a surplus of roughly 10 to 20 percent above maintenance, giving 0.25 to 0.5 percent of body weight per week, is the recommendation that limits fat gain. [20] A surplus is also capped at 20 percent of maintenance.
 
-18. Projected goal date: weeks to goal = (current trend weight - goal weight) / chosen weekly rate, from today. The UI says "At this pace, about [Month Year]" with the month only, never a day, and adds "Bodies adapt, so the real date is usually later. The estimate updates as you weigh in."
+18. Projected goal date: weeks to goal = (current trend weight - goal weight) / chosen weekly rate, from today. The UI shows the specific date ("Dec 18, 2026") under "Goal forecast" and adds "Estimate. Updates with each weigh-in." (His call 2026-09-02: a date, not a month; the estimate caveat carries the uncertainty.)
    Why: the 3,500 kcal per pound rule [21] treats loss as linear, but validated dynamic models show a deficit produces a slowing curve as the body adapts, with about half the eventual change reached after a year. [22] Weight loss also lowers resting energy more than the weight change alone predicts, an effect measured years later in one cohort. [23] A month-level date with honest wording is as precise as the math allows.
 
 19. Trend weight is an exponentially weighted moving average of daily weigh-ins with a smoothing factor of 0.1, seeded with the first weigh-in. Days without a weigh-in carry the previous trend value. The trend, not the latest reading, drives the goal projection and the Targets page; single weigh-ins are shown as light points around the trend line.
@@ -212,7 +212,7 @@ Items marked UNVERIFIED were not confirmed against a primary source at the time 
 | Macronutrients | "Protein, Carbs, Fat" | macros, macronutrients |
 | AMDR | "the range experts recommend" | AMDR, acceptable distribution |
 | Grams per kilogram protein | "protein for your size" | g/kg, per kilogram |
-| Calorie floor | "the lowest budget Tare will set" | floor, minimum intake, VLCD |
+| Calorie floor | "Lowest recommended intake." | floor, minimum intake, VLCD |
 | Trend weight | "your trend" | EWMA, moving average, smoothed |
 | Projected goal date | "At this pace, about [Month Year]" | projection, ETA, linear estimate |
 | BMI | not shown | BMI, body mass index, obese, overweight, underweight |

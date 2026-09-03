@@ -133,10 +133,11 @@ export const notesFor = (
 ): string[] => notes.filter((_, index) => wanted.includes(keys[index] ?? ''))
 
 // A month and never a day (decision 18).
-export const monthText = (iso: string): string =>
-  new Date(`${iso}-01T00:00:00Z`).toLocaleDateString(undefined, {
+export const dateText = (iso: string): string =>
+  new Date(`${iso}T00:00:00Z`).toLocaleDateString(undefined, {
     timeZone: 'UTC',
-    month: 'long',
+    month: 'short',
+    day: 'numeric',
     year: 'numeric',
   })
 

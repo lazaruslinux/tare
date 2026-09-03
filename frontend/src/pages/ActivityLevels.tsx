@@ -2,10 +2,8 @@ import { Check, ChevronRight } from 'lucide-react'
 import { useState } from 'react'
 
 import type { Me, RestingInputs, Targets as TargetsRow } from '../api'
-import { ExerciseSheet } from '../components/ExerciseSheet'
 import { SaveMarks, useSavedChip } from '../components/SaveMarks'
 import { Sheet } from '../components/Sheet'
-import { today } from '../lib/day'
 import { LEVELS, LEVEL_INTRO, asNumber, calText, personalNumber } from '../lib/targets'
 import { heightText, round1, weightText } from '../lib/units'
 import type { Save } from './Targets'
@@ -90,7 +88,6 @@ export function ActivityLevels({
   missing,
   busy,
   error,
-  onSaved,
   onSaveProfile,
   onOpenProfile,
 }: {
@@ -101,11 +98,9 @@ export function ActivityLevels({
   missing: string[]
   busy: boolean
   error: string
-  onSaved: () => void
   onSaveProfile: Save
   onOpenProfile: () => void
 }) {
-  const [logging, setLogging] = useState(false)
   const [saved, markSaved] = useSavedChip()
   const [goal, setGoal] = useState<Goal>(null)
   const [typed, setTyped] = useState('')
@@ -217,7 +212,7 @@ export function ActivityLevels({
       </button>
 
       <div className="t-card mb-3">
-        <p className="t-micro mb-2">About what you use today</p>
+        <p className="t-micro mb-2">Daily energy use</p>
         {resting === null ? (
           <button type="button" className="text-sm text-accent" onClick={onOpenProfile}>
             {personalNumber(missing).label}
@@ -254,21 +249,7 @@ export function ActivityLevels({
           </div>
         )}
 
-        <p className="t-note mt-3">
-          This is an estimate. What your body really uses can be a few hundred calories
-          either side of it.
-        </p>
-
-        <button
-          type="button"
-          className="t-row w-full text-left"
-          onClick={() => setLogging(true)}
-        >
-          <span className="min-w-0 flex-1 text-sm">Exercise today</span>
-          <span className="t-nums shrink-0 text-sm text-muted">
-            {exercise > 0 ? `${calText(exercise)} cal` : 'Log exercise'}
-          </span>
-        </button>
+        <p className="t-note mt-3">Estimate. Real use can differ by a few hundred cal.</p>
       </div>
 
       <div className="t-card mb-3">
@@ -320,16 +301,6 @@ export function ActivityLevels({
         )}
       </Sheet>
 
-      {logging && (
-        <ExerciseSheet
-          date={today(me.timezone)}
-          onClose={() => setLogging(false)}
-          onSaved={() => {
-            setLogging(false)
-            onSaved()
-          }}
-        />
-      )}
     </>
   )
 }

@@ -83,14 +83,8 @@ BAD_STEP_GOAL = f"Pick a goal between {MIN_STEP_GOAL:,} and {MAX_STEP_GOAL:,} st
 # The plain sentences behind app.health's note keys. The words are the doc's,
 # and no formula name appears in any of them (decision 29).
 NOTE_TEXT = {
-    "cap": (
-        "That goal rate would move you further from what you use than Tare will "
-        "set, so it has been eased back."
-    ),
-    "floor": (
-        "This is the lowest budget Tare will set, so reaching your goal will take "
-        "longer than the goal rate you picked."
-    ),
+    "cap": "Highest recommended deficit.",
+    "floor": "Lowest recommended intake.",
     "pregnancy": (
         "Energy needs change during pregnancy and breastfeeding. Ask your clinician "
         "what is right for you."
@@ -798,7 +792,7 @@ def read_targets(
         # split beside the split.
         "note_keys": note_keys,
         "nudges": waiting,
-        "projection": None if month is None else {"month": month},
+        "projection": None if month is None else {"date": month},
         "trend_kg": (
             None if state.trend_kg is None else health.round_for_display(state.trend_kg, "kg")
         ),

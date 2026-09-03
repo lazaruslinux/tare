@@ -407,10 +407,9 @@ def trend_by_day(readings: list[tuple[dt.date, float]]) -> list[tuple[dt.date, f
 def projection(
     trend_kg: float, goal_kg: float | None, weekly_rate_kg: float, today: dt.date
 ) -> str | None:
-    """Decision 18: the month a goal is reached at this pace, or nothing.
+    """Decision 18: the day a goal is reached at this pace, or nothing.
 
-    A month and never a day: the linear rule the weeks come from is not precise
-    enough to name one, and the screen says so beside this figure.
+    A plain linear estimate; the screen marks it as one beside this figure.
     """
     if goal_kg is None or weekly_rate_kg <= 0:
         return None
@@ -418,7 +417,7 @@ def projection(
     if gap == 0:
         return None
     reached = today + dt.timedelta(days=round(gap / weekly_rate_kg * 7.0))
-    return f"{reached.year:04d}-{reached.month:02d}"
+    return reached.isoformat()
 
 
 def nudges(

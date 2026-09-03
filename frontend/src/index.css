@@ -209,8 +209,18 @@
     color: var(--muted);
   }
 
+  /* iOS Safari gives a date field its own intrinsic width; pin it like the rest. */
+  .t-input[type='date'] {
+    -webkit-appearance: none;
+    appearance: none;
+    display: block;
+    max-width: 100%;
+  }
+
   .t-input {
     width: 100%;
+    min-width: 0;
+    box-sizing: border-box;
     min-height: 44px;
     padding: 0.5rem 0.75rem;
     border: 1px solid var(--line-strong);

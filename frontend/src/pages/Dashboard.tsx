@@ -24,7 +24,7 @@ import { MacroBar } from '../components/MacroBar'
 import { HEADLINE, nutrientText } from '../components/NutritionLabel'
 import { useTopBar } from '../hooks/useTopBar'
 import { dayLabel, slotByTime, today } from '../lib/day'
-import { personalNumber, calText, monthText } from '../lib/targets'
+import { personalNumber, calText, dateText } from '../lib/targets'
 import { round1, weightIn, weightText, weightUnit } from '../lib/units'
 
 // How far back the weight line reaches, and how long a deleted reading can be
@@ -428,7 +428,7 @@ export function Dashboard({
   const goalMonth =
     targets === null || targets.projection === null
       ? ''
-      : ` · Goal about ${monthText(targets.projection.month)}`
+      : ` · Goal ${dateText(targets.projection.date)}`
   const week = run.slice(-WEEK)
 
   // The rings the Food card draws. The steps one is a spec like the others and

@@ -3,7 +3,7 @@ import { useCallback, useEffect, useState } from 'react'
 
 import { api, errorText, type Me, type Profile as ProfileRow, type Targets as TargetsRow } from '../api'
 import { useTopBar } from '../hooks/useTopBar'
-import { DISCLAIMER, GOAL_LABEL, LEVEL_LABEL, calText, monthText } from '../lib/targets'
+import { DISCLAIMER, GOAL_LABEL, LEVEL_LABEL, calText, dateText } from '../lib/targets'
 import { ActivityLevels } from './ActivityLevels'
 import { DailyBudget } from './DailyBudget'
 import { WeightGoal } from './WeightGoal'
@@ -125,7 +125,6 @@ export function Targets({
         missing={profile?.missing ?? []}
         busy={busy}
         error={error}
-        onSaved={reload}
         onSaveProfile={saveProfile}
         onOpenProfile={onOpenProfile}
       />
@@ -150,7 +149,7 @@ export function Targets({
       ? 'Maintain'
       : targets.projection === null
         ? GOAL_LABEL[targets.goal]
-        : `${GOAL_LABEL[targets.goal]} · about ${monthText(targets.projection.month)}`
+        : `${GOAL_LABEL[targets.goal]} · ${dateText(targets.projection.date)}`
   // The level, and what the body uses before any of it. Without a profile
   // there is no resting figure, and the level stands on its own.
   const activityValue =

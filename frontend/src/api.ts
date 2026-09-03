@@ -143,7 +143,7 @@ export type Targets = {
   note_keys: string[]
   nudges: Nudge[]
   // A month and never a day.
-  projection: { month: string } | null
+  projection: { date: string } | null
   trend_kg: number | null
   reestimate: { delta_calories: number; calories: number } | null
   disclaimer_seen: boolean

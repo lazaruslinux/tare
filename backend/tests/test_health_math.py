@@ -250,9 +250,11 @@ def test_a_day_without_a_weigh_in_carries_the_trend_forward():
     assert [round(value, 3) for _, value in line] == [80.0, 80.0, 80.0, 80.1]
 
 
-def test_the_projection_names_a_month_and_never_a_day(case_a):
+def test_the_projection_names_a_day(case_a):
     worked = health.budget(case_a["maintenance"], "lose", 0.45, "female", False)
-    assert health.projection(70, 65, worked.weekly_rate_kg, TODAY) == "2026-11"
+    expected = TODAY + dt.timedelta(days=round(5 / worked.weekly_rate_kg * 7))
+    assert health.projection(70, 65, worked.weekly_rate_kg, TODAY) == expected.isoformat()
+    assert expected.isoformat().startswith("2026-11")
     # Nothing to project towards, and nothing moving towards it.
     assert health.projection(70, None, worked.weekly_rate_kg, TODAY) is None
     assert health.projection(70, 65, 0, TODAY) is None
