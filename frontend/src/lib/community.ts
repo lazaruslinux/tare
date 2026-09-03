@@ -80,6 +80,15 @@ export function macroDoubt(values: Values): Nutrient | null {
   return floor >= FLOOR_MIN && calories < TOLERANCE * floor ? 'calories' : null
 }
 
+// Where a request stands, in the words somebody reads rather than the word the
+// column stores.
+export const STATUS_LABEL: Record<string, string> = {
+  pending: 'Waiting',
+  approved: 'Approved',
+  rejected: 'Not approved',
+  withdrawn: 'Withdrawn',
+}
+
 // What a submission is called in the queue and in a member's own list.
 export const KIND_LABEL: Record<string, string> = {
   new: 'New food',

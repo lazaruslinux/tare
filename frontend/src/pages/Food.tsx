@@ -36,7 +36,7 @@ import { MealDetail } from './MealDetail'
 import { MyList, LIST_TITLE, type ListKind } from './MyList'
 import { PartsForm } from './PartsForm'
 import { RecipeDetail } from './RecipeDetail'
-import { KIND_LABEL } from '../lib/community'
+import { KIND_LABEL, STATUS_LABEL } from '../lib/community'
 
 // How many rows a card on this page shows before it stops being a card and
 // starts being a list. Five is what fits above the fold beside four other
@@ -46,14 +46,6 @@ const SHOWN = 5
 // waiting on it, long enough to notice the mistake.
 const UNDO = 6000
 
-const STATUS_LABEL: Record<MySubmission['status'], string> = {
-  pending: 'Waiting',
-  approved: 'Approved',
-  rejected: 'Not approved',
-}
-
-// What each kind of request is called where somebody reads their own list of
-// them, in the words they would use rather than the words the column stores.
 // Where going back from something lands, because a food is opened from the
 // page, from the shared database and from a list screen alike.
 type From = { at: 'list' } | { at: 'browse' } | { at: 'all'; kind: ListKind }
@@ -61,7 +53,9 @@ type From = { at: 'list' } | { at: 'browse' } | { at: 'all'; kind: ListKind }
 type View =
   | From
   | { at: 'detail'; id: number; from: From }
-  | { at: 'form'; food: FoodItem | null; notice?: string }
+  // A food open in the form, and whether it was opened to be sent: Resubmit
+  // is the edit form with the switch already on.
+  | { at: 'form'; food: FoodItem | null; notice?: string; submitDefault?: boolean }
   | { at: 'recipe'; id: number; from: From }
   | { at: 'meal'; id: number; from: From }
   // The editors are given what they are changing, or nothing for a new one.
@@ -346,7 +340,7 @@ export function FoodTab({
         me={me}
         backLabel={nameOf(from)}
         onBack={() => setView(from)}
-        onEdit={(food, notice) => setView({ at: 'form', food, notice })}
+        onEdit={(food, opened) => setView({ at: 'form', food, ...opened })}
         onDelete={remove}
         onSubmitted={() => {
           void load()
@@ -435,10 +429,12 @@ export function FoodTab({
       <FoodForm
         food={editing}
         notice={view.notice}
+        submitDefault={view.submitDefault}
         backLabel={editing === null ? 'Food' : editing.name}
         onOpenFood={(id) => setView({ at: 'detail', id, from: { at: 'list' } })}
         onSaved={(saved) => {
           void load()
+          void loadSubmissions()
           setView({ at: 'detail', id: saved.id, from: { at: 'list' } })
         }}
         onCancel={() =>

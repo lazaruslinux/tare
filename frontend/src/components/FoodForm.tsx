@@ -216,7 +216,7 @@ export function FoodForm({
   // The food this code already is, when the scan turned one up. Nothing is
   // created for it: it is there to be opened.
   const [already, setAlready] = useState<{ id: number; name: string } | null>(null)
-  const [submitOn, setSubmitOn] = useState(submitDefault ?? true)
+  const [submitOn, setSubmitOn] = useState(submitDefault ?? food === null)
   const [photoId, setPhotoId] = useState<number | null>(null)
   const [labelPhotoId, setLabelPhotoId] = useState<number | null>(null)
   const [conflicted, setConflicted] = useState(false)
@@ -230,9 +230,16 @@ export function FoodForm({
   // A food being entered for the first time. Everywhere else this form is
   // opened on a food that already exists, or on a proposal about one.
   const creating = food === null && onSubmit === undefined
+  // One of your own foods, open to be changed. This is where its pictures and
+  // the switch live: it is the only screen that has both the panel and them,
+  // so submitting again is the same form as correcting it.
+  const own = food !== null && onSubmit === undefined && food.mine
+  // The switch is not offered while a decision is outstanding: there is
+  // nothing to send until that one is answered or taken back.
+  const offerable = creating || (own && food.status !== 'pending')
   const scannable = onOpenFood !== undefined && food === null
   // Whether the whole panel is asked for rather than the four anybody reads.
-  const whole = Boolean(sharing) || Boolean(complete) || (creating && submitOn)
+  const whole = Boolean(sharing) || Boolean(complete) || (offerable && submitOn)
 
   const heading = title ?? (food ? 'Edit food' : 'New food')
   useTopBar(inSheet ? null : { title: heading, back: { label: backLabel, onBack: onCancel } })
@@ -392,6 +399,24 @@ export function FoodForm({
             body: payload,
           }))
       let saved = await write(body)
+      if (own && food !== null) {
+        // The corrections first, then the picture, then the offer: what goes
+        // for review is the food as it stands after this form. A new front
+        // photo replaces the one it was carrying.
+        if (photoId !== null) {
+          await api(`/foods/${food.id}/photo`, { method: 'POST', body: { photo_id: photoId } })
+          saved = await api<Food>(`/foods/${food.id}`)
+        }
+        if (submitOn) {
+          const answer = await api<{ food: Food }>(`/foods/${food.id}/submit`, {
+            method: 'POST',
+            body: { note, label_photo_id: labelPhotoId },
+          })
+          saved = answer.food
+        }
+        onSaved(saved)
+        return
+      }
       if (creating && photoId !== null) {
         // The food is written by now. A picture that will not go on is worth
         // less than the food, so it is not what somebody is told about: it can
@@ -418,6 +443,16 @@ export function FoodForm({
       <BarcodeScanner onCode={(code) => void resolve(code)} onClose={() => setScanning(false)} />
     )
   }
+
+  // What the button does, said in the word for it: a food that has been offered
+  // before is being offered again.
+  const action = sharing
+    ? 'Send'
+    : offerable && submitOn
+      ? food !== null && food.submissions.length > 0
+        ? 'Resubmit'
+        : 'Submit'
+      : 'Save'
 
   const typed = num(serving.amount)
   const per =
@@ -628,7 +663,7 @@ export function FoodForm({
           )}
         </div>
 
-        {creating && (
+        {offerable && (
           <div className="t-card mb-3">
             <label className="t-row text-sm">
               <span className="flex-1">Submit to Tare database</span>
@@ -650,9 +685,9 @@ export function FoodForm({
           </div>
         )}
 
-        {creating && (
+        {(creating || own) && (
           <PhotoSlots
-            front={{ id: photoId, required: submitOn }}
+            front={{ id: photoId, url: food?.photo_url, required: submitOn }}
             label={{ id: labelPhotoId, required: submitOn }}
             busy={saving}
             onFront={setPhotoId}
@@ -661,7 +696,7 @@ export function FoodForm({
           />
         )}
 
-        {(sharing || (creating && submitOn)) && (
+        {(sharing || (offerable && submitOn)) && (
           <div className="t-card mb-3">
             <label className="t-label" htmlFor="food-note">
               Anything the reviewer should know (optional)
@@ -680,7 +715,7 @@ export function FoodForm({
 
         <div className="t-actions mb-3">
           <button className="t-btn t-btn-primary flex-1" type="submit" disabled={saving}>
-            {creating && submitOn ? 'Submit' : sharing ? 'Send' : 'Save'}
+            {action}
           </button>
           <button className="t-btn" type="button" onClick={onCancel}>
             Cancel

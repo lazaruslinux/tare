@@ -253,6 +253,16 @@ export type FoodServing = LabelServing & {
   position: number
 }
 
+// One request about one food, as the food's own page lists it: what was asked,
+// what came of it, and when.
+export type FoodSubmissionRow = {
+  id: number
+  kind: string
+  status: string
+  created_at: string
+  decision_note: string
+}
+
 // The whole food. Every nutrient is per 100 of base_unit, and null is what a
 // label never said rather than none of it.
 export type Food = FoodRow & {
@@ -268,6 +278,9 @@ export type Food = FoodRow & {
   // Why an administrator turned this account's own offer of it down. Empty
   // unless that is what happened to it.
   decision_note: string
+  // What this account has asked about this food of theirs, newest first.
+  // Empty for a food that is not yours.
+  submissions: FoodSubmissionRow[]
   servings: FoodServing[]
   protein_g: number | null
   carbs_g: number | null

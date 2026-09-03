@@ -360,6 +360,46 @@ def rejection_note(db: Session, user: models.User, food: models.Food) -> str:
     return note or ""
 
 
+# How many of a food's own requests its page shows. The record is short by
+# nature: a food is offered, answered, corrected, and offered again.
+SUBMISSION_HISTORY = 5
+
+
+def submissions_for(
+    db: Session, user: models.User, food: models.Food
+) -> list[dict[str, object]]:
+    """What this account has asked about this food of theirs, newest first.
+
+    Only the owner's own, because a request is between one member and whoever
+    reviews it and nobody else is in it. Newest first and capped: the page is
+    about where the food stands now, with enough behind it to read as history.
+    """
+    if food.owner_id != user.id:
+        return []
+    rows = db.execute(
+        select(models.FoodSubmission)
+        .where(
+            models.FoodSubmission.submitted_by_id == user.id,
+            or_(
+                models.FoodSubmission.food_id == food.id,
+                models.FoodSubmission.target_food_id == food.id,
+            ),
+        )
+        .order_by(models.FoodSubmission.created_at.desc(), models.FoodSubmission.id.desc())
+        .limit(SUBMISSION_HISTORY)
+    ).scalars().all()
+    return [
+        {
+            "id": row.id,
+            "kind": row.kind,
+            "status": row.status,
+            "created_at": row.created_at,
+            "decision_note": row.decision_note,
+        }
+        for row in rows
+    ]
+
+
 def food_detail(db: Session, food: models.Food, user: models.User) -> dict[str, object]:
     """The whole food, its panel per 100 of its base unit, and its servings.
 
@@ -387,6 +427,10 @@ def food_detail(db: Session, food: models.Food, user: models.User) -> dict[str, 
         # Why it was turned down, for the one screen that says so. Empty
         # unless this account's own offer of this food was rejected.
         "decision_note": rejection_note(db, user, food) if state == "rejected" else "",
+        # The owner's own record of offering this food, which is what its page
+        # says instead of one line about the last answer. Empty for everybody
+        # else.
+        "submissions": submissions_for(db, user, food),
         "density_g_per_ml": food.density_g_per_ml,
         # What it was scanned from, where it was. On the packaging either way,
         # and it is what decides whether offering this food needs a photograph

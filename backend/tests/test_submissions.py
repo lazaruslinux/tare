@@ -545,3 +545,63 @@ def test_a_shared_food_shows_only_what_was_published(client, db_session, signed_
 
     found = client.get("/api/foods/search", params={"q": "shared"}).json()
     assert [row["photo_url"] for row in found] == [None]
+
+
+# ---- What a food's own page says about it ----
+
+
+def test_a_food_s_page_lists_what_was_asked_about_it_newest_first(
+    client, make_user, signed_in
+):
+    """A rejection and the offer that followed it, in that order, with the
+    reason still on the one it was given about."""
+    make_user("reviewer", admin=True)
+    made = offer(client, barcode=None).json()
+    food_id = made["food"]["id"]
+
+    sign_in(client, "reviewer")
+    assert (
+        client.post(
+            f"/api/admin/queue/{made['submission_id']}/reject",
+            json={"note": "The sodium is out by a factor of ten."},
+        ).status_code
+        == 200
+    )
+
+    sign_in(client, "member")
+    rows = client.get(f"/api/foods/{food_id}").json()["submissions"]
+    assert [(row["kind"], row["status"]) for row in rows] == [("new", "rejected")]
+    assert rows[0]["decision_note"] == "The sodium is out by a factor of ten."
+
+    assert (
+        client.post(
+            f"/api/foods/{food_id}/submit",
+            json={
+                "photo_id": a_photo(client),
+                "label_photo_id": a_photo(client, "label"),
+            },
+        ).status_code
+        == 201
+    )
+    rows = client.get(f"/api/foods/{food_id}").json()["submissions"]
+    assert [(row["status"], row["decision_note"]) for row in rows] == [
+        ("pending", ""),
+        ("rejected", "The sodium is out by a factor of ten."),
+    ]
+
+
+def test_nobody_else_is_told_what_was_asked_about_a_food(client, make_user, signed_in):
+    """A request is between whoever made it and whoever reviews it. Once the
+    food is shared, the page everybody reads carries none of that."""
+    make_user("reviewer", admin=True)
+    made = offer(client).json()
+
+    sign_in(client, "reviewer")
+    assert (
+        client.post(f"/api/admin/queue/{made['submission_id']}/approve", json={}).status_code
+        == 200
+    )
+
+    make_user("stranger")
+    sign_in(client, "stranger")
+    assert client.get(f"/api/foods/{made['food']['id']}").json()["submissions"] == []

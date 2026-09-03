@@ -4,29 +4,19 @@ import { useEffect, useState, type ChangeEvent } from 'react'
 import { api, errorText, upload, type Food, type Me } from '../api'
 import { FoodForm } from '../components/FoodForm'
 import { NutritionLabel } from '../components/NutritionLabel'
-import { PhotoSlots } from '../components/PhotoSlots'
 import { PortionSheet } from '../components/PortionSheet'
-import { Sheet } from '../components/Sheet'
 import { useTopBar } from '../hooks/useTopBar'
 import {
+  KIND_LABEL,
   MAX_PHOTO_BYTES,
   PHOTO_TOO_LARGE,
   SENT_FOR_REVIEW,
-  SHARED_FACTS,
-  missingSentence,
-  type Values,
+  STATUS_LABEL,
 } from '../lib/community'
-import { slotByTime, today } from '../lib/day'
+import { dayLabel, dayOf, slotByTime, today } from '../lib/day'
 
 // How long the line saying something was sent stays up.
 const NOTICE = 4000
-
-// What a food carries, in the shape the sharing rule reads.
-function panelOf(food: Food): Values {
-  const values = {} as Values
-  for (const fact of SHARED_FACTS) values[fact.key] = food[fact.key]
-  return values
-}
 
 export function FoodDetail({
   id,
@@ -44,9 +34,10 @@ export function FoodDetail({
   // the tab's own list and from the shared database alike.
   backLabel: string
   onBack: () => void
-  // The notice is why somebody was sent to the form: a food that was short of
-  // what sharing needs opens the form saying which box is empty.
-  onEdit: (food: Food, notice?: string) => void
+  // Why the form is being opened. A notice says which box sent somebody
+  // there; submitDefault is Resubmit, which is the same form with the switch
+  // already on.
+  onEdit: (food: Food, opened?: { notice?: string; submitDefault?: boolean }) => void
   onDelete: (food: Food) => void
   onSubmitted: () => void
   // Something about this food changed that a screen behind this one shows too.
@@ -61,11 +52,6 @@ export function FoodDetail({
   // The correction form, open over this screen rather than in place of it, so
   // going back lands on the food it is about.
   const [suggesting, setSuggesting] = useState(false)
-  // The photos step of submitting a food, which is the one thing the page
-  // cannot already answer: a packaged food needs its panel photographed, and
-  // that picture belongs to the request rather than to the food.
-  const [offering, setOffering] = useState(false)
-  const [labelPhotoId, setLabelPhotoId] = useState<number | null>(null)
   const [notice, setNotice] = useState('')
 
   // The correction form names itself while it is open.
@@ -102,28 +88,14 @@ export function FoodDetail({
     }
   }
 
-  const offer = (current: Food) => {
-    // Checked here first, so somebody short of half a label lands in the form
-    // with the reason rather than on a refusal they have to go back from.
-    const missing = missingSentence(panelOf(current), current.servings.length)
-    if (missing !== null) {
-      onEdit(current, missing)
-      return
-    }
-    setError('')
-    setOffering(true)
-  }
-
-  const send = async (current: Food) => {
+  // Take back a request that has not been decided. The food is left exactly
+  // as it was, privately, which is what the server does with it.
+  const withdraw = async (current: Food, submissionId: number) => {
     setSending(true)
     setError('')
     try {
-      const answer = await api<{ food: Food }>(`/foods/${current.id}/submit`, {
-        method: 'POST',
-        body: { label_photo_id: labelPhotoId },
-      })
-      setOffering(false)
-      setFood(answer.food)
+      await api(`/submissions/${submissionId}`, { method: 'DELETE' })
+      setFood(await api<Food>(`/foods/${current.id}`))
       onSubmitted()
     } catch (failure) {
       setError(errorText(failure))
@@ -204,6 +176,11 @@ export function FoodDetail({
   }
 
   const shared = food !== null && food.status === 'approved'
+  // The newest request about this food, which is what the card's one button
+  // answers: a decision that has not been made yet can be taken back, and
+  // anything else is offered again.
+  const latest = food?.submissions[0]
+  const waiting = latest !== undefined && latest.status === 'pending' ? latest : undefined
 
   return (
     <>
@@ -251,7 +228,7 @@ export function FoodDetail({
             />
             <p className="min-w-0 flex-1 text-xs text-muted">
               {food.mine
-                ? 'A picture of the front of the pack. It goes with this food if you ever submit it.'
+                ? 'Front of item. Change it under Edit.'
                 : 'Submit a picture of the front. An administrator decides whether it is published.'}
             </p>
           </div>
@@ -318,41 +295,50 @@ export function FoodDetail({
             </div>
           )}
 
-          {food.mine && food.status === 'custom' && food.community !== 'rejected' && (
+          {food.mine && (food.status === 'custom' || food.status === 'pending') && (
             <div className="t-card mb-3">
-              <div className="t-actions mb-2">
+              <p className="t-micro mb-1">Submissions</p>
+              {food.submissions.length === 0 ? (
+                <p className="mb-3 text-sm text-muted">Not submitted yet.</p>
+              ) : (
+                food.submissions.map((row) => (
+                  <div key={row.id}>
+                    <div className="t-row min-h-9 text-sm">
+                      <span className="min-w-0 flex-1">
+                        {KIND_LABEL[row.kind] ?? row.kind} ·{' '}
+                        {dayLabel(dayOf(me.timezone, row.created_at), today(me.timezone))}
+                      </span>
+                      <span className="t-chip shrink-0">
+                        {STATUS_LABEL[row.status] ?? row.status}
+                      </span>
+                    </div>
+                    {row.status === 'rejected' && row.decision_note && (
+                      <p className="mb-2 text-xs text-muted">Reason: {row.decision_note}</p>
+                    )}
+                  </div>
+                ))
+              )}
+              {waiting === undefined ? (
                 <button
-                  className="t-btn flex-1"
+                  className="t-btn t-btn-primary w-full"
                   type="button"
                   disabled={sending}
-                  onClick={() => offer(food)}
+                  onClick={() => onEdit(food, { submitDefault: true })}
                 >
-                  Submit to Tare database
+                  {latest === undefined || latest.status !== 'rejected'
+                    ? 'Submit to Tare database'
+                    : 'Resubmit'}
                 </button>
-              </div>
-              <p className="mt-2 text-xs text-muted">
-                It stays yours until an administrator approves it. Then everyone has it.
-              </p>
-            </div>
-          )}
-
-          {food.mine && food.status === 'custom' && food.community === 'rejected' && (
-            <div className="t-card mb-3">
-              <p className="t-micro mb-1">Not approved</p>
-              {food.decision_note && <p className="mb-3 text-sm">{food.decision_note}</p>}
-              <div className="t-actions">
+              ) : (
                 <button
-                  className="t-btn flex-1"
+                  className="t-btn w-full"
                   type="button"
                   disabled={sending}
-                  onClick={() => offer(food)}
+                  onClick={() => void withdraw(food, waiting.id)}
                 >
-                  Submit again
+                  Withdraw
                 </button>
-              </div>
-              <p className="mt-2 text-xs text-muted">
-                It is still yours to log. Fix what the note says and send it back.
-              </p>
+              )}
             </div>
           )}
 
@@ -368,44 +354,6 @@ export function FoodDetail({
                 {notice}
               </div>
             </div>
-          )}
-
-          {offering && (
-            <Sheet open tall label="Photos" onClose={() => setOffering(false)}>
-              <p className="t-micro mb-1">Submitting</p>
-              <p className="mb-3 text-base font-semibold tracking-tight">{food.name}</p>
-
-              <PhotoSlots
-                front={{ id: null, url: food.photo_url, required: true }}
-                label={{ id: labelPhotoId, required: true }}
-                busy={sending}
-                onFront={(id) => {
-                  if (id !== null) void attachFront(food, id)
-                }}
-                onLabel={setLabelPhotoId}
-                onFailed={setError}
-              />
-
-              {error && <p className="t-error mb-3">{error}</p>}
-
-              <div className="t-actions">
-                <button
-                  className="t-btn t-btn-primary flex-1"
-                  type="button"
-                  disabled={sending}
-                  onClick={() => void send(food)}
-                >
-                  Send
-                </button>
-                <button
-                  className="t-btn"
-                  type="button"
-                  onClick={() => setOffering(false)}
-                >
-                  Cancel
-                </button>
-              </div>
-            </Sheet>
           )}
 
           {logging && (
