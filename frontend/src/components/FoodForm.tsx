@@ -18,8 +18,8 @@ import { PhotoSlots } from './PhotoSlots'
 
 // Two ways to measure a food, in the words somebody would use out loud.
 const BASES: { value: BaseUnit; title: string; note: string }[] = [
-  { value: 'g', title: 'Grams', note: 'Solids, weighed' },
-  { value: 'ml', title: 'Milliliters', note: 'Liquids, poured' },
+  { value: 'g', title: 'Weight', note: 'grams, ounces' },
+  { value: 'ml', title: 'Volume', note: 'mL, fl oz' },
 ]
 
 // Matches the bounds the server holds a density to. Said on screen only when
@@ -184,7 +184,7 @@ export function FoodForm({
   // The food this code already is, when the scan turned one up. Nothing is
   // created for it: it is there to be opened.
   const [already, setAlready] = useState<{ id: number; name: string } | null>(null)
-  const [submitOn, setSubmitOn] = useState(Boolean(submitDefault))
+  const [submitOn, setSubmitOn] = useState(submitDefault ?? true)
   const [photoId, setPhotoId] = useState<number | null>(null)
   const [labelPhotoId, setLabelPhotoId] = useState<number | null>(null)
   const [conflicted, setConflicted] = useState(false)
@@ -466,7 +466,7 @@ export function FoodForm({
         </div>
 
         <div className="mb-3">
-          <p className="t-micro mb-2">Measured in</p>
+          <p className="t-micro mb-2">Measured by</p>
           <div className="flex gap-3">
             {BASES.map((base) => (
               <button
@@ -485,7 +485,7 @@ export function FoodForm({
 
         <div className="t-card mb-3">
           <p className="t-micro mb-1">Serving size</p>
-          <div className="t-row">
+          <div className="t-row mb-3">
             <input
               className="t-input min-w-0 flex-1"
               placeholder="1 slice"
@@ -503,9 +503,6 @@ export function FoodForm({
             />
             <span className="w-6 text-xs text-muted">{baseUnit}</span>
           </div>
-          <p className="mt-2 mb-3 text-xs text-muted">
-            What the label calls one serving, and how much of it that is in {baseUnit}.
-          </p>
 
           <p className="t-label mb-1">{per}</p>
           {HEADLINE.map((fact) => (
@@ -581,8 +578,11 @@ export function FoodForm({
                 onChange={(event) => setSubmitOn(event.target.checked)}
               />
             </label>
+            <p className="mt-2 text-xs text-muted">
+              Every food you submit makes Tare faster and better for everyone.
+            </p>
             {submitOn && (
-              <p className="mt-2 text-xs text-muted">
+              <p className="mt-1 text-xs text-muted">
                 All ten numbers are required. Enter 0 for anything the label lists as none.
               </p>
             )}
@@ -592,7 +592,7 @@ export function FoodForm({
         {creating && (
           <PhotoSlots
             front={{ id: photoId, required: submitOn }}
-            label={{ id: labelPhotoId, required: submitOn && barcode.trim() !== '' }}
+            label={{ id: labelPhotoId, required: submitOn }}
             busy={saving}
             onFront={setPhotoId}
             onLabel={setLabelPhotoId}

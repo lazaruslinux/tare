@@ -67,8 +67,7 @@ def offer(client, **overrides):
     """
     sent = body(**overrides)
     sent.setdefault("photo_id", a_photo(client))
-    if sent.get("barcode"):
-        sent.setdefault("label_photo_id", a_photo(client, "label"))
+    sent.setdefault("label_photo_id", a_photo(client, "label"))
     return client.post("/api/submissions/food", json=sent)
 
 
@@ -215,7 +214,10 @@ def test_a_food_you_already_keep_can_be_offered_as_it_stands(client, db_session,
     ).json()
 
     attach_front(client, made["id"])
-    response = client.post(f"/api/foods/{made['id']}/submit", json={"note": "Home made."})
+    response = client.post(
+        f"/api/foods/{made['id']}/submit",
+        json={"note": "Home made.", "label_photo_id": a_photo(client, "label")},
+    )
     assert response.status_code == 201
     assert response.json()["food"]["status"] == "pending"
     assert db_session.get(models.Food, made["id"]).status == "pending"
@@ -229,7 +231,9 @@ def test_offering_one_you_keep_is_held_to_the_same_whole_label(client, signed_in
     ).json()
 
     attach_front(client, made["id"])
-    response = client.post(f"/api/foods/{made['id']}/submit", json={})
+    response = client.post(
+        f"/api/foods/{made['id']}/submit", json={"label_photo_id": a_photo(client, "label")}
+    )
     assert response.status_code == 400
     assert response.json() == {"detail": "Saturated fat is required before this can be shared."}
 
@@ -252,7 +256,12 @@ def test_one_food_cannot_be_waiting_twice(client, signed_in):
         json={"name": "Grandma's fudge", "base_unit": "g", "servings": SERVINGS, **FULL},
     ).json()
     attach_front(client, made["id"])
-    assert client.post(f"/api/foods/{made['id']}/submit", json={}).status_code == 201
+    assert (
+        client.post(
+            f"/api/foods/{made['id']}/submit", json={"label_photo_id": a_photo(client, "label")}
+        ).status_code
+        == 201
+    )
 
     again = client.post(f"/api/foods/{made['id']}/submit", json={})
     assert again.status_code in (403, 409)
@@ -360,15 +369,12 @@ def test_anything_shared_needs_the_front_of_the_pack(client, signed_in):
     assert response.json() == {"detail": "Add a photo of the front of the pack."}
 
 
-def test_loose_food_needs_no_label_photo(client, db_session, signed_in):
+def test_a_loose_food_still_needs_a_label_photo(client, signed_in):
     response = client.post(
         "/api/submissions/food", json=body(barcode=None, photo_id=a_photo(client))
     )
-    assert response.status_code == 201
-    submission = db_session.get(
-        models.FoodSubmission, response.json()["submission_id"]
-    )
-    assert submission.label_photo_id is None
+    assert response.status_code == 400
+    assert response.json() == {"detail": "Add a photo of the nutrition label."}
 
 
 def test_the_label_photo_is_kept_with_the_request_and_not_with_the_food(

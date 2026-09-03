@@ -48,10 +48,9 @@ def offer(client, **overrides):
     }
     sent.update(overrides)
     # The pictures anything offered to everybody carries, unless the case says
-    # otherwise: the front of the pack, and the panel where there is a barcode.
+    # otherwise: the front of the pack and the panel.
     sent.setdefault("photo_id", a_photo(client))
-    if sent.get("barcode"):
-        sent.setdefault("label_photo_id", a_photo(client, "label"))
+    sent.setdefault("label_photo_id", a_photo(client, "label"))
     response = client.post("/api/submissions/food", json=sent)
     assert response.status_code == 201
     return response.json()
@@ -121,6 +120,7 @@ def test_the_queue_carries_the_whole_proposed_label(client, make_user):
             "base_unit": "g",
             "servings": SERVINGS,
             "photo_id": photo_id,
+            "label_photo_id": a_photo(client, "label"),
             **FULL,
         },
     )
@@ -136,8 +136,8 @@ def test_the_queue_carries_the_whole_proposed_label(client, make_user):
     # numbers were read off, which only this screen is ever served.
     assert first["photo_url"] is not None
     assert first["label_photo_url"] is not None
-    # And nothing to check the numbers against on the one with no barcode.
-    assert queue[1]["label_photo_url"] is None
+    # The label is evidence for every submission, barcode or not.
+    assert queue[1]["label_photo_url"] is not None
     assert first["food"]["barcode"] == CODE
     assert first["food"]["sodium_mg"] == 81
     assert first["food"]["servings"] == [{"name": "1 bar", "base_amount": 43}]

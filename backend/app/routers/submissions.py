@@ -135,11 +135,11 @@ def attach_label(db: Session, user: models.User, photo_id: int | None) -> int | 
     return photo.id
 
 
-def check_photos(packaged: bool, front: bool, label: bool) -> None:
-    """Refuse a submission that is not photographed well enough to judge."""
+def check_photos(front: bool, label: bool) -> None:
+    """Refuse a submission without both photos; the label is the evidence."""
     if not front:
         raise HTTPException(status.HTTP_400_BAD_REQUEST, NO_FRONT)
-    if packaged and not label:
+    if not label:
         raise HTTPException(status.HTTP_400_BAD_REQUEST, NO_LABEL)
 
 
@@ -262,7 +262,7 @@ def submit_new_food(
 
     # Both checks before anything is written, so a refusal leaves the upload
     # exactly where it was and the form can be sent again.
-    check_photos(bool(code), body.photo_id is not None, body.label_photo_id is not None)
+    check_photos(body.photo_id is not None, body.label_photo_id is not None)
     check_complete(body, body.servings)
     food = models.Food(
         status="pending",
@@ -311,7 +311,6 @@ def submit_own_food(
 
     standing = front_photo(db, food.id)
     check_photos(
-        bool(food.barcode),
         body.photo_id is not None or standing is not None,
         body.label_photo_id is not None,
     )

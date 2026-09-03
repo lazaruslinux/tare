@@ -377,7 +377,7 @@ export function FoodDetail({
 
               <PhotoSlots
                 front={{ id: null, url: food.photo_url, required: true }}
-                label={{ id: labelPhotoId, required: food.barcode !== null }}
+                label={{ id: labelPhotoId, required: true }}
                 busy={sending}
                 onFront={(id) => {
                   if (id !== null) void attachFront(food, id)
