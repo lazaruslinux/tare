@@ -29,6 +29,7 @@ export function ScanFlow({
   slot,
   onClose,
   onLogged,
+  onChanged,
 }: {
   me: Me
   // Where what is scanned lands. Left out from the centre control and the Food
@@ -38,6 +39,9 @@ export function ScanFlow({
   slot?: Slot
   onClose: () => void
   onLogged: () => void
+  // A food was written, whether or not it is logged after. The tabs behind this
+  // sheet list it, and Done closes the flow without logging anything.
+  onChanged: () => void
 }) {
   const [stage, setStage] = useState<Stage>({ at: 'camera' })
   const [code, setCode] = useState('')
@@ -154,7 +158,10 @@ export function ScanFlow({
         submitDefault
         prefill={stage.prefill}
         scannedBarcode={stage.barcode}
-        onSaved={(food) => setStage({ at: 'sent', food })}
+        onSaved={(food) => {
+          setStage({ at: 'sent', food })
+          onChanged()
+        }}
         onCancel={onClose}
         onConflict={() => void resolve(code)}
       />

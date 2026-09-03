@@ -1,7 +1,15 @@
 import { ChevronDown, ScanLine } from 'lucide-react'
 import { useState, type FormEvent } from 'react'
 
-import { ApiError, api, errorText, type Food, type Prefill, type Scanned } from '../api'
+import {
+  ApiError,
+  api,
+  errorText,
+  type Food,
+  type PhotoPurpose,
+  type Prefill,
+  type Scanned,
+} from '../api'
 import { useTopBar } from '../hooks/useTopBar'
 import { NO_SERVING, SHARED_FACTS, type Values } from '../lib/community'
 import {
@@ -158,6 +166,7 @@ export function FoodForm({
   inSheet,
   prefill,
   scannedBarcode,
+  review,
   onSaved,
   onCancel,
   onOpenFood,
@@ -185,6 +194,16 @@ export function FoodForm({
   prefill?: Prefill | null
   // The code that scan read, held still the way an in-form scan holds one.
   scannedBarcode?: string | null
+  // Open in front of a reviewer, correcting somebody else's proposal. Both
+  // pictures belong to the request rather than to the food, which is why they
+  // are given here: a food nobody has approved yet serves neither of them to
+  // anybody but the person who offered it. Both slots write back through the
+  // request as well.
+  review?: {
+    frontPhotoUrl: string | null
+    labelPhotoUrl: string | null
+    onPhoto: (purpose: PhotoPurpose, photoId: number | null) => Promise<unknown>
+  }
   onSaved: (food: Food) => void
   onCancel: () => void
   // Where a scanned code that is already in tare sends somebody. Given only
@@ -430,6 +449,15 @@ export function FoodForm({
           saved = answer.food
         }
         onSaved(saved)
+        return
+      }
+      if (review !== undefined && food !== null) {
+        // The corrections are written by now. Anything taken in this form goes
+        // on the request the reviewer is holding, not on the food, and the food
+        // is read back so the queue behind this shows what it says now.
+        if (photoId !== null) await review.onPhoto('front', photoId)
+        if (labelPhotoId !== null) await review.onPhoto('label', labelPhotoId)
+        onSaved(await api<Food>(`/foods/${food.id}`))
         return
       }
       if (creating && photoId !== null) {
@@ -707,11 +735,15 @@ export function FoodForm({
           </div>
         )}
 
-        {(creating || own) && (
+        {(creating || own || review !== undefined) && (
           <>
             <PhotoSlots
-              front={{ id: photoId, url: food?.photo_url, required: submitOn }}
-              label={{ id: labelPhotoId, required: submitOn }}
+              front={{
+                id: photoId,
+                url: review === undefined ? food?.photo_url : review.frontPhotoUrl,
+                required: submitOn,
+              }}
+              label={{ id: labelPhotoId, url: review?.labelPhotoUrl, required: submitOn }}
               busy={saving}
               onFront={(id) => {
                 setPhotoId(id)

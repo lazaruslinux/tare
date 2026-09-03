@@ -18,6 +18,7 @@ export function MealDetail({
   onBack,
   onEdit,
   onDelete,
+  onLogged,
 }: {
   id: number
   me: Me
@@ -27,6 +28,8 @@ export function MealDetail({
   onBack: () => void
   onEdit: (meal: Meal) => void
   onDelete: (meal: Meal) => void
+  // Logged from here, which the day on every other tab shows.
+  onLogged: () => void
 }) {
   const [meal, setMeal] = useState<Meal | null>(null)
   const [error, setError] = useState('')
@@ -76,6 +79,7 @@ export function MealDetail({
               answer.skipped.length === 1 ? 'was' : 'were'
             } left out because that food is gone.`
       )
+      onLogged()
     } catch (failure) {
       setRefusal(errorText(failure))
     }

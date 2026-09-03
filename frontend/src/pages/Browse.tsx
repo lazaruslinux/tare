@@ -34,10 +34,14 @@ function Row({ row, onOpen }: { row: FoodRow; onOpen: () => void }) {
 }
 
 export function Browse({
+  refresh,
   onBack,
   onOpen,
   onScan,
 }: {
+  // The app-wide change tick. A food approved while this was open belongs on
+  // the page, and reading it again is invisible: the rows stay up meanwhile.
+  refresh: number
   onBack: () => void
   onOpen: (id: number) => void
   // The one thing worth doing when the database is empty: put something in it.
@@ -60,11 +64,15 @@ export function Browse({
     if (window.matchMedia(ROOMY).matches) box.current?.focus()
   }, [])
 
-  // The letter is the whole of the listing's identity, so changing it reads the
-  // first page again rather than adding to what is on screen.
+  // The letter is the whole of the listing's identity, so changing it empties
+  // the screen before the first page of the new one lands. A refresh tick is
+  // not a new listing, so it leaves what is up alone while it reads.
+  useEffect(() => {
+    setRows(null)
+  }, [letter])
+
   useEffect(() => {
     let alive = true
-    setRows(null)
     const asked = letter ? `/foods/browse?letter=${letter}` : '/foods/browse'
     api<BrowsePage>(asked)
       .then((page) => {
@@ -77,7 +85,7 @@ export function Browse({
     return () => {
       alive = false
     }
-  }, [letter])
+  }, [letter, refresh])
 
   useEffect(() => {
     const needle = query.trim()

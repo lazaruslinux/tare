@@ -108,6 +108,7 @@ export function More({
   onChange,
   onSignedOut,
   waiting,
+  refresh,
   onReviewed,
   onOpenBiometrics,
   onOpenSubmissions,
@@ -121,6 +122,9 @@ export function More({
   // How many submissions are waiting. Read once above this screen, because the
   // navigation says the same number.
   waiting: number
+  // The app-wide change tick. What this tab reads from the server is read
+  // again on every bump, so a screen left open catches up on its own.
+  refresh: number
   // Said on the way out of an admin screen, so the count catches up with what
   // was just decided.
   onReviewed: () => void
@@ -171,7 +175,9 @@ export function More({
     return () => {
       alive = false
     }
-  }, [])
+    // The screen as well as the tick: coming back from Sync a device is where
+    // the line under that row is most likely to be out of date.
+  }, [refresh, screen])
 
   useEffect(() => {
     if (said === '') return
@@ -324,7 +330,9 @@ export function More({
 
   if (screen === 'feedbacklog') return <FeedbackLog />
 
-  if (screen === 'queue') return <AdminQueue onBack={leaveAdmin} onDecided={onReviewed} />
+  if (screen === 'queue') {
+    return <AdminQueue refresh={refresh} onBack={leaveAdmin} onDecided={onReviewed} />
+  }
   if (screen === 'invites') return <AdminInvites onBack={leaveAdmin} />
   if (screen === 'users') return <AdminUsers onBack={leaveAdmin} />
   if (screen === 'uploads') return <AdminUploads onBack={() => go(null)} />

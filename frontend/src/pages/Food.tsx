@@ -84,13 +84,18 @@ function SeeAll({ count, onOpen }: { count: number; onOpen: () => void }) {
 export function FoodTab({
   me,
   start,
+  refresh,
   onStarted,
   onScan,
   onSeen,
+  onChanged,
 }: {
   me: Me
   // Which card to open on, when something outside sent somebody here.
   start: 'list' | 'submissions'
+  // The app-wide change tick. Every bump reads the five lists again, quietly:
+  // nothing is cleared first, so a tick nobody caused is a tick nobody sees.
+  refresh: number
   onStarted: () => void
   // The scanner, which lives above this tab because the centre control opens
   // it too. Offered here where an empty shared database is the thing on screen.
@@ -98,6 +103,8 @@ export function FoodTab({
   // The answers on this screen have been read, so the badge that counted them
   // is worth asking again.
   onSeen: () => void
+  // Something here changed on the server, and the other tabs list it too.
+  onChanged: () => void
 }) {
   const [view, setView] = useState<View>({ at: 'list' })
   const [foods, setFoods] = useState<MyFoodRow[]>([])
@@ -172,7 +179,7 @@ export function FoodTab({
     return () => {
       alive = false
     }
-  }, [])
+  }, [refresh])
 
   useEffect(() => {
     if (undo === null) return
@@ -213,7 +220,7 @@ export function FoodTab({
     const waiting: Undo = {
       message: `Deleted ${food.name}.`,
       commit: () => {
-        api(`/foods/${food.id}`, { method: 'DELETE' }).catch(() => {
+        api(`/foods/${food.id}`, { method: 'DELETE' }).then(onChanged, () => {
           // The row is already off the screen. Saying so now, on a screen
           // somebody has moved on from, would be noise; the list tells the
           // truth the next time it is read.
@@ -231,6 +238,7 @@ export function FoodTab({
         api(`/submissions/${submission.id}`, { method: 'DELETE' })
           .then(() => {
             void load()
+            onChanged()
           })
           .catch(() => {})
       },
@@ -244,7 +252,10 @@ export function FoodTab({
     hold({
       message: row.pinned ? `Unpinned ${row.name}.` : `Took ${row.name} off Repeat.`,
       commit: () => {
-        api(`/foods/${row.id}/${row.pinned ? 'pin' : 'repeat'}`, { method: 'DELETE' }).catch(() => {})
+        api(`/foods/${row.id}/${row.pinned ? 'pin' : 'repeat'}`, { method: 'DELETE' }).then(
+          onChanged,
+          () => {}
+        )
       },
       revert: () => void loadRepeat(),
     })
@@ -256,7 +267,7 @@ export function FoodTab({
     const waiting: Undo = {
       message: `Deleted ${recipe.name}.`,
       commit: () => {
-        api(`/recipes/${recipe.id}`, { method: 'DELETE' }).catch(() => {})
+        api(`/recipes/${recipe.id}`, { method: 'DELETE' }).then(onChanged, () => {})
       },
     }
     hold(waiting)
@@ -268,7 +279,7 @@ export function FoodTab({
     const waiting: Undo = {
       message: `Deleted ${meal.name}.`,
       commit: () => {
-        api(`/meals/${meal.id}`, { method: 'DELETE' }).catch(() => {})
+        api(`/meals/${meal.id}`, { method: 'DELETE' }).then(onChanged, () => {})
       },
     }
     hold(waiting)
@@ -343,6 +354,7 @@ export function FoodTab({
   if (view.at === 'browse') {
     return (
       <Browse
+        refresh={refresh}
         onBack={() => setView({ at: 'list' })}
         onOpen={(id) => setView({ at: 'detail', id, from: { at: 'browse' } })}
         onScan={onScan}
@@ -363,9 +375,13 @@ export function FoodTab({
         onSubmitted={() => {
           void load()
           void loadSubmissions()
+          onChanged()
         }}
         onSeen={onSeen}
-        onChanged={() => void loadRepeat()}
+        onChanged={() => {
+          void loadRepeat()
+          onChanged()
+        }}
       />
     )
   }
@@ -380,6 +396,7 @@ export function FoodTab({
         onBack={() => setView(from)}
         onEdit={(recipe) => setView({ at: 'recipeForm', recipe })}
         onDelete={removeRecipe}
+        onLogged={onChanged}
       />
     )
   }
@@ -394,6 +411,7 @@ export function FoodTab({
         onBack={() => setView(from)}
         onEdit={(meal) => setView({ at: 'mealForm', meal })}
         onDelete={removeMeal}
+        onLogged={onChanged}
       />
     )
   }
@@ -407,6 +425,7 @@ export function FoodTab({
         recipe={editing}
         onSaved={(id) => {
           void loadRecipes()
+          onChanged()
           setView({ at: 'recipe', id, from: { at: 'list' } })
         }}
         onCancel={() =>
@@ -429,6 +448,7 @@ export function FoodTab({
         meal={editing}
         onSaved={(id) => {
           void loadMeals()
+          onChanged()
           setView({ at: 'meal', id, from: { at: 'list' } })
         }}
         onCancel={() =>
@@ -454,6 +474,7 @@ export function FoodTab({
         onSaved={(saved) => {
           void load()
           void loadSubmissions()
+          onChanged()
           setView({ at: 'detail', id: saved.id, from: { at: 'list' } })
         }}
         onCancel={() =>
@@ -753,7 +774,11 @@ export function FoodTab({
           slot={slotByTime(me.timezone)}
           units={me.units}
           onClose={() => setLogging(null)}
-          onDone={() => setLogging(null)}
+          onDone={() => {
+            setLogging(null)
+            void loadRepeat()
+            onChanged()
+          }}
         />
       )}
 

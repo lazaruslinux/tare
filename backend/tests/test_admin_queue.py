@@ -677,3 +677,15 @@ def test_nobody_else_s_answers_are_marked_read(client, make_user):
     assert client.post("/api/submissions/seen").status_code == 204
     sign_in(client, "member")
     assert client.get("/api/submissions/mine").json()[0]["seen_at"] is None
+
+
+def test_deciding_your_own_request_counts_as_reading_it(client, make_user):
+    """An administrator approving their own food has read the answer already."""
+    make_user("reviewer", admin=True)
+    sign_in(client, "reviewer")
+    made = offer(client)
+
+    client.post(f"/api/admin/queue/{made['submission_id']}/approve", json={})
+
+    rows = {row["id"]: row for row in client.get("/api/submissions/mine").json()}
+    assert rows[made["submission_id"]]["seen_at"] is not None

@@ -135,6 +135,10 @@ def stamp(submission: models.FoodSubmission, admin: models.User, outcome: str, n
     submission.decided_by_id = admin.id
     submission.decided_at = now_utc()
     submission.decision_note = note
+    # Deciding your own request is reading the answer to it. Left unstamped, an
+    # administrator approving their own food keeps the badge lit over nothing.
+    if submission.submitted_by_id == admin.id:
+        submission.seen_at = now_utc()
 
 
 def named(food: models.Food) -> dict[str, object]:

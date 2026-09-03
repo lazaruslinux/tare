@@ -11,6 +11,7 @@ import {
   type QueueItem,
 } from '../api'
 import { FoodForm } from '../components/FoodForm'
+import { Sheet } from '../components/Sheet'
 import { useTopBar } from '../hooks/useTopBar'
 import { KIND_LABEL, MAX_PHOTO_BYTES, PHOTO_TOO_LARGE, SHARED_FACTS } from '../lib/community'
 import { scale } from '../lib/units'
@@ -267,9 +268,13 @@ function Comparison({
 }
 
 export function AdminQueue({
+  refresh,
   onBack,
   onDecided,
 }: {
+  // The app-wide change tick. Somebody submitting a food while this is open
+  // puts it in the queue, and the queue is what this screen is.
+  refresh: number
   onBack: () => void
   // Each decision changes the waiting count the header shows, so it is told.
   onDecided: () => void
@@ -288,8 +293,15 @@ export function AdminQueue({
   const [answer, setAnswer] = useState<Record<number, string>>({})
   const [showAll, setShowAll] = useState<Record<number, boolean>>({})
   // The proposal being corrected before it is decided, loaded whole so the
-  // form has its servings as well as its panel.
-  const [adjusting, setAdjusting] = useState<Food | null>(null)
+  // form has its servings as well as its panel, and the request it belongs to.
+  // Null for a report, which is a food that is already shared: there is no
+  // request holding pictures for it.
+  const [adjusting, setAdjusting] = useState<{ food: Food; item: QueueItem | null } | null>(
+    null
+  )
+  // The request an approval is being confirmed for. His decision: yes is the
+  // one answer here that cannot be taken back, so it is asked twice.
+  const [approving, setApproving] = useState<QueueItem | null>(null)
 
   // The form names itself while a proposal is being corrected.
   useTopBar(
@@ -314,7 +326,16 @@ export function AdminQueue({
     return () => {
       alive = false
     }
-  }, [])
+  }, [refresh])
+
+  // What approving one of these sends, in one place: the button asks the
+  // question and the dialog answers it, and they must agree on the body.
+  const approveBody = (item: QueueItem): Record<string, unknown> =>
+    item.kind === 'new'
+      ? { keep_photo: keepPhoto[item.id] ?? true }
+      : item.kind === 'report'
+        ? { note: answer[item.id] ?? '' }
+        : {}
 
   const decide = async (id: number, path: string, body: unknown) => {
     setBusy(true)
@@ -323,6 +344,7 @@ export function AdminQueue({
       await api(`/admin/queue/${id}/${path}`, { method: 'POST', body })
       setRejecting(null)
       setReason('')
+      setApproving(null)
       await load()
       onDecided()
     } catch (failure) {
@@ -331,6 +353,13 @@ export function AdminQueue({
     }
     setBusy(false)
   }
+
+  // What a reviewer's picture does to a request, from the strip and from the
+  // editor alike. An id puts one in place; nothing takes the standing one off.
+  const setPhoto = (id: number, purpose: PhotoPurpose, photoId: number | null) =>
+    photoId === null
+      ? api(`/admin/queue/${id}/photo?purpose=${purpose}`, { method: 'DELETE' })
+      : api(`/admin/queue/${id}/photo`, { method: 'POST', body: { photo_id: photoId, purpose } })
 
   const replacePhoto = async (id: number, purpose: PhotoPurpose, file: File) => {
     if (file.size > MAX_PHOTO_BYTES) {
@@ -341,11 +370,9 @@ export function AdminQueue({
     setError('')
     try {
       const { photo_id } = await upload<{ photo_id: number }>('/photos', file, purpose)
-      await api(`/admin/queue/${id}/photo`, {
-        method: 'POST',
-        body: { photo_id, purpose },
-      })
+      await setPhoto(id, purpose, photo_id)
       await load()
+      onDecided()
     } catch (failure) {
       setError(errorText(failure))
     }
@@ -356,19 +383,23 @@ export function AdminQueue({
     setBusy(true)
     setError('')
     try {
-      await api(`/admin/queue/${id}/photo?purpose=${purpose}`, { method: 'DELETE' })
+      await setPhoto(id, purpose, null)
       await load()
+      onDecided()
     } catch (failure) {
       setError(errorText(failure))
     }
     setBusy(false)
   }
 
-  const adjust = async (foodId: number) => {
+  // A proposal opened in the form. The request comes with it on the kinds whose
+  // pictures a reviewer may change, so the editor can show and replace both.
+  const adjust = async (item: QueueItem, foodId: number, reviewing: boolean) => {
     setBusy(true)
     setError('')
     try {
-      setAdjusting(await api<Food>(`/foods/${foodId}`))
+      const food = await api<Food>(`/foods/${foodId}`)
+      setAdjusting({ food, item: reviewing ? item : null })
     } catch (failure) {
       setError(errorText(failure))
     }
@@ -376,22 +407,43 @@ export function AdminQueue({
   }
 
   if (adjusting !== null) {
+    const request = adjusting.item
     return (
       <FoodForm
-        food={adjusting}
+        food={adjusting.food}
         // A report is about a food that is already shared, so what this opens
         // is the row itself rather than a proposal waiting on a decision.
-        title={adjusting.status === 'approved' ? 'Edit this food' : 'Edit before approving'}
+        title={
+          adjusting.food.status === 'approved' ? 'Edit this food' : 'Edit before approving'
+        }
         backLabel="Review queue"
         complete
+        review={
+          request === null
+            ? undefined
+            : {
+                frontPhotoUrl: request.photo_url,
+                labelPhotoUrl: request.label_photo_url,
+                onPhoto: (purpose, photoId) => setPhoto(request.id, purpose, photoId),
+              }
+        }
         onSaved={() => {
           setAdjusting(null)
           void load()
+          onDecided()
         }}
         onCancel={() => setAdjusting(null)}
       />
     )
   }
+
+  // What the confirmation names. A request about a shared food names that one;
+  // a new food names itself.
+  const approvingName =
+    approving === null
+      ? ''
+      : ((approving.kind === 'new' ? approving.food?.name : approving.target?.name) ??
+        'this food')
 
   return (
     <>
@@ -406,6 +458,10 @@ export function AdminQueue({
 
       {(queue ?? []).map((item) => {
         const about = item.kind === 'new' ? item.food : item.target
+        // What the food is, in the words on the package. A proposal carries its
+        // own; anything about a shared food carries the shared one's.
+        const description =
+          item.kind === 'new' ? item.food?.description : item.current?.description
         // Held in a const so the buttons below narrow it too: a closure does
         // not keep the narrowing a JSX guard gave.
         const proposal = item.food
@@ -416,10 +472,8 @@ export function AdminQueue({
                 <p className="truncate text-base font-semibold tracking-tight">
                   {about?.name ?? 'A deleted food'}
                 </p>
+                {description && <p className="truncate text-sm text-muted">{description}</p>}
                 <p className="truncate text-sm text-muted">{about?.brand || 'No brand'}</p>
-                {item.kind === 'report' && item.current?.description && (
-                  <p className="text-xs text-muted">{item.current.description}</p>
-                )}
                 {item.kind === 'new' && item.food?.barcode && (
                   <p className="t-nums text-xs text-muted">{item.food.barcode}</p>
                 )}
@@ -456,7 +510,7 @@ export function AdminQueue({
                   type="button"
                   className="t-btn mt-3 w-full"
                   disabled={busy}
-                  onClick={() => adjust(proposal.id)}
+                  onClick={() => adjust(item, proposal.id, true)}
                 >
                   Edit before approving
                 </button>
@@ -470,7 +524,7 @@ export function AdminQueue({
                   type="button"
                   className="t-btn mt-3 w-full"
                   disabled={busy}
-                  onClick={() => adjust((item.current as Proposed).id)}
+                  onClick={() => adjust(item, (item.current as Proposed).id, false)}
                 >
                   Fix it
                 </button>
@@ -585,17 +639,15 @@ export function AdminQueue({
                   type="button"
                   className="t-btn t-btn-primary flex-1"
                   disabled={busy}
-                  onClick={() =>
-                    decide(
-                      item.id,
-                      'approve',
-                      item.kind === 'new'
-                        ? { keep_photo: keepPhoto[item.id] ?? true }
-                        : item.kind === 'report'
-                          ? { note: answer[item.id] ?? '' }
-                          : {}
-                    )
-                  }
+                  onClick={() => {
+                    // Resolving a report changes nothing anybody else sees, so
+                    // it stays one tap. Approving is asked about first.
+                    if (item.kind === 'report') {
+                      void decide(item.id, 'approve', approveBody(item))
+                      return
+                    }
+                    setApproving(item)
+                  }}
                 >
                   {item.kind === 'report' ? 'Resolve' : 'Approve'}
                 </button>
@@ -614,6 +666,34 @@ export function AdminQueue({
           </div>
         )
       })}
+
+      <Sheet
+        center
+        open={approving !== null}
+        label={`Approve ${approvingName}?`}
+        onClose={() => setApproving(null)}
+      >
+        <p className="text-base font-semibold tracking-tight">Approve {approvingName}?</p>
+        <p className="mt-2 text-sm text-muted">
+          This goes into the Tare database for everybody.
+        </p>
+        <div className="mt-4 flex gap-3">
+          <button
+            type="button"
+            className="t-btn t-btn-primary flex-1"
+            disabled={busy}
+            onClick={() => {
+              if (approving === null) return
+              void decide(approving.id, 'approve', approveBody(approving))
+            }}
+          >
+            Approve
+          </button>
+          <button type="button" className="t-btn" onClick={() => setApproving(null)}>
+            Cancel
+          </button>
+        </div>
+      </Sheet>
 
       {looking && (
         <button

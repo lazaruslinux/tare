@@ -1,5 +1,5 @@
 import { AnimatePresence, motion, useReducedMotion } from 'framer-motion'
-import { useEffect, useState } from 'react'
+import { useCallback, useEffect, useState } from 'react'
 
 import { api, type Me } from './api'
 import { ExerciseSheet } from './components/ExerciseSheet'
@@ -11,6 +11,7 @@ import { SideRail } from './components/SideRail'
 import { TabBar, type Page, type RailTarget } from './components/TabBar'
 import { TopBar } from './components/TopBar'
 import { entry } from './entry'
+import { useResume } from './hooks/useResume'
 import { TopBarContext, useTopBarState } from './hooks/useTopBar'
 import { useWaitingCount } from './hooks/useWaitingCount'
 import { useWideLayout } from './hooks/useWideLayout'
@@ -69,9 +70,11 @@ export default function App() {
   const [journalDay, setJournalDay] = useState('')
   const [measuring, setMeasuring] = useState(false)
   const [exercising, setExercising] = useState(false)
-  // Bumped whenever something is logged from the centre control. The tab
-  // underneath stays mounted while that sheet is open, so it is told to read
-  // the day again rather than being left showing the day before the meal.
+  // The app-wide change tick. Bumped whenever something changed on the server,
+  // wherever it was changed from, and whenever the app came back to the front
+  // after being left. Every tab watches it and reads its lists again, so a food
+  // added in one place shows up in the others without anybody leaving the app.
+  // It refetches lists and nothing else: no view state is keyed on it.
   const [logged, setLogged] = useState(0)
   // Bumped to send the tab that is already open back to its first screen. The
   // remount is the reset: each tab keeps its own view state inside itself.
@@ -80,6 +83,15 @@ export default function App() {
   const reduced = useReducedMotion()
   const bar = useTopBarState()
   const { waiting, queue, refresh: refreshWaiting } = useWaitingCount(me)
+  const changed = useCallback(() => setLogged((n) => n + 1), [])
+
+  // Back from wherever somebody went. Everything on screen is read again, the
+  // badge included, because time passed and another device may have moved.
+  useResume(() => {
+    if (me === null) return
+    changed()
+    refreshWaiting()
+  })
 
   useEffect(() => {
     if (phase !== 'loading') return
@@ -237,6 +249,7 @@ export default function App() {
                       onChange={setMe}
                       onSignedOut={leave}
                       waiting={queue}
+                      refresh={logged}
                       onReviewed={refreshWaiting}
                       onOpenBiometrics={() => selectRail('measurements')}
                       onOpenSubmissions={() => {
@@ -251,9 +264,11 @@ export default function App() {
                     <FoodTab
                       me={me}
                       start={foodView}
+                      refresh={logged}
                       onStarted={() => setFoodView('list')}
                       onScan={() => setScanning({})}
                       onSeen={refreshWaiting}
+                      onChanged={changed}
                     />
                   ) : page === 'journal' ? (
                     <Journal
@@ -329,7 +344,7 @@ export default function App() {
             onClose={() => setMeasuring(false)}
             onSaved={() => {
               setMeasuring(false)
-              setLogged(logged + 1)
+              changed()
             }}
           />
         )}
@@ -339,7 +354,7 @@ export default function App() {
             onClose={() => setExercising(false)}
             onSaved={() => {
               setExercising(false)
-              setLogged(logged + 1)
+              changed()
             }}
           />
         )}
@@ -349,9 +364,10 @@ export default function App() {
             date={scanning.date}
             slot={scanning.slot}
             onClose={() => setScanning(null)}
+            onChanged={changed}
             onLogged={() => {
               setScanning(null)
-              setLogged(logged + 1)
+              changed()
             }}
           />
         )}
@@ -363,7 +379,7 @@ export default function App() {
             onClose={() => setPicking(false)}
             onLogged={() => {
               setPicking(false)
-              setLogged(logged + 1)
+              changed()
             }}
           />
         )}

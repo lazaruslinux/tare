@@ -20,6 +20,7 @@ export function RecipeDetail({
   onBack,
   onEdit,
   onDelete,
+  onLogged,
 }: {
   id: number
   me: Me
@@ -29,6 +30,8 @@ export function RecipeDetail({
   onBack: () => void
   onEdit: (recipe: Recipe) => void
   onDelete: (recipe: Recipe) => void
+  // Logged from here, which the day on every other tab shows.
+  onLogged: () => void
 }) {
   const [recipe, setRecipe] = useState<Recipe | null>(null)
   const [error, setError] = useState('')
@@ -70,6 +73,7 @@ export function RecipeDetail({
       setNotice(
         `Logged ${servingsText(servings)} into ${SLOT_LABEL[slot].toLowerCase()}.`
       )
+      onLogged()
     } catch (failure) {
       setRefusal(errorText(failure))
     }
