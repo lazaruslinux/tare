@@ -592,7 +592,6 @@ export function Dashboard({
       .reverse()
       .filter((row) => row.body_fat_pct !== null)
       .map((row) => ({ date: row.date, kg: row.body_fat_pct as number }))
-    const now = line.length > 0 ? line[line.length - 1].kg : null
     const newest = windowed?.latest.weight_kg ?? null
     const logged = run.filter((row) => row.logged).length
 
@@ -617,9 +616,12 @@ export function Dashboard({
           ) : (
             <>
               <span className="t-nums block text-3xl font-semibold leading-tight">
-                {weightText(line[line.length - 1].kg, me.units)}
+                {newest === null
+                  ? weightText(line[line.length - 1].kg, me.units)
+                  : weightText(newest.value, me.units)}
               </span>
               <span className="block text-xs text-muted">
+                {newest === null ? '' : `${dayLabel(newest.date, todayIso)} · `}
                 {changeText(line, me.units, over)}
                 {goalMonth}
               </span>
@@ -627,20 +629,6 @@ export function Dashboard({
             </>
           )}
           <div className="mt-2">
-            {newest !== null && (
-              <Dated
-                label="Latest weigh-in"
-                value={weightText(newest.value, me.units)}
-                date={newest.date}
-                todayIso={todayIso}
-              />
-            )}
-            <div className="t-row min-h-9 text-sm">
-              <span className="flex-1 text-muted">Smoothed weight</span>
-              <span className="t-nums">
-                {now === null ? 'No trend yet' : weightText(now, me.units)}
-              </span>
-            </div>
             <div className="t-row min-h-9 text-sm">
               <span className="flex-1 text-muted">Goal weight</span>
               <span className="t-nums">
@@ -650,13 +638,10 @@ export function Dashboard({
               </span>
             </div>
           </div>
-          <p className="mt-2 text-xs text-muted">
-            Weigh-ins bounce with water. Tare evens them out and reads your goal date from that smoothed line.
-          </p>
         </div>
 
         <div className="t-card mb-3">
-          <p className="t-micro mb-2">Food, last {RUN_DAYS} days</p>
+          <p className="t-micro mb-2">Intake, last {RUN_DAYS} days</p>
           <DayBars days={run} todayIso={todayIso} height={72} mondaysOnly />
           <p className="t-nums mt-1 text-xs text-muted">
             Days logged {logged} of {RUN_DAYS}
@@ -883,7 +868,7 @@ export function Dashboard({
           </>
         )}
         <div className="mt-3 border-t border-line pt-3">
-          <p className="t-micro mb-2">Food, last {WEEK} days</p>
+          <p className="t-micro mb-2">Intake, last {WEEK} days</p>
           <DayBars days={week} todayIso={todayIso} />
         </div>
       </div>

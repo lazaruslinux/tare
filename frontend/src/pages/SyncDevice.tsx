@@ -212,20 +212,18 @@ export function SyncDevice() {
     return (
       <>
         <div className="t-card mb-3">
+          <p className="text-sm">{WHAT_THIS_IS}</p>
           {status?.connected === true ? (
-            <p className="text-sm">
+            <p className="mt-2 text-sm text-muted">
               {status.last_used_at === null
-                ? 'Key made · nothing received yet'
-                : `Connected · last health data sync: ${lastSync(status.last_used_at)}`}
+                ? 'Key created, no syncs received yet.'
+                : `Connected. Last health data sync: ${lastSync(status.last_used_at)}.`}
             </p>
           ) : (
-            <>
-              <p className="text-sm">{WHAT_THIS_IS}</p>
-              <p className="mt-2 text-sm text-muted">
-                Nothing is sent from Tare to your phone. Your phone posts to Tare on a
-                schedule you pick.
-              </p>
-            </>
+            <p className="mt-2 text-sm text-muted">
+              Nothing is sent from Tare to your phone. Your phone posts to Tare on a
+              schedule you pick.
+            </p>
           )}
         </div>
         <div className="t-card mb-3">

@@ -34,6 +34,7 @@ import { Fitness } from './Fitness'
 import { Profile } from './Profile'
 import { SyncDevice } from './SyncDevice'
 import { Targets } from './Targets'
+import { ScaleGlyph } from '../components/ScaleGlyph'
 
 // Everything that is not a tab of its own, as a list of screens. Each row
 // opens one, and the screen it opens names the way back here. The last three
@@ -108,6 +109,7 @@ export function More({
   onSignedOut,
   waiting,
   onReviewed,
+  onOpenBiometrics,
   onOpenSubmissions,
   start,
   onStarted,
@@ -125,6 +127,7 @@ export function More({
   // What this account has offered lives on the Food tab beside the foods it
   // is about, so this row goes there rather than building a second screen for
   // the same list.
+  onOpenBiometrics: () => void
   onOpenSubmissions: () => void
   // Which screen to open on. Only ever set by something outside this tab
   // sending somebody straight to it, and handed back the moment it is read.
@@ -499,6 +502,7 @@ export function More({
         <Row label="Profile" icon={IdCard} onOpen={() => go('profile')} />
         {!railed && <Row label="Targets" icon={Target} onOpen={() => go('targets')} />}
         {!railed && <Row label="Fitness" icon={HeartPulse} onOpen={() => go('fitness')} />}
+        {!railed && <Row label="Biometrics" icon={ScaleGlyph} onOpen={onOpenBiometrics} />}
         <Row
           label="Health data sync"
           icon={Smartphone}

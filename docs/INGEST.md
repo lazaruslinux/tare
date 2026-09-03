@@ -9,7 +9,7 @@ you pick, and Tare stores what arrives.
 
 ## What you need first
 
-1. Open Tare, go to More, then Sync a device.
+1. Open Tare, go to More, then Health data sync.
 2. Pick iPhone or Android.
 3. Tap Make my sync key.
 4. Copy the two lines it shows you: the address to send to, and the
@@ -127,14 +127,22 @@ minutes come from how long each session lasted.
 
 ## Upload an export
 
-Sync a device takes a file as well, which is the other way to bring a month of
+Health data sync takes a file as well, which is the other way to bring a month of
 history in. In Health Auto Export, export the range you want as JSON and save
-the file to your phone. Then open Tare, go to More, then Sync a device, pick
+the file to your phone. Then open Tare, go to More, then Health data sync, pick
 your phone, and choose the file under Upload an export.
 
 It takes one JSON file, up to 15 MB, and reads it exactly as a sync from your
 phone is read. Anything already stored is skipped, and the line underneath says
 how many days and workouts it added.
+
+Everything that arrives from a file is marked as such. Workouts from a file stay
+out of the community feed unless you choose to share them, and the Remove
+everything I uploaded row on the Health data sync screen deletes every number
+that came from a file while leaving synced and typed-in data alone. Uploads are
+limited to five an hour per account, a file that is not shaped like a health
+export is refused before it is read in full, and an administrator can turn
+uploads off for the whole instance with TARE_UPLOADS=false.
 
 HC Webhook has no export to a file, so on Android the webhook above is the only
 way in.
@@ -144,5 +152,5 @@ way in.
 - Check the authorization line. It has to be the whole line, the word Bearer
   included.
 - Check the address. It ends in `/api/ingest/health`.
-- Make a new key from Sync a device and paste it into the automation again.
+- Make a new key from Health data sync and paste it into the automation again.
   Anything that already arrived stays where it is.

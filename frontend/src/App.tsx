@@ -238,6 +238,7 @@ export default function App() {
                       onSignedOut={leave}
                       waiting={queue}
                       onReviewed={refreshWaiting}
+                      onOpenBiometrics={() => selectRail('measurements')}
                       onOpenSubmissions={() => {
                         setFoodView('submissions')
                         select('food')
