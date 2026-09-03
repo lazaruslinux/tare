@@ -5,7 +5,7 @@ import type { Me, RestingInputs, Targets as TargetsRow } from '../api'
 import { ExerciseSheet } from '../components/ExerciseSheet'
 import { SaveMarks, useSavedChip } from '../components/SaveMarks'
 import { today } from '../lib/day'
-import { LEVELS, LEVEL_INTRO, calText } from '../lib/targets'
+import { LEVELS, LEVEL_INTRO, calText, personalNumber } from '../lib/targets'
 import { heightText, round1, weightText } from '../lib/units'
 import type { Save } from './Targets'
 
@@ -64,6 +64,7 @@ function factsLine(facts: RestingInputs, units: Me['units']): string {
 export function ActivityLevels({
   me,
   targets,
+  missing,
   busy,
   error,
   onSaved,
@@ -72,6 +73,9 @@ export function ActivityLevels({
 }: {
   me: Me
   targets: TargetsRow
+  // Which of the four details are still missing, so the offer to add them
+  // names the gap rather than asking for everything.
+  missing: string[]
   busy: boolean
   error: string
   onSaved: () => void
@@ -172,7 +176,7 @@ export function ActivityLevels({
         <p className="t-micro mb-2">About what you use today</p>
         {resting === null ? (
           <button type="button" className="text-sm text-accent" onClick={onOpenProfile}>
-            Add your details for a personal number
+            {personalNumber(missing).label}
           </button>
         ) : (
           <div className="flex items-center gap-4">

@@ -119,9 +119,9 @@ def check_deploy_config(current: Settings | None = None) -> None:
 
     if s.tz not in US_ZONES:
         problems.append(
-            f"TARE_TZ is set to {s.tz!r}, which is not a zone tare offers. "
+            f"TARE_TZ is set to {s.tz!r}, which is not a zone Tare offers. "
             "Use one of: " + ", ".join(US_ZONES)
         )
 
     if problems:
-        raise RuntimeError("tare cannot start until this is fixed:\n- " + "\n- ".join(problems))
+        raise RuntimeError("Tare cannot start until this is fixed:\n- " + "\n- ".join(problems))

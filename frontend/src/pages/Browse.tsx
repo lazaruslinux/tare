@@ -52,7 +52,7 @@ export function Browse({
   const [busy, setBusy] = useState(false)
   const box = useRef<HTMLInputElement>(null)
 
-  useTopBar({ title: 'Browse tare database', back: { label: 'Food', onBack } })
+  useTopBar({ title: 'Browse Tare database', back: { label: 'Food', onBack } })
 
   useEffect(() => {
     if (window.matchMedia(ROOMY).matches) box.current?.focus()

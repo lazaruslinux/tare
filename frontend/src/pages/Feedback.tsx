@@ -10,7 +10,7 @@ const AREAS: { value: string; label: string }[] = [
   { value: 'food', label: 'Food' },
   { value: 'scanner', label: 'Scanner' },
   { value: 'targets', label: 'Targets' },
-  { value: 'measurements', label: 'Measurements' },
+  { value: 'measurements', label: 'Biometrics' },
   { value: 'more', label: 'More' },
   { value: 'other', label: 'Other' },
 ]

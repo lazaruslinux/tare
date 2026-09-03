@@ -11,7 +11,7 @@ import datetime as dt
 import pytest
 
 from app import clock, models
-from app.routers.health import NO_GRAMS, NOTE_TEXT, NUDGE_TEXT, PCT_RANGE, PCT_SUM
+from app.routers.health import BAD_RATE, NO_GRAMS, NOTE_TEXT, NUDGE_TEXT, PCT_RANGE, PCT_SUM
 from tests.conftest import PASSWORD
 
 TODAY = dt.date(2026, 9, 2)
@@ -49,9 +49,13 @@ def profile(client, **fields):
 
 @pytest.fixture()
 def case_a(client, member):
-    """The worked case: female, 165 cm, 70 kg, 30, Not much, Lose, Steady."""
-    assert profile(client, sex="female", height_cm=165, goal="lose", rate="steady").status_code == 200
+    """The worked case: female, 165 cm, 70 kg, 30, Not much, losing to 65 kg.
+
+    The weigh-in comes first, because the direction is read off it and the
+    goal weight together.
+    """
     assert weigh(client, 70).status_code == 200
+    assert profile(client, sex="female", height_cm=165, goal_weight_kg=65).status_code == 200
     return member
 
 
@@ -101,8 +105,11 @@ def test_the_worked_case_comes_out_of_the_route(client, case_a):
     # The cap and the carbs sentence, and no clinician sentence at this weight.
     assert set(body["notes"]) == {NOTE_TEXT["cap"], NOTE_TEXT["carbs_low"]}
     assert body["nudges"] == []
-    # The two faster paces are not offered at these numbers.
-    assert body["rates_offered"] == ["gentle", "steady"]
+    # The goal weight sits under the weigh-in, so the direction is losing and
+    # the three steps are on offer.
+    assert body["goal"] == "lose"
+    assert body["rate_steps"] == [0.45, 0.7, 0.9]
+    assert body["rate_kg_per_week"] == 0.45
     assert body["trend_kg"] == 70.0
 
 
@@ -122,14 +129,16 @@ def test_a_man_gets_the_higher_added_sugars_ceiling(client, member):
 
 
 def test_a_goal_weight_gives_a_month_and_never_a_day(client, case_a):
-    assert profile(client, goal_weight_kg=65).status_code == 200
     assert client.get("/api/health/targets").json()["projection"] == {"month": "2026-11"}
 
 
-def test_a_pace_the_member_is_not_offered_is_refused_with_the_reason(client, case_a):
-    refused = profile(client, rate="fastest")
+def test_a_rate_off_the_steps_is_refused_with_the_reason(client, case_a):
+    refused = profile(client, rate_kg_per_week=1.2)
     assert refused.status_code == 400
-    assert refused.json() == {"detail": NOTE_TEXT["gate"]}
+    assert refused.json() == {"detail": BAD_RATE}
+    # And one of the three is taken.
+    assert profile(client, rate_kg_per_week=0.9).status_code == 200
+    assert client.get("/api/health/profile").json()["rate_kg_per_week"] == 0.9
 
 
 def test_pregnancy_leaves_the_budget_at_the_day(client, case_a):
@@ -161,15 +170,17 @@ def test_a_stale_body_fat_reading_is_not_used(client, member):
 
 
 def test_the_clinician_sentence_appears_and_can_be_waved_away(client, member):
-    # 40 kg at 175 cm is well under the healthy range, with a loss goal.
-    assert profile(client, sex="female", height_cm=175, goal="lose").status_code == 200
+    # 40 kg at 175 cm is well under the healthy range, with a lower goal.
     assert weigh(client, 40).status_code == 200
+    assert profile(client, sex="female", height_cm=175, goal_weight_kg=38).status_code == 200
     body = client.get("/api/health/targets").json()
-    assert body["nudges"] == [
-        {"key": "below_range", "text": NUDGE_TEXT["below_range"]}
-    ]
+    # A goal under a weight that is already under the range is under it too,
+    # so both sentences are waiting.
+    assert [row["key"] for row in body["nudges"]] == ["below_range", "goal_below_range"]
+    assert body["nudges"][0]["text"] == NUDGE_TEXT["below_range"]
 
     assert client.post("/api/health/nudges/below_range/dismiss").status_code == 204
+    assert client.post("/api/health/nudges/goal_below_range/dismiss").status_code == 204
     assert client.get("/api/health/targets").json()["nudges"] == []
     # And a key nobody publishes is not a nudge to dismiss.
     assert client.post("/api/health/nudges/made-up/dismiss").status_code == 404
@@ -241,7 +252,7 @@ def test_a_starting_point_fills_the_percentages(client, case_a):
 
     refused = client.put("/api/health/targets", json={"mode": "pct", "preset": "keto"})
     assert refused.status_code == 400
-    assert refused.json() == {"detail": "That is not a starting point tare offers."}
+    assert refused.json() == {"detail": "That is not a starting point Tare offers."}
 
 
 @pytest.mark.parametrize(
@@ -340,7 +351,7 @@ def test_muscle_and_bone_are_shares_of_the_weight(client, member):
         json={"weight_kg": 80, "muscle_pct": 95},
     )
     assert refused.status_code == 400
-    assert refused.json() == {"detail": "That is not a muscle percentage tare can use."}
+    assert refused.json() == {"detail": "That is not a muscle percentage Tare can use."}
     saved = weigh(client, 101.6, muscle_pct=67.7, bone_pct=3.5).json()
     assert saved["muscle_pct"] == 67.7
     assert saved["muscle_kg"] == 68.78
@@ -425,11 +436,16 @@ def test_a_workout_can_be_taken_back(client, member):
     assert client.delete(f"/api/health/exercise/{made['id']}").status_code == 404
 
 
-def test_the_goal_drops_its_pace_when_the_goal_itself_changes(client, case_a):
-    assert client.get("/api/health/profile").json()["rate"] == "steady"
-    assert profile(client, goal="gain").status_code == 200
-    assert client.get("/api/health/profile").json()["rate"] is None
-    assert client.get("/api/health/targets").json()["rate"] == "gentle"
+def test_a_goal_weight_that_turns_the_direction_around_drops_the_goal_rate(client, case_a):
+    assert profile(client, rate_kg_per_week=0.9).status_code == 200
+    # 75 kg is above the 70 on the scale, so this is a gaining plan now and
+    # the losing rate it was picked under does not come with it.
+    assert profile(client, goal_weight_kg=75).status_code == 200
+    who = client.get("/api/health/profile").json()
+    assert who["goal"] == "gain"
+    assert who["rate_kg_per_week"] is None
+    assert who["rate_steps"] == [0.25, 0.45]
+    assert client.get("/api/health/targets").json()["rate_kg_per_week"] == 0.25
 
 
 def test_the_location_can_be_set_from_the_profile_screen(client, member, db_session):

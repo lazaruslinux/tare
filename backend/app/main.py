@@ -156,7 +156,7 @@ def create_app() -> FastAPI:
     check_deploy_config()
 
     app = FastAPI(
-        title="tare",
+        title="Tare",
         version=VERSION,
         # No /docs, /redoc, or /openapi.json: an unauthenticated map of every
         # route is not worth the convenience, and a route that is not served

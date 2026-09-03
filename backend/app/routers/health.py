@@ -29,17 +29,18 @@ from app.routers.account import clean_location
 router = APIRouter(prefix="/health", tags=["health"])
 
 MISSING_ENTRY = "There is no such exercise entry."
-MISSING_MEASUREMENT = "There is no measurement on that day."
+MISSING_MEASUREMENT = "Nothing is recorded on that day."
 BAD_DATE = "That is not a date."
-BAD_ACTIVITY = "That is not an activity tare knows."
+BAD_ACTIVITY = "That is not an activity Tare knows."
 BAD_EFFORT = "That effort is not offered for this activity."
 NO_GRAMS = "Setting the grams yourself needs calories, protein, carbs and fat."
 NO_PCT = "A percentage split needs all three numbers."
 PCT_RANGE = f"Each percentage has to be between {health.PCT_MIN} and {health.PCT_MAX}."
 PCT_SUM = f"The three percentages have to add up to {health.PCT_TOTAL}."
-BAD_PRESET = "That is not a starting point tare offers."
+BAD_PRESET = "That is not a starting point Tare offers."
+BAD_RATE = "That is not a goal rate Tare offers."
 BAD_MODE = "That is not a way to set targets."
-FUTURE_MEASUREMENT = "A measurement cannot be in the future."
+FUTURE_MEASUREMENT = "That day is in the future."
 
 # How far back a measurement list reaches by default, and the furthest it will.
 DEFAULT_DAYS = 90
@@ -74,16 +75,12 @@ BAD_MINUTES = f"Minutes must be between 1 and {MAX_MINUTES}."
 # and no formula name appears in any of them (decision 29).
 NOTE_TEXT = {
     "cap": (
-        "That pace would move you further from what you use than tare will set, "
-        "so it has been eased back."
+        "That goal rate would move you further from what you use than Tare will "
+        "set, so it has been eased back."
     ),
     "floor": (
-        "This is the lowest budget tare will set, so reaching your goal will take "
-        "longer than the pace you picked."
-    ),
-    "gate": (
-        "The two faster paces are offered only when your details suggest they suit "
-        "you. Steady is the fastest pace tare offers you right now."
+        "This is the lowest budget Tare will set, so reaching your goal will take "
+        "longer than the goal rate you picked."
     ),
     "pregnancy": (
         "Energy needs change during pregnancy and breastfeeding. Ask your clinician "
@@ -114,7 +111,7 @@ NUDGE_TEXT = {
         "Your details put you below the healthy weight range. Talk to a clinician "
         "before aiming lower."
     ),
-    "high_weight": "A clinician can help plan safely at this weight. tare is only an estimate.",
+    "high_weight": "A clinician can help plan safely at this weight. Tare is only an estimate.",
 }
 
 
@@ -127,8 +124,7 @@ class ProfileIn(BaseModel):
     location: str | None = None
     pregnant_or_breastfeeding: bool | None = None
     activity_level: str | None = None
-    goal: str | None = None
-    rate: str | None = None
+    rate_kg_per_week: float | None = None
     goal_weight_kg: float | None = None
 
 
@@ -198,6 +194,13 @@ def readings(
     if since is not None:
         query = query.where(models.WeightEntry.date_for >= since)
     return list(db.execute(query.order_by(models.WeightEntry.date_for)).scalars())
+
+
+def latest_weight_kg(db: Session, user: models.User) -> float | None:
+    """The newest weigh-in there is, which is the weight a direction is read
+    against. None until somebody has stood on a scale."""
+    rows = readings(db, user)
+    return rows[-1].weight_kg if rows else None
 
 
 def weight_on(db: Session, user: models.User, day: dt.date) -> models.WeightEntry | None:
@@ -319,6 +322,9 @@ class Reckoning:
             and self.kg is not None
             and self.age is not None
         )
+        # Decision: which way the member is going is read off the two weights
+        # rather than stored, so nothing can disagree with what they can see.
+        self.direction = health.direction(self.kg, self.profile.goal_weight_kg)
         self.bmi = (
             health.bmi(self.kg, self.cm)
             if self.kg is not None and self.cm is not None and self.cm > 0
@@ -330,6 +336,20 @@ class Reckoning:
             [(row.date_for, row.weight_kg) for row in self.rows]
         )
         self.trend_kg = self.trend_days[-1][1] if self.trend_days else None
+
+    def missing(self) -> list[str]:
+        """What a personal number is still waiting on, in the order it is asked
+        for. Empty once all four are in."""
+        absent = []
+        if self.sex is None:
+            absent.append("sex")
+        if self.cm is None:
+            absent.append("height")
+        if self.kg is None:
+            absent.append("weight")
+        if self.age is None:
+            absent.append("birthdate")
+        return absent
 
     def fresh_body_fat(self) -> float | None:
         """Decision 2: a body-fat reading is used only while it is recent."""
@@ -370,14 +390,13 @@ def auto_budget(state: Reckoning) -> tuple[dict[str, float], list[str], float]:
 
     worked = health.budget(
         maintenance_kcal,
-        state.profile.goal,
-        state.profile.rate,
+        state.direction,
+        state.profile.rate_kg_per_week,
         state.sex,
-        state.bmi,
         state.profile.pregnant_or_breastfeeding,
     )
     assert state.bmi is not None
-    split = health.macros(worked.calories, state.kg, state.profile.goal, state.age, state.bmi)
+    split = health.macros(worked.calories, state.kg, state.direction, state.age, state.bmi)
     limits = health.ceilings(worked.calories, state.sex)
     notes = list(worked.notes)
     if split.carbs_low:
@@ -526,10 +545,16 @@ def read_profile(
         "birthdate": None if user.birthdate is None else user.birthdate.isoformat(),
         "pregnant_or_breastfeeding": profile.pregnant_or_breastfeeding,
         "activity_level": profile.activity_level,
-        "goal": profile.goal,
-        "rate": profile.rate,
+        # Derived from the two weights, never stored.
+        "goal": state.direction,
+        # What is stored, where null means the first step of that direction.
+        "rate_kg_per_week": profile.rate_kg_per_week,
+        "rate_steps": list(health.steps_for(state.direction)),
         "goal_weight_kg": profile.goal_weight_kg,
         "complete": state.complete,
+        # Which of the four a personal number is still waiting on, worked out
+        # here so no screen has to know the rule.
+        "missing": state.missing(),
         "latest_weight_kg": (
             None if state.kg is None else health.round_for_display(state.kg, "kg")
         ),
@@ -560,7 +585,7 @@ def write_profile(
         if body.height_cm is not None and not (
             MIN_HEIGHT_CM <= body.height_cm <= MAX_HEIGHT_CM
         ):
-            raise HTTPException(status.HTTP_400_BAD_REQUEST, "That is not a height tare can use.")
+            raise HTTPException(status.HTTP_400_BAD_REQUEST, "That is not a height Tare can use.")
         profile.height_cm = body.height_cm
 
     if "location" in sent:
@@ -574,29 +599,32 @@ def write_profile(
             raise HTTPException(status.HTTP_400_BAD_REQUEST, "That is not an activity level.")
         profile.activity_level = body.activity_level
 
-    if "goal" in sent:
-        if body.goal not in models.GOALS:
-            raise HTTPException(status.HTTP_400_BAD_REQUEST, "That is not a goal.")
-        profile.goal = body.goal
-        # A pace belongs to the goal it was picked under, so changing the goal
-        # drops it back to that goal's own default rather than carrying a
-        # losing pace into a gaining plan.
-        if "rate" not in sent:
-            profile.rate = None
-
-    if "rate" in sent:
-        if body.rate is not None:
-            state = Reckoning(db, user)
-            offered = health.rates_offered(profile.goal, state.bmi)
-            if body.rate not in offered:
-                raise HTTPException(status.HTTP_400_BAD_REQUEST, NOTE_TEXT["gate"])
-        profile.rate = body.rate
-
+    # The goal weight is taken first, because a goal rate sent with it belongs
+    # to the direction the new goal weight points in.
+    weighed = (
+        latest_weight_kg(db, user)
+        if {"goal_weight_kg", "rate_kg_per_week"} & sent
+        else None
+    )
     if "goal_weight_kg" in sent:
         low, high = LIMITS["weight_kg"]
         if body.goal_weight_kg is not None and not (low <= body.goal_weight_kg <= high):
-            raise HTTPException(status.HTTP_400_BAD_REQUEST, "That is not a weight tare can use.")
+            raise HTTPException(status.HTTP_400_BAD_REQUEST, "That is not a weight Tare can use.")
+        was = health.direction(weighed, profile.goal_weight_kg)
         profile.goal_weight_kg = body.goal_weight_kg
+        # A goal rate belongs to the direction it was picked under, so a goal
+        # weight that turns the direction around drops it back to that
+        # direction's own first step.
+        turned = health.direction(weighed, body.goal_weight_kg) != was
+        if turned and "rate_kg_per_week" not in sent:
+            profile.rate_kg_per_week = None
+
+    if "rate_kg_per_week" in sent:
+        if body.rate_kg_per_week is not None:
+            steps = health.steps_for(health.direction(weighed, profile.goal_weight_kg))
+            if body.rate_kg_per_week not in steps:
+                raise HTTPException(status.HTTP_400_BAD_REQUEST, BAD_RATE)
+        profile.rate_kg_per_week = body.rate_kg_per_week
 
     profile.updated_at = now_utc()
     db.commit()
@@ -625,7 +653,7 @@ def read_targets(
     dismissed = set(profile.dismissed_nudges)
     waiting = [
         {"key": key, "text": NUDGE_TEXT[key]}
-        for key in health.nudges(state.bmi, profile.goal, goal_bmi)
+        for key in health.nudges(state.bmi, state.direction, goal_bmi)
         if key not in dismissed
     ]
 
@@ -645,12 +673,12 @@ def read_targets(
         window = state.today - dt.timedelta(days=REESTIMATE_WINDOW - 1)
         series = [value for day, value in state.trend_days if day >= window]
         delta = health.reestimate(
-            series, logged_days(db, user, window), weekly_rate, profile.goal
+            series, logged_days(db, user, window), weekly_rate, state.direction
         )
         maintenance_kcal = state.maintenance()
         if delta is not None and maintenance_kcal is not None:
             corrected = health.clamp_budget(
-                figures["calories"] + delta, maintenance_kcal, state.sex, profile.goal
+                figures["calories"] + delta, maintenance_kcal, state.sex, state.direction
             )
             offer = {
                 "delta_calories": health.round_for_display(
@@ -726,9 +754,15 @@ def read_targets(
         )
         * 10,
         "activity_level": profile.activity_level,
-        "goal": profile.goal,
-        "rate": profile.rate or health.default_rate(profile.goal),
-        "rates_offered": list(health.rates_offered(profile.goal, state.bmi)),
+        # The way the two weights point, which is what the old stored goal
+        # used to say. The key is kept so the screens read the same word.
+        "goal": state.direction,
+        "rate_kg_per_week": (
+            profile.rate_kg_per_week
+            if profile.rate_kg_per_week in health.steps_for(state.direction)
+            else next(iter(health.steps_for(state.direction)), None)
+        ),
+        "rate_steps": list(health.steps_for(state.direction)),
         "goal_weight_kg": profile.goal_weight_kg,
         "weekly_rate": round(weekly_rate, 2),
         "notes": [NOTE_TEXT[key] for key in note_keys],
@@ -888,12 +922,12 @@ def write_measurement(
 def _name(field: str) -> str:
     """What a refused number is called in the sentence that refuses it."""
     return {
-        "weight_kg": "weight tare can use",
-        "body_fat_pct": "body fat percentage tare can use",
-        "body_water_pct": "body water percentage tare can use",
-        "visceral_fat": "visceral fat rating tare can use",
-        "muscle_pct": "muscle percentage tare can use",
-        "bone_pct": "bone percentage tare can use",
+        "weight_kg": "weight Tare can use",
+        "body_fat_pct": "body fat percentage Tare can use",
+        "body_water_pct": "body water percentage Tare can use",
+        "visceral_fat": "visceral fat rating Tare can use",
+        "muscle_pct": "muscle percentage Tare can use",
+        "bone_pct": "bone percentage Tare can use",
     }[field]
 
 

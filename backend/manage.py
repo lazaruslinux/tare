@@ -54,7 +54,7 @@ def create_admin(args: argparse.Namespace) -> int:
         # The same rule the front door holds everybody to (decision 21).
         today = now_utc().date()
         if birthdate > today or health.age_on(birthdate, today) < MIN_AGE:
-            print(f"tare is for adults {MIN_AGE} and over.", file=sys.stderr)
+            print(f"Tare is for adults {MIN_AGE} and over.", file=sys.stderr)
             return 1
 
         conflicts = [models.User.username == name]
@@ -141,7 +141,7 @@ def verify_email(args: argparse.Namespace) -> int:
 
 
 def build_parser() -> argparse.ArgumentParser:
-    parser = argparse.ArgumentParser(prog="manage.py", description="tare administration")
+    parser = argparse.ArgumentParser(prog="manage.py", description="Tare administration")
     commands = parser.add_subparsers(dest="command", metavar="command")
 
     admin = commands.add_parser("create-admin", help="make an administrator account")

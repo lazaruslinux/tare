@@ -17,7 +17,7 @@ TODAY = dt.date(2026, 9, 2)
 
 @pytest.fixture()
 def case_a():
-    """Female, 165 cm, 70 kg, born 1996-03-15, Not much, Lose, Steady.
+    """Female, 165 cm, 70 kg, born 1996-03-15, Not much, losing at 0.45.
 
     The case where the quarter-of-maintenance cap binds and the pace that
     really happens is slower than the one that was picked.
@@ -49,7 +49,7 @@ def case_b():
 
 @pytest.fixture()
 def case_c():
-    """Female, 155 cm, 50 kg, 25, Not much, Lose, Steady: the floor binds."""
+    """Female, 155 cm, 50 kg, 25, Not much, losing at 0.45: the floor binds."""
     resting = health.rmr_mifflin("female", 50, 155, 25)
     return {
         "kg": 50,
@@ -91,11 +91,10 @@ def test_lean_mass_takes_over_when_body_fat_is_known():
     )
 
 
-def test_the_cap_binds_before_the_chosen_pace_does(case_a):
-    worked = health.budget(
-        case_a["maintenance"], "lose", "steady", "female", case_a["bmi"], False
-    )
-    # Steady asks for 500 a day; a quarter of 1704.3 is 426.075, and that wins.
+def test_the_cap_binds_before_the_chosen_goal_rate_does(case_a):
+    worked = health.budget(case_a["maintenance"], "lose", 0.45, "female", False)
+    # The first step asks for 450 a day; a quarter of 1704.3 is 426.075, and
+    # that wins.
     assert worked.calories == pytest.approx(1278.225)
     assert health.round_for_display(worked.calories, "calories") == 1280
     assert worked.notes == ("cap",)
@@ -103,9 +102,7 @@ def test_the_cap_binds_before_the_chosen_pace_does(case_a):
 
 
 def test_the_floor_is_the_last_word_and_says_it_will_take_longer(case_c):
-    worked = health.budget(
-        case_c["maintenance"], "lose", "steady", "female", case_c["bmi"], False
-    )
+    worked = health.budget(case_c["maintenance"], "lose", 0.45, "female", False)
     # The cap gives 1064.475, which is under the floor for a female member.
     assert worked.calories == 1200.0
     assert set(worked.notes) == {"cap", "floor"}
@@ -113,54 +110,54 @@ def test_the_floor_is_the_last_word_and_says_it_will_take_longer(case_c):
 
 
 def test_the_male_floor_is_the_higher_one():
-    worked = health.budget(1400, "lose", "steady", "male", 22.0, False)
+    worked = health.budget(1400, "lose", 0.45, "male", False)
     assert worked.calories == 1500.0
     assert "floor" in worked.notes
 
 
 def test_maintaining_is_the_day_itself(case_b):
-    worked = health.budget(
-        case_b["maintenance"], "maintain", None, "male", case_b["bmi"], False
-    )
+    worked = health.budget(case_b["maintenance"], "maintain", None, "male", False)
     assert health.round_for_display(worked.calories, "calories") == 2230
     assert worked.weekly_rate_kg == 0
     assert worked.notes == ()
 
 
-def test_the_two_faster_paces_are_offered_only_above_the_threshold():
-    assert health.rates_offered("lose", 25.7) == ("gentle", "steady")
-    assert health.rates_offered("lose", 34.9) == ("gentle", "steady")
-    assert health.rates_offered("lose", 35.0) == ("gentle", "steady", "faster", "fastest")
-    # Gaining is offered at the two slower paces, and maintaining at none.
-    assert health.rates_offered("gain", 40.0) == ("gentle", "steady")
-    assert health.rates_offered("maintain", 40.0) == ()
+def test_the_direction_is_read_off_the_two_weights():
+    assert health.direction(80.0, 75.0) == "lose"
+    assert health.direction(80.0, 85.0) == "gain"
+    assert health.direction(80.0, 80.0) == "maintain"
+    # No goal weight, or nobody on the scale yet, is nothing to aim at.
+    assert health.direction(80.0, None) == "maintain"
+    assert health.direction(None, 75.0) == "maintain"
 
 
-def test_a_pace_that_is_no_longer_offered_falls_back_and_says_so(case_a):
-    worked = health.budget(
-        case_a["maintenance"], "lose", "fastest", "female", case_a["bmi"], False
-    )
-    assert "gate" in worked.notes
-    # Steady is what is left, and the cap still binds under it.
-    assert worked.calories == pytest.approx(1278.225)
+def test_the_steps_are_the_three_and_the_two():
+    assert health.steps_for("lose") == (0.45, 0.7, 0.9)
+    assert health.steps_for("gain") == (0.25, 0.45)
+    assert health.steps_for("maintain") == ()
+
+
+def test_a_rate_off_the_direction_s_steps_falls_back_to_its_first(case_a):
+    # 0.9 belongs to losing, and a turned-around goal leaves it behind.
+    worked = health.budget(2000, "gain", 0.9, "male", False)
+    assert worked.calories == pytest.approx(2250.0)
+    assert worked.notes == ()
 
 
 def test_gaining_is_capped_at_a_fifth_of_the_day():
-    # A fifth of 2000 is 400, so the steady 500 is eased back.
-    worked = health.budget(2000, "gain", "steady", "male", 22.0, False)
+    # A fifth of 2000 is 400, so the 450 step is eased back.
+    worked = health.budget(2000, "gain", 0.45, "male", False)
     assert worked.calories == pytest.approx(2400.0)
     assert "cap" in worked.notes
     assert round(worked.weekly_rate_kg, 2) == 0.4
-    # And a gentle 250 sits inside it untouched.
-    gentle = health.budget(2000, "gain", "gentle", "male", 22.0, False)
+    # And the 250 step sits inside it untouched.
+    gentle = health.budget(2000, "gain", 0.25, "male", False)
     assert gentle.calories == pytest.approx(2250.0)
     assert gentle.notes == ()
 
 
 def test_pregnancy_leaves_the_day_alone(case_a):
-    worked = health.budget(
-        case_a["maintenance"], "lose", "steady", "female", case_a["bmi"], True
-    )
+    worked = health.budget(case_a["maintenance"], "lose", 0.45, "female", True)
     assert worked.calories == pytest.approx(case_a["maintenance"])
     assert worked.notes == ("pregnancy",)
     assert worked.weekly_rate_kg == 0
@@ -254,9 +251,7 @@ def test_a_day_without_a_weigh_in_carries_the_trend_forward():
 
 
 def test_the_projection_names_a_month_and_never_a_day(case_a):
-    worked = health.budget(
-        case_a["maintenance"], "lose", "steady", "female", case_a["bmi"], False
-    )
+    worked = health.budget(case_a["maintenance"], "lose", 0.45, "female", False)
     assert health.projection(70, 65, worked.weekly_rate_kg, TODAY) == "2026-11"
     # Nothing to project towards, and nothing moving towards it.
     assert health.projection(70, None, worked.weekly_rate_kg, TODAY) is None

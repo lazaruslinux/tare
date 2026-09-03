@@ -43,7 +43,7 @@ export function SideRail({
 
   return (
     <nav aria-label="Main" className="t-rail">
-      <span className="px-3 pb-4 text-xl font-semibold tracking-tight lowercase">tare</span>
+      <span className="px-3 pb-4 text-xl font-semibold tracking-tight">Tare</span>
       <button
         ref={plus}
         onClick={() => onPlus(plus.current?.getBoundingClientRect() ?? null)}

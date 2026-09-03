@@ -16,9 +16,9 @@ from app.security import RESET_TOKEN_HOURS, VERIFY_TOKEN_HOURS
 
 log = logging.getLogger("tare.mail")
 
-_SUBJECT = "Verify your tare account"
+_SUBJECT = "Verify your Tare account"
 
-_BODY = """Someone created a tare account with this address.
+_BODY = """Someone created a Tare account with this address.
 
 Open this link to finish signing up:
 
@@ -29,9 +29,9 @@ ignore this message.
 """
 
 
-_RESET_SUBJECT = "Reset your tare password"
+_RESET_SUBJECT = "Reset your Tare password"
 
-_RESET_BODY = """Someone asked to reset the tare password for this address.
+_RESET_BODY = """Someone asked to reset the Tare password for this address.
 
 Open this link to choose a new one:
 

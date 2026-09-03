@@ -101,9 +101,9 @@ export function Welcome({ code, onReady }: { code: string; onReady: () => void }
   return (
     <div className="t-center">
       <div className="w-full max-w-sm">
-        <p className="mb-1 text-center text-2xl font-semibold tracking-tight lowercase">tare</p>
+        <p className="mb-1 text-center text-2xl font-semibold tracking-tight">Tare</p>
         <p className="text-center text-sm text-muted">
-          {invite.inviter_display_name} has invited you to tare.
+          {invite.inviter_display_name} has invited you to Tare.
         </p>
         {about ? (
           <div className="mt-4">
@@ -117,7 +117,7 @@ export function Welcome({ code, onReady }: { code: string; onReady: () => void }
               className="inline-flex min-h-11 items-center text-sm text-accent underline underline-offset-4"
               onClick={() => setAbout(true)}
             >
-              What is tare?
+              What is Tare?
             </button>
           </div>
           <form className="t-card flex flex-col gap-3" onSubmit={submit}>
@@ -161,7 +161,7 @@ export function Welcome({ code, onReady }: { code: string; onReady: () => void }
                 value={birthdate}
                 onChange={(event) => setBirthdate(event.target.value)}
               />
-              <p className="mt-1 text-xs text-muted">tare is for adults 18 and over.</p>
+              <p className="mt-1 text-xs text-muted">Tare is for adults 18 and over.</p>
             </div>
             <div>
               <label className="t-label" htmlFor="new-email">

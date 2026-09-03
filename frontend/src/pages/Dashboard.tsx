@@ -18,6 +18,7 @@ import { MacroBar } from '../components/MacroBar'
 import { HEADLINE, nutrientText } from '../components/NutritionLabel'
 import { useTopBar } from '../hooks/useTopBar'
 import { dayLabel, slotByTime, today } from '../lib/day'
+import { personalNumber, calText } from '../lib/targets'
 import { round1, weightText } from '../lib/units'
 
 // How far back the weight line reaches, and how long a deleted reading can be
@@ -212,7 +213,7 @@ export function Dashboard({
   // names the way back.
   useTopBar(
     screen === 'measurements'
-      ? { title: 'Measurements', back: { label: 'Dashboard', onBack: () => setScreen(null) } }
+      ? { title: 'Biometrics', back: { label: 'Dashboard', onBack: () => setScreen(null) } }
       : { title: 'Dashboard', left: 'wordmark' }
   )
 
@@ -304,6 +305,10 @@ export function Dashboard({
   // The trend is the smoothed figure the goal is read against; the latest
   // reading is what the scale said this morning.
   const trendKg = trend.length > 0 ? trend[trend.length - 1].kg : null
+  // What a personal number is still waiting on, and where to hand it over.
+  // The server works the list out, so this never re-derives the rule.
+  const gap =
+    profile === null || profile.complete ? null : personalNumber(profile.missing)
 
   const snackbar = pending !== null && (
     <div className="pointer-events-none fixed inset-x-0 bottom-24 z-30 px-4">
@@ -321,13 +326,13 @@ export function Dashboard({
       <>
         {rows.length === 0 && (
           <div className="t-card mb-3">
-            <p className="text-sm text-muted">No measurements yet.</p>
+            <p className="text-sm text-muted">No biometrics yet.</p>
             <button
               type="button"
               className="t-btn t-btn-primary mt-3"
               onClick={() => setMeasuring(todayIso)}
             >
-              Add measurements
+              Add biometrics
             </button>
           </div>
         )}
@@ -424,19 +429,19 @@ export function Dashboard({
             />
             <div className="absolute inset-0 flex flex-col items-center justify-center">
               <span className="t-nums text-2xl font-semibold leading-none">
-                {day === null ? '-' : day.remaining_calories}
+                {day === null ? '-' : calText(day.remaining_calories)}
               </span>
-              <span className="text-xs text-muted">left</span>
+              <span className="text-xs text-muted">remaining</span>
             </div>
           </div>
           <div className="min-w-0 flex-1">
             <span className="t-nums block text-sm">
               {day === null ? '-' : nutrientText('calories', day.totals.calories ?? 0)}
-              <span className="text-muted"> consumed of {day?.budget.calories ?? '-'}</span>
+              <span className="text-muted"> consumed of {day === null ? '-' : calText(day.budget.calories)}</span>
             </span>
             {day !== null && day.exercise_kcal > 0 && (
               <span className="block text-xs text-muted">
-                Exercise added back +{day.exercise_kcal}
+                Includes exercise added: +{day.exercise_kcal} cal
               </span>
             )}
           </div>
@@ -454,25 +459,52 @@ export function Dashboard({
           ))}
         </div>
 
-        {profile !== null && !profile.complete && (
+        {gap !== null && (
           <button
             type="button"
             className="mt-3 text-sm text-accent"
-            onClick={onOpenProfile}
+            onClick={() =>
+              gap.needs === 'weight' ? setMeasuring(todayIso) : onOpenProfile()
+            }
           >
-            Add your details for a personal number
+            {gap.label}
           </button>
         )}
       </div>
 
       <div className="t-card mb-3">
         <CardHead
-          label="Measurements"
+          label="Exercise"
+          onOpen={onOpenJournal}
+          onAdd={() => setExercising(true)}
+        />
+        {day === null || day.exercise.length === 0 ? (
+          <p className="text-sm text-muted">No exercise logged.</p>
+        ) : (
+          <>
+            {day.exercise.map((row) => (
+              <div key={row.id} className="t-row min-h-9 text-sm">
+                <span className="min-w-0 flex-1 truncate">{row.name}</span>
+                <span className="t-nums text-muted">
+                  {row.minutes} min · about {row.kcal} cal
+                </span>
+              </div>
+            ))}
+            <p className="mt-2 text-xs text-muted">
+              Includes exercise added: +{day.exercise_kcal} cal
+            </p>
+          </>
+        )}
+      </div>
+
+      <div className="t-card mb-3">
+        <CardHead
+          label="Biometrics"
           onOpen={() => setScreen('measurements')}
           onAdd={() => setMeasuring(todayIso)}
         />
         {latest === null ? (
-          <p className="text-sm text-muted">No measurements yet.</p>
+          <p className="text-sm text-muted">No biometrics yet.</p>
         ) : (
           <>
             <span className="t-nums block text-3xl font-semibold leading-tight">
@@ -533,31 +565,6 @@ export function Dashboard({
                 />
               )}
             </div>
-          </>
-        )}
-      </div>
-
-      <div className="t-card mb-3">
-        <CardHead
-          label="Exercise"
-          onOpen={onOpenJournal}
-          onAdd={() => setExercising(true)}
-        />
-        {day === null || day.exercise.length === 0 ? (
-          <p className="text-sm text-muted">No exercise logged.</p>
-        ) : (
-          <>
-            {day.exercise.map((row) => (
-              <div key={row.id} className="t-row min-h-9 text-sm">
-                <span className="min-w-0 flex-1 truncate">{row.name}</span>
-                <span className="t-nums text-muted">
-                  {row.minutes} min · about {row.kcal} cal
-                </span>
-              </div>
-            ))}
-            <p className="mt-2 text-xs text-muted">
-              Exercise added back +{day.exercise_kcal}
-            </p>
           </>
         )}
       </div>

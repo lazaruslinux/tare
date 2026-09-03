@@ -36,17 +36,17 @@ STALE_LINK = "That verification link is no longer valid. Ask for a new one."
 # Decision 21. tare is for adults, the birthdate is asked for at registration,
 # and the check is the server's rather than the form's.
 MIN_AGE = 18
-UNDER_AGE = "tare is for adults 18 and over."
+UNDER_AGE = "Tare is for adults 18 and over."
 FUTURE_BIRTHDATE = "That birthdate is in the future."
 # A hundred and twenty years is older than anybody has been. Beyond it the
 # entry is a typed year rather than a person.
 MAX_AGE = 120
 IMPOSSIBLE_BIRTHDATE = "That birthdate is too far back to be right."
-CLEARED_BIRTHDATE = "tare needs your birthdate."
+CLEARED_BIRTHDATE = "Tare needs your birthdate."
 
 # What a signup is refused with when the instance has a mail server and the
 # address was left blank.
-EMAIL_REQUIRED = "This tare needs an email address to sign up."
+EMAIL_REQUIRED = "This Tare needs an email address to sign up."
 
 # The one answer a reset request ever gets. The same words for an address with
 # an account, an address without one, and an instance that cannot send mail at

@@ -140,9 +140,9 @@ export function MeasurementsSheet({
   }
 
   return (
-    <Sheet open label="Measurements" tall onClose={onClose}>
+    <Sheet open label="Biometrics" tall onClose={onClose}>
       <form onSubmit={submit}>
-        <p className="mb-3 text-base font-semibold">Measurements</p>
+        <p className="mb-3 text-base font-semibold">Biometrics</p>
 
         <div className="mb-3">
           <label className="t-label" htmlFor="measure-date">

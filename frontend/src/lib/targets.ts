@@ -4,7 +4,7 @@
 // and the Activity Levels screen all name the same four levels and the same three
 // goals, and one of them drifting would be a screen disagreeing with a screen.
 
-import type { ActivityLevel, Goal, Rate, Units } from '../api'
+import type { ActivityLevel, Goal, Units } from '../api'
 import { kgToLb, round1 } from './units'
 
 // Decision 5's four levels. The names are the member's; the multipliers they
@@ -54,42 +54,68 @@ export const LEVEL_INTRO =
   'This is the kind of job and ordinary day you have. Do not count exercise: ' +
   'what you log is added on top.'
 
-export const GOALS: { value: Goal; label: string }[] = [
-  { value: 'maintain', label: 'Maintain' },
-  { value: 'lose', label: 'Lose weight' },
-  { value: 'gain', label: 'Gain weight' },
-]
-
 export const GOAL_LABEL: Record<Goal, string> = {
   maintain: 'Maintain',
   lose: 'Lose weight',
   gain: 'Gain weight',
 }
 
-// The paces, and what each of them is a week.
-export const RATE_KG: Record<Rate, number> = {
-  gentle: 0.25,
-  steady: 0.5,
-  faster: 0.75,
-  fastest: 1,
+// A goal rate in whichever units the account reads in. The server keeps
+// kilograms a week, and the words say which way it is going.
+export const rateStepText = (kg: number, units: Units, goal: Goal): string => {
+  const amount = units === 'imperial' ? `${round1(kgToLb(kg))} lb` : `${kg} kg`
+  return `${amount} ${goal === 'gain' ? 'gained' : 'lost'} / week`
 }
 
-export const RATE_LABEL: Record<Rate, string> = {
-  gentle: 'Gentle',
-  steady: 'Steady',
-  faster: 'Faster',
-  fastest: 'Fastest',
+// Where the 1 percent of body weight a week guidance starts to bite.
+const FAST_SHARE = 0.01
+
+// What the review note says about the goal rate that is set. The words are
+// the doc's decision 13, and the tier is picked from the rate against the
+// weight it is a share of.
+export const rateReview = (
+  kg: number,
+  latestKg: number | null,
+  goal: Goal
+): string => {
+  if (goal === 'gain') return 'A small, steady gain keeps more of it as muscle.'
+  if (kg <= 0.45) {
+    return (
+      'A steady pace most people can keep up. Slower loss tends to hold on to ' +
+      'more muscle.'
+    )
+  }
+  if (latestKg !== null && kg > latestKg * FAST_SHARE) {
+    return (
+      'This is faster than about 1 percent of your weight a week. Loss this ' +
+      'quick is often water rather than fat, and makes it easier to lose muscle ' +
+      'and miss out on nutrients. Most guidance stops at 2 lb a week.'
+    )
+  }
+  return (
+    'This makes a bigger gap between what you consume and what you use. It works ' +
+    'for some, but many find it hard to keep up. Watch how you feel and ease back ' +
+    'if it stops feeling right.'
+  )
 }
 
-// A pace in whichever units the account reads in. The server keeps kilograms.
-export const rateText = (rate: Rate, units: Units): string =>
-  units === 'imperial'
-    ? `${round1(kgToLb(RATE_KG[rate]))} lb a week`
-    : `${RATE_KG[rate]} kg a week`
+// What the four details a personal number needs are still waiting on, and
+// where the member is sent to hand it over. The server works out the list.
+export type PersonalGap = { label: string; needs: 'weight' | 'profile' }
+
+export const personalNumber = (missing: string[]): PersonalGap => {
+  if (missing.includes('weight')) {
+    return { label: 'Add a weigh-in for a personal number', needs: 'weight' }
+  }
+  if (missing.includes('sex') || missing.includes('height')) {
+    return { label: 'Add your height and sex for a personal number', needs: 'profile' }
+  }
+  return { label: 'Add your birthdate for a personal number', needs: 'profile' }
+}
 
 // Decision 30, word for word, said once and then reachable from the Guide.
 export const DISCLAIMER =
-  'tare estimates. It is not medical advice. The numbers come from population ' +
+  'Tare estimates. It is not medical advice. The numbers come from population ' +
   'averages and can be off by a few hundred calories for any one person. Talk to ' +
   'a clinician before changing how you eat if you are pregnant or breastfeeding, ' +
   'under care for a medical condition, or have a history of disordered eating.'
@@ -100,13 +126,13 @@ export const PACE_CAVEAT =
 
 // The one paragraph on the Weight goal screen that is not about a number on it.
 export const GOOD_TO_KNOW =
-  'As your weight changes, so does what you use in a day. tare re-figures your ' +
+  'As your weight changes, so does what you use in a day. Tare re-figures your ' +
   'budget from each weigh-in and, after a month of weigh-ins, may offer a small ' +
   'correction.'
 
 // Which sentences belong on which screen. The server sends them with their
 // keys so neither screen has to read the sentences to place them.
-export const PACE_NOTES = ['cap', 'floor', 'gate', 'pregnancy']
+export const PACE_NOTES = ['cap', 'floor', 'pregnancy']
 export const SPLIT_NOTES = ['carbs_low', 'manual', 'defaults']
 
 export const notesFor = (

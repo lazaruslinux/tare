@@ -175,7 +175,7 @@ export function Profile({
           value={birthdate}
           onChange={(event) => setBirthdate(event.target.value)}
         />
-        <p className="mt-1 text-xs text-muted">tare is for adults 18 and over.</p>
+        <p className="mt-1 text-xs text-muted">Tare is for adults 18 and over.</p>
       </div>
 
       <div className="mb-4">

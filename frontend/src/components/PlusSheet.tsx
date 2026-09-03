@@ -53,7 +53,7 @@ export function PlusSheet({
   const rows = [
     { label: 'Scan food', onPick: onScan },
     { label: 'Add food', onPick: onAddFood },
-    { label: 'Measurements', onPick: onMeasure },
+    { label: 'Biometrics', onPick: onMeasure },
     { label: 'Manual exercise', onPick: onExercise },
   ]
   const popover = anchor !== null && window.matchMedia(WIDE).matches

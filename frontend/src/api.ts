@@ -28,8 +28,9 @@ export type Me = {
 
 export type Sex = 'female' | 'male'
 export type ActivityLevel = 'not_much' | 'light' | 'moderate' | 'heavy'
+// Which way the two weights point. Worked out on the server from the latest
+// weigh-in and the goal weight, and never stored or chosen.
 export type Goal = 'maintain' | 'lose' | 'gain'
-export type Rate = 'gentle' | 'steady' | 'faster' | 'fastest'
 export type EffortLevel = 'light' | 'moderate' | 'vigorous'
 
 // What tare needs to work out somebody's own numbers, and what it has so far.
@@ -41,12 +42,17 @@ export type Profile = {
   pregnant_or_breastfeeding: boolean
   activity_level: ActivityLevel
   goal: Goal
-  // Null is the default pace for the goal rather than no pace at all.
-  rate: Rate | null
+  // Kilograms a week. Null is the first step for the direction rather than no
+  // goal rate at all, and the steps are the ones this direction offers.
+  rate_kg_per_week: number | null
+  rate_steps: number[]
   goal_weight_kg: number | null
   // Whether sex, height, weight and age are all there. Without all four the
   // published general targets stand.
   complete: boolean
+  // Which of the four are still missing, so a screen can name the gap rather
+  // than work the rule out again. Empty once the profile is complete.
+  missing: string[]
   latest_weight_kg: number | null
   latest_weight_date: string | null
   // Worked out on the server from the latest weight and the height, to one
@@ -120,8 +126,9 @@ export type Targets = {
   exercise_today: number
   activity_level: ActivityLevel
   goal: Goal
-  rate: Rate | null
-  rates_offered: Rate[]
+  // Kilograms a week, and the steps the stepper moves between.
+  rate_kg_per_week: number | null
+  rate_steps: number[]
   goal_weight_kg: number | null
   weekly_rate: number
   // Plain sentences from the server. Screens print them as they stand, and

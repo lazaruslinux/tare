@@ -618,12 +618,6 @@ SEXES = ("female", "male")
 # multipliers live in app.health beside the equation they multiply.
 ACTIVITY_LEVELS = ("not_much", "light", "moderate", "heavy")
 
-GOALS = ("maintain", "lose", "gain")
-
-# How fast, in plain words. Which of them are offered depends on the goal and
-# on the member's own numbers, which is app.health's call.
-RATES = ("gentle", "steady", "faster", "fastest")
-
 # Whether the daily numbers are worked out, split by percentages somebody
 # chose, or typed in as grams.
 TARGET_MODES = ("auto", "pct", "grams")
@@ -660,14 +654,10 @@ class HealthProfile(Base):
         nullable=False,
         default="not_much",
     )
-    goal: Mapped[str] = mapped_column(
-        Enum(*GOALS, name="health_goal", native_enum=False), nullable=False, default="maintain"
-    )
-    # Null is not "no pace": it is the default pace for the goal, which is
-    # steady for losing and gentle for gaining.
-    rate: Mapped[str | None] = mapped_column(
-        Enum(*RATES, name="health_rate", native_enum=False), nullable=True
-    )
+    # How fast, in kilograms a week. Null is not "no goal rate": it is the
+    # first step of whichever way the two weights point. The direction itself
+    # is not stored, because the two weights already say it.
+    rate_kg_per_week: Mapped[float | None] = mapped_column(Float, nullable=True)
     goal_weight_kg: Mapped[float | None] = mapped_column(Float, nullable=True)
     pregnant_or_breastfeeding: Mapped[bool] = mapped_column(
         Boolean, nullable=False, default=False

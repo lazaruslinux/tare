@@ -26,7 +26,7 @@ export function Birthdate({ onDone }: { onDone: (me: Me) => void }) {
     <div className="t-center">
       <form className="w-full max-w-sm" onSubmit={submit}>
         <p className="mb-1 text-xl font-semibold tracking-tight">When were you born?</p>
-        <p className="mb-4 text-sm text-muted">tare is for adults 18 and over.</p>
+        <p className="mb-4 text-sm text-muted">Tare is for adults 18 and over.</p>
 
         <label className="t-label" htmlFor="ask-birthdate">
           Date of birth

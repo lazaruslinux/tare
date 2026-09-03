@@ -71,7 +71,7 @@ export function Login({ onSignedIn }: { onSignedIn: (me: Me) => void }) {
     return (
       <div className="t-center">
         <div className="w-full max-w-sm">
-          <p className="mb-5 text-center text-2xl font-semibold tracking-tight lowercase">tare</p>
+          <p className="mb-5 text-center text-2xl font-semibold tracking-tight">Tare</p>
           {answered ? (
             <div className="t-card">
               <p className="text-sm text-muted">{answered}</p>
@@ -79,7 +79,7 @@ export function Login({ onSignedIn }: { onSignedIn: (me: Me) => void }) {
           ) : (
             <form className="t-card flex flex-col gap-3" onSubmit={sendLink}>
               <p className="text-sm text-muted">
-                Type the address on your account and tare sends a link for setting a new password.
+                Type the address on your account and Tare sends a link for setting a new password.
               </p>
               <div>
                 <label className="t-label" htmlFor="forgot-email">
@@ -118,7 +118,7 @@ export function Login({ onSignedIn }: { onSignedIn: (me: Me) => void }) {
   return (
     <div className="t-center">
       <div className="w-full max-w-sm">
-        <p className="mb-5 text-center text-2xl font-semibold tracking-tight lowercase">tare</p>
+        <p className="mb-5 text-center text-2xl font-semibold tracking-tight">Tare</p>
         <form className="t-card flex flex-col gap-3" onSubmit={submit}>
           <div>
             <label className="t-label" htmlFor="username">

@@ -1,8 +1,8 @@
 # Targets math
 
-This document is the specification for every number tare computes about a person: the daily calorie budget, the protein, carbohydrate and fat targets, the ceilings for saturated fat, added sugars and sodium, the credit for logged exercise, the limits on weight-change goals, the projected goal date, and the trend weight. The implementation follows the numbered decisions below and nothing else. Every number carries a bracketed source number that points to the Sources section.
+This document is the specification for every number Tare computes about a person: the daily calorie budget, the protein, carbohydrate and fat targets, the ceilings for saturated fat, added sugars and sodium, the credit for logged exercise, the limits on weight-change goals, the projected goal date, and the trend weight. The implementation follows the numbered decisions below and nothing else. Every number carries a bracketed source number that points to the Sources section.
 
-tare estimates. It does not diagnose, treat, or prescribe. The equations here are population averages that can miss any one person by several hundred calories a day. The app says so, in plain words, wherever a computed number appears for the first time.
+Tare estimates. It does not diagnose, treat, or prescribe. The equations here are population averages that can miss any one person by several hundred calories a day. The app says so, in plain words, wherever a computed number appears for the first time.
 
 Items marked UNVERIFIED were not confirmed against a primary source at the time of writing and must not be promoted to fact without a source.
 
@@ -19,9 +19,9 @@ Items marked UNVERIFIED were not confirmed against a primary source at the time 
 3. Harris-Benedict (original 1918 and revised 1984) is not used. [4][5]
    Why: it overestimates resting energy in modern populations and was less accurate than Mifflin-St Jeor in the same review. [2]
 
-4. Mifflin-St Jeor was derived from adults aged 19 to 78. [1] tare accepts members 18 and over. Members over 78 get the same estimate with the standard disclaimer; no separate equation is used. Accuracy above 80 is UNVERIFIED.
+4. Mifflin-St Jeor was derived from adults aged 19 to 78. [1] Tare accepts members 18 and over. Members over 78 get the same estimate with the standard disclaimer; no separate equation is used. Accuracy above 80 is UNVERIFIED.
 
-5. Activity level multiplies resting energy to give the daily maintenance estimate. tare uses four levels with plain names:
+5. Activity level multiplies resting energy to give the daily maintenance estimate. Tare uses four levels with plain names:
 
    | UI name | Multiplier | Meant for | Example |
    |---|---|---|---|
@@ -39,7 +39,7 @@ Items marked UNVERIFIED were not confirmed against a primary source at the time 
    Why: people overstate their activity, and a budget that runs high is the common way calorie apps fail. Exercise still earns credit when it is logged, so an active member is not penalised. The overstatement claim is UNVERIFIED as a cited finding and is stated here as a product decision.
 
 7. Exercise credit: a logged workout adds its net calories to that day's budget. For a manual entry the net figure is (MET - 1) x 3.5 x weight(kg) / 200 x minutes, using the MET value from the 2024 Adult Compendium of Physical Activities. [8] For a workout that arrived from a phone with its own calorie figure (Round 9), that figure is used as reported and treated as net. A manual entry and an imported workout that overlap in time count once, the imported one wins.
-   Why: the Compendium defines 1 MET as 3.5 mL of oxygen per kg per minute, about 1 kcal per kg per hour. [8] Subtracting 1 MET is tare's own step, not the Compendium's: it removes the resting energy the body would have spent anyway, which is already inside the resting estimate, so the credit is not counted twice. Apple's active energy and Health Connect's active calories are both defined as energy above resting, so they are already net. Consumer wearables misestimate energy expenditure by a wide margin (median errors of 27 to 93 percent across seven devices in one validation), [9] so tare shows the credit as an estimate and never as a precise number.
+   Why: the Compendium defines 1 MET as 3.5 mL of oxygen per kg per minute, about 1 kcal per kg per hour. [8] Subtracting 1 MET is Tare's own step, not the Compendium's: it removes the resting energy the body would have spent anyway, which is already inside the resting estimate, so the credit is not counted twice. Apple's active energy and Health Connect's active calories are both defined as energy above resting, so they are already net. Consumer wearables misestimate energy expenditure by a wide margin (median errors of 27 to 93 percent across seven devices in one validation), [9] so Tare shows the credit as an estimate and never as a precise number.
 
 8. Daily step-driven active energy from a phone or watch is displayed in the Move tab but is never added to the budget in version 1.
    Why: the activity level already covers everyday movement, so crediting step energy on top of it double counts. A device-driven mode that replaces the activity level with measured active energy is a post-v1 question.
@@ -56,7 +56,7 @@ Items marked UNVERIFIED were not confirmed against a primary source at the time 
    | Fat | 67 g (30 percent) | Inside the 20 to 35 percent acceptable range [7] |
    | Fiber | 28 g | Daily Value at 2,000 kcal [10], which follows 14 g per 1,000 kcal [7] |
    | Saturated fat, ceiling | 20 g | Under 10 percent of calories [12]; Daily Value 20 g [10] |
-   | Added sugars, ceiling | 36 g | American Heart Association: no more than 25 g a day for women and 36 g for men [31]. The higher of the two stands while sex is unknown, so tare never sets a lower ceiling than the member's own would be |
+   | Added sugars, ceiling | 36 g | American Heart Association: no more than 25 g a day for women and 36 g for men [31]. The higher of the two stands while sex is unknown, so Tare never sets a lower ceiling than the member's own would be |
    | Sodium, ceiling | 2,300 mg | Dietary Guidelines limit for ages 14 and over [12]; Daily Value 2,300 mg [10] |
    | Cholesterol, ceiling | 300 mg | Daily Value [10] |
 
@@ -69,7 +69,7 @@ Items marked UNVERIFIED were not confirmed against a primary source at the time 
    | Goal | Protein | Source |
    |---|---|---|
    | Maintain | 1.4 g/kg | Middle of the 1.2 to 1.6 g/kg general-population target in the 2025-2030 Dietary Guidelines [12]; equals the no-profile default of 100 g at 2,000 kcal for a 70 kg adult, so adding a profile never lowers the number |
-   | Lose weight | 1.6 g/kg | Top of the federal range [12] and inside the 1.4 to 2.0 g/kg the ISSN gives for exercising adults [11]. The ISSN's figure for keeping lean mass in a deficit is 2.3 to 3.1 g/kg, but that is for resistance-trained people; [11] 1.6 is tare's practical pick for general adults, a product decision |
+   | Lose weight | 1.6 g/kg | Top of the federal range [12] and inside the 1.4 to 2.0 g/kg the ISSN gives for exercising adults [11]. The ISSN's figure for keeping lean mass in a deficit is 2.3 to 3.1 g/kg, but that is for resistance-trained people; [11] 1.6 is Tare's practical pick for general adults, a product decision |
    | Gain weight or muscle | 1.6 g/kg | Muscle gain with resistance training showed a break point at 1.62 g/kg (95 percent interval 1.03 to 2.20); the segmented fit did not reach significance (p = 0.079), so this is a best estimate, not a hard plateau [15] |
    | Any goal, age 65 and over | at least 1.2 g/kg | PROT-AGE: 1.0 to 1.2 g/kg for healthy older adults, at least 1.2 g/kg for those who exercise [13] |
 
@@ -102,17 +102,20 @@ Items marked UNVERIFIED were not confirmed against a primary source at the time 
 
 ### Weight change
 
-13. Weight loss rate is chosen in plain words and mapped to a deficit:
+13. Weight loss rate is set with a stepper, and all three steps are offered to every member:
 
-   | UI name | Rate | Deficit |
+   | Step | Rate | Deficit |
    |---|---|---|
-   | Gentle | 0.25 kg (0.5 lb) per week | 250 kcal/day |
-   | Steady (default) | 0.5 kg (1 lb) per week | 500 kcal/day |
-   | Faster | 0.75 kg (1.5 lb) per week | 750 kcal/day |
-   | Fastest | 1 kg (2 lb) per week | 1,000 kcal/day |
+   | 1 (default) | 0.45 kg (1 lb) per week | 450 kcal/day |
+   | 2 | 0.7 kg (1.5 lb) per week | 700 kcal/day |
+   | 3 | 0.9 kg (2 lb) per week | 900 kcal/day |
 
-   Faster and Fastest are offered only when the member's BMI is 35 or more; below that, Steady is the top of the list.
-   Why: the NHLBI clinical guidelines tie the deficit to BMI: 300 to 500 kcal/day (about 0.5 to 1 lb per week) for a BMI of 27 to 35, and 500 to 1,000 kcal/day (1 to 2 lb per week) for a BMI above 35. [16] Offering the 1,000 kcal deficit to everyone would overstate that source, so the two faster rates follow its condition. The CDC's 1 to 2 lb per week page could not be reached (UNVERIFIED). [17] NICE's current guideline NG246 gives no weekly rate; the 0.5 to 1 kg per week figure belonged to the withdrawn CG189. [18] Athletes aiming at 0.7 percent of body weight per week (and achieving it) kept more lean mass than those aiming at 1.4 percent (achieving about 1.0), [19] which is why the default is the slower end.
+   Under the stepper the screen shows a "Goal rate review" note, picked from the rate against the latest weigh-in:
+   - Step 1: "A steady pace most people can keep up. Slower loss tends to hold on to more muscle."
+   - Steps 2 and 3 at or under 1 percent of the member's weight a week, and either step before the first weigh-in: "This makes a bigger gap between what you consume and what you use. It works for some, but many find it hard to keep up. Watch how you feel and ease back if it stops feeling right."
+   - Steps 2 and 3 over 1 percent of the member's weight a week: "This is faster than about 1 percent of your weight a week. Loss this quick is often water rather than fat, and makes it easier to lose muscle and miss out on nutrients. Most guidance stops at 2 lb a week."
+
+   Why: the BMI 35 gate that used to hold back the two faster rates is retired, his call of 2026-09-02. It sorted members by a number the app never shows them (decision 29) and refused a pace to the person it was hardest to explain the refusal to. What replaces it is a tiered note that says what a fast loss costs, plus the two guardrails that were always the real ones: the 25 percent cap of decision 14 and the floors of decision 15, both of which ease a chosen step back and say so. The NHLBI clinical guidelines still bound the top of the list: 500 to 1,000 kcal/day, 1 to 2 lb per week, is the fastest they describe, [16] and 0.9 kg a week is inside it. Athletes aiming at 0.7 percent of body weight per week (and achieving it) kept more lean mass than those aiming at 1.4 percent (achieving about 1.0), [19] which is why step 1 is the default and why the tier that warns starts at 1 percent. The CDC's 1 to 2 lb per week page could not be reached (UNVERIFIED). [17] NICE's current guideline NG246 gives no weekly rate; the 0.5 to 1 kg per week figure belonged to the withdrawn CG189. [18] The third tier's sentence about water, muscle and nutrients is UNVERIFIED product wording: the ACSM 2009 position stand (Donnelly et al., Med Sci Sports Exerc 41(2):459) was the intended citation, and on 2026-09-02 its DOI redirected to a paywall (HTTP 402) and PubMed refused the abstract, so nothing was read and nothing is cited for it.
 
 14. The deficit is capped at 25 percent of the maintenance estimate. A chosen rate that needs more than that is reduced to the cap and the Targets page says so in one sentence.
    Why: the guideline deficits above assume a typical adult; for a small or light person 1,000 kcal/day is a far larger fraction of maintenance than it is for a large one. A percentage cap keeps the deficit proportional. The 25 percent figure is a product decision informed by the lean-mass finding, [19] not a guideline number.
@@ -120,15 +123,17 @@ Items marked UNVERIFIED were not confirmed against a primary source at the time 
 15. Calorie floors: the budget never goes below 1,200 kcal for female members or 1,500 kcal for male members, whatever the goal. If the floor binds, the budget sits at the floor, the projected rate is recalculated from the deficit that remains, and the Targets page says the goal will take longer than the chosen pace.
    Why: the NHLBI guidelines describe low-calorie diets of 1,000 to 1,200 kcal/day for women and 1,200 to 1,500 kcal/day for men as a choice made with a clinician, [16] so an unsupervised app should not set budgets below the upper edge of those ranges. The floors sit exactly at those upper edges. They are also the common convention among calorie apps.
 
-16. The budget may fall below the resting estimate when the floor allows it. tare does not refuse that; it applies the floor and the 25 percent cap instead.
+16. The budget may fall below the resting estimate when the floor allows it. Tare does not refuse that; it applies the floor and the 25 percent cap instead.
    Why: guideline deficits routinely produce budgets under resting rate for heavier members, and refusing them would block the guideline itself.
 
-17. Weight gain rate is chosen the same way:
+17. Weight gain rate is set the same way, with two steps:
 
-   | UI name | Rate | Surplus |
+   | Step | Rate | Surplus |
    |---|---|---|
-   | Gentle (default) | 0.25 kg (0.5 lb) per week | 250 kcal/day |
-   | Steady | 0.5 kg (1 lb) per week | 500 kcal/day |
+   | 1 (default) | 0.25 kg (0.5 lb) per week | 250 kcal/day |
+   | 2 | 0.45 kg (1 lb) per week | 450 kcal/day |
+
+   Its review note is one sentence at either step: "A small, steady gain keeps more of it as muscle."
 
    Why: for muscle gain a surplus of roughly 10 to 20 percent above maintenance, giving 0.25 to 0.5 percent of body weight per week, is the recommendation that limits fat gain. [20] A surplus is also capped at 20 percent of maintenance.
 
@@ -143,20 +148,20 @@ Items marked UNVERIFIED were not confirmed against a primary source at the time 
 
 ### Guardrails
 
-21. tare is for adults 18 and over. Birthdate is required at registration and checked on the server. Under 18 is refused with "tare is for adults 18 and over." Existing accounts without a birthdate are asked at next sign-in.
+21. Tare is for adults 18 and over. Birthdate is required at registration and checked on the server. Under 18 is refused with "Tare is for adults 18 and over." Existing accounts without a birthdate are asked at next sign-in.
    Why: the energy equations were derived in adults, [1] and the product owner's decision is adults only. The minimum-age policies of MyFitnessPal, Cronometer, Lose It and Noom are UNVERIFIED and are not relied on.
 
 22. Clinician nudge, shown once per trigger as a calm sentence with a Dismiss action, never a modal:
    - Current BMI under 18.5 with a weight-loss goal: "Your details put you below the healthy weight range. Talk to a clinician before aiming lower." The loss goal is not blocked; the nudge stays on the Targets page while the condition holds.
    - Goal weight that would give a BMI under 18.5: the goal is accepted but the same sentence appears and the goal date is not shown.
-   - BMI of 40 or more: "A clinician can help plan safely at this weight. tare is only an estimate."
+   - BMI of 40 or more: "A clinician can help plan safely at this weight. Tare is only an estimate."
    Why: the WHO defines adult underweight as a BMI under 18.5 in its indicator set and overweight and obesity at 25 and 30 on its fact sheet; [25] the 40 threshold is obesity class III in the NHLBI classification table. [16] Eating-disorder red flags cannot be detected from a calorie budget, so the app does not attempt it; the disclaimer (decision 30) and the floors are the protection.
 
 23. BMI is computed on the server for the guardrails and shown on the Profile screen as a plain number with no category word; it is never shown on any other screen. Body-fat percentage is shown as the member's own recorded number without a category label.
    Why: BMI does not distinguish fat from lean mass and its bands differ by population, [25][26] and a category label on a first screen is the opposite of the calm, non-judging tone the product owner asked for. This is a product decision; the ACE body-fat bands [27] are recorded for a future opt-in view only and are UNVERIFIED, since the cited page no longer exists at its address.
 
 24. Pregnancy and breastfeeding: the profile has an off-by-default switch, "Pregnant or breastfeeding". While on, weight-loss goals are unavailable, the budget is the maintenance estimate with no deficit, the Targets page says "Energy needs change during pregnancy and breastfeeding. Ask your clinician what is right for you," and no additional calories are added.
-   Why: the Dietary Reference Intakes add about 340 kcal/day in the second trimester, 452 kcal/day in the third, and about 330 kcal/day in the first six months of breastfeeding [7] (report text, not reachable by fetch, UNVERIFIED as quoted), and the pregnancy weight guidelines recommend gain in every BMI class rather than loss. [28] Adding those calories automatically would require trimester tracking that tare does not do; blocking loss and handing the number to a clinician is the honest version-1 behaviour.
+   Why: the Dietary Reference Intakes add about 340 kcal/day in the second trimester, 452 kcal/day in the third, and about 330 kcal/day in the first six months of breastfeeding [7] (report text, not reachable by fetch, UNVERIFIED as quoted), and the pregnancy weight guidelines recommend gain in every BMI class rather than loss. [28] Adding those calories automatically would require trimester tracking that Tare does not do; blocking loss and handing the number to a clinician is the honest version-1 behaviour.
 
 25. Profile fields and fallbacks:
 
@@ -167,10 +172,9 @@ Items marked UNVERIFIED were not confirmed against a primary source at the time 
    | Height | Yes | Fixed 2,000 kcal defaults |
    | Weight | Yes; latest weigh-in wins | Fixed 2,000 kcal defaults |
    | Activity level | No | Not much (decision 6) |
-   | Goal | No | Maintain |
-   | Rate | No | Steady for loss, Gentle for gain |
+   | Goal rate | No | The first step for the direction: 0.45 kg a week losing, 0.25 kg a week gaining |
    | Body fat | No | Mifflin-St Jeor instead of Cunningham (decision 2) |
-   | Goal weight | No | No projection shown |
+   | Goal weight | No | No projection shown, and the day is a maintaining one (decision 31) |
 
    Why: the equation needs all four of sex, height, weight and age; [1] everything else has a safe default that a non-tracker never has to touch.
 
@@ -185,7 +189,10 @@ Items marked UNVERIFIED were not confirmed against a primary source at the time 
 29. Formula names (Mifflin-St Jeor, Cunningham, MET, PAL, BMI, AMDR, TDEE, BMR) never appear in the UI, with one exception: the At rest helper on the Activity Levels screen may say "Sometimes called basal metabolic rate" once, because it is the name a member is most likely to have met elsewhere and to be looking for. Every other formula name stays out. They live in this document and in the Guide page under a "Where the numbers come from" heading for members who want them.
 
 30. Disclaimer, shown once on the Targets page the first time a budget is computed, and always reachable from the Guide:
-   "tare estimates. It is not medical advice. The numbers come from population averages and can be off by a few hundred calories for any one person. Talk to a clinician before changing how you eat if you are pregnant or breastfeeding, under care for a medical condition, or have a history of disordered eating."
+   "Tare estimates. It is not medical advice. The numbers come from population averages and can be off by a few hundred calories for any one person. Talk to a clinician before changing how you eat if you are pregnant or breastfeeding, under care for a medical condition, or have a history of disordered eating."
+
+31. Goal direction is inferred from the two weights and never chosen. A goal weight under the latest weigh-in is a losing plan, one above it is a gaining plan, and no goal weight, no weigh-in, or the two the same is maintaining. There is no Lose / Maintain / Gain chooser anywhere, and no goal is stored: the two weights are the only record of it. The latest weigh-in rather than the trend weight (decision 19), so the direction agrees with the number the member is looking at. A goal weight that turns the direction around drops the stored goal rate, because a rate belongs to the direction it was picked under.
+   Why: his call of 2026-09-02. A member who has typed both weights has already said which way they are going, and asking again is a second answer that can disagree with the first.
 
 ## Plain-language phrasing
 
@@ -202,7 +209,7 @@ Items marked UNVERIFIED were not confirmed against a primary source at the time 
 | Macronutrients | "Protein, Carbs, Fat" | macros, macronutrients |
 | AMDR | "the range experts recommend" | AMDR, acceptable distribution |
 | Grams per kilogram protein | "protein for your size" | g/kg, per kilogram |
-| Calorie floor | "the lowest budget tare will set" | floor, minimum intake, VLCD |
+| Calorie floor | "the lowest budget Tare will set" | floor, minimum intake, VLCD |
 | Trend weight | "your trend" | EWMA, moving average, smoothed |
 | Projected goal date | "At this pace, about [Month Year]" | projection, ETA, linear estimate |
 | BMI | not shown | BMI, body mass index, obese, overweight, underweight |
@@ -215,7 +222,7 @@ Items marked UNVERIFIED were not confirmed against a primary source at the time 
 
 Each item is a decision for the product owner. The default in the Decisions section stands until changed.
 
-1. Exercise credit fraction (decision 7): tare credits 100 percent of net exercise calories. MyFitnessPal is widely criticised for the same full credit because device estimates run high. [9] Alternative: credit 50 percent by default with a "count all of it" switch on the Targets page. Recommendation: keep 100 percent of the net figure for manual entries (the MET math is already conservative) and revisit for imported workouts in Round 9 when real device numbers are visible.
+1. Exercise credit fraction (decision 7): Tare credits 100 percent of net exercise calories. MyFitnessPal is widely criticised for the same full credit because device estimates run high. [9] Alternative: credit 50 percent by default with a "count all of it" switch on the Targets page. Recommendation: keep 100 percent of the net figure for manual entries (the MET math is already conservative) and revisit for imported workouts in Round 9 when real device numbers are visible.
 2. Calorie floors (decision 15): decided 2026-09-01, 1,200 for women and 1,500 for men, the upper edges of the NHLBI ranges. [16]
 3. Default activity level (decision 6): Not much (1.2) is the conservative pick. Alternative: Light (1.375), which better matches a person who walks a fair amount but does not exercise. The cost of the wrong pick is a budget about 200 kcal too high or too low.
 5. Pregnancy switch (decision 24): included as a profile switch. Alternative: leave it out of version 1 and let the disclaimer carry it.
@@ -223,7 +230,7 @@ Each item is a decision for the product owner. The default in the Decisions sect
 9. Faster rates gated on BMI 35 (decision 13): decided 2026-09-01, the gate stays; it is what the source says. [16] The Targets page explains it in one sentence.
 10. Added sugars ceiling (decisions 9 and 12): decided 2026-09-02, the American Heart Association's 25 g for women and 36 g for men, [31] and 36 g while sex is unknown. The 10 percent of calories basis is dropped with the percentage the Dietary Guidelines withdrew. [12]
 7. Activity multiplier provenance (decision 5): the 1.2 to 1.9 set is a convention with no primary source found. Alternative: use the DRI physical-activity coefficients directly inside the DRI estimated energy requirement equations, [7] which have a documented derivation but are less familiar and give slightly different numbers.
-8. Older-adult protein (decision 10): PROT-AGE's 1.0 to 1.2 g/kg is a floor for age 65 and over, with at least 1.2 g/kg for those who exercise. [13] Its 1.2 to 1.5 g/kg band is for acute or chronic illness, which tare cannot know about. The 1.2 minimum stands.
+8. Older-adult protein (decision 10): PROT-AGE's 1.0 to 1.2 g/kg is a floor for age 65 and over, with at least 1.2 g/kg for those who exercise. [13] Its 1.2 to 1.5 g/kg band is for acute or chronic illness, which Tare cannot know about. The 1.2 minimum stands.
 
 ## Sources
 
@@ -234,7 +241,7 @@ Each item is a decision for the product owner. The default in the Decisions sect
 5. Roza AM, Shizgal HM. The Harris Benedict equation reevaluated: resting energy requirements and the body cell mass. American Journal of Clinical Nutrition, 1984. https://doi.org/10.1093/ajcn/40.1.168. Accessed 2026-09-01. Revised equation, not used.
 6. FAO/WHO/UNU. Human energy requirements: report of a joint expert consultation. FAO Food and Nutrition Technical Report Series 1, 2004. https://www.fao.org/3/y5686e/y5686e00.htm. Accessed 2026-09-01. PAL bands for sedentary, active and vigorous lifestyles.
 7. Institute of Medicine. Dietary Reference Intakes for Energy, Carbohydrate, Fiber, Fat, Fatty Acids, Cholesterol, Protein, and Amino Acids. National Academies Press, 2005. https://doi.org/10.17226/10490. Accessed 2026-09-01. AMDR ranges, protein RDA 0.8 g/kg, carbohydrate RDA 130 g, fiber 14 g per 1,000 kcal, physical-activity coefficients, pregnancy and lactation energy additions.
-8. Herrmann SD, Willis EA, Ainsworth BE, et al. 2024 Adult Compendium of Physical Activities. Journal of Sport and Health Science, 2024, with the Compendium site https://pacompendium.com/. The 2011 edition (Ainsworth et al., https://doi.org/10.1249/MSS.0b013e31821ece12) is superseded. Accessed 2026-09-01. MET values and the definition 1 MET = 3.5 mL O2/kg/min, about 1 kcal/kg/hour. The (MET - 1) net correction is not stated by the Compendium; it is tare's own step.
+8. Herrmann SD, Willis EA, Ainsworth BE, et al. 2024 Adult Compendium of Physical Activities. Journal of Sport and Health Science, 2024, with the Compendium site https://pacompendium.com/. The 2011 edition (Ainsworth et al., https://doi.org/10.1249/MSS.0b013e31821ece12) is superseded. Accessed 2026-09-01. MET values and the definition 1 MET = 3.5 mL O2/kg/min, about 1 kcal/kg/hour. The (MET - 1) net correction is not stated by the Compendium; it is Tare's own step.
 9. Shcherbina A, Mattsson CM, Waggott D, et al. Accuracy in wrist-worn, sensor-based measurements of heart rate and energy expenditure in a diverse cohort. Journal of Personalized Medicine, 2017. https://doi.org/10.3390/jpm7020003. Accessed 2026-09-01. Energy expenditure error range across consumer wearables.
 10. US Food and Drug Administration. Daily Value on the Nutrition and Supplement Facts Labels, and 21 CFR 101.9(c)(9). https://www.fda.gov/food/nutrition-facts-label/daily-value-nutrition-and-supplement-facts-labels and https://www.ecfr.gov/current/title-21/chapter-I/subchapter-B/part-101/subpart-A/section-101.9. Accessed 2026-09-01. Daily Values at 2,000 kcal: fat 78 g, saturated fat 20 g, cholesterol 300 mg, sodium 2,300 mg, carbohydrate 275 g, fiber 28 g, added sugars 50 g, protein 50 g.
 11. Jager R, Kerksick CM, Campbell BI, et al. International Society of Sports Nutrition position stand: protein and exercise. Journal of the International Society of Sports Nutrition, 2017. https://doi.org/10.1186/s12970-017-0177-8. Accessed 2026-09-01. 1.4 to 2.0 g/kg for active adults; higher intakes during energy restriction.

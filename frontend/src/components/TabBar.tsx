@@ -34,7 +34,7 @@ export const TABS: { id: Tab; label: string; Icon: LucideIcon; railOnly?: true }
   { id: 'plus', label: 'Add', Icon: Plus },
   { id: 'food', label: 'Food', Icon: Apple },
   { id: 'targets', label: 'Targets', Icon: Target, railOnly: true },
-  { id: 'measurements', label: 'Measurements', Icon: Weight, railOnly: true },
+  { id: 'measurements', label: 'Biometrics', Icon: Weight, railOnly: true },
   { id: 'more', label: 'More', Icon: Ellipsis },
 ]
 

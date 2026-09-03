@@ -21,19 +21,15 @@ ACTIVITY_MULTIPLIER = {
     "heavy": 1.725,
 }
 
-# Decisions 13 and 17: the pace in plain words, in kilograms a week.
-RATE_KG_PER_WEEK = {"gentle": 0.25, "steady": 0.5, "faster": 0.75, "fastest": 1.0}
+# Decisions 13 and 17: the goal rates on offer, in kilograms a week. Losing
+# reads 1, 1.5 and 2 lb a week; gaining reads 0.5 and 1 lb.
+LOSE_STEPS = (0.45, 0.7, 0.9)
+GAIN_STEPS = (0.25, 0.45)
 
 # What a kilogram a week costs or earns in a day, which is the pairing the two
 # rate tables in decisions 13 and 17 are written with. Not the 7,700 kcal per
 # kilogram of decision 20: that figure sizes a correction, not a pace.
 KCAL_PER_DAY_PER_KG_WEEK = 1000.0
-
-# Decision 13: the two faster paces are offered only above this.
-FASTER_RATES_BMI = 35.0
-
-# Decision 17: gaining is offered at the two slower paces only.
-GAIN_RATES = ("gentle", "steady")
 
 # Decisions 14 and 17: how far from maintenance a budget may sit.
 DEFICIT_CAP = 0.25
@@ -215,42 +211,42 @@ def bmi(kg: float, cm: float) -> float:
     return kg / (metres * metres)
 
 
-def rates_offered(goal: str, body_mass_index: float | None) -> tuple[str, ...]:
-    """Decisions 13 and 17: which paces this member may pick from.
+def direction(latest_weight_kg: float | None, goal_weight_kg: float | None) -> str:
+    """Which way the member is going, read off the two weights they can see.
 
-    The two faster ones follow the source's own condition, so they appear only
-    when the member's numbers meet it.
+    The latest weigh-in rather than the trend, so the answer matches the number
+    on the screen. Without either weight, or with the two the same, there is
+    nothing to aim at and the day is the day.
     """
-    if goal == "gain":
-        return GAIN_RATES
-    if goal != "lose":
-        return ()
-    if body_mass_index is not None and body_mass_index >= FASTER_RATES_BMI:
-        return ("gentle", "steady", "faster", "fastest")
-    return ("gentle", "steady")
+    if latest_weight_kg is None or goal_weight_kg is None:
+        return "maintain"
+    if goal_weight_kg < latest_weight_kg:
+        return "lose"
+    if goal_weight_kg > latest_weight_kg:
+        return "gain"
+    return "maintain"
 
 
-def default_rate(goal: str) -> str | None:
-    """Decision 25: steady for losing, gentle for gaining, none for maintaining."""
-    if goal == "lose":
-        return "steady"
-    if goal == "gain":
-        return "gentle"
-    return None
+def steps_for(way: str) -> tuple[float, ...]:
+    """Decisions 13 and 17: the goal rates offered for going that way."""
+    if way == "lose":
+        return LOSE_STEPS
+    if way == "gain":
+        return GAIN_STEPS
+    return ()
 
 
 def budget(
     maintenance_kcal: float,
-    goal: str,
-    rate: str | None,
+    way: str,
+    rate_kg_per_week: float | None,
     sex: str,
-    body_mass_index: float | None,
     pregnant: bool,
 ) -> Budget:
     """Decisions 13 to 17 and 24: the day's calories, and why they are that.
 
-    The order is the order the sources impose: the pace is held to what the
-    member is offered, then to a share of maintenance, and the floor is applied
+    The order is the order the sources impose: the goal rate is one of the
+    steps, then it is held to a share of maintenance, and the floor is applied
     last because it is the one figure nothing may go under.
     """
     notes: list[str] = []
@@ -261,24 +257,21 @@ def budget(
         notes.append("pregnancy")
         return Budget(_floored(maintenance_kcal, sex, notes), 0.0, tuple(notes))
 
-    offered = rates_offered(goal, body_mass_index)
-    chosen = rate or default_rate(goal)
-    if goal in ("lose", "gain") and chosen not in offered:
-        # A pace the member is not offered, which a stored one can become when
-        # their weight changes under it. The quickest they are offered stands.
-        chosen = offered[-1] if offered else None
-        notes.append("gate")
-
-    if goal == "maintain" or chosen is None:
+    steps = steps_for(way)
+    if not steps:
         return Budget(_floored(maintenance_kcal, sex, notes), 0.0, tuple(notes))
+    # A stored rate belongs to the direction it was picked under, and a
+    # weigh-in can turn that direction around. The direction's own first step
+    # stands until the member picks again.
+    chosen = rate_kg_per_week if rate_kg_per_week in steps else steps[0]
 
-    change = RATE_KG_PER_WEEK[chosen] * KCAL_PER_DAY_PER_KG_WEEK
-    cap = maintenance_kcal * (DEFICIT_CAP if goal == "lose" else SURPLUS_CAP)
+    change = chosen * KCAL_PER_DAY_PER_KG_WEEK
+    cap = maintenance_kcal * (DEFICIT_CAP if way == "lose" else SURPLUS_CAP)
     if change > cap:
         change = cap
         notes.append("cap")
 
-    raw = maintenance_kcal - change if goal == "lose" else maintenance_kcal + change
+    raw = maintenance_kcal - change if way == "lose" else maintenance_kcal + change
     calories = _floored(raw, sex, notes)
     # What the budget actually asks of the body, once the cap and the floor
     # have had their say. Decision 15 recalculates the pace from what is left.

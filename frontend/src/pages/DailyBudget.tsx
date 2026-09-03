@@ -3,7 +3,7 @@ import { useState, type ReactNode } from 'react'
 
 import type { BudgetFigures, Goal, TargetMode, Targets as TargetsRow } from '../api'
 import { SaveMarks, useSavedChip } from '../components/SaveMarks'
-import { SPLIT_NOTES, asNumber, calText, notesFor } from '../lib/targets'
+import { SPLIT_NOTES, asNumber, calText, notesFor, personalNumber } from '../lib/targets'
 import type { Save } from './Targets'
 
 const MODES: { value: TargetMode; label: string }[] = [
@@ -59,11 +59,15 @@ function Fold({ label, children }: { label: string; children: ReactNode }) {
 
 export function DailyBudget({
   targets,
+  missing,
   busy,
   error,
   onSaveTargets,
 }: {
   targets: TargetsRow
+  // Which of the four details are still missing, so the line about a personal
+  // number names the gap.
+  missing: string[]
   busy: boolean
   error: string
   onSaveTargets: Save
@@ -157,7 +161,7 @@ export function DailyBudget({
           {breakdown === null || targets.mode === 'grams' ? (
             <p className="t-note">
               {breakdown === null
-                ? 'Add your details for a personal number.'
+                ? `${personalNumber(missing).label}.`
                 : 'You set this number yourself, so there is nothing to work out.'}
             </p>
           ) : (
@@ -219,7 +223,7 @@ export function DailyBudget({
               )
             })}
             <p className="t-note mt-3">
-              tare works these out from your details and your goal. You can set them
+              Tare works these out from your details and your goal. You can set them
               yourself instead.
             </p>
           </>

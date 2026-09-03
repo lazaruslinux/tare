@@ -1,58 +1,55 @@
-import { CalendarDays, Check, ChevronRight } from 'lucide-react'
-import { useState } from 'react'
+import { ChevronRight, CircleCheck, Minus, Plus, Trophy } from 'lucide-react'
+import { useState, type ReactNode } from 'react'
 
 import { api, type Me, type Profile as ProfileRow, type Targets as TargetsRow } from '../api'
 import { MeasurementsSheet } from '../components/MeasurementsSheet'
 import { SaveMarks, useSavedChip } from '../components/SaveMarks'
+import { ScaleGlyph } from '../components/ScaleGlyph'
 import { Sheet } from '../components/Sheet'
 import { today } from '../lib/day'
 import {
-  GOAL_LABEL,
-  GOALS,
   GOOD_TO_KNOW,
   PACE_CAVEAT,
   PACE_NOTES,
-  RATE_LABEL,
   asNumber,
+  calText,
   monthText,
   notesFor,
-  rateText,
+  rateReview,
+  rateStepText,
 } from '../lib/targets'
 import { weightFrom, weightIn, weightText, weightUnit } from '../lib/units'
 import type { Save } from './Targets'
 
 // Which sheet is open over the screen, if any.
-type Open = 'weight' | 'goal' | 'pace' | null
+type Open = 'weight' | 'goal' | null
 
+// A tile in the overview: a glyph, the label under it, and the figure under
+// that. The glyph is what makes the two read as a pair at a glance.
 function Tile({
+  glyph,
   label,
   value,
   muted,
-  onOpen,
 }: {
+  glyph: ReactNode
   label: string
   value: string
   muted?: boolean
-  onOpen?: () => void
 }) {
-  const inside = (
-    <>
+  return (
+    <div className="t-card">
+      <span className="mb-1 block text-muted">{glyph}</span>
       <span className="t-micro mb-1 block">{label}</span>
       <span className={`block text-lg font-semibold leading-tight ${muted ? 'text-muted' : ''}`}>
         {value}
       </span>
-    </>
-  )
-  if (onOpen === undefined) return <div className="t-card">{inside}</div>
-  return (
-    <button type="button" className="t-card w-full text-left" onClick={onOpen}>
-      {inside}
-    </button>
+    </div>
   )
 }
 
 // The same two-line row the Targets list uses: the value sits under its label,
-// so a long one ("Lose weight, Steady, 1.1 lb a week") never squeezes the label.
+// so a long one never squeezes the label.
 function Row({ label, value, onOpen }: { label: string; value: string; onOpen: () => void }) {
   return (
     <button type="button" className="t-row w-full text-left" onClick={onOpen}>
@@ -90,7 +87,7 @@ export function WeightGoal({
     targets.goal_weight_kg === null ? '' : String(weightIn(targets.goal_weight_kg, units))
   )
   const [savedGoal, markGoalSaved] = useSavedChip()
-  const [savedPace, markPaceSaved] = useSavedChip()
+  const [savedRate, markRateSaved] = useSavedChip()
 
   const typed = asNumber(goalWeight)
   const goalDirty =
@@ -102,64 +99,28 @@ export function WeightGoal({
     if (await onSaveProfile({ goal_weight_kg: kg })) markGoalSaved()
   }
 
-  const pick = async (body: Record<string, unknown>) => {
-    if (await onSaveProfile(body)) markPaceSaved()
-  }
-
   const dismiss = async (key: string) => {
     await api(`/health/nudges/${key}/dismiss`, { method: 'POST' }).catch(() => undefined)
     onSaved()
   }
 
-  const rate = targets.rate
-  const gated = targets.goal === 'lose' && targets.rates_offered.length === 2
-  const paceValue =
-    targets.goal === 'maintain'
-      ? 'Maintain'
-      : [
-          GOAL_LABEL[targets.goal],
-          rate === null ? null : RATE_LABEL[rate],
-          rate === null ? null : rateText(rate, units),
-        ]
-          .filter(Boolean)
-          .join(' · ')
+  const steps = targets.rate_steps
+  const rate = targets.rate_kg_per_week
+  const at = rate === null ? 0 : Math.max(steps.indexOf(rate), 0)
+  const latestKg = profile?.latest_weight_kg ?? null
+
+  const step = async (to: number) => {
+    if (to < 0 || to >= steps.length) return
+    if (await onSaveProfile({ rate_kg_per_week: steps[to] })) markRateSaved()
+  }
 
   const notes = notesFor(targets.note_keys, targets.notes, PACE_NOTES)
   const offer = targets.reestimate
+  const adjustment = targets.breakdown === null ? null : Math.abs(targets.breakdown.adjustment)
 
   return (
     <>
       {error && <p className="t-error mb-3">{error}</p>}
-
-      <div className="mb-3 grid grid-cols-2 gap-3">
-        <Tile
-          label="Goal weight"
-          value={
-            targets.goal_weight_kg === null
-              ? 'Add a goal weight'
-              : weightText(targets.goal_weight_kg, units)
-          }
-          muted={targets.goal_weight_kg === null}
-          onOpen={() => setOpen('goal')}
-        />
-        <div className="t-card">
-          <p className="t-micro mb-1 flex items-center gap-1">
-            <CalendarDays className="h-3.5 w-3.5" strokeWidth={2.5} />
-            At this pace
-          </p>
-          <span
-            className={`block text-lg font-semibold leading-tight ${
-              targets.projection === null ? 'text-muted' : ''
-            }`}
-          >
-            {targets.projection === null
-              ? 'No date yet'
-              : `About ${monthText(targets.projection.month)}`}
-          </span>
-        </div>
-      </div>
-
-      {targets.projection !== null && <p className="t-note mb-3">{PACE_CAVEAT}</p>}
 
       <div className="t-card mb-3">
         <Row
@@ -172,7 +133,7 @@ export function WeightGoal({
           onOpen={() => setOpen('weight')}
         />
         <Row
-          label="Goal weight"
+          label="Weight goal"
           value={
             targets.goal_weight_kg === null
               ? 'Not set'
@@ -180,8 +141,99 @@ export function WeightGoal({
           }
           onOpen={() => setOpen('goal')}
         />
-        <Row label="Goal and pace" value={paceValue} onOpen={() => setOpen('pace')} />
       </div>
+
+      <div className="t-card mb-3">
+        <p className="t-micro mb-2">Set your goal rate</p>
+        {steps.length === 0 || rate === null ? (
+          <>
+            <span className="block text-lg font-semibold leading-tight">Maintain</span>
+            <p className="t-note mt-1">
+              Set a weight goal above or below your current weight to pick a goal rate.
+            </p>
+          </>
+        ) : (
+          <>
+            <div className="t-stepper">
+              <button
+                type="button"
+                aria-label="Slower"
+                disabled={busy || at === 0}
+                onClick={() => void step(at - 1)}
+              >
+                <Minus className="h-5 w-5" strokeWidth={2.5} />
+              </button>
+              <span className="t-nums flex-1 text-center text-base font-semibold">
+                {rateStepText(steps[at], units, targets.goal)}
+              </span>
+              <button
+                type="button"
+                aria-label="Faster"
+                disabled={busy || at === steps.length - 1}
+                onClick={() => void step(at + 1)}
+              >
+                <Plus className="h-5 w-5" strokeWidth={2.5} />
+              </button>
+            </div>
+            <div className="mt-2 flex items-center gap-3">
+              {busy ? (
+                <span className="text-xs text-muted">Saving</span>
+              ) : (
+                <SaveMarks dirty={false} saved={savedRate} />
+              )}
+            </div>
+            <div className="t-review mt-3">
+              <CircleCheck className="mt-0.5 h-4 w-4 shrink-0" strokeWidth={2.5} />
+              <span className="min-w-0">
+                <span className="block font-semibold">Goal rate review</span>
+                {rateReview(steps[at], latestKg, targets.goal)}
+              </span>
+            </div>
+          </>
+        )}
+      </div>
+
+      <p className="t-micro mb-2">Goal overview</p>
+      <div className="mb-3 grid grid-cols-2 gap-3">
+        <Tile
+          glyph={<ScaleGlyph className="h-5 w-5" />}
+          label="Goal weight"
+          value={
+            targets.goal_weight_kg === null
+              ? 'Not set'
+              : weightText(targets.goal_weight_kg, units)
+          }
+          muted={targets.goal_weight_kg === null}
+        />
+        <Tile
+          glyph={<Trophy className="h-5 w-5" strokeWidth={2} />}
+          label="Goal forecast"
+          value={
+            targets.projection === null
+              ? 'No date yet'
+              : `About ${monthText(targets.projection.month)}`
+          }
+          muted={targets.projection === null}
+        />
+      </div>
+
+      <div className="t-card mb-3">
+        <span className="t-micro mb-1 block">Energy target</span>
+        <span className="t-nums block text-lg font-semibold leading-tight">
+          {calText(targets.budget.calories)} cal
+        </span>
+        {adjustment !== null && (
+          <p className="t-note mt-1">
+            {targets.goal === 'maintain' || adjustment === 0
+              ? 'Matches what you use in a day.'
+              : `You will consume about ${calText(adjustment)} cal ${
+                  targets.goal === 'gain' ? 'more' : 'less'
+                } than what you use in a day.`}
+          </p>
+        )}
+      </div>
+
+      {targets.projection !== null && <p className="t-note mb-3">{PACE_CAVEAT}</p>}
 
       {notes.map((note) => (
         <p key={note} className="t-note mb-3">
@@ -205,8 +257,8 @@ export function WeightGoal({
       {offer !== null && (
         <div className="t-card mb-3">
           <p className="text-sm">
-            Your weight is moving differently from the pace you picked. tare can set your
-            budget to {offer.calories} cal a day.
+            Your weight is moving differently from the goal rate you picked. Tare can set
+            your budget to {offer.calories} cal a day.
           </p>
           <button
             type="button"
@@ -244,8 +296,8 @@ export function WeightGoal({
         />
       )}
 
-      <Sheet open={open === 'goal'} label="Goal weight" onClose={() => setOpen(null)}>
-        <p className="t-micro mb-2">Goal weight</p>
+      <Sheet open={open === 'goal'} label="Weight goal" onClose={() => setOpen(null)}>
+        <p className="t-micro mb-2">Weight goal</p>
         <label className="t-label" htmlFor="goal-weight">
           Weight ({weightUnit(units)})
         </label>
@@ -270,64 +322,9 @@ export function WeightGoal({
           <SaveMarks dirty={goalDirty} saved={savedGoal} />
         </div>
         <p className="t-note mt-3">
-          Leave it empty to have no goal weight. tare then shows no date.
+          A goal under your current weight is a losing plan and one above it is a gaining
+          one. Leave it empty to have no weight goal. Tare then shows no date.
         </p>
-      </Sheet>
-
-      <Sheet open={open === 'pace'} label="Goal and pace" onClose={() => setOpen(null)}>
-        <p className="t-micro mb-2">Your goal</p>
-        <div className="mb-4 flex gap-2">
-          {GOALS.map((choice) => (
-            <button
-              key={choice.value}
-              type="button"
-              aria-pressed={targets.goal === choice.value}
-              disabled={busy}
-              className="t-choice px-2 py-3 text-center"
-              onClick={() => void pick({ goal: choice.value })}
-            >
-              <span className="block text-sm font-semibold">{choice.label}</span>
-            </button>
-          ))}
-        </div>
-
-        {targets.rates_offered.length > 0 && (
-          <>
-            <p className="t-micro mb-2">How fast</p>
-            {targets.rates_offered.map((offered) => (
-              <button
-                key={offered}
-                type="button"
-                aria-pressed={rate === offered}
-                disabled={busy}
-                className="t-option"
-                onClick={() => void pick({ rate: offered })}
-              >
-                <span className="min-w-0 flex-1">
-                  <span className="block text-sm font-semibold">{RATE_LABEL[offered]}</span>
-                  <span className="block text-xs text-muted">{rateText(offered, units)}</span>
-                </span>
-                {rate === offered && (
-                  <Check className="h-4 w-4 shrink-0 text-accent" strokeWidth={2.5} />
-                )}
-              </button>
-            ))}
-            {gated && (
-              <p className="t-note mt-3">
-                tare offers the two faster paces only when your details suggest they suit
-                you.
-              </p>
-            )}
-          </>
-        )}
-
-        <div className="mt-3 flex items-center gap-3">
-          {busy ? (
-            <span className="text-xs text-muted">Saving</span>
-          ) : (
-            <SaveMarks dirty={false} saved={savedPace} />
-          )}
-        </div>
       </Sheet>
     </>
   )

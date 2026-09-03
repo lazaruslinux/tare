@@ -288,7 +288,7 @@ export function FoodTab({
   // to it.
   const nameOf = (from: From) =>
     from.at === 'browse'
-      ? 'Browse tare database'
+      ? 'Browse Tare database'
       : from.at === 'all'
         ? LIST_TITLE[from.kind]
         : 'Food'
@@ -723,7 +723,7 @@ export function FoodTab({
         className="t-card mb-3 w-full text-left"
         onClick={() => setView({ at: 'browse' })}
       >
-        <p className="t-section">Browse tare database</p>
+        <p className="t-section">Browse Tare database</p>
       </button>
 
       {logging !== null && (

@@ -306,6 +306,43 @@
     opacity: 0.55;
   }
 
+  /* Moving through a short list of set values, one tap at a time: the two
+     ends are 44px buttons and the value sits between them. An end that has
+     nowhere further to go is disabled rather than hidden. */
+  .t-stepper {
+    display: flex;
+    align-items: center;
+    gap: 0.75rem;
+  }
+  .t-stepper > button {
+    display: flex;
+    flex: none;
+    align-items: center;
+    justify-content: center;
+    width: 44px;
+    height: 44px;
+    border: 1px solid var(--line);
+    border-radius: 999px;
+    background: var(--surface-2);
+    color: var(--text);
+  }
+  .t-stepper > button:disabled {
+    opacity: 0.4;
+  }
+
+  /* What a chosen number means, said back in a tinted inset under it. The one
+     tinted aside in the app: it is read before a goal rate is settled on. */
+  .t-review {
+    display: flex;
+    gap: 0.625rem;
+    padding: 0.75rem;
+    border-radius: 0.75rem;
+    background: var(--surface-2);
+    color: var(--muted);
+    font-size: 0.8125rem;
+    line-height: 1.5;
+  }
+
   /* A quiet aside. Not a banner: no border, no tint, no icon. */
   .t-note {
     color: var(--muted);
@@ -599,6 +636,7 @@
     .t-option,
     .t-choice,
     button.t-card,
+    .t-stepper > button,
     .t-tap44 {
       transition:
         background-color 0.12s ease,
@@ -619,7 +657,8 @@
       filter: brightness(1.08);
     }
     .t-option:hover,
-    .t-choice:hover {
+    .t-choice:hover,
+    .t-stepper > button:not(:disabled):hover {
       border-color: var(--line-strong);
     }
     button.t-card:hover {

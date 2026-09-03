@@ -38,11 +38,11 @@ export function TopBar({
           <>
             <button
               type="button"
-              className="t-topbar-mark t-tap44 px-2 text-lg font-semibold tracking-tight lowercase"
+              className="t-topbar-mark t-tap44 px-2 text-lg font-semibold tracking-tight"
               aria-label="Dashboard"
               onClick={onHome}
             >
-              tare
+              Tare
             </button>
             {/* The rail carries the name at rail width, so the slot says which
                 screen this is instead. */}

@@ -122,6 +122,7 @@ export function Targets({
       <ActivityLevels
         me={me}
         targets={targets}
+        missing={profile?.missing ?? []}
         busy={busy}
         error={error}
         onSaved={reload}
@@ -134,6 +135,7 @@ export function Targets({
     return (
       <DailyBudget
         targets={targets}
+        missing={profile?.missing ?? []}
         busy={busy}
         error={error}
         onSaveTargets={saveTargets}

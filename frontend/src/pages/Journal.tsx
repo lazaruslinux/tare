@@ -19,6 +19,7 @@ import { HEADLINE, nutrientText } from '../components/NutritionLabel'
 import { PortionSheet } from '../components/PortionSheet'
 import { useTopBar } from '../hooks/useTopBar'
 import { SLOTS, SLOT_LABEL, dayLabel, shiftDay, slotByTime, today, type Slot } from '../lib/day'
+import { calText } from '../lib/targets'
 import { portionText, round1, servingsText, weightText } from '../lib/units'
 
 // How long a deleted row can be brought back. Short enough that nobody is
@@ -241,7 +242,7 @@ export function Journal({
       {day !== null && (
         <div className="t-card mb-3">
           <div className="mb-1 flex items-center justify-between">
-            <p className="t-micro">Left today</p>
+            <p className="t-micro">Remaining today</p>
             <button
               type="button"
               className="t-micro t-tap44 flex items-center gap-1"
@@ -252,13 +253,18 @@ export function Journal({
             </button>
           </div>
           <span className="t-nums block text-3xl font-semibold leading-tight">
-            {day.remaining_calories}
+            {calText(day.remaining_calories)}
+            <span className="ml-1 text-sm font-normal text-muted">cal</span>
           </span>
           <span className="block text-xs text-muted">
             {nutrientText('calories', day.totals.calories ?? 0)} consumed of{' '}
-            {day.budget.calories}
-            {day.exercise_kcal > 0 && ` · Exercise added back +${day.exercise_kcal}`}
+            {calText(day.budget.calories)}
           </span>
+          {day.exercise_kcal > 0 && (
+            <span className="block text-xs text-muted">
+              Includes exercise added: +{day.exercise_kcal} cal
+            </span>
+          )}
           <div className="mt-4 flex flex-col gap-3">
             {HEADLINE.slice(1).map((fact) => (
               <MacroBar
@@ -330,9 +336,48 @@ export function Journal({
 
       {day !== null && (
         <div className="t-card mb-3">
-          <p className="t-micro mb-1">Measurements</p>
+          <div className="mb-1 flex items-center justify-between">
+            <p className="t-micro">Exercise</p>
+            {day.exercise_kcal > 0 && (
+              <span className="t-nums text-xs text-muted">+{day.exercise_kcal} cal</span>
+            )}
+          </div>
+          {day.exercise.length === 0 ? (
+            <p className="text-sm text-muted">No exercise logged.</p>
+          ) : (
+            day.exercise.map((row) => (
+              <div key={row.id} className="t-row">
+                <span className="min-w-0 flex-1">
+                  <span className="block truncate text-sm">{row.name}</span>
+                  <span className="block text-xs text-muted">
+                    {row.minutes} min · about {row.kcal} cal
+                  </span>
+                </span>
+                <button
+                  type="button"
+                  className="t-tap44 shrink-0 text-sm text-muted"
+                  onClick={() => removeExercise(row.id, row.name)}
+                >
+                  Delete
+                </button>
+              </div>
+            ))
+          )}
+          <button
+            type="button"
+            className="t-row w-full text-left text-sm text-muted"
+            onClick={() => setExercising(true)}
+          >
+            + Add
+          </button>
+        </div>
+      )}
+
+      {day !== null && (
+        <div className="t-card mb-3">
+          <p className="t-micro mb-1">Biometrics</p>
           {weighed === null ? (
-            <p className="text-sm text-muted">No measurements yet.</p>
+            <p className="text-sm text-muted">No biometrics yet.</p>
           ) : (
             <>
               <div className="t-row min-h-9 text-sm">
@@ -383,45 +428,6 @@ export function Journal({
             onClick={() => setMeasuring(true)}
           >
             {weighed === null ? '+ Add' : '+ Edit'}
-          </button>
-        </div>
-      )}
-
-      {day !== null && (
-        <div className="t-card mb-3">
-          <div className="mb-1 flex items-center justify-between">
-            <p className="t-micro">Exercise</p>
-            {day.exercise_kcal > 0 && (
-              <span className="t-nums text-xs text-muted">+{day.exercise_kcal} cal</span>
-            )}
-          </div>
-          {day.exercise.length === 0 ? (
-            <p className="text-sm text-muted">No exercise logged.</p>
-          ) : (
-            day.exercise.map((row) => (
-              <div key={row.id} className="t-row">
-                <span className="min-w-0 flex-1">
-                  <span className="block truncate text-sm">{row.name}</span>
-                  <span className="block text-xs text-muted">
-                    {row.minutes} min · about {row.kcal} cal
-                  </span>
-                </span>
-                <button
-                  type="button"
-                  className="t-tap44 shrink-0 text-sm text-muted"
-                  onClick={() => removeExercise(row.id, row.name)}
-                >
-                  Delete
-                </button>
-              </div>
-            ))
-          )}
-          <button
-            type="button"
-            className="t-row w-full text-left text-sm text-muted"
-            onClick={() => setExercising(true)}
-          >
-            + Add
           </button>
         </div>
       )}

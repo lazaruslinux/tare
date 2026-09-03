@@ -27,7 +27,7 @@ AREAS = {
     "food": "Food",
     "scanner": "Scanner",
     "targets": "Targets",
-    "measurements": "Measurements",
+    "measurements": "Biometrics",
     "more": "More",
     "other": "Other",
 }

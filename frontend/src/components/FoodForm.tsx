@@ -384,7 +384,7 @@ export function FoodForm({
 
       {already !== null && (
         <div className="t-card mb-3">
-          <p className="text-sm">Already in tare: {already.name}</p>
+          <p className="text-sm">Already in Tare: {already.name}</p>
           <button
             type="button"
             className="t-btn mt-3"
