@@ -193,8 +193,7 @@ export function AvatarCrop({
           // The corner is a share of the side, so the frame rounds the way the
           // avatar does at every size it is shown at.
           className="relative overflow-hidden bg-surface-2"
-          style={{ borderRadius: CORNER }}
-          style={{ width: V, height: V, touchAction: 'none' }}
+          style={{ width: V, height: V, touchAction: 'none', borderRadius: CORNER }}
           onPointerDown={onPointerDown}
           onPointerMove={onPointerMove}
           onPointerUp={onPointerEnd}
