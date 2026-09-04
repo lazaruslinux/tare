@@ -678,7 +678,7 @@ export function Dashboard({
       key: 'calories',
       filled: ringBudget <= 0 ? 0 : (day?.totals.calories ?? 0) / ringBudget,
       centre: day === null ? '\u2013' : calText(Math.abs(remaining)),
-      caption: remaining < 0 ? 'over' : 'left',
+      caption: remaining < 0 ? 'cal over' : 'cal remaining',
     },
     {
       key: 'exercise',
@@ -693,7 +693,7 @@ export function Dashboard({
   const leftToday =
     remaining < 0
       ? `${calText(Math.abs(remaining))} cal over today`
-      : `${calText(remaining)} cal left today`
+      : `${calText(remaining)} cal remaining today`
 
   const snackbar = pending !== null && (
     <div className="pointer-events-none fixed inset-x-0 bottom-24 z-30 px-4">
