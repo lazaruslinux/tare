@@ -804,7 +804,7 @@ export function Dashboard({
           <p className="text-base font-semibold tracking-tight">Log a day to see your week.</p>
         ) : (
           <p className="text-base font-semibold tracking-tight">
-            Under target {underTarget} of {WEEK} days
+            Within calorie budget {underTarget} of {WEEK} days
           </p>
         )}
         <p className="mb-3 text-xs text-muted">
