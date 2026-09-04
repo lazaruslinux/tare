@@ -99,14 +99,14 @@ export function Sharing({
   }
 
   // Each label carries the fact itself, so what a member turns on is exactly
-  // what they read here.
-  const MISSING = 'add it on Profile'
+  // what they read here. Until the profile answers, the gender row is the
+  // bare word rather than a guess.
+  const MISSING = 'not set'
   const ageLabel = `Age (${me.birthdate === null ? MISSING : ageOf(me.birthdate)})`
-  const genderLabel = `Gender (${
-    profile === null || profile.sex === null
-      ? MISSING
-      : (GENDER_LABEL[profile.sex] ?? profile.sex)
-  })`
+  const genderLabel =
+    profile === null
+      ? 'Gender'
+      : `Gender (${profile.sex === null ? MISSING : (GENDER_LABEL[profile.sex] ?? profile.sex)})`
   const placeLabel = `Location (${me.location === null ? MISSING : me.location})`
 
   return (
@@ -117,6 +117,7 @@ export function Sharing({
         <Switch label={ageLabel} checked={age} onChange={setAge} />
         <Switch label={genderLabel} checked={gender} onChange={setGender} />
         <Switch label={placeLabel} checked={place} onChange={setPlace} />
+        <p className="mt-2 text-xs text-muted">These can be edited in your profile settings.</p>
       </div>
 
       <p className="t-micro mb-1">Workout privacy settings</p>
