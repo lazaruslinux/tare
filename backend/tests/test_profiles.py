@@ -7,6 +7,7 @@ that matter are the ones about what is counted and what happens to the file a
 picture replaced.
 """
 
+import io
 import os
 
 from PIL import Image
@@ -209,6 +210,22 @@ def test_removing_the_picture_clears_the_account_and_the_disk(
     assert client.get("/api/auth/me").json()["avatar_url"] is None
     # The address it was read from answers like an address that was never used.
     assert client.get(f"/api/photos/avatar/{was}").status_code == 404
+
+
+def test_a_picture_the_size_a_phone_sends_is_taken(client, signed_in):
+    # A real photograph framed to 512 px is well past the small-body cap that
+    # holds every other JSON address, so the picture route needs its own room.
+    out = io.BytesIO()
+    Image.effect_noise((512, 512), 64).convert("RGB").save(out, format="JPEG", quality=90)
+    raw = out.getvalue()
+    assert len(raw) > 64 * 1024
+    assert send_avatar(client, raw).status_code == 200
+
+
+def test_a_picture_past_the_route_limit_gets_the_route_sentence(client, signed_in):
+    response = send_avatar(client, b"x" * (5 * 1024 * 1024 + 1))
+    assert response.status_code == 413
+    assert response.json() == {"detail": "A picture must be at most 5 MB."}
 
 
 def test_a_file_that_is_not_an_image_is_refused(client, signed_in):

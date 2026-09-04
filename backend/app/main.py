@@ -51,12 +51,18 @@ MAX_INGEST_BYTES = 15 * 1024 * 1024
 # same ceiling: it is the same document, arriving inside a multipart wrapper.
 INGEST_UPLOAD_PATH = "/api/ingest/upload"
 
+# And the picture an account is shown by. A little above the five megabytes
+# that route allows, for the same reason as the photo route.
+AVATAR_PATH = "/api/account/avatar"
+MAX_AVATAR_BYTES = 6 * 1024 * 1024
+
 # What each of them is held to. By exact path, so nothing underneath one
 # inherits its allowance.
 PATH_CEILINGS = {
     UPLOAD_PATH: MAX_UPLOAD_BYTES,
     INGEST_PATH: MAX_INGEST_BYTES,
     INGEST_UPLOAD_PATH: MAX_INGEST_BYTES,
+    AVATAR_PATH: MAX_AVATAR_BYTES,
 }
 
 _TOO_LARGE = b'{"detail":"Request body is too large."}'
@@ -94,8 +100,8 @@ class BodySizeLimitMiddleware:
             await self.app(scope, receive, send)
             return
 
-        # Which ceiling this address is held to. Two routes get a larger one
-        # and everything else gets the small one.
+        # Which ceiling this address is held to. The few routes that take a
+        # file or an export get a larger one and everything else gets the small one.
         ceiling = PATH_CEILINGS.get(str(scope.get("path")), MAX_BODY_BYTES)
 
         declared = dict(scope.get("headers") or []).get(b"content-length")
