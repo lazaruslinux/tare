@@ -34,6 +34,7 @@ import { Feedback, FeedbackLog } from './Feedback'
 import { Fitness } from './Fitness'
 import { Profile } from './Profile'
 import { Sharing } from './Sharing'
+import { Submissions } from './Submissions'
 import { SyncDevice } from './SyncDevice'
 import { Targets } from './Targets'
 import { ScaleGlyph } from '../components/ScaleGlyph'
@@ -48,6 +49,7 @@ export type Screen =
   | 'fitness'
   | 'sync'
   | 'sharing'
+  | 'submissions'
   | 'display'
   | 'feedback'
   | 'queue'
@@ -113,8 +115,9 @@ export function More({
   waiting,
   refresh,
   onReviewed,
+  onChanged,
   onOpenBiometrics,
-  onOpenSubmissions,
+  onOpenFood,
   start,
   onStarted,
   onScreen,
@@ -128,14 +131,17 @@ export function More({
   // The app-wide change tick. What this tab reads from the server is read
   // again on every bump, so a screen left open catches up on its own.
   refresh: number
-  // Said on the way out of an admin screen, so the count catches up with what
-  // was just decided.
+  // The badge is worth asking about again: said on the way out of an admin
+  // screen, and after somebody reads the answers to their own submissions.
   onReviewed: () => void
-  // What this account has offered lives on the Food tab beside the foods it
-  // is about, so this row goes there rather than building a second screen for
-  // the same list.
+  // Something under this tab changed on the server, and the other tabs list it
+  // too.
+  onChanged: () => void
+  // The weigh-ins live on the Progress screen under the Dashboard, so this row
+  // opens that rather than holding a second copy of the same history.
   onOpenBiometrics: () => void
-  onOpenSubmissions: () => void
+  // A food a submission is about, opened on the tab it lives on.
+  onOpenFood: (foodId: number) => void
   // Which screen to open on. Only ever set by something outside this tab
   // sending somebody straight to it, and handed back the moment it is read.
   start?: Screen
@@ -338,6 +344,19 @@ export function More({
     return <Sharing me={me} onChange={onChange} onBack={() => go(null)} />
   }
 
+  if (screen === 'submissions') {
+    return (
+      <Submissions
+        me={me}
+        refresh={refresh}
+        onBack={() => go(null)}
+        onOpenFood={onOpenFood}
+        onSeen={onReviewed}
+        onChanged={onChanged}
+      />
+    )
+  }
+
   if (screen === 'sync') return <SyncDevice />
 
   if (screen === 'feedbacklog') return <FeedbackLog />
@@ -537,7 +556,7 @@ export function More({
         />
         <Row label="Display" icon={Monitor} onOpen={() => go('display')} />
         <Row label="Send feedback" icon={MessageSquare} onOpen={() => go('feedback')} />
-        <Row label="My submissions" icon={Inbox} onOpen={onOpenSubmissions} />
+        <Row label="My submissions" icon={Inbox} onOpen={() => go('submissions')} />
       </div>
 
       {me.is_admin && (

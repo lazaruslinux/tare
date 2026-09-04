@@ -68,9 +68,9 @@ export default function App() {
   // The scanner, and where what it finds should land. An empty target is now,
   // which is what every way in but the Journal's means.
   const [scanning, setScanning] = useState<{ date?: string; slot?: Slot } | null>(null)
-  // Which part of the Food tab to open on. Only ever set by the More page's
-  // shortcut into it, and handed back to 'list' the moment the tab has read it.
-  const [foodView, setFoodView] = useState<'list' | 'submissions'>('list')
+  // A food the Food tab should open on. Only ever set by something outside it
+  // sending somebody to a food, and handed back the moment the tab has read it.
+  const [foodOpen, setFoodOpen] = useState<number | null>(null)
   // Which screen the More tab should open on. Only ever set by something
   // sending somebody straight to it, and handed back once it has been read.
   const [moreView, setMoreView] = useState<Screen>(null)
@@ -290,9 +290,10 @@ export default function App() {
                       waiting={queue}
                       refresh={logged}
                       onReviewed={refreshWaiting}
+                      onChanged={changed}
                       onOpenBiometrics={() => selectRail('measurements')}
-                      onOpenSubmissions={() => {
-                        setFoodView('submissions')
+                      onOpenFood={(id) => {
+                        setFoodOpen(id)
                         select('food')
                       }}
                       start={moreView}
@@ -302,9 +303,9 @@ export default function App() {
                   ) : page === 'food' ? (
                     <FoodTab
                       me={me}
-                      start={foodView}
+                      open={foodOpen}
                       refresh={logged}
-                      onStarted={() => setFoodView('list')}
+                      onOpened={() => setFoodOpen(null)}
                       onScan={() => setScanning({})}
                       onSeen={refreshWaiting}
                       onChanged={changed}
