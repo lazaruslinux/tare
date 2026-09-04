@@ -11,6 +11,7 @@ import {
   type Proposed,
   type QueueItem,
 } from '../api'
+import { Lightbox } from '../components/Lightbox'
 import { FoodForm } from '../components/FoodForm'
 import { Sheet } from '../components/Sheet'
 import { useTopBar } from '../hooks/useTopBar'
@@ -703,16 +704,7 @@ export function AdminQueue({
         </div>
       </Sheet>
 
-      {looking && (
-        <button
-          type="button"
-          aria-label="Close the label"
-          className="fixed inset-0 z-50 flex items-center justify-center bg-black/80 p-4"
-          onClick={() => setLooking(null)}
-        >
-          <img src={looking} alt="The label" className="max-h-full max-w-full rounded-xl" />
-        </button>
-      )}
+      {looking && <Lightbox src={looking} alt="The label" onClose={() => setLooking(null)} />}
     </>
   )
 }

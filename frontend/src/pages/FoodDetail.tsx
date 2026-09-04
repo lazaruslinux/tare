@@ -4,6 +4,7 @@ import { useEffect, useState, type ChangeEvent } from 'react'
 import { api, errorText, upload, type Food, type Me } from '../api'
 import { NutritionLabel } from '../components/NutritionLabel'
 import { PortionSheet } from '../components/PortionSheet'
+import { Lightbox } from '../components/Lightbox'
 import { Sheet } from '../components/Sheet'
 import { useTopBar } from '../hooks/useTopBar'
 import {
@@ -54,6 +55,8 @@ export function FoodDetail({
   const [error, setError] = useState('')
   const [logging, setLogging] = useState(false)
   const [sending, setSending] = useState(false)
+  // The front picture, shown big.
+  const [viewing, setViewing] = useState<string | null>(null)
   // Saying what is wrong with a food everybody eats out of, over this screen
   // rather than in place of it.
   const [reporting, setReporting] = useState(false)
@@ -221,36 +224,39 @@ export function FoodDetail({
           </div>
 
           <div className="mb-3 flex items-center gap-3">
-            <label
-              className={
-                food.photo_url
-                  ? 'block cursor-pointer'
-                  : 't-phototile h-24 w-24 cursor-pointer rounded-xl'
-              }
-              htmlFor="detail-photo"
-            >
-              {food.photo_url ? (
+            {food.photo_url ? (
+              // A picture on file opens big. Swapping it is the edit form's job.
+              <button
+                type="button"
+                className="block shrink-0"
+                aria-label="See the front picture"
+                onClick={() => setViewing(food.photo_url)}
+              >
                 <img
                   src={food.photo_url}
                   alt={`The front of ${food.name}`}
                   className="h-24 w-24 rounded-xl border border-line object-cover"
                 />
-              ) : (
-                <Camera className="h-6 w-6" strokeWidth={1.75} />
-              )}
-              <span className="sr-only">
-                {food.mine ? 'Add a photo of the front' : 'Submit a photo of the front'}
-              </span>
-            </label>
-            <input
-              id="detail-photo"
-              className="sr-only"
-              type="file"
-              accept="image/*"
-              capture="environment"
-              disabled={sending}
-              onChange={(event) => takePhoto(event, food)}
-            />
+              </button>
+            ) : (
+              <>
+                <label className="t-phototile h-24 w-24 cursor-pointer rounded-xl" htmlFor="detail-photo">
+                  <Camera className="h-6 w-6" strokeWidth={1.75} />
+                  <span className="sr-only">
+                    {food.mine ? 'Add a photo of the front' : 'Submit a photo of the front'}
+                  </span>
+                </label>
+                <input
+                  id="detail-photo"
+                  className="sr-only"
+                  type="file"
+                  accept="image/*"
+                  capture="environment"
+                  disabled={sending}
+                  onChange={(event) => takePhoto(event, food)}
+                />
+              </>
+            )}
             {food.description && (
               <p className="min-w-0 flex-1 text-sm">{food.description}</p>
             )}
@@ -303,7 +309,7 @@ export function FoodDetail({
             )}
           </div>
 
-          {shared && (
+          {shared && !me.is_admin && (
             <div className="t-card mb-3">
               <p className="t-micro mb-2">Help improve Tare</p>
               <div className="t-actions">
@@ -442,6 +448,13 @@ export function FoodDetail({
               units={me.units}
               onClose={() => setLogging(false)}
               onDone={() => setLogging(false)}
+            />
+          )}
+          {viewing && (
+            <Lightbox
+              src={viewing}
+              alt={`The front of ${food.name}`}
+              onClose={() => setViewing(null)}
             />
           )}
         </>

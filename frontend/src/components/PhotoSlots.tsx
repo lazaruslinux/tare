@@ -3,6 +3,7 @@ import { useId, useState, type ChangeEvent } from 'react'
 
 import { errorText, upload, type PhotoPurpose } from '../api'
 import { MAX_PHOTO_BYTES, PHOTO_TOO_LARGE } from '../lib/community'
+import { Lightbox } from './Lightbox'
 
 // The two pictures a food submitted to everybody carries: the front of the
 // item, which is what somebody recognises it by, and the nutrition label,
@@ -47,6 +48,7 @@ function Tile({
 }) {
   const field = useId()
   const [uploading, setUploading] = useState(false)
+  const [viewing, setViewing] = useState(false)
   const shown = photoId === null ? (standing ?? null) : `/api/photos/${photoId}.webp`
 
   const take = async (event: ChangeEvent<HTMLInputElement>) => {
@@ -77,11 +79,19 @@ function Tile({
         </label>
       ) : (
         <div className="relative h-24 w-24">
-          <img
-            src={shown}
-            alt={title}
-            className="h-24 w-24 rounded-xl border border-line object-cover"
-          />
+          <button
+            type="button"
+            className="block"
+            aria-label={`See the ${title.toLowerCase()}`}
+            onClick={() => setViewing(true)}
+          >
+            <img
+              src={shown}
+              alt={title}
+              className="h-24 w-24 rounded-xl border border-line object-cover"
+            />
+          </button>
+          {viewing && <Lightbox src={shown} alt={title} onClose={() => setViewing(false)} />}
           {/* The one this step uploaded is taken back here. A picture already
               on file is taken off only where the slot says it may be. */}
           {(photoId !== null || onRemove !== undefined) && (
