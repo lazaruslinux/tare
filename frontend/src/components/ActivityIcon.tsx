@@ -42,7 +42,7 @@ function Run({ className }: { className?: string }) {
       <Head cx={15.4} cy={3.4} />
       <path d="M14.2 7.4 12.4 13" />
       <path d="M14.2 7.4 17.4 9.6 19.4 6.8" />
-      <path d="M14.2 7.4 9.2 10.4" />
+      <path d="M14.2 7.4 10.8 9.4 11.4 12.4" />
       <path d="M12.4 13 16.4 14 15 19.2" />
       <path d="M12.4 13 9 16.2 6.2 14.4" />
     </Figure>
