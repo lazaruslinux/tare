@@ -1,12 +1,13 @@
 import { ChevronRight, Route } from 'lucide-react'
 import { useEffect, useState } from 'react'
 
-import { api, type FeedPage, type FeedRow, type Me } from '../api'
+import { api, type FeedJournal, type FeedPage, type FeedRow, type FeedWorkout, type Me } from '../api'
 import { dayLabel, today } from '../lib/day'
 import { distanceText, durationText } from '../lib/units'
 
-// What the members of this instance are doing, read only. Workouts and
-// nothing else: no food, no weight, no answering back.
+// What the members of this instance are doing, read only. Two kinds of row:
+// a workout somebody did, and a day somebody finished. No food, no weight, no
+// answering back.
 
 function timeText(iso: string, timezone: string): string {
   try {
@@ -22,6 +23,56 @@ function timeText(iso: string, timezone: string): string {
   }
 }
 
+// The member's name, which is the one thing on a row that opens something.
+function Name({ row, onOpenMember }: { row: FeedRow; onOpenMember: () => void }) {
+  return (
+    <span
+      role="button"
+      tabIndex={0}
+      className="underline decoration-line underline-offset-2"
+      onClick={(event) => {
+        event.stopPropagation()
+        onOpenMember()
+      }}
+      onKeyDown={(event) => {
+        if (event.key !== 'Enter' && event.key !== ' ') return
+        event.preventDefault()
+        event.stopPropagation()
+        onOpenMember()
+      }}
+    >
+      {row.display_name}
+    </span>
+  )
+}
+
+// A finished day. Nothing to open: the row is the whole of what was shared.
+function JournalRow({
+  me,
+  row,
+  todayIso,
+  onOpenMember,
+}: {
+  me: Me
+  row: FeedJournal
+  todayIso: string
+  onOpenMember: () => void
+}) {
+  return (
+    <div className="t-row">
+      <span className="min-w-0 flex-1">
+        <span className="block truncate text-sm">
+          <Name row={row} onOpenMember={onOpenMember} /> completed {row.pronoun} journal
+        </span>
+        <span className="block text-xs text-muted">
+          {`${dayLabel(row.date, todayIso)} ${timeText(row.at, me.timezone)}`}
+        </span>
+      </span>
+      {row.hidden === true && <span className="t-chip shrink-0">Only you</span>}
+    </div>
+  )
+}
+
 function Row({
   me,
   row,
@@ -30,7 +81,7 @@ function Row({
   onOpenMember,
 }: {
   me: Me
-  row: FeedRow
+  row: FeedWorkout
   todayIso: string
   onOpen: () => void
   onOpenMember: () => void
@@ -40,23 +91,7 @@ function Row({
       <span className="min-w-0 flex-1">
         <span className="block truncate text-sm">{row.activity}</span>
         <span className="block text-xs text-muted">
-          <span
-            role="button"
-            tabIndex={0}
-            className="underline decoration-line underline-offset-2"
-            onClick={(event) => {
-              event.stopPropagation()
-              onOpenMember()
-            }}
-            onKeyDown={(event) => {
-              if (event.key !== 'Enter' && event.key !== ' ') return
-              event.preventDefault()
-              event.stopPropagation()
-              onOpenMember()
-            }}
-          >
-            {row.display_name}
-          </span>
+          <Name row={row} onOpenMember={onOpenMember} />
           {` · ${dayLabel(row.date, todayIso)} ${timeText(row.started_at, me.timezone)}`}
           {` · ${durationText(row.duration_s)}`}
           {row.distance_m === null ? '' : ` · ${distanceText(row.distance_m, me.units)}`}
@@ -122,7 +157,7 @@ export function Feed({
   if (rows.length === 0) {
     return (
       <p className="text-sm text-muted">
-        Nothing shared yet. Workouts appear here as members' phones send them.
+        Nothing shared yet. Workouts and finished days appear here as members share them.
       </p>
     )
   }
@@ -130,16 +165,26 @@ export function Feed({
   const shown = limit === undefined ? rows : rows.slice(0, limit)
   return (
     <>
-      {shown.map((row) => (
-        <Row
-          key={row.id}
-          me={me}
-          row={row}
-          todayIso={todayIso}
-          onOpen={() => onOpenWorkout(row.id)}
-          onOpenMember={() => onOpenMember(row.user_id)}
-        />
-      ))}
+      {shown.map((row) =>
+        row.kind === 'journal' ? (
+          <JournalRow
+            key={`j${row.id}`}
+            me={me}
+            row={row}
+            todayIso={todayIso}
+            onOpenMember={() => onOpenMember(row.user_id)}
+          />
+        ) : (
+          <Row
+            key={`w${row.id}`}
+            me={me}
+            row={row}
+            todayIso={todayIso}
+            onOpen={() => onOpenWorkout(row.id)}
+            onOpenMember={() => onOpenMember(row.user_id)}
+          />
+        )
+      )}
       {limit === undefined && cursor !== null && (
         <button type="button" className="t-btn mt-3 w-full" disabled={busy} onClick={more}>
           Show more

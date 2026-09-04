@@ -208,6 +208,12 @@ class DiaryIn(BaseModel):
     fat_g: float | None = Field(default=None, ge=0)
 
 
+class CompleteIn(BaseModel):
+    """The day somebody is finished with. Left out means today."""
+
+    date: dt.date | None = None
+
+
 class DiaryPatch(BaseModel):
     """A change to one entry. A field left out is left alone."""
 

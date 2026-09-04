@@ -21,7 +21,7 @@ from sqlalchemy.orm import Session
 from app import clock, health, models, schemas, units
 from app.db import get_db
 from app.deps import require_user
-from app.models import DIARY_SLOTS, NUTRIENTS, SERVING_UNIT
+from app.models import DIARY_SLOTS, NUTRIENTS, SERVING_UNIT, now_utc
 from app.recipes import own_recipe, per_serving
 from app.routers.fitness import day_exercise, imported_row, steps_on, workouts_on
 from app.routers.foods import MAX_NAME, readable_food
@@ -39,6 +39,10 @@ router = APIRouter(prefix="/diary", tags=["diary"])
 MISSING_ENTRY = "There is no such entry."
 
 BAD_DATE = "That is not a date."
+# What a locked day answers every write with, and why a day cannot be locked
+# before it has happened.
+DAY_COMPLETE = "This day is complete."
+FUTURE_DAY = "That day has not happened yet."
 BAD_SLOT = "That is not a meal."
 BAD_UNIT = "That is not a unit this can measure in."
 NO_AMOUNT = "Say how much of it you had."
@@ -276,6 +280,38 @@ def own_entry(db: Session, user: models.User, entry_id: int) -> models.DiaryEntr
     return entry
 
 
+def completion(db: Session, user: models.User, day: dt.date) -> models.JournalDay | None:
+    """The row that says this day is finished, if there is one."""
+    return db.get(models.JournalDay, (user.id, day))
+
+
+def completed_days(
+    db: Session, user: models.User, first: dt.date, last: dt.date
+) -> set[dt.date]:
+    """Which days in a run were marked complete, in one query rather than one
+    a day."""
+    return set(
+        db.execute(
+            select(models.JournalDay.date).where(
+                models.JournalDay.user_id == user.id,
+                models.JournalDay.date >= first,
+                models.JournalDay.date <= last,
+            )
+        ).scalars()
+    )
+
+
+def refuse_if_complete(db: Session, user: models.User, day: dt.date) -> None:
+    """The lock, in one place.
+
+    Every route that writes something onto a day asks this first, so the mark
+    means the same thing wherever it is met. What a phone syncs is not asked:
+    that is a record arriving, not somebody editing a day they closed.
+    """
+    if completion(db, user, day) is not None:
+        raise HTTPException(status.HTTP_409_CONFLICT, DAY_COMPLETE)
+
+
 @router.get("/day")
 def read_day(
     date: str = "",
@@ -311,8 +347,13 @@ def read_day(
     eaten = total(entries, "calories") or 0.0
     db.commit()
 
+    done = completion(db, user, day)
+
     return {
         "date": day.isoformat(),
+        # Whether the member has closed this day. A closed day is read only.
+        "completed": done is not None,
+        "completed_at": None if done is None else done.completed_at.isoformat(),
         "totals": {field: total(entries, field) for field in NUTRIENTS},
         "slots": {
             slot: {
@@ -410,6 +451,8 @@ def read_days(
     span_days = [first + dt.timedelta(days=step) for step in range(span)]
     steps = steps_on(db, user, span_days)
 
+    marked = completed_days(db, user, first, today)
+
     state = Reckoning(db, user)
     budget = day_budget(state)["calories"]
     db.commit()
@@ -432,9 +475,47 @@ def read_days(
                 "exercise_kcal": exercise_credit(counted),
                 "steps": steps.get(day),
                 "logged": food is not None,
+                "completed": day in marked,
             }
         )
     return {"days": run}
+
+
+@router.put("/complete")
+def complete_day(
+    body: schemas.CompleteIn,
+    db: Session = Depends(get_db),
+    user: models.User = Depends(require_user),
+) -> dict[str, object]:
+    """Say a day is finished, which counts it and locks it.
+
+    Asking twice is not an error: the answer to "this day is done" is the same
+    the second time, and a phone that sent it twice should not have to care.
+    """
+    day = body.date or clock.user_today(user)
+    if day > clock.user_today(user):
+        raise HTTPException(status.HTTP_400_BAD_REQUEST, FUTURE_DAY)
+    row = completion(db, user, day)
+    if row is None:
+        row = models.JournalDay(user_id=user.id, date=day, completed_at=now_utc())
+        db.add(row)
+        db.commit()
+    return {"date": day.isoformat(), "completed_at": row.completed_at.isoformat()}
+
+
+@router.delete("/complete/{date}", status_code=status.HTTP_204_NO_CONTENT)
+def uncomplete_day(
+    date: str,
+    db: Session = Depends(get_db),
+    user: models.User = Depends(require_user),
+) -> None:
+    """Open the day again. One tap, no question asked: it is undoing a mark,
+    not throwing anything away."""
+    day = asked_day(date, user)
+    row = completion(db, user, day)
+    if row is not None:
+        db.delete(row)
+        db.commit()
 
 
 @router.post("", status_code=status.HTTP_201_CREATED)
@@ -446,6 +527,7 @@ def add_entry(
     """Log something: a food measured out, a recipe by the serving, or a name
     and its calories."""
     day = body.date or clock.user_today(user)
+    refuse_if_complete(db, user, day)
     slot = checked_slot(body.slot)
     if body.food_id is not None and body.recipe_id is not None:
         raise HTTPException(status.HTTP_400_BAD_REQUEST, BOTH_KINDS)
@@ -490,10 +572,14 @@ def update_entry(
     """Move an entry, re-measure it, or correct what a quick add claimed."""
     entry = own_entry(db, user, entry_id)
     sent = body.model_fields_set
+    refuse_if_complete(db, user, entry.date_for)
 
     if "date" in sent:
         if body.date is None:
             raise HTTPException(status.HTTP_400_BAD_REQUEST, BAD_DATE)
+        # Moving a row onto a closed day is writing onto it, so that day is
+        # asked as well.
+        refuse_if_complete(db, user, body.date)
         entry.date_for = body.date
     if "slot" in sent:
         entry.slot = checked_slot(body.slot)
@@ -567,5 +653,7 @@ def delete_entry(
     db: Session = Depends(get_db),
     user: models.User = Depends(require_user),
 ) -> None:
-    db.delete(own_entry(db, user, entry_id))
+    entry = own_entry(db, user, entry_id)
+    refuse_if_complete(db, user, entry.date_for)
+    db.delete(entry)
     db.commit()

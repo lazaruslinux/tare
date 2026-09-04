@@ -31,6 +31,8 @@ export type Me = {
   share_sex: boolean
   share_location: boolean
   share_workouts: boolean
+  // Whether finishing a day says so in the community feed.
+  share_journal: boolean
 }
 
 export type Sex = 'female' | 'male'
@@ -533,6 +535,8 @@ export type DayRow = {
   // What a phone counted, or null on a day no phone sent.
   steps: number | null
   logged: boolean
+  // Whether the member marked the day complete, which is also what locks it.
+  completed: boolean
 }
 
 // A run of days ending today, oldest first.
@@ -540,6 +544,10 @@ export type DiaryDays = { days: DayRow[] }
 
 export type DiaryDay = {
   date: string
+  // A day the member has closed. Nothing on it can be written until it is
+  // opened again.
+  completed: boolean
+  completed_at: string | null
   totals: Totals
   slots: Record<Slot, { entries: DiaryEntry[]; subtotal_calories: number | null }>
   // The four the day is read against, what exercise added back to it, and what
@@ -574,6 +582,9 @@ export class ApiError extends Error {
     this.detail = detail
   }
 }
+
+// The event a refused write raises, listened for by the screen it was about.
+export const STALE = 'tare:stale'
 
 export function errorText(failure: unknown): string {
   return failure instanceof ApiError ? failure.detail : 'Something went wrong. Try again.'
@@ -656,6 +667,10 @@ async function send<T>(path: string, init: RequestInit): Promise<T> {
 
   if (!response.ok) {
     const detail = (payload as { detail?: unknown } | null)?.detail
+    // A write refused because the day was closed somewhere else. Said once,
+    // here, so the screen showing that day reads it again rather than every
+    // sheet having to be told what to do about it.
+    if (response.status === 409) window.dispatchEvent(new Event(STALE))
     throw new ApiError(
       response.status,
       typeof detail === 'string' ? detail : 'Something went wrong. Try again.'
@@ -741,7 +756,8 @@ export type WorkoutDetail = Omit<
 
 // One workout as the community feed lists it: enough to recognise it and
 // nothing that belongs to whoever did it.
-export type FeedRow = {
+export type FeedWorkout = {
+  kind: 'workout'
   id: number
   user_id: number
   display_name: string
@@ -757,6 +773,24 @@ export type FeedRow = {
   indoor: boolean
   source: WorkoutSource
 }
+
+// One finished day. It says that and nothing else: never what was eaten, never
+// a number. The pronoun is worked out on the server, so the gender behind it
+// never reaches anybody.
+export type FeedJournal = {
+  kind: 'journal'
+  // Whose day and which day, which is all this row is named by.
+  id: string
+  user_id: number
+  display_name: string
+  mine: boolean
+  hidden?: boolean
+  date: string
+  at: string
+  pronoun: string
+}
+
+export type FeedRow = FeedWorkout | FeedJournal
 
 // One page of the feed. The marker is opaque and only ever handed back.
 export type FeedPage = { items: FeedRow[]; next_cursor: string | null }
@@ -789,6 +823,8 @@ export type FitnessSummary = {
   week: FitnessWeekDay[]
   goals: { exercise_minutes: number; steps: number }
   workouts: Workout[]
+  // How many sessions the same seven days hold, the member's own count.
+  week_workouts: number
 }
 
 export type FitnessHistory = {

@@ -1,4 +1,4 @@
-import { ChevronLeft, ChevronRight, Plus } from 'lucide-react'
+import { ChevronLeft, ChevronRight, Circle, CircleCheck, Plus } from 'lucide-react'
 
 import type { TopBarView } from '../hooks/useTopBar'
 import { TareMark } from './TareMark'
@@ -13,6 +13,7 @@ export function TopBar({
   onStep,
   onToday,
   onAct,
+  onToggleMark,
   onHome,
 }: {
   view: TopBarView
@@ -22,10 +23,15 @@ export function TopBar({
   onToday: () => void
   // The right-hand button, whatever the screen on top hung on it.
   onAct: () => void
+  // The check beside it, on the one screen that has one.
+  onToggleMark: () => void
   // The wordmark is the way home: Dashboard, top of the page.
   onHome: () => void
 }) {
-  const { kind, title, backLabel, subtitle, atToday, action } = view
+  const { kind, title, backLabel, subtitle, atToday, action, mark } = view
+  // The left slot matches the right one button for button, so the day in the
+  // middle stays in the middle however many sit beside it.
+  const buttons = (action === null ? 0 : 1) + (mark === null ? 0 : 1)
   return (
     <header className="t-topbar">
       <div className="flex min-w-0 items-center justify-start">
@@ -61,7 +67,10 @@ export function TopBar({
         )}
         {/* Nothing on the left of the day chooser; this keeps the middle in
             the middle while the right slot holds a button. */}
-        {kind === 'pager' && action !== null && <span className="w-11" aria-hidden="true" />}
+        {kind === 'pager' &&
+          Array.from({ length: buttons }, (_, slot) => (
+            <span key={slot} className="w-11" aria-hidden="true" />
+          ))}
       </div>
       {kind === 'pager' ? (
         <div className="flex min-w-0 items-center justify-center">
@@ -96,6 +105,21 @@ export function TopBar({
         <span />
       )}
       <div className="flex min-w-0 items-center justify-end">
+        {mark !== null && (
+          <button
+            type="button"
+            className={`t-topbar-icon ${mark.done ? 'text-accent' : 'text-muted'}`}
+            aria-label={mark.label}
+            aria-pressed={mark.done}
+            onClick={onToggleMark}
+          >
+            {mark.done ? (
+              <CircleCheck className="h-5 w-5" strokeWidth={2.5} />
+            ) : (
+              <Circle className="h-5 w-5" strokeWidth={2.5} />
+            )}
+          </button>
+        )}
         {action !== null && (
           <button
             type="button"

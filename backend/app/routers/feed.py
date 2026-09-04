@@ -1,9 +1,10 @@
 """What the members of this instance show each other.
 
-One list, read only, and it holds workouts and nothing else. No food, no
-weight, no steps, no likes and no comments: the feed is here so a small group
-can see that somebody else went out this morning, not so anybody can be scored
-against them.
+One list, read only, and it holds two kinds of thing: a workout somebody did,
+and a day somebody finished. No food, no weight, no steps, no likes and no
+comments: the feed is here so a small group can see that somebody else went out
+this morning, not so anybody can be scored against them. A finished day says
+that and nothing else, never what was in it.
 
 What a member is shown about another member is the shortest list the app
 could work with: a name, how long they have been here, and up to three facts
@@ -39,23 +40,45 @@ BAD_CURSOR = "That page marker is not one of ours."
 MISSING_MEMBER = "There is no such member."
 
 
-def write_cursor(started_at: dt.datetime, workout_id: int) -> str:
+# The two kinds of row, and how they break a tie at the same instant: a
+# workout is listed before a finished day stamped to the same moment. One rule,
+# written once, so the page filter and the merge cannot disagree.
+WORKOUT = "workout"
+JOURNAL = "journal"
+RANK = {JOURNAL: 0, WORKOUT: 1}
+
+
+def write_cursor(at: dt.datetime, kind: str, anchor: str) -> str:
     """Where a page of the feed stopped, as one opaque word.
 
-    The id leads so the two parts split cleanly: a timestamp holds full stops
-    and a row id never does.
+    Three parts, split on a character none of them holds: which kind of row it
+    was, which row, and when. The kind is part of it because the two lists are
+    read separately and stitched together, and a marker that named only a time
+    would show or skip whatever shared that instant.
     """
-    raw = f"{workout_id}.{started_at.isoformat()}"
+    raw = f"{kind}|{anchor}|{at.isoformat()}"
     return base64.urlsafe_b64encode(raw.encode()).decode().rstrip("=")
 
 
-def read_cursor(cursor: str) -> tuple[dt.datetime, int]:
+def read_cursor(cursor: str) -> tuple[dt.datetime, str, str]:
     try:
         padded = cursor + "=" * (-len(cursor) % 4)
-        workout_id, started = base64.urlsafe_b64decode(padded).decode().split(".", 1)
-        return dt.datetime.fromisoformat(started), int(workout_id)
+        kind, anchor, at = base64.urlsafe_b64decode(padded).decode().split("|", 2)
+        if kind not in RANK:
+            raise ValueError(kind)
+        return dt.datetime.fromisoformat(at), kind, anchor
     except (ValueError, binascii.Error, UnicodeDecodeError):
         raise HTTPException(status.HTTP_400_BAD_REQUEST, BAD_CURSOR) from None
+
+
+def pronoun_for(member: models.User, profile: models.HealthProfile | None) -> str:
+    """The word a sentence about somebody uses, and the only thing the feed
+    learns from the gender they may have shared. The field itself never leaves
+    the server, and "their" is the answer for everybody who has not shared it.
+    """
+    if not member.share_sex or profile is None:
+        return "their"
+    return {"male": "his", "female": "her"}.get(profile.sex or "", "their")
 
 
 @router.get("")
@@ -64,14 +87,28 @@ def read_feed(
     db: Session = Depends(get_db),
     user: models.User = Depends(require_user),
 ) -> dict[str, object]:
-    """Every member's shared workouts, newest first, a page at a time.
+    """Every member's shared workouts and finished days, newest first, a page
+    at a time.
+
+    Two tables, one list. They are read separately with the same "before this
+    marker" filter, merged here, and cut to a page; the marker written back
+    names the last row's time, its kind and which row it was, so the next page
+    starts exactly after it whichever table that row came out of. Sorting them
+    in the database instead would mean a union of two unlike shapes for no
+    gain: a page is thirty rows.
 
     A row this account hid is still in its own feed and says so, because the
     only way back to a hidden workout is through the list it was hidden from.
     """
+    at: dt.datetime | None = None
+    kind = ""
+    anchor = ""
+    if cursor:
+        at, kind, anchor = read_cursor(cursor)
+
     # A row reaches the others when neither it nor its whole account is held
     # back. The owner always sees their own.
-    query = (
+    workouts = (
         select(models.Workout)
         .join(models.User, models.User.id == models.Workout.user_id)
         .where(
@@ -86,65 +123,165 @@ def read_feed(
         .order_by(models.Workout.started_at.desc(), models.Workout.id.desc())
         .limit(PAGE + 1)
     )
-    if cursor:
-        at, anchor = read_cursor(cursor)
-        query = query.where(
+    journals = (
+        select(models.JournalDay)
+        .join(models.User, models.User.id == models.JournalDay.user_id)
+        .where(
             or_(
-                models.Workout.started_at < at,
-                and_(models.Workout.started_at == at, models.Workout.id < anchor),
+                models.User.share_journal.is_(True),
+                models.JournalDay.user_id == user.id,
             )
         )
-    found = list(db.execute(query).scalars())
-    more = len(found) > PAGE
-    rows = found[:PAGE]
+        .order_by(
+            models.JournalDay.completed_at.desc(),
+            models.JournalDay.user_id.desc(),
+            models.JournalDay.date.desc(),
+        )
+        .limit(PAGE + 1)
+    )
 
-    # Two queries for the whole page rather than two per row: who each one
-    # belongs to, and which of them recorded a line.
+    if at is not None:
+        if kind == WORKOUT:
+            workouts = workouts.where(
+                or_(
+                    models.Workout.started_at < at,
+                    and_(
+                        models.Workout.started_at == at, models.Workout.id < int(anchor)
+                    ),
+                )
+            )
+            # A day stamped to the same instant as the workout the last page
+            # ended on is listed after it, so it is still to come.
+            journals = journals.where(models.JournalDay.completed_at <= at)
+        else:
+            was_user, was_date = anchor.split(":", 1)
+            workouts = workouts.where(models.Workout.started_at < at)
+            journals = journals.where(
+                or_(
+                    models.JournalDay.completed_at < at,
+                    and_(
+                        models.JournalDay.completed_at == at,
+                        or_(
+                            models.JournalDay.user_id < int(was_user),
+                            and_(
+                                models.JournalDay.user_id == int(was_user),
+                                models.JournalDay.date < dt.date.fromisoformat(was_date),
+                            ),
+                        ),
+                    ),
+                )
+            )
+
+    sessions = list(db.execute(workouts).scalars())
+    finished = list(db.execute(journals).scalars())
+
+    # Both lists in one order, by the rule the cursor is written to. The last
+    # two parts of the key are only ever compared inside one kind, because the
+    # rank ahead of them is what separates the kinds.
+    Row = models.Workout | models.JournalDay
+    Key = tuple[dt.datetime, int, int, str]
+    ordered: list[tuple[Key, str, Row]] = [
+        *(
+            ((row.started_at, RANK[WORKOUT], row.id, ""), WORKOUT, row)
+            for row in sessions
+        ),
+        *(
+            (
+                (row.completed_at, RANK[JOURNAL], 0, f"{row.user_id:012d}:{row.date}"),
+                JOURNAL,
+                row,
+            )
+            for row in finished
+        ),
+    ]
+    ordered.sort(key=lambda each: each[0], reverse=True)
+    more = len(ordered) > PAGE
+    page = ordered[:PAGE]
+
+    # Three queries for the whole page rather than three per row: who each one
+    # belongs to, which workouts recorded a line, and the gender a finished day
+    # is spoken about in.
+    owner_ids = {each.user_id for _, _, each in page}
     owners = {
         row.id: row
         for row in db.execute(
-            select(models.User).where(
-                models.User.id.in_({workout.user_id for workout in rows})
+            select(models.User).where(models.User.id.in_(owner_ids))
+        ).scalars()
+    }
+    profiles = {
+        row.user_id: row
+        for row in db.execute(
+            select(models.HealthProfile).where(
+                models.HealthProfile.user_id.in_(
+                    {each.id for each in owners.values() if each.share_sex}
+                )
             )
         ).scalars()
     }
     with_route = set(
         db.execute(
             select(models.WorkoutRoute.workout_id).where(
-                models.WorkoutRoute.workout_id.in_({workout.id for workout in rows})
+                models.WorkoutRoute.workout_id.in_(
+                    {each.id for _, _, each in page if isinstance(each, models.Workout)}
+                )
             )
         ).scalars()
     )
 
     items: list[dict[str, object]] = []
-    for workout in rows:
-        owner = owners.get(workout.user_id)
-        mine = workout.user_id == user.id
+    for _, _, each in page:
+        owner = owners.get(each.user_id)
+        mine = each.user_id == user.id
+        name = "" if owner is None else (owner.display_name or owner.username)
+        if isinstance(each, models.JournalDay):
+            journal: dict[str, object] = {
+                "kind": JOURNAL,
+                # The row has no id of its own: whose day it was and which day
+                # is what names it, and the client only ever uses it as a key.
+                "id": f"{each.user_id}:{each.date.isoformat()}",
+                "user_id": each.user_id,
+                "display_name": name,
+                "mine": mine,
+                "date": each.date.isoformat(),
+                "at": each.completed_at.isoformat(),
+                "pronoun": (
+                    "their"
+                    if owner is None
+                    else pronoun_for(owner, profiles.get(owner.id))
+                ),
+            }
+            if mine:
+                journal["hidden"] = not user.share_journal
+            items.append(journal)
+            continue
+
         hidden = set() if owner is None or mine else kept_back(owner)
         item: dict[str, object] = {
-            "id": workout.id,
-            "user_id": workout.user_id,
-            "display_name": (
-                "" if owner is None else (owner.display_name or owner.username)
-            ),
+            "kind": WORKOUT,
+            "id": each.id,
+            "user_id": each.user_id,
+            "display_name": name,
             "mine": mine,
-            "activity": workout.activity,
-            "date": workout.date_for.isoformat(),
-            "started_at": workout.started_at.isoformat(),
-            "duration_s": workout.duration_s,
-            "distance_m": workout.distance_m,
-            "has_route": workout.id in with_route and "route" not in hidden,
-            "indoor": workout.indoor,
-            "source": workout.source,
+            "activity": each.activity,
+            "date": each.date_for.isoformat(),
+            "started_at": each.started_at.isoformat(),
+            "duration_s": each.duration_s,
+            "distance_m": each.distance_m,
+            "has_route": each.id in with_route and "route" not in hidden,
+            "indoor": each.indoor,
+            "source": each.source,
         }
         if mine:
-            item["hidden"] = workout.hidden_from_feed or not user.share_workouts
+            item["hidden"] = each.hidden_from_feed or not user.share_workouts
         items.append(item)
 
+    last = page[-1] if page else None
     return {
         "items": items,
         "next_cursor": (
-            write_cursor(rows[-1].started_at, rows[-1].id) if more and rows else None
+            write_cursor(last[0][0], last[1], last[0][3] or str(last[0][2]))
+            if more and last is not None
+            else None
         ),
     }
 

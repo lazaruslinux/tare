@@ -94,6 +94,8 @@ class User(Base):
     share_location: Mapped[bool] = mapped_column(Boolean, nullable=False, default=False)
     # Every workout at once. Off, and nothing of theirs reaches the feed.
     share_workouts: Mapped[bool] = mapped_column(Boolean, nullable=False, default=True)
+    # Whether finishing a day says so in the feed. Off until it is turned on.
+    share_journal: Mapped[bool] = mapped_column(Boolean, nullable=False, default=False)
     created_at: Mapped[dt.datetime] = mapped_column(UtcDateTime, nullable=False, default=now_utc)
 
 
@@ -538,6 +540,25 @@ class DiaryEntry(Base):
     sugar_g: Mapped[float | None] = mapped_column(Float, nullable=True)
 
     created_at: Mapped[dt.datetime] = mapped_column(UtcDateTime, nullable=False, default=now_utc)
+
+
+class JournalDay(Base):
+    """A day somebody said they were finished with.
+
+    The row is the whole answer: it exists, so the day is complete and locked.
+    Taking it away unlocks the day again, which is why there is nothing here
+    to set back to false.
+    """
+
+    __tablename__ = "journal_days"
+
+    user_id: Mapped[int] = mapped_column(
+        ForeignKey("users.id", ondelete="CASCADE"), primary_key=True
+    )
+    date: Mapped[dt.date] = mapped_column(Date, primary_key=True)
+    completed_at: Mapped[dt.datetime] = mapped_column(
+        UtcDateTime, nullable=False, default=now_utc
+    )
 
 
 class Recipe(Base):

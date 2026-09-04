@@ -17,7 +17,7 @@ import datetime as dt
 
 from fastapi import APIRouter, Depends, HTTPException, status
 from pydantic import BaseModel
-from sqlalchemy import select
+from sqlalchemy import func, select
 from sqlalchemy.orm import Session
 
 from app import clock, fitness_catalog, health, models
@@ -198,6 +198,16 @@ def read_summary(
     day = asked_day(date, user)
     first = day - dt.timedelta(days=6)
     values = _tile_values(db, user, first, day)
+    week_workouts = (
+        db.execute(
+            select(func.count(models.Workout.id)).where(
+                models.Workout.user_id == user.id,
+                models.Workout.date_for >= first,
+                models.Workout.date_for <= day,
+            )
+        ).scalar_one()
+        or 0
+    )
     token = db.get(models.IngestToken, user.id)
     profile = db.get(models.HealthProfile, user.id)
 
@@ -218,6 +228,9 @@ def read_summary(
             "exercise_minutes": 30 if profile is None else profile.exercise_minutes_goal,
             "steps": 8000 if profile is None else profile.step_goal,
         },
+        # How many sessions the same seven days hold. The member's own count,
+        # so one they keep out of the feed is still one they did.
+        "week_workouts": week_workouts,
         "workouts": [workout_row(row) for row in workouts_on(db, user, day)],
     }
 

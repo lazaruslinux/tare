@@ -168,6 +168,17 @@ class ExerciseIn(BaseModel):
     minutes: int
 
 
+def refuse_if_complete(db: Session, user: models.User, day: dt.date) -> None:
+    """The diary's own lock, asked from here.
+
+    Imported inside the call rather than at the top: app.routers.diary reads
+    this module, and reading it back would be a circle.
+    """
+    from app.routers.diary import refuse_if_complete as refuse
+
+    refuse(db, user, day)
+
+
 def profile_of(db: Session, user: models.User) -> models.HealthProfile:
     """This account's profile, made on first sight.
 
@@ -924,6 +935,7 @@ def write_measurement(
     day = asked_day(date, user)
     if day > clock.user_today(user):
         raise HTTPException(status.HTTP_400_BAD_REQUEST, FUTURE_MEASUREMENT)
+    refuse_if_complete(db, user, day)
 
     for field in ("weight_kg", *EXTRA_FIELDS):
         value = getattr(body, field)
@@ -969,6 +981,7 @@ def delete_measurement(
     date: str, db: Session = Depends(get_db), user: models.User = Depends(require_user)
 ) -> None:
     day = asked_day(date, user)
+    refuse_if_complete(db, user, day)
     row = db.execute(
         select(models.WeightEntry).where(
             models.WeightEntry.user_id == user.id, models.WeightEntry.date_for == day
@@ -1006,6 +1019,7 @@ def add_exercise(
     if body.minutes < 1 or body.minutes > MAX_MINUTES:
         raise HTTPException(status.HTTP_400_BAD_REQUEST, BAD_MINUTES)
     day = body.date_for or clock.user_today(user)
+    refuse_if_complete(db, user, day)
     if body.activity not in health.ACTIVITY_BY_KEY:
         raise HTTPException(status.HTTP_400_BAD_REQUEST, BAD_ACTIVITY)
     met = health.met_for(body.activity, body.effort)
@@ -1038,5 +1052,6 @@ def delete_exercise(
     row = db.get(models.ExerciseEntry, entry_id)
     if row is None or row.user_id != user.id:
         raise HTTPException(status.HTTP_404_NOT_FOUND, MISSING_ENTRY)
+    refuse_if_complete(db, user, row.date_for)
     db.delete(row)
     db.commit()

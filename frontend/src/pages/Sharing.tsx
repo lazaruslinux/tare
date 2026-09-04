@@ -40,6 +40,7 @@ export function Sharing({
   const [gender, setGender] = useState(me.share_sex)
   const [place, setPlace] = useState(me.share_location)
   const [workouts, setWorkouts] = useState(me.share_workouts)
+  const [journal, setJournal] = useState(me.share_journal)
   // Held the way the screen reads them: on means shown, and the server is
   // told what is hidden.
   const [hidden, setHidden] = useState<string[]>(me.feed_hidden)
@@ -65,6 +66,7 @@ export function Sharing({
     gender !== me.share_sex ||
     place !== me.share_location ||
     workouts !== me.share_workouts ||
+    journal !== me.share_journal ||
     hidden.join() !== me.feed_hidden.join()
 
   // The master switch takes the three with it: off folds them away and turns
@@ -97,6 +99,7 @@ export function Sharing({
             share_sex: gender,
             share_location: place,
             share_workouts: workouts,
+            share_journal: journal,
           },
         })
       )
@@ -160,6 +163,15 @@ export function Sharing({
             </motion.div>
           )}
         </AnimatePresence>
+      </div>
+
+      <p className="t-micro mb-1">Journal privacy settings</p>
+      <div className="t-card mb-3">
+        <Switch
+          label="Share when I complete my journal"
+          checked={journal}
+          onChange={setJournal}
+        />
       </div>
 
       {error && <p className="t-error mb-3">{error}</p>}

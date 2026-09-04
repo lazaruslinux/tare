@@ -283,7 +283,12 @@ def test_what_is_hidden_is_said_back_with_the_account(client, make_user):
     assert saved["share_sex"] is False
     assert saved["share_location"] is True
     assert saved["share_workouts"] is True
+    # Off until it is asked for, and saved beside the rest when it is.
+    assert saved["share_journal"] is False
     assert client.get("/api/auth/me").json() == saved
+    assert client.patch("/api/account", json={"share_journal": True}).json()[
+        "share_journal"
+    ] is True
 
 
 # What one member may learn about another
@@ -340,6 +345,127 @@ def test_a_member_who_is_not_there(client, make_user):
 
     assert refused.status_code == 404
     assert refused.json() == {"detail": "There is no such member."}
+
+
+# Finished days
+# -------------
+
+
+def put_journal(db_session, user, minutes_ago, day=None):
+    """A day marked complete, straight into the database, at a known moment."""
+    at = now_utc() - dt.timedelta(minutes=minutes_ago)
+    row = models.JournalDay(
+        user_id=user.id, date=day or at.date(), completed_at=at
+    )
+    db_session.add(row)
+    db_session.commit()
+    return row
+
+
+def profile_for(db_session, user, sex):
+    db_session.add(models.HealthProfile(user_id=user.id, sex=sex))
+    db_session.commit()
+
+
+def test_a_finished_day_reaches_the_others_only_once_it_is_shared(
+    client, db_session, make_user
+):
+    keeper = make_user("keeper")
+    put_journal(db_session, keeper, minutes_ago=5)
+    make_user("member")
+    sign_in(client, "member")
+
+    assert client.get("/api/feed").json()["items"] == []
+
+    keeper.share_journal = True
+    db_session.commit()
+
+    rows = client.get("/api/feed").json()["items"]
+    assert [row["kind"] for row in rows] == ["journal"]
+    assert rows[0]["display_name"] == "keeper"
+    # Nothing about the day but that it was finished.
+    assert set(rows[0]) == {
+        "kind",
+        "id",
+        "user_id",
+        "display_name",
+        "mine",
+        "date",
+        "at",
+        "pronoun",
+    }
+
+
+def test_an_unshared_finished_day_is_the_owners_alone_and_says_so(
+    client, db_session, make_user
+):
+    keeper = make_user("keeper")
+    put_journal(db_session, keeper, minutes_ago=5)
+    sign_in(client, "keeper")
+
+    rows = client.get("/api/feed").json()["items"]
+    assert [row["hidden"] for row in rows] == [True]
+
+    keeper.share_journal = True
+    db_session.commit()
+    assert client.get("/api/feed").json()["items"][0]["hidden"] is False
+
+
+def test_unlocking_a_day_takes_its_row_out_of_the_feed(client, db_session, make_user):
+    keeper = make_user("keeper", timezone="UTC")
+    keeper.share_journal = True
+    db_session.commit()
+    sign_in(client, "keeper")
+    today = dt.datetime.now(dt.timezone.utc).date().isoformat()
+    assert client.put("/api/diary/complete", json={"date": today}).status_code == 200
+    assert len(client.get("/api/feed").json()["items"]) == 1
+
+    assert client.delete(f"/api/diary/complete/{today}").status_code == 204
+    assert client.get("/api/feed").json()["items"] == []
+
+
+def test_the_pronoun_follows_what_the_member_shared(client, db_session, make_user):
+    """Three accounts, three answers, and the field itself never leaves."""
+    for name, sex, shared in (("hers", "female", True), ("his", "male", True), ("theirs", "male", False)):
+        member = make_user(name)
+        member.share_journal = True
+        member.share_sex = shared
+        db_session.commit()
+        profile_for(db_session, member, sex)
+        put_journal(db_session, member, minutes_ago=5, day=dt.date(2026, 1, 1))
+
+    make_user("reader")
+    sign_in(client, "reader")
+    rows = client.get("/api/feed").json()["items"]
+    said = {row["display_name"]: row["pronoun"] for row in rows}
+    assert said == {"hers": "her", "his": "his", "theirs": "their"}
+    assert all("sex" not in row for row in rows)
+
+
+def test_a_page_of_both_kinds_reads_through_without_repeating_itself(
+    client, db_session, make_user
+):
+    runner = make_user("runner")
+    runner.share_journal = True
+    db_session.commit()
+    for step in range(20):
+        put_workout(db_session, runner, minutes_ago=step * 2)
+        put_journal(db_session, runner, minutes_ago=step * 2 + 1, day=dt.date(2026, 1, 1) + dt.timedelta(days=step))
+    make_user("member")
+    sign_in(client, "member")
+
+    first = client.get("/api/feed").json()
+    assert len(first["items"]) == 30
+    assert first["next_cursor"] is not None
+    second = client.get(f"/api/feed?cursor={first['next_cursor']}").json()
+    assert second["next_cursor"] is None
+
+    seen = [f"{row['kind']}{row['id']}" for row in first["items"] + second["items"]]
+    assert len(seen) == 40
+    assert len(set(seen)) == 40
+    # Newest first, whichever table a row came out of.
+    times = [row.get("started_at") or row["at"] for row in first["items"] + second["items"]]
+    assert times == sorted(times, reverse=True)
 
 
 # The strip beside the screen

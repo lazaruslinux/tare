@@ -19,6 +19,9 @@ export type TopBarHeader = {
   pager?: { atToday: boolean; onStep: (days: number) => void; onToday: () => void }
   // The one button on the right. A plus everywhere it appears so far.
   action?: { label: string; onAct: () => void }
+  // The Journal's completion check, which sits to the left of the plus. Done
+  // is the filled state, and tapping it is what opens or closes the day.
+  mark?: { done: boolean; label: string; onToggle: () => void }
 }
 
 // What the bar draws. The handlers are deliberately not part of it: a screen
@@ -33,6 +36,8 @@ export type TopBarView = {
   atToday: boolean
   // The right-hand button's name, or null for a bar without one.
   action: string | null
+  // The check beside it, or null on a bar that has none.
+  mark: { done: boolean; label: string } | null
 }
 
 type Handlers = {
@@ -40,6 +45,7 @@ type Handlers = {
   step: ((days: number) => void) | null
   today: (() => void) | null
   act: (() => void) | null
+  toggle: (() => void) | null
 }
 
 export const TopBarContext = createContext<(header: TopBarHeader) => void>(() => {})
@@ -65,7 +71,9 @@ function same(prev: TopBarView, next: TopBarView): boolean {
     prev.backLabel === next.backLabel &&
     prev.subtitle === next.subtitle &&
     prev.atToday === next.atToday &&
-    prev.action === next.action
+    prev.action === next.action &&
+    prev.mark?.done === next.mark?.done &&
+    prev.mark?.label === next.mark?.label
   )
 }
 
@@ -86,9 +94,16 @@ export function useTopBarState() {
     subtitle: null,
     atToday: true,
     action: null,
+    mark: null,
   })
   const viewRef = useRef(view)
-  const acts = useRef<Handlers>({ back: null, step: null, today: null, act: null })
+  const acts = useRef<Handlers>({
+    back: null,
+    step: null,
+    today: null,
+    act: null,
+    toggle: null,
+  })
   // Entries this app pushed and has not spent.
   const depth = useRef(0)
   // Pops the app asked for itself, which must not be answered as if somebody
@@ -112,6 +127,7 @@ export function useTopBarState() {
       step: header.pager?.onStep ?? null,
       today: header.pager?.onToday ?? null,
       act: header.action?.onAct ?? null,
+      toggle: header.mark?.onToggle ?? null,
     }
     const next: TopBarView = {
       kind: header.back
@@ -126,6 +142,10 @@ export function useTopBarState() {
       subtitle: header.subtitle ?? null,
       atToday: header.pager?.atToday ?? true,
       action: header.action?.label ?? null,
+      mark:
+        header.mark === undefined
+          ? null
+          : { done: header.mark.done, label: header.mark.label },
     }
     const prev = viewRef.current
     if (same(prev, next)) return
@@ -186,6 +206,7 @@ export function useTopBarState() {
   const step = useCallback((days: number) => acts.current.step?.(days), [])
   const goToday = useCallback(() => acts.current.today?.(), [])
   const act = useCallback(() => acts.current.act?.(), [])
+  const toggleMark = useCallback(() => acts.current.toggle?.(), [])
 
   return {
     view,
@@ -195,5 +216,6 @@ export function useTopBarState() {
     step,
     goToday,
     act,
+    toggleMark,
   }
 }

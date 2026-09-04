@@ -249,6 +249,7 @@ export default function App() {
               onStep={bar.step}
               onToday={bar.goToday}
               onAct={bar.act}
+              onToggleMark={bar.toggleMark}
               onHome={() => {
                 select('dashboard')
                 window.scrollTo({ top: 0 })

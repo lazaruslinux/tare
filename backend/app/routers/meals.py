@@ -19,7 +19,14 @@ from app import clock, models, schemas
 from app.db import get_db
 from app.deps import require_user
 from app.models import now_utc
-from app.routers.diary import checked_slot, entry_row, log_food, measure, stored_unit
+from app.routers.diary import (
+    checked_slot,
+    entry_row,
+    log_food,
+    measure,
+    refuse_if_complete,
+    stored_unit,
+)
 from app.routers.foods import MY_LIST_CAP, readable_food
 from app.routers.recipes import checked_name, part_food
 
@@ -182,6 +189,7 @@ def log_meal(
     """
     meal = own_meal(db, user, meal_id)
     day = body.date or clock.user_today(user)
+    refuse_if_complete(db, user, day)
     slot = checked_slot(body.slot)
 
     made: list[models.DiaryEntry] = []

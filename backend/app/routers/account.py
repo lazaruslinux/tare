@@ -51,13 +51,14 @@ class AccountPatch(BaseModel):
     timezone: str | None = None
     birthdate: dt.date | None = None
     location: str | None = None
-    # The Sharing screen's four, saved together because they are one answer to
-    # one question: what other members see.
+    # The Sharing screen's switches, saved together because they are one answer
+    # to one question: what other members see.
     feed_hidden: list[str] | None = None
     share_age: bool | None = None
     share_sex: bool | None = None
     share_location: bool | None = None
     share_workouts: bool | None = None
+    share_journal: bool | None = None
 
 
 @router.patch("/account")
@@ -110,7 +111,13 @@ def update_account(
         # Kept in the order Tare names them, and each name once.
         user.feed_hidden = [name for name in fitness.HIDEABLE if name in asked]
 
-    for field in ("share_age", "share_sex", "share_location", "share_workouts"):
+    for field in (
+        "share_age",
+        "share_sex",
+        "share_location",
+        "share_workouts",
+        "share_journal",
+    ):
         if field in sent:
             setattr(user, field, bool(getattr(body, field)))
 

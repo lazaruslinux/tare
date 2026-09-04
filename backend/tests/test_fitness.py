@@ -39,6 +39,27 @@ def test_the_summary_carries_the_four_tiles_and_the_week(client, db_session, mak
     assert body["week"][-1]["steps"] == 8500
     assert body["goals"] == {"exercise_minutes": 30, "steps": 8000}
     assert [row["activity"] for row in body["workouts"]] == ["Outdoor Run"]
+    # The same seven days, counted as sessions. The export lands one.
+    assert body["week_workouts"] == 1
+
+
+def test_the_week_count_holds_a_workout_kept_out_of_the_feed(
+    client, db_session, make_user
+):
+    day = yesterday()
+    user = signed_in_with_export(client, db_session, make_user, day)
+    session = db_session.scalar(
+        select(models.Workout).where(models.Workout.user_id == user.id)
+    )
+    session.hidden_from_feed = True
+    db_session.commit()
+
+    body = client.get(f"/api/fitness/summary?date={day.isoformat()}").json()
+
+    # It is still one the member did, whoever else can see it.
+    assert body["week_workouts"] == 1
+    # A window it does not fall in counts none of it.
+    assert client.get("/api/fitness/summary?date=2020-01-01").json()["week_workouts"] == 0
 
 
 def test_a_day_nothing_arrived_for_reads_as_nothing(client, db_session, make_user):

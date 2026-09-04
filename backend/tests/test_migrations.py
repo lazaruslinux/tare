@@ -11,7 +11,13 @@ FOOD_TABLES = {"foods", "food_servings"}
 DIARY_TABLES = {"diary_entries", "saved_foods"}
 COMMUNITY_TABLES = {"food_photos", "food_submissions"}
 RECIPE_TABLES = {"recipes", "recipe_ingredients", "meal_templates", "meal_template_items"}
-HEALTH_TABLES = {"health_profiles", "weight_entries", "repeat_hidden", "exercise_entries"}
+HEALTH_TABLES = {
+    "health_profiles",
+    "weight_entries",
+    "repeat_hidden",
+    "exercise_entries",
+    "journal_days",
+}
 FITNESS_TABLES = {
     "fitness_daily",
     "fitness_intraday",
@@ -47,6 +53,7 @@ def test_upgrade_head_builds_the_identity_schema(tmp_path):
             for constraint in inspector.get_unique_constraints("weight_entries")
         }
         user_columns = {column["name"] for column in inspector.get_columns("users")}
+        journal_columns = {column["name"] for column in inspector.get_columns("journal_days")}
         photo_columns = {column["name"] for column in inspector.get_columns("food_photos")}
         food_columns = {column["name"] for column in inspector.get_columns("foods")}
         serving_columns = {
@@ -90,7 +97,14 @@ def test_upgrade_head_builds_the_identity_schema(tmp_path):
     assert "uq_fitness_daily_day_metric" in daily_unique
     assert "location" in user_columns
     # The three facts a member may show other members, each off until it is on.
-    assert {"share_age", "share_sex", "share_location", "share_workouts"} <= user_columns
+    assert {
+        "share_age",
+        "share_sex",
+        "share_location",
+        "share_workouts",
+        "share_journal",
+    } <= user_columns
+    assert journal_columns == {"user_id", "date", "completed_at"}
     assert "recipe_id" in {column["name"] for column in inspector.get_columns("diary_entries")}
     # The partial indexes are the one thing here a plain column cannot express,
     # so it is worth seeing that the migrations really emitted them.

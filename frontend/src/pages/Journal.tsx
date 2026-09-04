@@ -5,6 +5,7 @@ import {
   api,
   errorText,
   SOURCE_LABEL,
+  STALE,
   type DiaryDay,
   type DiaryEntry,
   type Food,
@@ -19,6 +20,7 @@ import { MacroBar } from '../components/MacroBar'
 import { MeasurementsSheet } from '../components/MeasurementsSheet'
 import { HEADLINE, nutrientText } from '../components/NutritionLabel'
 import { PortionSheet } from '../components/PortionSheet'
+import { Sheet } from '../components/Sheet'
 import { WorkoutDetails } from '../components/WorkoutDetails'
 import { useTopBar } from '../hooks/useTopBar'
 import { SLOTS, SLOT_LABEL, dayLabel, shiftDay, slotByTime, today, type Slot } from '../lib/day'
@@ -28,6 +30,13 @@ import { portionText, round1, servingsText, weightText } from '../lib/units'
 // How long a deleted row can be brought back. Short enough that nobody is
 // waiting on it, long enough to notice the mistake.
 const UNDO = 6000
+
+// The day as the completed line names it: two digits each, in the order it is
+// read aloud here.
+const shortDate = (iso: string): string => {
+  const [year, month, day] = iso.split('-')
+  return `${month}/${day}/${year.slice(2)}`
+}
 
 // What is waiting to be deleted: a logged food or a logged workout. Both leave
 // the screen at once and both settle when the window closes.
@@ -122,10 +131,34 @@ export function Journal({
   const [servings, setServings] = useState<{ entry: DiaryEntry; slot: Slot } | null>(null)
   const [saving, setSaving] = useState(false)
   const [refusal, setRefusal] = useState('')
+  // The popup that asks before a day is closed. Closing it again is one tap
+  // and asks nothing.
+  const [confirming, setConfirming] = useState(false)
+  const [marking, setMarking] = useState(false)
+
+  // A day the member has closed. Nothing on it can be written until the check
+  // is tapped again, and the server holds the same rule.
+  const locked = day !== null && day.completed
+
+  const toggleComplete = async () => {
+    if (day === null || marking) return
+    setMarking(true)
+    setError('')
+    try {
+      if (locked) await api(`/diary/complete/${date}`, { method: 'DELETE' })
+      else await api('/diary/complete', { method: 'PUT', body: { date } })
+      setConfirming(false)
+      setAgain(again + 1)
+      onChanged?.()
+    } catch (failure) {
+      setError(errorText(failure))
+    }
+    setMarking(false)
+  }
 
   // The day chooser is this tab's header, so the day is picked in one place
   // and the page below is only the day itself. The plus adds to the day on
-  // screen, at the meal the hour makes likely.
+  // screen, at the meal the hour makes likely, and goes while the day is shut.
   useTopBar(
     viewing !== null
       ? null
@@ -136,12 +169,30 @@ export function Journal({
             onStep: (days) => setDate(shiftDay(date, days)),
             onToday: () => setDate(todayIso),
           },
-          action: {
-            label: 'Add food',
-            onAct: () => setPicking(slotByTime(me.timezone)),
+          mark: {
+            done: locked,
+            label: locked ? 'Open this day again' : 'Mark day as complete',
+            onToggle: () => {
+              if (locked) void toggleComplete()
+              else setConfirming(true)
+            },
           },
+          action: locked
+            ? undefined
+            : {
+                label: 'Add food',
+                onAct: () => setPicking(slotByTime(me.timezone)),
+              },
         }
   )
+
+  // A write refused because this day was closed on another device. The message
+  // is already on whichever sheet asked; this is the page catching up.
+  useEffect(() => {
+    const stale = () => setAgain((count) => count + 1)
+    window.addEventListener(STALE, stale)
+    return () => window.removeEventListener(STALE, stale)
+  }, [])
 
   useEffect(() => onDay(date), [date, onDay])
 
@@ -266,6 +317,12 @@ export function Journal({
 
       {error && <p className="t-error mb-3">{error}</p>}
 
+      {locked && (
+        <p className="mb-3 text-sm text-accent">
+          Journal for {shortDate(date)} complete!
+        </p>
+      )}
+
       {day !== null && (
         <BreakdownCard energy={day.energy}>
           <div className="mb-1 flex items-center justify-between">
@@ -309,13 +366,15 @@ export function Journal({
       {day !== null && empty && (
         <div className="t-card mb-3">
           <p className="text-sm text-muted">Nothing logged yet. Add your first food.</p>
-          <button
-            type="button"
-            className="t-btn t-btn-primary mt-3"
-            onClick={() => setPicking(slotByTime(me.timezone))}
-          >
-            Add food
-          </button>
+          {!locked && (
+            <button
+              type="button"
+              className="t-btn t-btn-primary mt-3"
+              onClick={() => setPicking(slotByTime(me.timezone))}
+            >
+              Add food
+            </button>
+          )}
         </div>
       )}
 
@@ -331,31 +390,44 @@ export function Journal({
                   </span>
                 )}
               </div>
-              {day.slots[slot].entries.map((entry) => (
+              {day.slots[slot].entries.map((entry) => {
+                const line = (
+                  <>
+                    <span className="min-w-0 flex-1">
+                      <span className="block truncate text-sm">{entry.name}</span>
+                      {under(entry) && (
+                        <span className="block truncate text-xs text-muted">{under(entry)}</span>
+                      )}
+                    </span>
+                    <span className="t-nums shrink-0 text-sm">
+                      {nutrientText('calories', entry.calories)}
+                    </span>
+                  </>
+                )
+                return locked ? (
+                  <div key={entry.id} className="t-row">
+                    {line}
+                  </div>
+                ) : (
+                  <button
+                    key={entry.id}
+                    type="button"
+                    className="t-row w-full text-left"
+                    onClick={() => openEntry(entry, slot)}
+                  >
+                    {line}
+                  </button>
+                )
+              })}
+              {!locked && (
                 <button
-                  key={entry.id}
                   type="button"
-                  className="t-row w-full text-left"
-                  onClick={() => openEntry(entry, slot)}
+                  className="t-row w-full text-left text-sm text-muted"
+                  onClick={() => setPicking(slot)}
                 >
-                  <span className="min-w-0 flex-1">
-                    <span className="block truncate text-sm">{entry.name}</span>
-                    {under(entry) && (
-                      <span className="block truncate text-xs text-muted">{under(entry)}</span>
-                    )}
-                  </span>
-                  <span className="t-nums shrink-0 text-sm">
-                    {nutrientText('calories', entry.calories)}
-                  </span>
+                  + Add
                 </button>
-              ))}
-              <button
-                type="button"
-                className="t-row w-full text-left text-sm text-muted"
-                onClick={() => setPicking(slot)}
-              >
-                + Add
-              </button>
+              )}
             </div>
           ))}
         </>
@@ -399,24 +471,28 @@ export function Journal({
               ) : (
                 <div key={row.id ?? row.name} className="t-row">
                   {line}
-                  <button
-                    type="button"
-                    className="t-tap44 shrink-0 text-sm text-muted"
-                    onClick={() => removeExercise(row.id as number, row.name)}
-                  >
-                    Delete
-                  </button>
+                  {!locked && (
+                    <button
+                      type="button"
+                      className="t-tap44 shrink-0 text-sm text-muted"
+                      onClick={() => removeExercise(row.id as number, row.name)}
+                    >
+                      Delete
+                    </button>
+                  )}
                 </div>
               )
             })
           )}
-          <button
-            type="button"
-            className="t-row w-full text-left text-sm text-muted"
-            onClick={() => setExercising(true)}
-          >
-            + Add
-          </button>
+          {!locked && (
+            <button
+              type="button"
+              className="t-row w-full text-left text-sm text-muted"
+              onClick={() => setExercising(true)}
+            >
+              + Add
+            </button>
+          )}
         </div>
       )}
 
@@ -463,13 +539,15 @@ export function Journal({
               )}
             </>
           )}
-          <button
-            type="button"
-            className="t-row w-full text-left text-sm text-muted"
-            onClick={() => setMeasuring(true)}
-          >
-            {weighed === null ? '+ Log weigh-in' : '+ Update'}
-          </button>
+          {!locked && (
+            <button
+              type="button"
+              className="t-row w-full text-left text-sm text-muted"
+              onClick={() => setMeasuring(true)}
+            >
+              {weighed === null ? '+ Log weigh-in' : '+ Update'}
+            </button>
+          )}
         </div>
       )}
 
@@ -528,6 +606,32 @@ export function Journal({
           onDelete={() => remove(servings.entry)}
         />
       )}
+
+      <Sheet
+        center
+        open={confirming}
+        label="Mark day as complete?"
+        onClose={() => setConfirming(false)}
+      >
+        <p className="text-base font-semibold tracking-tight">Mark day as complete?</p>
+        <p className="mt-2 text-sm text-muted">
+          This will lock {date === todayIso ? "today's" : "this day's"} journal from further
+          edits. You can always un-lock it again.
+        </p>
+        <div className="mt-4 flex gap-3">
+          <button
+            type="button"
+            className="t-btn t-btn-primary flex-1"
+            disabled={marking}
+            onClick={() => void toggleComplete()}
+          >
+            Mark complete
+          </button>
+          <button type="button" className="t-btn" onClick={() => setConfirming(false)}>
+            Cancel
+          </button>
+        </div>
+      </Sheet>
 
       {pending !== null && (
         <div className="pointer-events-none fixed inset-x-0 bottom-24 z-30 px-4">
