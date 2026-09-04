@@ -69,9 +69,6 @@ const UNITS: { value: Units; label: string }[] = [
   { value: 'metric', label: 'Metric (g, ml)' },
 ]
 
-// How long the line about what just happened stays up.
-const SAID_FOR = 4000
-
 // What the sync row says under itself, or nothing at all before a key exists.
 function syncNote(row: SyncKey | null): string | undefined {
   if (row === null || !row.connected) return undefined
@@ -164,9 +161,6 @@ export function More({
   const [measuring, setMeasuring] = useState(false)
   // Which member's profile is open on the Members screen, if any.
   const [member, setMember] = useState<number | null>(null)
-  // What was just done, said on the list this screen returns to. It lives here
-  // rather than on the screen that did it, because that screen has closed.
-  const [said, setSaid] = useState('')
 
   const [displayName, setDisplayName] = useState(me.display_name ?? '')
   const [units, setUnits] = useState<Units>(me.units)
@@ -193,11 +187,6 @@ export function More({
     // the line under that row is most likely to be out of date.
   }, [refresh, screen])
 
-  useEffect(() => {
-    if (said === '') return
-    const timer = window.setTimeout(() => setSaid(''), SAID_FOR)
-    return () => window.clearTimeout(timer)
-  }, [said])
 
   // What was said about the last save belongs to the screen it was said on.
   const go = (next: Screen) => {
@@ -326,12 +315,7 @@ export function More({
 
   if (screen === 'feedback') {
     return (
-      <Feedback
-        onSent={() => {
-          setSaid('Thank you. It is in the log.')
-          go(null)
-        }}
-      />
+      <Feedback onSent={() => go(null)} />
     )
   }
 
@@ -598,13 +582,6 @@ export function More({
         </button>
       </div>
 
-      {said !== '' && (
-        <div className="pointer-events-none fixed inset-x-0 bottom-24 z-30 px-4">
-          <div className="pointer-events-auto mx-auto w-full max-w-md rounded-xl border border-line bg-surface-2 px-4 py-3 text-sm">
-            {said}
-          </div>
-        </div>
-      )}
     </>
   )
 }

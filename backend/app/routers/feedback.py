@@ -20,13 +20,14 @@ from app.models import now_utc
 
 router = APIRouter(prefix="/feedback", tags=["feedback"])
 
-# Where it happened, in the words the screens use.
+# Which part of the app it is about, in the words the screens use.
 AREAS = {
     "dashboard": "Dashboard",
     "journal": "Journal",
     "food": "Food",
     "scanner": "Scanner",
     "targets": "Targets",
+    "profile": "Profile",
     "measurements": "Biometrics",
     "more": "More",
     "other": "Other",
@@ -40,13 +41,11 @@ KINDS = {
 }
 
 MAX_TEXT = 2000
-MAX_EXPECTED = 1000
 
-BAD_AREA = "Pick where it happened."
+BAD_AREA = "Pick which section it is about."
 BAD_KIND = "Pick what kind it is."
 NO_TEXT = "Write what happened."
 LONG_TEXT = f"Keep it under {MAX_TEXT:,} characters."
-LONG_EXPECTED = f"Keep it under {MAX_EXPECTED:,} characters."
 
 # Twenty an hour, keyed to the account rather than the address: this is behind
 # a sign-in, so the person is known, and a household on one address should not
@@ -58,10 +57,9 @@ class FeedbackIn(BaseModel):
     area: str
     kind: str
     text: str
-    expected: str = ""
 
 
-def block(user: models.User, area: str, kind: str, text: str, expected: str) -> str:
+def block(user: models.User, area: str, kind: str, text: str) -> str:
     """One entry as it is written down."""
     moment = now_utc()
     local = moment.astimezone(clock.user_tz(user))
@@ -69,10 +67,7 @@ def block(user: models.User, area: str, kind: str, text: str, expected: str) -> 
         f"## {local:%Y-%m-%d %H:%M %Z} ({moment:%Y-%m-%d %H:%M} UTC) | {user.username} | "
         f"{AREAS[area]} | {KINDS[kind]}"
     )
-    lines = [head, text]
-    if expected:
-        lines.append(f"Expected: {expected}")
-    return "\n".join(lines) + "\n\n"
+    return f"{head}\n{text}\n\n"
 
 
 @router.post("", status_code=status.HTTP_201_CREATED)
@@ -86,13 +81,10 @@ def send_feedback(
     if body.kind not in KINDS:
         raise HTTPException(status.HTTP_400_BAD_REQUEST, BAD_KIND)
     text = body.text.strip()
-    expected = body.expected.strip()
     if not text:
         raise HTTPException(status.HTTP_400_BAD_REQUEST, NO_TEXT)
     if len(text) > MAX_TEXT:
         raise HTTPException(status.HTTP_400_BAD_REQUEST, LONG_TEXT)
-    if len(expected) > MAX_EXPECTED:
-        raise HTTPException(status.HTTP_400_BAD_REQUEST, LONG_EXPECTED)
     if limiter.hit(str(user.id)):
         raise HTTPException(status.HTTP_429_TOO_MANY_REQUESTS, throttle.TOO_MANY)
 
@@ -103,7 +95,7 @@ def send_feedback(
     if directory:
         os.makedirs(directory, exist_ok=True)
     with open(path, "a", encoding="utf-8") as handle:
-        handle.write(block(user, body.area, body.kind, text, expected))
+        handle.write(block(user, body.area, body.kind, text))
     return {"ok": True}
 
 

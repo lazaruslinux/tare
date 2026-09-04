@@ -20,7 +20,7 @@ def test_two_reports_are_two_blocks_in_the_order_they_were_sent(
     client, signed_in, feedback_path
 ):
     assert send(client).status_code == 201
-    assert send(client, text="The second one.", expected="A number").status_code == 201
+    assert send(client, text="The second one.").status_code == 201
 
     blocks = feedback_path.read_text(encoding="utf-8").split("\n\n")
     assert blocks[-1] == ""
@@ -29,7 +29,7 @@ def test_two_reports_are_two_blocks_in_the_order_they_were_sent(
     assert first[1] == "The scanner stalled."
     assert len(first) == 2
     assert second[1] == "The second one."
-    assert second[2] == "Expected: A number"
+    assert len(second) == 2
 
 
 def test_a_blank_report_is_refused(client, signed_in):

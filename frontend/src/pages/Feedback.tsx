@@ -1,15 +1,17 @@
 import { useEffect, useRef, useState } from 'react'
 
 import { api, errorText } from '../api'
+import { Sheet } from '../components/Sheet'
 
-// Where it happened and what kind of thing it is, in the words the screens
-// use. The keys are the server's.
+// Which part of the app it is about and what kind of thing it is, in the
+// words the screens use. The keys are the server's.
 const AREAS: { value: string; label: string }[] = [
   { value: 'dashboard', label: 'Dashboard' },
   { value: 'journal', label: 'Journal' },
   { value: 'food', label: 'Food' },
   { value: 'scanner', label: 'Scanner' },
   { value: 'targets', label: 'Targets' },
+  { value: 'profile', label: 'Profile' },
   { value: 'measurements', label: 'Biometrics' },
   { value: 'more', label: 'More' },
   { value: 'other', label: 'Other' },
@@ -57,9 +59,10 @@ export function Feedback({ onSent }: { onSent: () => void }) {
   const [area, setArea] = useState('')
   const [kind, setKind] = useState('')
   const [text, setText] = useState('')
-  const [expected, setExpected] = useState('')
   const [error, setError] = useState('')
   const [sending, setSending] = useState(false)
+  // Sent: the thank-you sits over the cleared form until Done.
+  const [sent, setSent] = useState(false)
 
   const ready = area !== '' && kind !== '' && text.trim() !== ''
 
@@ -67,12 +70,11 @@ export function Feedback({ onSent }: { onSent: () => void }) {
     setSending(true)
     setError('')
     try {
-      await api('/feedback', { method: 'POST', body: { area, kind, text, expected } })
+      await api('/feedback', { method: 'POST', body: { area, kind, text } })
       setArea('')
       setKind('')
       setText('')
-      setExpected('')
-      onSent()
+      setSent(true)
     } catch (failure) {
       setError(errorText(failure))
     }
@@ -81,28 +83,18 @@ export function Feedback({ onSent }: { onSent: () => void }) {
 
   return (
     <div className="t-card mb-3">
-      <Chips label="Where" options={AREAS} chosen={area} onPick={setArea} />
-      <Chips label="What kind" options={KINDS} chosen={kind} onPick={setKind} />
+      <Chips label="Section" options={AREAS} chosen={area} onPick={setArea} />
+      <Chips label="Type" options={KINDS} chosen={kind} onPick={setKind} />
 
       <label className="t-micro mb-2 block" htmlFor="feedback-text">
         What happened
       </label>
       <textarea
         id="feedback-text"
-        className="t-input mb-4"
+        className="t-input"
         rows={5}
         value={text}
         onChange={(event) => setText(event.target.value)}
-      />
-
-      <label className="t-micro mb-2 block" htmlFor="feedback-expected">
-        What you expected (optional)
-      </label>
-      <input
-        id="feedback-expected"
-        className="t-input"
-        value={expected}
-        onChange={(event) => setExpected(event.target.value)}
       />
 
       {error && <p className="t-error mt-3">{error}</p>}
@@ -115,6 +107,14 @@ export function Feedback({ onSent }: { onSent: () => void }) {
       >
         Send
       </button>
+
+      <Sheet center open={sent} label="Thanks for your feedback" onClose={onSent}>
+        <p className="text-base font-semibold tracking-tight">Thanks for your feedback!</p>
+        <p className="mt-2 text-sm text-muted">It goes straight to the administrator.</p>
+        <button type="button" className="t-btn t-btn-primary mt-4 w-full" onClick={onSent}>
+          Done
+        </button>
+      </Sheet>
     </div>
   )
 }
