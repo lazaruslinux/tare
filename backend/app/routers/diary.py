@@ -51,7 +51,7 @@ MISSING_AUTO_LOG = "There is no such auto-log."
 AUTO_LOG_CLASH = "That food already auto-logs at {slot}."
 BAD_UNIT = "That is not a unit this can measure in."
 NO_AMOUNT = "Say how much of it you had."
-NO_QUICK_ADD = "A quick add needs a name and its calories."
+NO_QUICK_ADD = "A typed-in food needs a name and its calories."
 # What is left of an entry once its food is gone: a portion and a set of
 # numbers, which can be made larger or smaller and nothing else.
 UNLINKED_UNIT = "The food this came from is gone, so only the amount can change."
@@ -826,6 +826,8 @@ def add_entry(
         # add that claimed zero of them would be inventing a label.
         for field in QUICK:
             setattr(entry, field, getattr(body, field))
+        # Calories are kept whole, the way every label states them.
+        entry.calories = float(round(body.calories))
 
     db.add(entry)
     db.commit()

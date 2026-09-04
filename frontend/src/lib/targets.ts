@@ -148,4 +148,5 @@ export const asNumber = (raw: string): number | null => {
 }
 
 // A calorie figure the way every screen says it: grouped, and never "kcal".
-export const calText = (value: number): string => value.toLocaleString()
+// Calories are read whole, however they were worked out.
+export const calText = (value: number): string => Math.round(value).toLocaleString()

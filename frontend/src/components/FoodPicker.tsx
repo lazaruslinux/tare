@@ -69,7 +69,7 @@ function QuickAdd({
           date,
           slot,
           name,
-          calories: num(panel.calories),
+          calories: panel.calories.trim() === '' ? null : Math.round(num(panel.calories) ?? 0),
           protein_g: num(panel.protein_g),
           carbs_g: num(panel.carbs_g),
           fat_g: num(panel.fat_g),
@@ -108,7 +108,7 @@ function QuickAdd({
         <input
           id="quick-calories"
           className="t-input t-nums max-w-[40%] text-right"
-          inputMode="decimal"
+          inputMode="numeric"
           value={panel.calories}
           onChange={(event) => set('calories', event.target.value)}
         />
@@ -276,15 +276,15 @@ export function FoodPicker({
             </button>
           )}
 
-          {/* A quick add is logged and forgotten, so there is nothing in it to
-              put in a recipe or a kept meal. */}
+          {/* A typed-in food is logged and forgotten, so there is nothing in
+              it to put in a recipe or a kept meal. */}
           {!onPick && (
             <button
               type="button"
               className="t-row w-full text-left text-sm text-muted"
               onClick={() => setQuick(true)}
             >
-              Quick add
+              Type in a food
             </button>
           )}
         </>

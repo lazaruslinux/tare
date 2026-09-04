@@ -68,7 +68,7 @@ function without(day: DiaryDay, gone: DiaryEntry): DiaryDay {
     ...day,
     totals,
     slots,
-    remaining_calories: day.remaining_calories + (gone.calories ?? 0),
+    remaining_calories: day.remaining_calories + Math.round(gone.calories ?? 0),
   }
 }
 

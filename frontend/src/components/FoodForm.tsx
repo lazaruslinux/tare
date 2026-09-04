@@ -407,6 +407,8 @@ export function FoodForm({
     // What is in the boxes, which is per one serving.
     const read = {} as Values
     for (const fact of SHARED_FACTS) read[fact.key] = num(panel[fact.key])
+    // Calories are whole: a label never says 220.4, and neither does Tare.
+    if (read.calories !== null) read.calories = Math.round(read.calories)
 
     // Untouched, so what the lookup gave is what is stored: rounding a panel
     // to a tenth and back again is drift nobody asked for.
@@ -735,7 +737,7 @@ export function FoodForm({
               <input
                 id={`food-${fact.key}`}
                 className="t-input t-nums max-w-[40%] text-right"
-                inputMode="decimal"
+                inputMode={fact.key === 'calories' ? 'numeric' : 'decimal'}
                 value={panel[fact.key]}
                 onChange={(event) => setFact(fact.key, event.target.value)}
               />

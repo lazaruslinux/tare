@@ -579,3 +579,10 @@ def test_a_day_counts_the_minutes_that_were_worked(client, signed_in, frozen):
     assert read["exercise_minutes"] == 75
     assert read["exercise_minutes_goal"] == 30
     assert day(client, "2026-08-31")["exercise_minutes"] == 0
+
+
+def test_a_typed_in_food_keeps_whole_calories(client, signed_in):
+    made = log(client, name="Fruitcake", calories=99.6)
+    assert made.status_code == 201
+    assert made.json()["calories"] == 100
+
