@@ -96,6 +96,7 @@ def proposal(**overrides):
         "name": "Milk chocolate bar",
         "brand": "Hershey",
         "description": "King Size",
+        "section": "candy-and-sweets",
         "base_unit": "g",
         "servings": [{"name": "1 bar", "amount": 45, "unit": "g", "position": 0}],
         **FULL,
@@ -1005,6 +1006,33 @@ def test_browse_wants_a_letter_and_nothing_else(client, signed_in):
         response = client.get("/api/foods/browse", params={"letter": asked})
         assert response.status_code == 400
         assert response.json() == {"detail": "Pick a letter."}
+
+
+def test_browse_by_section_reads_one_aisle(client, db_session, signed_in):
+    put_food(db_session, status="approved", name="Frozen peas", section="frozen", barcode=None)
+    put_food(db_session, status="approved", name="Fudge", section="candy-and-sweets", barcode=None)
+
+    page = client.get("/api/foods/browse?section=frozen").json()
+    assert [row["name"] for row in page["items"]] == ["Frozen peas"]
+    assert page["items"][0]["section"] == "frozen"
+
+
+def test_a_section_and_a_letter_narrow_it_together(client, db_session, signed_in):
+    put_food(db_session, status="approved", name="Frozen peas", section="frozen", barcode=None)
+    put_food(db_session, status="approved", name="Fish fingers", section="frozen", barcode=None)
+    put_food(db_session, status="approved", name="Fudge", section="candy-and-sweets", barcode=None)
+
+    page = client.get("/api/foods/browse?section=frozen&letter=F").json()
+    assert [row["name"] for row in page["items"]] == ["Fish fingers", "Frozen peas"]
+
+    empty = client.get("/api/foods/browse?section=frozen&letter=Z").json()
+    assert empty["items"] == []
+
+
+def test_browse_wants_a_section_tare_has(client, signed_in):
+    response = client.get("/api/foods/browse", params={"section": "hardware"})
+    assert response.status_code == 400
+    assert response.json() == {"detail": "That is not a section Tare has."}
 
 
 # ---- Invite links ----

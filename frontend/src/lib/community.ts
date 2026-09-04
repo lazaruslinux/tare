@@ -96,3 +96,34 @@ export const KIND_LABEL: Record<string, string> = {
   photo: 'Photo',
   report: 'Report',
 }
+
+// Where a food sits in a shop, which is how the shared database is browsed.
+// The slugs are what the server stores and the words beside them are what
+// every screen says, so this list is the one place either is written down.
+export const SECTIONS: { slug: string; label: string }[] = [
+  { slug: 'produce', label: 'Produce' },
+  { slug: 'meat', label: 'Meat' },
+  { slug: 'seafood', label: 'Seafood' },
+  { slug: 'eggs-and-dairy', label: 'Eggs and dairy' },
+  { slug: 'bread-and-bakery', label: 'Bread and bakery' },
+  { slug: 'grains-and-pasta', label: 'Grains and pasta' },
+  { slug: 'canned-and-jarred', label: 'Canned and jarred' },
+  { slug: 'frozen', label: 'Frozen' },
+  { slug: 'snacks', label: 'Snacks' },
+  { slug: 'candy-and-sweets', label: 'Candy and sweets' },
+  { slug: 'drinks', label: 'Drinks' },
+  { slug: 'coffee-and-tea', label: 'Coffee and tea' },
+  { slug: 'condiments-and-sauces', label: 'Condiments and sauces' },
+  { slug: 'spices-and-baking', label: 'Spices and baking' },
+  { slug: 'prepared-meals', label: 'Prepared meals' },
+  { slug: 'supplements', label: 'Supplements' },
+  { slug: 'other', label: 'Other' },
+]
+
+// What a section is called on screen. A slug nothing knows reads as itself
+// rather than as a blank, which is a food to go and look at.
+export const sectionLabel = (slug: string): string =>
+  SECTIONS.find((row) => row.slug === slug)?.label ?? slug
+
+// Said where the section is picked, and it is the server's own sentence.
+export const NO_SECTION = 'Pick a section.'

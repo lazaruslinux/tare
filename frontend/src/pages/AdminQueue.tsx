@@ -15,7 +15,13 @@ import { Lightbox } from '../components/Lightbox'
 import { FoodForm } from '../components/FoodForm'
 import { Sheet } from '../components/Sheet'
 import { useTopBar } from '../hooks/useTopBar'
-import { KIND_LABEL, MAX_PHOTO_BYTES, PHOTO_TOO_LARGE, SHARED_FACTS } from '../lib/community'
+import {
+  KIND_LABEL,
+  MAX_PHOTO_BYTES,
+  PHOTO_TOO_LARGE,
+  SHARED_FACTS,
+  sectionLabel,
+} from '../lib/community'
 import { scale } from '../lib/units'
 
 // The queue, which is the only door into the shared database. It is read dense
@@ -51,6 +57,11 @@ function comparison(now: Proposed, proposed: Proposed): Line[] {
       label: 'Description',
       now: now.description || '-',
       proposed: proposed.description || '-',
+    },
+    {
+      label: 'Section',
+      now: sectionLabel(now.section),
+      proposed: sectionLabel(proposed.section),
     },
     { label: 'Measured in', now: now.base_unit, proposed: proposed.base_unit },
   ]

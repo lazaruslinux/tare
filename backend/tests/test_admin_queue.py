@@ -43,6 +43,7 @@ def offer(client, **overrides):
         "name": "Milk chocolate bar",
         "brand": "Hershey's",
         "base_unit": "g",
+        "section": "candy-and-sweets",
         "servings": SERVINGS,
         **FULL,
     }
@@ -122,6 +123,7 @@ def test_the_queue_carries_the_whole_proposed_label(client, make_user):
             "barcode": None,
             "name": "Grandma's fudge",
             "base_unit": "g",
+            "section": "candy-and-sweets",
             "servings": SERVINGS,
             "photo_id": photo_id,
             "label_photo_id": a_photo(client, "label"),
@@ -504,6 +506,7 @@ def adjusted(client, food_id, **overrides):
         "name": "Milk chocolate bar",
         "brand": "Hershey's",
         "base_unit": "g",
+        "section": "candy-and-sweets",
         "servings": SERVINGS,
         **FULL,
     }
@@ -531,6 +534,34 @@ def test_a_reviewer_may_correct_a_waiting_food_and_what_they_changed_is_kept(
     ).status_code == 200
     db_session.expire_all()
     assert db_session.get(models.Food, made["food"]["id"]).calories == 500
+
+
+def test_a_reviewer_puts_a_food_in_another_aisle_before_approving_it(
+    client, db_session, make_user
+):
+    """The submitter picks the section; whoever reviews it has the last word."""
+    made = member_and_admin(client, make_user)
+
+    sign_in(client, "reviewer")
+    assert adjusted(client, made["food"]["id"], section="snacks").status_code == 200
+    assert client.post(
+        f"/api/admin/queue/{made['submission_id']}/approve", json={}
+    ).status_code == 200
+
+    db_session.expire_all()
+    shared = db_session.get(models.Food, made["food"]["id"])
+    assert (shared.status, shared.section) == ("approved", "snacks")
+    submission = db_session.get(models.FoodSubmission, made["submission_id"])
+    assert submission.changes == ["Section"]
+
+
+def test_an_aisle_tare_does_not_have_is_refused_in_the_queue(client, make_user):
+    made = member_and_admin(client, make_user)
+
+    sign_in(client, "reviewer")
+    response = adjusted(client, made["food"]["id"], section="hardware")
+    assert response.status_code == 400
+    assert response.json() == {"detail": "That is not a section Tare has."}
 
 
 def test_what_the_reviewer_changed_reads_on_the_submitter_s_own_list(

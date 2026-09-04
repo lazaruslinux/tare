@@ -11,7 +11,7 @@ import {
   type Scanned,
 } from '../api'
 import { useTopBar } from '../hooks/useTopBar'
-import { NO_SERVING, SHARED_FACTS, type Values } from '../lib/community'
+import { NO_SECTION, NO_SERVING, SECTIONS, SHARED_FACTS, type Values } from '../lib/community'
 import {
   MASS_UNITS,
   UNIT_LABEL,
@@ -221,6 +221,12 @@ export function FoodForm({
   // Only a food carries one. A barcode lookup has nothing to say here, so a
   // scanned form opens with it blank.
   const [description, setDescription] = useState(food?.description ?? '')
+  // The aisle a shared food is browsed under. 'other' is what a food nobody
+  // has put anywhere carries, so it opens blank and is picked rather than
+  // inherited: every food already shared was backfilled into it.
+  const [section, setSection] = useState(
+    food && food.section !== 'other' ? food.section : ''
+  )
   const [baseUnit, setBaseUnit] = useState<BaseUnit>(opening?.base_unit ?? 'g')
   const [ingredients, setIngredients] = useState(opening?.ingredients_text ?? '')
   const [serving, setServingRow] = useState<ServingDraft>(() =>
@@ -243,6 +249,8 @@ export function FoodForm({
   // Said under the tiles rather than with the rest, because that is where the
   // two things it is about are.
   const [photoError, setPhotoError] = useState('')
+  // Said under the select for the same reason: the box it is about is there.
+  const [sectionError, setSectionError] = useState('')
   // Open while somebody is being asked whether they really mean to keep a food
   // to themselves.
   const [asking, setAsking] = useState(false)
@@ -283,6 +291,9 @@ export function FoodForm({
   // The switch is not offered while a decision is outstanding: there is
   // nothing to send until that one is answered or taken back.
   const offerable = creating || (own && food.status !== 'pending')
+  // Who is asked which aisle it belongs in: whoever is offering it, and
+  // whoever is reviewing it. Nobody else is browsing this food.
+  const asksSection = (offerable && submitOn) || review !== undefined
   const scannable = onOpenFood !== undefined && food === null
 
   const heading = title ?? (food ? 'Edit food' : 'New food')
@@ -370,6 +381,14 @@ export function FoodForm({
       setError(NO_SERVING)
       return
     }
+    // A shared food is browsed by its aisle, so it is picked before it goes.
+    if ((on && offerable) || review !== undefined) {
+      if (!section) {
+        setSectionError(NO_SECTION)
+        return
+      }
+    }
+    setSectionError('')
     // Nothing is sent without both pictures, because the reviewer has only
     // them to check the numbers against.
     if (on && (creating || own)) {
@@ -404,6 +423,9 @@ export function FoodForm({
       name,
       brand,
       description,
+      // Sent whatever the switch says, so a food waiting on a decision keeps
+      // the aisle it was offered in when its owner corrects a number.
+      section,
       base_unit: baseUnit,
       density_g_per_ml: density,
       ingredients_text: ingredients,
@@ -619,6 +641,30 @@ export function FoodForm({
               onChange={(event) => setDescription(event.target.value)}
             />
           </div>
+          {asksSection && (
+            <div className="mt-3">
+              <label className="t-label" htmlFor="food-section">
+                Section
+              </label>
+              <select
+                id="food-section"
+                className="t-input"
+                value={section}
+                onChange={(event) => {
+                  setSection(event.target.value)
+                  setSectionError('')
+                }}
+              >
+                <option value="">Pick a section</option>
+                {SECTIONS.map((row) => (
+                  <option key={row.slug} value={row.slug}>
+                    {row.label}
+                  </option>
+                ))}
+              </select>
+              {sectionError && <p className="t-error mt-2">{sectionError}</p>}
+            </div>
+          )}
           {source && (
             <p className="mt-3 text-xs text-muted">
               Filled in from {source}. Check every number against the package.

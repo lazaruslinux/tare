@@ -157,6 +157,33 @@ class IngestToken(Base):
 #   approved  in the shared database, visible to everyone
 FOOD_STATUSES = ("cache", "custom", "pending", "shadow", "approved")
 
+# Where a food sits in a shop, which is how the shared database is browsed. A
+# fixed list rather than free text, for the same reason the database itself is
+# one. Stored as the slug; the words a screen says live with the screen.
+FOOD_SECTIONS = (
+    "produce",
+    "meat",
+    "seafood",
+    "eggs-and-dairy",
+    "bread-and-bakery",
+    "grains-and-pasta",
+    "canned-and-jarred",
+    "frozen",
+    "snacks",
+    "candy-and-sweets",
+    "drinks",
+    "coffee-and-tea",
+    "condiments-and-sauces",
+    "spices-and-baking",
+    "prepared-meals",
+    "supplements",
+    "other",
+)
+
+# What a food carries until somebody says otherwise, and the aisle everything
+# already shared was put in for a reviewer to sort.
+DEFAULT_SECTION = "other"
+
 # The nutrition panel, stored per 100 of the food's base unit. The order is the
 # order it reads in, and the routes and the screens both follow it.
 NUTRIENTS = (
@@ -220,6 +247,11 @@ class Food(Base):
     # What it is, in a few words: "King Size", "Blueberry flavor". Not the
     # brand and not the panel, just what tells two rows of one food apart.
     description: Mapped[str] = mapped_column(String(60), nullable=False, default="")
+    # Which aisle it would be found in. Only a food in the shared database is
+    # browsed this way, so a private one keeps the default and never asks.
+    section: Mapped[str] = mapped_column(
+        String(32), nullable=False, default=DEFAULT_SECTION
+    )
     # 'g' or 'ml'. Every number below is per 100 of this.
     base_unit: Mapped[str] = mapped_column(String(2), nullable=False, default="g")
     # What one millilitre of it weighs, when the label gave enough to work it

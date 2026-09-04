@@ -100,8 +100,9 @@ def test_upgrade_head_builds_the_identity_schema(tmp_path):
     # And the one that holds a person to a single open request of each kind
     # about a food that is already shared.
     assert "uq_food_submissions_open_target" in submission_indexes
-    # The short line under a food's name, and the panel it keeps.
-    assert {"description", "label_photo_id"} <= food_columns
+    # The short line under a food's name, the aisle it is browsed under, and
+    # the panel it keeps.
+    assert {"description", "section", "label_photo_id"} <= food_columns
     # The words a serving was typed in, beside what they came to.
     assert {"amount", "unit", "base_amount"} <= serving_columns
     # The two purposes a picture has, and the panel a request carries.

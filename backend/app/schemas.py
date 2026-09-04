@@ -47,6 +47,10 @@ class FoodIn(BaseModel):
     # The short line under the name. Left out is the same as blank: most foods
     # have nothing to add to their own name.
     description: str = ""
+    # The aisle it would be found in, as a slug. Blank is a food nobody has
+    # put anywhere, which is every private one: only a food headed for the
+    # shared database is asked.
+    section: str = ""
     base_unit: Literal["g", "ml"] = "g"
     density_g_per_ml: float | None = Field(default=None, ge=DENSITY_MIN, le=DENSITY_MAX)
     # The code the form was filled in from, kept with the food so the next scan

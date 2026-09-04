@@ -34,6 +34,9 @@ FULL = {
 
 SERVINGS = [{"name": "1 bar", "amount": 43, "unit": "g", "position": 0}]
 
+# The aisle every case that is about something else offers its bar in.
+SECTION = "candy-and-sweets"
+
 
 def body(**overrides):
     sent = {
@@ -41,6 +44,7 @@ def body(**overrides):
         "name": "Milk chocolate bar",
         "brand": "Hershey's",
         "base_unit": "g",
+        "section": SECTION,
         "servings": SERVINGS,
         **FULL,
     }
@@ -619,3 +623,55 @@ def test_nobody_else_is_told_what_was_asked_about_a_food(client, make_user, sign
     make_user("stranger")
     sign_in(client, "stranger")
     assert client.get(f"/api/foods/{made['food']['id']}").json()["submissions"] == []
+
+
+# ---- Which aisle a shared food is browsed under ----
+
+
+def test_an_offer_says_which_aisle_it_belongs_in(client, db_session, signed_in):
+    made = offer(client)
+    assert made.status_code == 201
+    assert made.json()["food"]["section"] == SECTION
+    assert db_session.get(models.Food, made.json()["food"]["id"]).section == SECTION
+
+
+def test_an_offer_without_a_section_is_refused(client, signed_in):
+    response = client.post(
+        "/api/submissions/food",
+        json=body(
+            section="", photo_id=a_photo(client), label_photo_id=a_photo(client, "label")
+        ),
+    )
+    assert response.status_code == 400
+    assert response.json() == {"detail": "Pick a section."}
+
+
+def test_a_section_tare_does_not_have_is_refused(client, signed_in):
+    response = client.post(
+        "/api/submissions/food",
+        json=body(
+            section="hardware",
+            photo_id=a_photo(client),
+            label_photo_id=a_photo(client, "label"),
+        ),
+    )
+    assert response.status_code == 400
+    assert response.json() == {"detail": "That is not a section Tare has."}
+
+
+def test_a_food_kept_privately_is_never_asked_which_aisle(client, db_session, signed_in):
+    """Nothing browses a private food, so nothing asks where it would sit."""
+    made = client.post(
+        "/api/foods",
+        json={
+            "name": "Leftover rice",
+            "base_unit": "g",
+            "calories": 130,
+            "protein_g": 2.4,
+            "carbs_g": 28,
+            "fat_g": 0.3,
+        },
+    )
+    assert made.status_code == 201
+    assert made.json()["section"] == "other"
+    assert db_session.get(models.Food, made.json()["id"]).section == "other"

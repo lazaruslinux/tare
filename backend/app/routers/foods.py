@@ -20,7 +20,7 @@ from sqlalchemy.orm import InstrumentedAttribute, Session
 from app import models, schemas, units
 from app.db import get_db
 from app.deps import require_user
-from app.models import NUTRIENTS
+from app.models import DEFAULT_SECTION, FOOD_SECTIONS, NUTRIENTS
 
 router = APIRouter(prefix="/foods", tags=["foods"])
 
@@ -38,6 +38,11 @@ MAX_BRAND = 120
 # still reads as one line under a name in a list.
 MAX_DESCRIPTION = 60
 MAX_SERVING_NAME = 60
+
+# An aisle nobody stocks, and a food that has not been put in one. Both are
+# said here because the form, the browse list and the queue all lean on them.
+BAD_SECTION = "That is not a section Tare has."
+NO_SECTION = "Pick a section."
 
 # A serving is measured in the food's own family or not at all: a cup of a
 # food weighed in grams would need a density to mean anything, and a label
@@ -236,6 +241,9 @@ def food_row(
         "brand": food.brand,
         # The short line under the name, empty on most foods.
         "description": food.description,
+        # Which aisle it is browsed under. Every food carries one; only a
+        # shared food is browsed by it.
+        "section": food.section,
         "calories": food.calories,
         "base_unit": food.base_unit,
         "status": food.status,
@@ -559,7 +567,12 @@ NUTRIENT_LABELS = {
 # Everything a reviewer can change about a waiting proposal, in the words the
 # person who offered it reads afterwards. The servings are a list rather than a
 # column, so they are compared whole under one word.
-EDIT_LABELS = {"name": "Name", "brand": "Brand", "description": "Description"}
+EDIT_LABELS = {
+    "name": "Name",
+    "brand": "Brand",
+    "description": "Description",
+    "section": "Section",
+}
 EDIT_LABELS.update(NUTRIENT_LABELS)
 SERVING_LABEL = "Serving"
 FRONT_LABEL = "Front photo"
@@ -646,6 +659,12 @@ def apply_body(food: models.Food, body: schemas.FoodIn) -> None:
             status.HTTP_400_BAD_REQUEST,
             f"A description must be at most {MAX_DESCRIPTION} characters.",
         )
+    # Blank is the aisle a private food keeps: nothing asks for one, and a
+    # food that is offered later is asked then. Anything else is held to the
+    # list, so a slug nothing browses by cannot be stored.
+    section = body.section.strip().lower()
+    if section and section not in FOOD_SECTIONS:
+        raise HTTPException(status.HTTP_400_BAD_REQUEST, BAD_SECTION)
     if any(getattr(body, field) is None for field in REQUIRED):
         raise HTTPException(
             status.HTTP_400_BAD_REQUEST, "Calories, protein, carbs, and fat are required."
@@ -654,6 +673,7 @@ def apply_body(food: models.Food, body: schemas.FoodIn) -> None:
     food.name = name
     food.brand = brand
     food.description = description
+    food.section = section or DEFAULT_SECTION
     food.base_unit = body.base_unit
     food.density_g_per_ml = body.density_g_per_ml
     food.ingredients_text = body.ingredients_text.strip()
@@ -877,6 +897,7 @@ def repeat_foods(
 def browse_foods(
     cursor: str = "",
     letter: str = "",
+    section: str = "",
     db: Session = Depends(get_db),
     user: models.User = Depends(require_user),
 ) -> dict[str, object]:
@@ -890,9 +911,14 @@ def browse_foods(
     Given a letter it is the same database read the other way: everything
     starting with that letter, in alphabetical order, which is how somebody
     looks for a food they cannot spell the middle of.
+
+    A section is the same list read the way somebody shops, and the two narrow
+    it together: the frozen things beginning with P are both at once.
     """
     if letter and not (len(letter) == 1 and letter.isascii() and letter.isalpha()):
         raise HTTPException(status.HTTP_400_BAD_REQUEST, BAD_LETTER)
+    if section and section not in FOOD_SECTIONS:
+        raise HTTPException(status.HTTP_400_BAD_REQUEST, BAD_SECTION)
     # One row per food, so a food is not repeated when it has been photographed
     # more than once. The lowest id is the published one, and the partial index
     # allows only one of those anyway.
@@ -915,6 +941,8 @@ def browse_foods(
         # another one without counting the whole table.
         .limit(BROWSE_PAGE + 1)
     )
+    if section:
+        query = query.where(models.Food.section == section)
     if letter:
         # Sorted and compared on the folded name throughout, so a page break
         # lands in the same place on either database rather than following

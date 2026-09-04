@@ -13,6 +13,7 @@ import {
   PHOTO_TOO_LARGE,
   SENT_FOR_REVIEW,
   changeLine,
+  sectionLabel,
   statusLabel,
 } from '../lib/community'
 import { dayLabel, dayOf, slotByTime, today } from '../lib/day'
@@ -218,7 +219,14 @@ export function FoodDetail({
           <div className="flex items-start justify-between gap-3">
             <div className="min-w-0">
               <p className="text-xl font-semibold tracking-tight">{food.name}</p>
-              <p className="mb-3 text-sm text-muted">{food.brand || 'No brand'}</p>
+              <div className="mb-3 flex items-center gap-2">
+                <p className="truncate text-sm text-muted">{food.brand || 'No brand'}</p>
+                {/* Which aisle it is browsed under, on the foods that are
+                    browsed. A private food is nobody else's to find. */}
+                {shared && (
+                  <span className="t-chip shrink-0">{sectionLabel(food.section)}</span>
+                )}
+              </div>
             </div>
             {food.status === 'pending' && <span className="t-chip shrink-0">pending</span>}
           </div>

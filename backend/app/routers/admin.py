@@ -84,6 +84,7 @@ def proposed(food: models.Food) -> dict[str, object]:
         "name": food.name,
         "brand": food.brand,
         "description": food.description,
+        "section": food.section,
         "barcode": food.barcode,
         "base_unit": food.base_unit,
         "density_g_per_ml": food.density_g_per_ml,
@@ -248,6 +249,9 @@ def approve_edit(
     target.name = shadow.name
     target.brand = shadow.brand
     target.description = shadow.description
+    # Which aisle it is browsed under, which a reviewer confirms or changes
+    # the same way they do everything else on the panel.
+    target.section = shadow.section
     # The unit the panel and the servings are both counted in, so it travels
     # with them or the numbers underneath it change meaning.
     target.base_unit = shadow.base_unit

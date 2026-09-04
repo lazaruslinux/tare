@@ -3,6 +3,7 @@ import { useEffect, useRef, useState } from 'react'
 import { api, errorText, type BrowsePage, type FoodRow } from '../api'
 import { Calories, PhotoThumb, subline } from '../components/FoodRows'
 import { useTopBar } from '../hooks/useTopBar'
+import { SECTIONS, sectionLabel } from '../lib/community'
 
 // The shared database, as a place to look something up rather than a wall to
 // scroll. Three ways in, in the order somebody reaches for them: type the name,
@@ -13,6 +14,19 @@ const DEBOUNCE = 250
 const MIN_QUERY = 2
 
 const LETTERS = 'ABCDEFGHIJKLMNOPQRSTUVWXYZ'.split('')
+
+// The aisle somebody was last reading is remembered per device: a person who
+// shops the freezer comes back to the freezer.
+const SECTION_KEY = 'tare.browse.section'
+
+function rememberedSection(): string {
+  try {
+    const kept = window.localStorage.getItem(SECTION_KEY)
+    return SECTIONS.some((row) => row.slug === kept) ? (kept as string) : ''
+  } catch {
+    return ''
+  }
+}
 
 // Where the search box takes focus on its own. A phone would answer that with
 // the keyboard over half the screen before anybody asked for it.
@@ -51,6 +65,8 @@ export function Browse({
   // Null is not an empty result: it is a box nobody has typed two letters into.
   const [results, setResults] = useState<FoodRow[] | null>(null)
   const [letter, setLetter] = useState('')
+  // Empty is every aisle, which is the list as it was before sections.
+  const [section, setSectionState] = useState(rememberedSection)
   // Null is a page nobody has read yet, which is not the same as none.
   const [rows, setRows] = useState<FoodRow[] | null>(null)
   const [cursor, setCursor] = useState<string | null>(null)
@@ -64,17 +80,30 @@ export function Browse({
     if (window.matchMedia(ROOMY).matches) box.current?.focus()
   }, [])
 
-  // The letter is the whole of the listing's identity, so changing it empties
-  // the screen before the first page of the new one lands. A refresh tick is
-  // not a new listing, so it leaves what is up alone while it reads.
+  const setSection = (slug: string) => {
+    setSectionState(slug)
+    try {
+      window.localStorage.setItem(SECTION_KEY, slug)
+    } catch {
+      // A browser that refuses storage still gets the aisle it picked.
+    }
+  }
+
+  // The letter and the aisle are the whole of the listing's identity, so
+  // changing either empties the screen before the first page of the new one
+  // lands. A refresh tick is not a new listing, so it leaves what is up alone
+  // while it reads.
   useEffect(() => {
     setRows(null)
-  }, [letter])
+  }, [letter, section])
 
   useEffect(() => {
     let alive = true
-    const asked = letter ? `/foods/browse?letter=${letter}` : '/foods/browse'
-    api<BrowsePage>(asked)
+    const asked = new URLSearchParams()
+    if (letter) asked.set('letter', letter)
+    if (section) asked.set('section', section)
+    const query = asked.toString()
+    api<BrowsePage>(query ? `/foods/browse?${query}` : '/foods/browse')
       .then((page) => {
         if (!alive) return
         setRows(page.items)
@@ -85,7 +114,7 @@ export function Browse({
     return () => {
       alive = false
     }
-  }, [letter, refresh])
+  }, [letter, section, refresh])
 
   useEffect(() => {
     const needle = query.trim()
@@ -106,7 +135,9 @@ export function Browse({
     setBusy(true)
     setError('')
     try {
-      const asked = new URLSearchParams(letter ? { letter, cursor } : { cursor })
+      const asked = new URLSearchParams({ cursor })
+      if (letter) asked.set('letter', letter)
+      if (section) asked.set('section', section)
       const page = await api<BrowsePage>(`/foods/browse?${asked}`)
       // Added to what is on screen rather than replacing it: this is one long
       // list read downwards, not a set of numbered pages.
@@ -129,6 +160,22 @@ export function Browse({
         value={query}
         onChange={(event) => setQuery(event.target.value)}
       />
+
+      {results === null && (
+        <div className="mb-3 flex gap-x-2 gap-y-4 overflow-x-auto min-[900px]:flex-wrap">
+          {[{ slug: '', label: 'All' }, ...SECTIONS].map((option) => (
+            <button
+              key={option.slug || 'all'}
+              type="button"
+              className="t-chip t-tap44 shrink-0 aria-pressed:border-accent aria-pressed:text-text"
+              aria-pressed={section === option.slug}
+              onClick={() => setSection(option.slug)}
+            >
+              {option.label}
+            </button>
+          ))}
+        </div>
+      )}
 
       {results === null && (
         <div className="mb-3 flex gap-x-2 gap-y-4 overflow-x-auto min-[900px]:flex-wrap">
@@ -160,7 +207,13 @@ export function Browse({
         <>
           {rows !== null && rows.length === 0 && (
             <div className="t-card mb-3">
-              {letter ? (
+              {section && letter ? (
+                <p className="text-sm text-muted">
+                  Nothing in {sectionLabel(section)} starts with {letter} yet.
+                </p>
+              ) : section ? (
+                <p className="text-sm text-muted">Nothing in {sectionLabel(section)} yet.</p>
+              ) : letter ? (
                 <p className="text-sm text-muted">Nothing shared starts with {letter} yet.</p>
               ) : (
                 <>
