@@ -248,6 +248,19 @@ export function FoodTab({
     })
   }
 
+  // Off the list at once. A shared food only leaves this account's list: the
+  // food itself stays in the Tare database.
+  const removeKept = (row: MyFoodRow) => {
+    setFoods((rows) => rows.filter((item) => item.id !== row.id))
+    hold({
+      message: `Took ${row.name} off My foods.`,
+      commit: () => {
+        api(`/foods/${row.id}/keep`, { method: 'DELETE' }).then(onChanged, () => {})
+      },
+      revert: () => void load(),
+    })
+  }
+
   const removeRecipe = (recipe: Recipe) => {
     setRecipes((rows) => rows.filter((row) => row.id !== recipe.id))
     setView({ at: 'list' })
@@ -327,6 +340,7 @@ export function FoodTab({
               : { kind, rows: recipes }
         }
         onBack={back}
+        onRemove={kind === 'foods' ? removeKept : undefined}
         onOpen={(id) =>
           setView(
             kind === 'foods'
@@ -384,6 +398,7 @@ export function FoodTab({
         }}
         onSeen={onSeen}
         onChanged={() => {
+          void load()
           void loadRepeat()
           void loadAutos()
           onChanged()
@@ -523,7 +538,7 @@ export function FoodTab({
         <div className="mb-1 flex items-center justify-between">
           <p className="t-section">
             <ScanBarcode className="h-4 w-4" strokeWidth={2} />
-            Scanned / created foods
+            My foods (recently added)
           </p>
           <button
             type="button"
@@ -560,6 +575,9 @@ export function FoodTab({
                 key={row.id}
                 row={row}
                 onOpen={() => setView({ at: 'detail', id: row.id, from: { at: 'list' } })}
+                // A food of their own is deleted from its own page. Only a
+                // shared one comes off the list here.
+                onRemove={row.status === 'approved' ? () => removeKept(row) : undefined}
               />
             ))}
             {foods.length > SHOWN && (

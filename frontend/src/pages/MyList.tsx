@@ -50,10 +50,14 @@ export function MyList({
   onBack,
   onOpen,
   onAdd,
+  onRemove,
 }: {
   listed: Listed
   onBack: () => void
   onOpen: (id: number) => void
+  // Taking a shared food off My foods, the same way the card above does it.
+  // Absent on the lists where a row is not taken off anything.
+  onRemove?: (row: MyFoodRow) => void
   // The same thing the card's plus does, in the bar of the screen that grew
   // out of that card.
   onAdd: () => void
@@ -152,7 +156,16 @@ export function MyList({
           <p className="text-sm text-muted">{nothing}</p>
         ) : listed.kind === 'foods' ? (
           (shown as MyFoodRow[]).map((row) => (
-            <FoodLine key={row.id} row={row} onOpen={() => onOpen(row.id)} />
+            <FoodLine
+              key={row.id}
+              row={row}
+              onOpen={() => onOpen(row.id)}
+              onRemove={
+                onRemove !== undefined && row.status === 'approved'
+                  ? () => onRemove(row)
+                  : undefined
+              }
+            />
           ))
         ) : listed.kind === 'meals' ? (
           (shown as MealRow[]).map((row) => (

@@ -249,10 +249,9 @@ export type FoodRow = {
   photo_url: string | null
 }
 
-// A row in one of the member's own lists. The day it was last eaten is what
-// those lists are ordered by, so the thing somebody had yesterday is near the
-// top of a list of hundreds. Null is a food nobody has logged.
-export type MyFoodRow = FoodRow & { last_logged: string | null }
+// A row of somebody's own list. The list is ordered by when each was added,
+// which the screen never has to read, so a row is a food row and nothing more.
+export type MyFoodRow = FoodRow
 
 // One page of the shared database. The marker is opaque: it says where the
 // page stopped and nothing else, and it is only ever handed back as it came.
@@ -304,6 +303,9 @@ export type Food = FoodRow & {
   mine: boolean
   // Whether this account keeps it to hand.
   pinned: boolean
+  // Whether it is on this account's own list of foods. True for a food of
+  // their own, which is on that list by nature.
+  kept: boolean
   // Why an administrator turned this account's own offer of it down. Empty
   // unless that is what happened to it.
   decision_note: string

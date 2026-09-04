@@ -1,4 +1,3 @@
-import datetime as dt
 
 from app import models
 from app.routers import foods as foods_router
@@ -259,57 +258,60 @@ def test_the_food_list_is_newest_first(client, signed_in):
     assert [row["name"] for row in listed] == ["Second one", "First one"]
 
 
-def eaten(db, user, food, on):
-    """One diary entry, straight in, on the day a case needs it on."""
-    db.add(
-        models.DiaryEntry(
-            user_id=user.id,
-            date_for=dt.date.fromisoformat(on),
-            slot="breakfast",
-            name=food["name"],
-            food_id=food["id"],
-            calories=100,
-        )
-    )
-    db.commit()
-
-
-def test_the_food_list_leads_with_what_was_eaten_last(client, db_session, signed_in):
-    older = create(client, name="First one").json()
-    create(client, name="Second one")
-    newest = create(client, name="Third one").json()
-
-    # The oldest food, eaten today, and the newest, eaten a week ago.
-    eaten(db_session, signed_in, older, "2026-09-02")
-    eaten(db_session, signed_in, newest, "2026-08-26")
-
-    listed = client.get("/api/foods/mine").json()
-    assert [row["name"] for row in listed] == ["First one", "Third one", "Second one"]
-    assert [row["last_logged"] for row in listed] == ["2026-09-02", "2026-08-26", None]
-
-
-def test_a_food_nobody_logged_falls_below_every_one_that_was(client, db_session, signed_in):
-    logged = create(client, name="Eaten once").json()
-    create(client, name="Never eaten")
-    eaten(db_session, signed_in, logged, "2020-01-01")
-
-    listed = client.get("/api/foods/mine").json()
-    assert [row["name"] for row in listed] == ["Eaten once", "Never eaten"]
-
-
-def test_only_my_own_meals_count_towards_when_a_food_was_last_eaten(
-    client, db_session, make_user, signed_in
-):
-    shared_food = put_food(db_session, None, name="Shared bar", status="approved")
-    mine = create(client, name="Mine").json()
-    eaten(db_session, signed_in, mine, "2020-01-01")
-    # Somebody else ate the shared food today, which is none of my business.
-    stranger = make_user("stranger")
-    eaten(db_session, stranger, {"id": shared_food.id, "name": "Shared bar"}, "2026-09-02")
+def test_a_shared_food_nobody_kept_is_not_in_my_list(client, db_session, signed_in):
+    put_food(db_session, None, name="Shared bar", status="approved")
+    create(client, name="Mine")
 
     listed = client.get("/api/foods/mine").json()
     assert [row["name"] for row in listed] == ["Mine"]
-    assert listed[0]["last_logged"] == "2020-01-01"
+
+
+def test_keeping_a_shared_food_puts_it_at_the_top_of_my_list(
+    client, db_session, signed_in
+):
+    create(client, name="First one")
+    create(client, name="Second one")
+    shared = put_food(db_session, None, name="Shared bar", status="approved")
+
+    assert client.post(f"/api/foods/{shared.id}/keep").status_code == 201
+    listed = client.get("/api/foods/mine").json()
+    assert [row["name"] for row in listed] == ["Shared bar", "Second one", "First one"]
+
+
+def test_keeping_a_food_twice_changes_nothing(client, db_session, signed_in):
+    shared = put_food(db_session, None, name="Shared bar", status="approved")
+
+    assert client.post(f"/api/foods/{shared.id}/keep").status_code == 201
+    again = client.post(f"/api/foods/{shared.id}/keep")
+    assert again.status_code == 200
+    assert len(client.get("/api/foods/mine").json()) == 1
+    assert client.get(f"/api/foods/{shared.id}").json()["kept"] is True
+
+
+def test_a_food_of_my_own_is_already_mine(client, signed_in):
+    made = create(client).json()
+
+    response = client.post(f"/api/foods/{made['id']}/keep")
+    assert response.status_code == 400
+    assert response.json()["detail"] == foods_router.ALREADY_YOURS
+    # Their own food reads as kept anyway, so one flag answers the question.
+    assert client.get(f"/api/foods/{made['id']}").json()["kept"] is True
+
+
+def test_taking_a_shared_food_off_my_list_leaves_it_shared(
+    client, db_session, signed_in
+):
+    shared = put_food(db_session, None, name="Shared bar", status="approved")
+    client.post(f"/api/foods/{shared.id}/keep")
+
+    assert client.delete(f"/api/foods/{shared.id}/keep").status_code == 204
+    assert client.get("/api/foods/mine").json() == []
+    assert client.get(f"/api/foods/{shared.id}").json()["kept"] is False
+    # Still in the shared database for everybody, this account included.
+    browsed = client.get("/api/foods/browse", params={"letter": "S"}).json()
+    assert [row["name"] for row in browsed["items"]] == ["Shared bar"]
+    # And taking off one already off changes nothing.
+    assert client.delete(f"/api/foods/{shared.id}/keep").status_code == 204
 
 
 def test_the_list_stops_at_the_cap(client, monkeypatch, signed_in):

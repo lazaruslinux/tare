@@ -8,7 +8,7 @@ BACKEND = Path(__file__).resolve().parents[1]
 
 IDENTITY_TABLES = {"users", "sessions", "email_tokens", "invites", "ingest_tokens"}
 FOOD_TABLES = {"foods", "food_servings"}
-DIARY_TABLES = {"diary_entries", "saved_foods", "auto_logs", "auto_log_days"}
+DIARY_TABLES = {"diary_entries", "saved_foods", "kept_foods", "auto_logs", "auto_log_days"}
 COMMUNITY_TABLES = {"food_photos", "food_submissions"}
 RECIPE_TABLES = {"recipes", "recipe_ingredients", "meal_templates", "meal_template_items"}
 HEALTH_TABLES = {
@@ -47,6 +47,9 @@ def test_upgrade_head_builds_the_identity_schema(tmp_path):
         }
         saved_unique = {
             constraint["name"] for constraint in inspector.get_unique_constraints("saved_foods")
+        }
+        kept_unique = {
+            constraint["name"] for constraint in inspector.get_unique_constraints("kept_foods")
         }
         weight_unique = {
             constraint["name"]
@@ -136,5 +139,7 @@ def test_upgrade_head_builds_the_identity_schema(tmp_path):
         assert f"'{kind}'" in submission_checks
     # And the pair that stops one food being pinned twice.
     assert "uq_saved_foods_user_food" in saved_unique
+    # And the one that stops a food sitting twice on one person's own list.
+    assert "uq_kept_foods_user_food" in kept_unique
     # And the one that holds a member to a single weigh-in a day.
     assert "uq_weight_entries_user_day" in weight_unique

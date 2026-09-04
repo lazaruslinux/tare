@@ -1284,6 +1284,32 @@ def test_approving_a_food_keeps_its_panel_on_the_food(client, db_session, make_u
     )
 
 
+def test_approving_a_food_keeps_it_on_the_submitter_list(client, db_session, make_user):
+    """It stops being theirs and stays where they have always found it."""
+    people(client, make_user)
+    front_id = a_photo(client)
+    label_id = a_photo(client, "label")
+    made = client.post(
+        "/api/submissions/food",
+        json={**proposal(barcode=None), "photo_id": front_id, "label_photo_id": label_id},
+    )
+    assert made.status_code == 201
+
+    sign_in(client, "reviewer")
+    approved = client.post(
+        f"/api/admin/queue/{made.json()['submission_id']}/approve", json={}
+    )
+    assert approved.status_code == 200
+    food_id = approved.json()["food"]["id"]
+    # Nobody else is given a place for it.
+    assert client.get("/api/foods/mine").json() == []
+
+    sign_in(client, "member")
+    listed = client.get("/api/foods/mine").json()
+    assert [(row["id"], row["status"]) for row in listed] == [(food_id, "approved")]
+    assert client.get(f"/api/foods/{food_id}").json()["kept"] is True
+
+
 def test_approving_a_correction_hands_its_panel_to_the_shared_food(
     client, db_session, make_user
 ):

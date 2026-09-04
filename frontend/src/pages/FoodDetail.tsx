@@ -1,4 +1,13 @@
-import { CalendarSync, Camera, Pencil, Pin, PinOff, Trash2 } from 'lucide-react'
+import {
+  BookmarkCheck,
+  BookmarkPlus,
+  CalendarSync,
+  Camera,
+  Pencil,
+  Pin,
+  PinOff,
+  Trash2,
+} from 'lucide-react'
 import { useEffect, useState, type ChangeEvent } from 'react'
 
 import { api, errorText, upload, type AutoLog, type Food, type Me } from '../api'
@@ -128,6 +137,20 @@ export function FoodDetail({
     setFood({ ...current, pinned: !current.pinned })
     try {
       await api(`/foods/${current.id}/pin`, { method: current.pinned ? 'DELETE' : 'POST' })
+      onChanged?.()
+    } catch (failure) {
+      setFood(current)
+      setError(errorText(failure))
+    }
+  }
+
+  // Put a shared food on this account's list of foods, or take it off again.
+  // Shown as done before it is, like the pin: both ways are idempotent, so a
+  // request that fails leaves nothing to reconcile beyond the next read.
+  const toggleKeep = async (current: Food) => {
+    setFood({ ...current, kept: !current.kept })
+    try {
+      await api(`/foods/${current.id}/keep`, { method: current.kept ? 'DELETE' : 'POST' })
       onChanged?.()
     } catch (failure) {
       setFood(current)
@@ -343,6 +366,23 @@ export function FoodDetail({
               <CalendarSync className="h-4 w-4" strokeWidth={2} />
               {standing === null ? 'Auto-log' : 'Auto-logging'}
             </button>
+            {/* A food of their own is on their list by nature, so this is only
+                offered on the ones out of the shared database. */}
+            {shared && (
+              <button
+                className="t-btn flex-1 basis-[calc(50%-0.375rem)] min-[640px]:flex-none min-[640px]:basis-auto"
+                type="button"
+                aria-pressed={food.kept}
+                onClick={() => void toggleKeep(food)}
+              >
+                {food.kept ? (
+                  <BookmarkCheck className="h-4 w-4" strokeWidth={2} />
+                ) : (
+                  <BookmarkPlus className="h-4 w-4" strokeWidth={2} />
+                )}
+                {food.kept ? 'In my foods' : 'Add to my foods'}
+              </button>
+            )}
             {((food.mine && !shared) || (me.is_admin && shared)) && (
               <button
                 className="t-btn flex-1 basis-[calc(50%-0.375rem)] min-[640px]:flex-none min-[640px]:basis-auto"

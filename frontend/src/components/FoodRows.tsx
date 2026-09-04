@@ -1,4 +1,4 @@
-import { Camera } from 'lucide-react'
+import { Camera, X } from 'lucide-react'
 
 import type { Community, FoodRow, MealRow, RecipeRow } from '../api'
 import { scale, servingsText } from '../lib/units'
@@ -67,9 +67,20 @@ export function Calories({ row }: { row: FoodRow }) {
   )
 }
 
-export function FoodLine({ row, onOpen }: { row: FoodRow; onOpen: () => void }) {
-  return (
-    <button type="button" className="t-row w-full text-left" onClick={onOpen}>
+export function FoodLine({
+  row,
+  onOpen,
+  onRemove,
+}: {
+  row: FoodRow
+  onOpen: () => void
+  // Taking the row off the list it is in, where that is a thing this list
+  // offers. The X sits beside the row rather than inside it, so opening the
+  // food and taking it off are two targets and not one.
+  onRemove?: () => void
+}) {
+  const line = (
+    <>
       <PhotoThumb url={row.photo_url} />
       <span className="min-w-0 flex-1">
         <span className="flex items-center gap-2">
@@ -81,7 +92,33 @@ export function FoodLine({ row, onOpen }: { row: FoodRow; onOpen: () => void }) 
         )}
       </span>
       <Calories row={row} />
-    </button>
+    </>
+  )
+  if (onRemove === undefined) {
+    return (
+      <button type="button" className="t-row w-full text-left" onClick={onOpen}>
+        {line}
+      </button>
+    )
+  }
+  return (
+    <div className="t-row">
+      <button
+        type="button"
+        className="flex min-w-0 flex-1 items-center gap-3 text-left"
+        onClick={onOpen}
+      >
+        {line}
+      </button>
+      <button
+        type="button"
+        className="t-tap44 shrink-0 text-muted"
+        aria-label={`Take ${row.name} off My foods`}
+        onClick={onRemove}
+      >
+        <X className="h-4 w-4" strokeWidth={2.5} />
+      </button>
+    </div>
   )
 }
 

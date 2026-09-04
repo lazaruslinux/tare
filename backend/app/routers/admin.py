@@ -369,6 +369,18 @@ def approve(
     # is not theirs to edit any more than it is anybody else's.
     food.owner_id = None
 
+    # It is nobody's food now, so the person who entered it is given a place
+    # for it on their own list, which is where they have always found it.
+    if submission.submitted_by_id is not None:
+        already = db.execute(
+            select(models.KeptFood.id).where(
+                models.KeptFood.user_id == submission.submitted_by_id,
+                models.KeptFood.food_id == food.id,
+            )
+        ).first()
+        if already is None:
+            db.add(models.KeptFood(user_id=submission.submitted_by_id, food_id=food.id))
+
     if food.barcode:
         # The cached lookup for this code has been superseded by a row a person
         # checked, so it goes. Every future scan of this packet is answered
