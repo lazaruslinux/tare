@@ -248,9 +248,7 @@ export function ActivityLevels({
             </div>
           </div>
         )}
-        <p className="t-note mt-2">Estimated. Real use can vary.</p>
-
-        <p className="t-note mt-3">Estimate. Real use can differ by a few hundred cal.</p>
+        <p className="t-note mt-3">Estimated. Real use can vary.</p>
       </div>
 
       <div className="t-card mb-3">
