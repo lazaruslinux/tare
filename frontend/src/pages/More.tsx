@@ -78,7 +78,7 @@ const UNITS: { value: Units; label: string }[] = [
 // What the sync row says under itself, or nothing at all before a key exists.
 function syncNote(row: SyncKey | null): string | undefined {
   if (row === null || !row.connected) return undefined
-  return row.last_used_at === null ? 'Key made, nothing received yet' : 'Connected'
+  return row.last_used_at === null ? 'Key created, nothing received yet' : 'Connected'
 }
 
 const THEMES: { value: Theme; label: string }[] = [

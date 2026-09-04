@@ -224,7 +224,7 @@ export function SyncDevice() {
           {status?.connected === true ? (
             <p className="mt-2 text-sm text-muted">
               {status.last_used_at === null
-                ? 'Key created, no syncs received yet.'
+                ? 'Key created, nothing received yet.'
                 : `Connected. Last health data sync: ${lastSync(status.last_used_at)}.`}
             </p>
           ) : (
@@ -311,7 +311,7 @@ export function SyncDevice() {
             Anything already synced is skipped.
           </p>
           <label className="t-btn cursor-pointer" htmlFor={field}>
-            {uploading ? 'Uploading...' : 'Choose a file'}
+            {uploading ? 'Uploading.' : 'Choose a file'}
           </label>
           <input
             id={field}

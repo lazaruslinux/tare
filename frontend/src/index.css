@@ -37,12 +37,15 @@
   --line: rgba(46, 79, 63, 0.12);
   --line-strong: rgba(46, 79, 63, 0.24);
   --text: #2e4f3f;
-  --muted: #5e7a6b;
+  /* Measured against all three light grounds: the old #5e7a6b read 4.01:1 on
+     --surface-2, under the 4.5:1 floor. This clears it on every one. */
+  --muted: #56705f;
   --label: #45604f;
   --accent: #35684f;
   --accent-strong: #24503b;
   --pending: #b7791f;
-  --danger: #b3554b;
+  /* Same measurement: #b3554b sat at 4.16:1 on --surface-2. */
+  --danger: #ab4f45;
   --ring: rgba(53, 104, 79, 0.3);
 }
 
@@ -58,6 +61,7 @@
   --color-line-strong: var(--line-strong);
   --color-text: var(--text);
   --color-muted: var(--muted);
+  --color-label: var(--label);
   --color-accent: var(--accent);
   --color-accent-strong: var(--accent-strong);
   --color-pending: var(--pending);
@@ -688,7 +692,9 @@
       background: var(--surface-2);
       border-radius: 6px;
     }
-    .t-btn:hover {
+    /* The filled variants keep their own ink: their label is var(--bg) on a
+       solid accent, and the shared rule repainted it to var(--text). */
+    .t-btn:not(.t-btn-primary):not(.t-btn-danger):hover {
       border-color: var(--muted);
       color: var(--text);
     }

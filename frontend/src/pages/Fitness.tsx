@@ -328,7 +328,7 @@ export function Fitness({
       <div className="t-card mb-3">
         <p className="t-micro mb-1">Today's workouts</p>
         {summary.workouts.length === 0 ? (
-          <p className="text-sm text-muted">No workouts today.</p>
+          <p className="text-sm text-muted">Nothing logged today.</p>
         ) : (
           <WorkoutRows
             me={me}
@@ -406,7 +406,7 @@ function AllWorkouts({
       <p className="t-micro mb-1">All workouts</p>
       {workouts.length === 0 ? (
         <p className="text-sm text-muted">
-          Nothing yet. Workouts appear here once your phone sends them.
+          Nothing here yet: workouts appear once your phone sends them.
         </p>
       ) : (
         <>

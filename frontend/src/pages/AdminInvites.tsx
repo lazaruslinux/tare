@@ -119,7 +119,7 @@ export function AdminInvites({ onBack }: { onBack: () => void }) {
 
       {invites !== null && rows.length === 0 && (
         <div className="t-card mb-3">
-          <p className="text-sm text-muted">No links have been made yet.</p>
+          <p className="text-sm text-muted">Nothing here yet.</p>
         </div>
       )}
 

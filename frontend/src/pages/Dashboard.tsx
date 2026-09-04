@@ -12,7 +12,6 @@ import {
   type Measurement,
   type Measurements,
   type Stamp,
-  type Profile,
   type Targets,
   type TrendPoint,
 } from '../api'
@@ -26,7 +25,7 @@ import { WorkoutDetails } from '../components/WorkoutDetails'
 import { useTopBar } from '../hooks/useTopBar'
 import { useWideLayout } from '../hooks/useWideLayout'
 import { dayLabel, shiftDay, slotByTime, today, weekday } from '../lib/day'
-import { personalNumber, calText, dateText } from '../lib/targets'
+import { calText, dateText } from '../lib/targets'
 import { round1, weightIn, weightText, weightUnit } from '../lib/units'
 
 // How far back the weight line reaches, and how long a deleted reading can be
@@ -406,7 +405,6 @@ export function Dashboard({
   onOpenJournal,
   onOpenFitness,
   onOpenTargets,
-  onOpenProfile,
   onChanged,
   start,
   onStarted,
@@ -423,7 +421,6 @@ export function Dashboard({
   onOpenFitness: () => void
   // Targets, which is where the goals the rings are read against are set.
   onOpenTargets: () => void
-  onOpenProfile: () => void
   // Which screen to open on. Only ever set by something outside this tab
   // sending somebody straight to it, and handed back the moment it is read.
   start?: DashScreen
@@ -437,7 +434,6 @@ export function Dashboard({
   // tab does not draw a card for it as well.
   const wide = useWideLayout()
   const [day, setDay] = useState<DiaryDay | null>(null)
-  const [profile, setProfile] = useState<Profile | null>(null)
   const [history, setHistory] = useState<Measurements | null>(null)
   const [run, setRun] = useState<DayRow[]>([])
   const [targets, setTargets] = useState<Targets | null>(null)
@@ -496,9 +492,6 @@ export function Dashboard({
     api<DiaryDay>(`/diary/day?date=${todayIso}`)
       .then((loaded) => alive && setDay(loaded))
       .catch((failure) => alive && setError(errorText(failure)))
-    api<Profile>('/health/profile')
-      .then((loaded) => alive && setProfile(loaded))
-      .catch(() => undefined)
     api<Measurements>(`/health/measurements?days=${HISTORY_DAYS}`)
       .then((loaded) => alive && setHistory(loaded))
       .catch(() => undefined)
@@ -607,10 +600,6 @@ export function Dashboard({
     ].some((one) => one !== null)
   const trend = (history?.trend ?? []).slice(-SPARK_DAYS)
   const spots = rows.filter((row) => trend.some((point) => point.date === row.date))
-  // What a personal number is still waiting on, and where to hand it over.
-  // The server works the list out, so this never re-derives the rule.
-  const gap =
-    profile === null || profile.complete ? null : personalNumber(profile.missing)
 
   // The month the goal is reached at, said once and shown wherever the weight
   // is. Nothing at all without a goal weight.
@@ -855,7 +844,7 @@ export function Dashboard({
           )}
           {recorded.length === 0 ? (
             <>
-              <p className="text-sm text-muted">No weigh-ins in this window.</p>
+              <p className="text-sm text-muted">Nothing measured in this window.</p>
               <button
                 type="button"
                 className="t-btn t-btn-primary mt-3"
@@ -948,18 +937,6 @@ export function Dashboard({
           warnOver
           highlightToday
         />
-
-        {gap !== null && (
-          <button
-            type="button"
-            className="mt-3 text-sm text-accent"
-            onClick={() =>
-              gap.needs === 'weight' ? setMeasuring(todayIso) : onOpenProfile()
-            }
-          >
-            {gap.label}
-          </button>
-        )}
       </div>
 
       <div className="t-card mb-3">
@@ -1001,7 +978,7 @@ export function Dashboard({
             rides the line under it, so one card carries both without two big
             numbers on one screen. */}
         {latest === null ? (
-          <p className="text-sm text-muted">No biometrics yet.</p>
+          <p className="text-sm text-muted">Nothing measured yet.</p>
         ) : (
           <>
             <span className="t-nums block text-3xl font-semibold leading-tight">

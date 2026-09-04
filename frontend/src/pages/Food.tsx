@@ -556,8 +556,7 @@ export function FoodTab({
         {foods.length === 0 ? (
           <>
             <p className="text-sm text-muted">
-              Start here: scan a barcode or create a food, then submit it to add it to the
-              Tare database for everyone.
+              Nothing here yet. Scan a barcode or create a food to start.
             </p>
             <div className="t-actions mt-3">
               <button type="button" className="t-btn t-btn-primary flex-1" onClick={onScan}>

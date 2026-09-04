@@ -219,7 +219,7 @@ export function Browse({
                 <>
                   <p className="mb-3 text-sm text-muted">Nothing shared yet.</p>
                   <button type="button" className="t-btn w-full" onClick={onScan}>
-                    Scan a food
+                    Scan a barcode
                   </button>
                 </>
               )}

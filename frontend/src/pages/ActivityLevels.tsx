@@ -198,8 +198,8 @@ export function ActivityLevels({
               <span className="ml-1 text-sm font-normal text-muted">cal</span>
             </span>
             <p className="t-note mt-2">
-              The least energy your body needs just to run, worked out from your age, sex,
-              height, weight and body fat. Sometimes called basal metabolic rate.
+              The least energy your body needs just to run, worked out from your age,
+              gender, height, weight and body fat. Sometimes called basal metabolic rate.
             </p>
             {facts !== null && (
               <p className="t-nums mt-2 text-xs text-muted">{factsLine(facts, me.units)}</p>

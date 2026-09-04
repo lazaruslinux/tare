@@ -336,10 +336,6 @@ export default function App() {
                         setMoreView('targets')
                         select('more')
                       }}
-                      onOpenProfile={() => {
-                        setMoreView('profile')
-                        select('more')
-                      }}
                       onChanged={changed}
                       start={dashView}
                       onStarted={() => setDashView(null)}

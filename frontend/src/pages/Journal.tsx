@@ -433,7 +433,7 @@ export function Journal({
             )}
           </div>
           {day.exercise.length === 0 ? (
-            <p className="text-sm text-muted">No exercise logged.</p>
+            <p className="text-sm text-muted">Nothing logged yet.</p>
           ) : (
             day.exercise.map((row) => {
               const line = (
@@ -491,7 +491,7 @@ export function Journal({
         <div className="t-card mb-3">
           <p className="t-micro mb-1">Biometrics</p>
           {weighed === null ? (
-            <p className="text-sm text-muted">No biometrics yet.</p>
+            <p className="text-sm text-muted">Nothing measured yet.</p>
           ) : (
             <>
               <div className="t-row min-h-9 text-sm">

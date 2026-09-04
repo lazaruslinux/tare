@@ -171,7 +171,7 @@ export function Targets({
       {!targets.disclaimer_seen && (
         <div className="t-card mb-3">
           <p className="t-note">{DISCLAIMER}</p>
-          <button type="button" className="mt-2 text-sm text-accent" onClick={onOpenGuide}>
+          <button type="button" className="mt-2 block text-sm text-accent" onClick={onOpenGuide}>
             More in the Guide
           </button>
           <button type="button" className="t-btn t-btn-primary mt-3" onClick={gotIt}>
