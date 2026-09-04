@@ -136,9 +136,9 @@ export function ActivityLevels({
   }
 
   const slices: Slice[] = [
-    { key: 'rest', label: 'At rest', value: resting ?? 0, opacity: 1 },
+    { key: 'rest', label: 'BMR', value: resting ?? 0, opacity: 1 },
     { key: 'day', label: 'Your day', value: adds ?? 0, opacity: 0.6 },
-    { key: 'exercise', label: 'Exercise', value: exercise, opacity: 0.3 },
+    { key: 'exercise', label: 'Exercise (Workouts)', value: exercise, opacity: 0.3 },
   ]
   const total = slices.reduce((sum, slice) => sum + Math.max(slice.value, 0), 0)
 
@@ -188,7 +188,7 @@ export function ActivityLevels({
       {/* The whole card is the way to the details it is worked out from, the
           same as the row it replaces. */}
       <button type="button" className="t-card mb-3 block w-full text-left" onClick={onOpenProfile}>
-        <p className="t-micro mb-2">At rest</p>
+        <p className="t-micro mb-2">BMR</p>
         {resting === null ? (
           <span className="block text-sm text-accent">Add your details</span>
         ) : (
@@ -198,8 +198,8 @@ export function ActivityLevels({
               <span className="ml-1 text-sm font-normal text-muted">cal</span>
             </span>
             <p className="t-note mt-2">
-              The least energy your body needs just to run, worked out from your age,
-              gender, height, weight and body fat. Sometimes called basal metabolic rate.
+              Your BMR or Basal Metabolic Rate is the estimated amount of calories your body
+              burns daily, based on age, gender, height, weight, and body fat percentage.
             </p>
             {facts !== null && (
               <p className="t-nums mt-2 text-xs text-muted">{factsLine(facts, me.units)}</p>
@@ -212,7 +212,7 @@ export function ActivityLevels({
       </button>
 
       <div className="t-card mb-3">
-        <p className="t-micro mb-2">Daily energy use</p>
+        <p className="t-micro mb-2">Daily calorie budget</p>
         {resting === null ? (
           <button type="button" className="text-sm text-accent" onClick={onOpenProfile}>
             {personalNumber(missing).label}
@@ -248,6 +248,7 @@ export function ActivityLevels({
             </div>
           </div>
         )}
+        <p className="t-note mt-2">Estimated. Real use can vary.</p>
 
         <p className="t-note mt-3">Estimate. Real use can differ by a few hundred cal.</p>
       </div>

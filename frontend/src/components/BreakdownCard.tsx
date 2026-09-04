@@ -96,13 +96,13 @@ export function BreakdownCard({
               transition={{ duration: 0.18 }}
             >
               <div className="mt-3">
-                <Line label="At rest" value={calText(energy.resting)} />
+                <Line label="BMR" value={calText(energy.resting)} />
                 <Line
                   label="Your day"
                   note={LEVEL_LABEL[energy.level]}
                   value={added(energy.activity)}
                 />
-                <Line label="Exercise" value={added(energy.exercise)} />
+                <Line label="Exercise (Workouts)" value={added(energy.exercise)} />
                 <Line label="Weight goal adjustment" value={signed(energy.adjustment)} />
                 <Line label="Budget" value={`${calText(energy.budget)} cal`} total />
               </div>

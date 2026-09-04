@@ -45,6 +45,12 @@ const QUESTIONS: { q: string; a: string }[] = [
       'estimates. It is not medical advice.',
   },
   {
+    q: 'What is BMR?',
+    a:
+      'Your BMR or Basal Metabolic Rate is the estimated amount of calories your body ' +
+      'burns daily, based on age, gender, height, weight, and body fat percentage.',
+  },
+  {
     q: 'What does Mark day as complete do?',
     a:
       "It locks that day's journal so nothing changes by accident, and the Dashboard " +
