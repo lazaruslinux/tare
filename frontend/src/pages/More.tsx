@@ -32,6 +32,8 @@ import { AdminUploads } from './AdminUploads'
 import { AdminUsers } from './AdminUsers'
 import { Feedback, FeedbackLog } from './Feedback'
 import { Fitness } from './Fitness'
+import { Members } from './Members'
+import { MemberView } from '../components/MemberView'
 import { Profile } from './Profile'
 import { Sharing } from './Sharing'
 import { Submissions } from './Submissions'
@@ -49,6 +51,7 @@ export type Screen =
   | 'fitness'
   | 'sync'
   | 'sharing'
+  | 'members'
   | 'submissions'
   | 'display'
   | 'feedback'
@@ -159,6 +162,8 @@ export function More({
   // nothing after that: it is a line on a row, not a live figure.
   const [sync, setSync] = useState<SyncKey | null>(null)
   const [measuring, setMeasuring] = useState(false)
+  // Which member's profile is open on the Members screen, if any.
+  const [member, setMember] = useState<number | null>(null)
   // What was just done, said on the list this screen returns to. It lives here
   // rather than on the screen that did it, because that screen has closed.
   const [said, setSaid] = useState('')
@@ -197,6 +202,7 @@ export function More({
   // What was said about the last save belongs to the screen it was said on.
   const go = (next: Screen) => {
     setAccountError('')
+    setMember(null)
     setScreen(next)
   }
 
@@ -337,6 +343,14 @@ export function More({
         onBack={() => go(null)}
         onOpenSync={() => go('sync')}
       />
+    )
+  }
+
+  if (screen === 'members') {
+    return member === null ? (
+      <Members me={me.id} onBack={() => go(null)} onOpen={setMember} />
+    ) : (
+      <MemberView userId={member} back="Members" onBack={() => setMember(null)} />
     )
   }
 
@@ -548,6 +562,7 @@ export function More({
           note={syncNote(sync)}
           onOpen={() => go('sync')}
         />
+        <Row label="Members" icon={Users} onOpen={() => go('members')} />
         <Row
           label="Sharing"
           icon={Eye}
@@ -570,7 +585,7 @@ export function More({
               onOpen={() => go('queue')}
             />
             <Row label="Invites" icon={Mail} onOpen={() => go('invites')} />
-            <Row label="Members" icon={Users} onOpen={() => go('users')} />
+            <Row label="Member accounts" icon={Users} onOpen={() => go('users')} />
             <Row label="Uploads" icon={Upload} onOpen={() => go('uploads')} />
             <Row label="Feedback log" icon={ScrollText} onOpen={() => go('feedbacklog')} />
           </div>

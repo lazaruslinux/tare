@@ -24,6 +24,9 @@ export type Me = {
   // to the one screen that does.
   birthdate: string | null
   location: string | null
+  // The picture other members see beside this account's name, or null for its
+  // initial.
+  avatar_url: string | null
   // What this account holds back on a workout other members can see, and the
   // three facts it lets them see about the person.
   feed_hidden: string[]
@@ -819,9 +822,26 @@ export type FeedPage = { items: FeedRow[]; next_cursor: string | null }
 export type MemberView = {
   display_name: string
   member_since: string
+  avatar_url: string | null
+  // What they have offered the shared database, and how much of it was taken.
+  // Shown for everybody: it is work done for the group rather than a fact
+  // about the person.
+  submitted: number
+  approved: number
   age?: number
   sex?: Sex
   location?: string
+}
+
+// One member in the list of them. The same few things a profile leads with, so
+// a row and the page it opens cannot disagree.
+export type MemberRow = {
+  id: number
+  display_name: string
+  avatar_url: string | null
+  member_since: string
+  submitted: number
+  approved: number
 }
 
 // The few figures the wide layout keeps beside whatever is on screen. The

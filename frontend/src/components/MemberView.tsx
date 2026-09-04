@@ -2,6 +2,7 @@ import { useEffect, useState } from 'react'
 
 import { api, errorText, type MemberView as Member } from '../api'
 import { useTopBar } from '../hooks/useTopBar'
+import { Avatar } from './Avatar'
 
 // One member, as other members see them. Whatever is not here is not being
 // withheld politely: it never left their account.
@@ -58,7 +59,15 @@ export function MemberView({
 
   return (
     <div className="t-card mb-3">
-      <p className="t-micro mb-1">Member since {monthText(member.member_since)}</p>
+      <div className="mb-3 flex items-center gap-3">
+        <Avatar url={member.avatar_url} name={member.display_name} size="page" />
+        <div className="min-w-0">
+          <p className="truncate text-base font-semibold">{member.display_name}</p>
+          <p className="t-micro mt-1">Member since {monthText(member.member_since)}</p>
+        </div>
+      </div>
+      <Fact label="Foods submitted" value={String(member.submitted)} />
+      <Fact label="Foods approved" value={String(member.approved)} />
       {shared ? (
         <>
           {member.age !== undefined && <Fact label="Age" value={String(member.age)} />}

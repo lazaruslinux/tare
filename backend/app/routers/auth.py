@@ -17,7 +17,7 @@ from pydantic import BaseModel
 from sqlalchemy import func, or_, select, update
 from sqlalchemy.orm import Session
 
-from app import mail, models, security, throttle
+from app import mail, models, profiles, security, throttle
 from app.config import settings
 from app.db import get_db, rows_touched
 from app.deps import require_user
@@ -121,6 +121,9 @@ def me_payload(user: models.User) -> dict[str, object]:
         # it to the one screen that asks (decision 21).
         "birthdate": None if user.birthdate is None else user.birthdate.isoformat(),
         "location": user.location,
+        # The picture other members are shown beside this account's name, or
+        # null when it has none.
+        "avatar_url": profiles.avatar_url(user),
         # What this account shows other members, and what it holds back on a
         # workout they can see.
         "feed_hidden": sorted(user.feed_hidden or []),

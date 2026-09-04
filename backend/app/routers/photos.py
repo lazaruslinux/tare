@@ -20,6 +20,7 @@ from __future__ import annotations
 
 import datetime as dt
 import os
+import re
 
 from fastapi import APIRouter, Depends, File, Form, HTTPException, UploadFile, status
 from fastapi.responses import FileResponse
@@ -37,6 +38,12 @@ MISSING_PHOTO = "There is no such photo."
 NO_FILE = "Choose a picture to attach."
 TOO_LARGE = "A photo must be at most 10 MB."
 BAD_PURPOSE = "A photo is of the front or of the label."
+
+# What a stored file is named, which is the only shape this router will look
+# for on disk. An avatar is read by its file name rather than by an id, so the
+# name in the address is held to the pattern the server writes before anything
+# is joined to a path with it.
+STORED_NAME = re.compile(r"^[0-9a-f]{32}\.webp$")
 
 # How long an upload that was never sent with anything is kept. Long enough
 # that somebody who filled a form in, went away, and came back still has their
@@ -239,6 +246,34 @@ def upload_photo(
     db.add(row)
     db.commit()
     return {"photo_id": row.id}
+
+
+@router.get("/avatar/{name}")
+def read_avatar(
+    name: str,
+    db: Session = Depends(get_db),
+    user: models.User = Depends(require_user),
+) -> FileResponse:
+    """One member's picture of themselves.
+
+    Every signed-in member may read any of them: an avatar is what somebody
+    chose to be seen as, and it is shown beside their name wherever they turn
+    up. A name that is not an account's current picture answers the same as a
+    name that was never anybody's.
+    """
+    if STORED_NAME.match(name) is None:
+        raise HTTPException(status.HTTP_404_NOT_FOUND, MISSING_PHOTO)
+    owner = db.execute(
+        select(models.User.id).where(models.User.avatar_path == name)
+    ).scalars().first()
+    stored = photos.path_for(name)
+    if owner is None or not os.path.isfile(stored):
+        raise HTTPException(status.HTTP_404_NOT_FOUND, MISSING_PHOTO)
+    return FileResponse(
+        stored,
+        media_type=photos.MEDIA_TYPE,
+        headers={"Cache-Control": "private, max-age=3600"},
+    )
 
 
 @router.get("/{photo_id}.webp")

@@ -5,11 +5,11 @@ from __future__ import annotations
 
 import datetime as dt
 
-from fastapi import APIRouter, Depends, HTTPException, status
+from fastapi import APIRouter, Depends, File, HTTPException, UploadFile, status
 from pydantic import BaseModel
 from sqlalchemy.orm import Session
 
-from app import clock, models, security, throttle
+from app import clock, models, photos, profiles, security, throttle
 from app.config import settings
 from app.db import get_db
 from app.deps import require_user
@@ -123,6 +123,59 @@ def update_account(
 
     db.commit()
     return me_payload(user)
+
+
+# A picture of a person, not a shelf: smaller than a food photo, because the
+# screen that sends one has already framed it to the square it will be shown in.
+AVATAR_MAX_BYTES = 5 * 1024 * 1024
+NO_AVATAR_FILE = "Choose a picture."
+AVATAR_TOO_LARGE = "A picture must be at most 5 MB."
+
+
+@router.post("/account/avatar")
+def set_avatar(
+    file: UploadFile = File(default=None),
+    db: Session = Depends(get_db),
+    user: models.User = Depends(require_user),
+) -> dict[str, object]:
+    """Take the picture this account is shown by, and answer with its address.
+
+    What arrives is thrown away: what is stored is a square webp this server
+    built, carrying nothing the camera wrote into it. The picture that was
+    there goes at the same moment, so an account is never holding two.
+    """
+    if file is None:
+        raise HTTPException(status.HTTP_400_BAD_REQUEST, NO_AVATAR_FILE)
+    raw = file.file.read(AVATAR_MAX_BYTES + 1)
+    if not raw:
+        raise HTTPException(status.HTTP_400_BAD_REQUEST, NO_AVATAR_FILE)
+    if len(raw) > AVATAR_MAX_BYTES:
+        raise HTTPException(status.HTTP_413_CONTENT_TOO_LARGE, AVATAR_TOO_LARGE)
+
+    try:
+        name = photos.store(raw, "avatar")
+    except photos.RejectedImage as refused:
+        raise HTTPException(status.HTTP_400_BAD_REQUEST, str(refused)) from None
+
+    was = user.avatar_path
+    user.avatar_path = name
+    db.commit()
+    # The row first, the file after: a file left behind is a tidying job, a row
+    # pointing at a file that is gone is a broken picture on somebody's screen.
+    if was:
+        photos.remove(was)
+    return {"avatar_url": profiles.avatar_url(user)}
+
+
+@router.delete("/account/avatar", status_code=status.HTTP_204_NO_CONTENT)
+def clear_avatar(
+    db: Session = Depends(get_db), user: models.User = Depends(require_user)
+) -> None:
+    was = user.avatar_path
+    user.avatar_path = None
+    db.commit()
+    if was:
+        photos.remove(was)
 
 
 # Where a phone posts its export. Handed back with a freshly minted key so the

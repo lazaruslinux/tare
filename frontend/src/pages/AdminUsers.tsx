@@ -26,7 +26,7 @@ export function AdminUsers({ onBack }: { onBack: () => void }) {
   const [people, setPeople] = useState<AdminUser[] | null>(null)
   const [error, setError] = useState('')
 
-  useTopBar({ title: 'Members', back: { label: 'More', onBack } })
+  useTopBar({ title: 'Member accounts', back: { label: 'More', onBack } })
 
   useEffect(() => {
     let alive = true

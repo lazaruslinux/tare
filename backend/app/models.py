@@ -80,6 +80,10 @@ class User(Base):
     birthdate: Mapped[dt.date | None] = mapped_column(Date, nullable=True)
     # Free text, "City, State". Never geocoded and never looked up.
     location: Mapped[str | None] = mapped_column(String(80), nullable=True)
+    # The file name of the picture other members see beside this account's
+    # name, or null for the account's initial. The name is the server's own,
+    # like every other stored picture.
+    avatar_path: Mapped[str | None] = mapped_column(String(128), nullable=True)
     is_admin: Mapped[bool] = mapped_column(Boolean, nullable=False, default=False)
     units: Mapped[str] = mapped_column(String(16), nullable=False, default="imperial")
     timezone: Mapped[str] = mapped_column(String(64), nullable=False, default="UTC")

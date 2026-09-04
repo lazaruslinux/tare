@@ -19,12 +19,13 @@ import binascii
 import datetime as dt
 
 from fastapi import APIRouter, Depends, HTTPException, status
-from sqlalchemy import and_, or_, select
+from sqlalchemy import and_, func, or_, select
 from sqlalchemy.orm import Session
 
 from app import clock, health, models
 from app.db import get_db
 from app.deps import require_user
+from app.profiles import avatar_url, submission_counts
 from app.routers.admin import waiting_items
 from app.routers.diary import exercise_credit, fill_auto_logs, total
 from app.routers.fitness import day_exercise, kept_back, steps_on, workouts_on
@@ -325,6 +326,50 @@ def read_today(
     return figures
 
 
+# The most rows the members list ever answers with. An instance is one small
+# invited group, so this is a ceiling rather than a page: nothing pages past it,
+# and reaching it would mean an instance far larger than tare is for.
+MEMBERS_CAP = 500
+
+
+@router.get("/members")
+def read_members(
+    db: Session = Depends(get_db),
+    user: models.User = Depends(require_user),
+) -> dict[str, object]:
+    """Everybody in this Tare, by the name they are shown under.
+
+    The whole list in one answer: an instance is a small invited group, and a
+    list nobody has to page through is a list somebody can read. Capped at
+    MEMBERS_CAP rows all the same, so one request can never be the whole of a
+    much larger table.
+
+    An administrator is shown exactly what anybody else is shown. This is the
+    community list, not the account list.
+    """
+    shown = func.coalesce(models.User.display_name, models.User.username)
+    members = list(
+        db.execute(
+            select(models.User)
+            .order_by(func.lower(shown), models.User.username)
+            .limit(MEMBERS_CAP)
+        ).scalars()
+    )
+    counts = submission_counts(db, [member.id for member in members])
+    return {
+        "items": [
+            {
+                "id": member.id,
+                "display_name": member.display_name or member.username,
+                "avatar_url": avatar_url(member),
+                "member_since": member.created_at.strftime("%Y-%m"),
+                **counts[member.id],
+            }
+            for member in members
+        ]
+    }
+
+
 @router.get("/members/{user_id}")
 def read_member(
     user_id: int,
@@ -341,6 +386,11 @@ def read_member(
     shown: dict[str, object] = {
         "display_name": member.display_name or member.username,
         "member_since": member.created_at.strftime("%Y-%m"),
+        "avatar_url": avatar_url(member),
+        # What they have given the shared database, shown for everybody. It is
+        # a count of work done for the group rather than a fact about them, so
+        # there is nothing here to keep private.
+        **submission_counts(db, [member.id])[member.id],
     }
     if member.share_age and member.birthdate is not None:
         # Counted against the date in UTC: an age in whole years is not worth

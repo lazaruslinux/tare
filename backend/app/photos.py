@@ -35,8 +35,15 @@ Image.MAX_IMAGE_PIXELS = MAX_PIXELS
 # small print somebody has to read, so it keeps its detail; a front is a pack
 # on a shelf at thumbnail size and does not. Beyond this is bytes nobody looks
 # at.
-MAX_EDGES = {"front": 1200, "label": 1600}
+MAX_EDGES = {"front": 1200, "label": 1600, "avatar": 512}
 QUALITY = 78
+
+# What is stored as a square, cropped to the middle of whatever arrived. An
+# avatar is drawn in a square box everywhere it appears, so the shape is
+# settled once here rather than left to every screen that shows one. The
+# member frames their own picture before it is sent; this is the guard for
+# everything that did not come from that screen.
+SQUARE = ("avatar",)
 
 SUFFIX = ".webp"
 MEDIA_TYPE = "image/webp"
@@ -111,9 +118,19 @@ def _fitted(image: Image.Image, max_edge: int) -> Image.Image:
     )
 
 
-def encode(raw: bytes, max_edge: int) -> bytes:
+def _centred(image: Image.Image) -> Image.Image:
+    """The largest square in the middle of the picture."""
+    width, height = image.size
+    edge = min(width, height)
+    left = (width - edge) // 2
+    top = (height - edge) // 2
+    return image.crop((left, top, left + edge, top + edge))
+
+
+def encode(raw: bytes, max_edge: int, square: bool = False) -> bytes:
     """The webp this server will serve, built from the bytes that arrived."""
-    fitted = _fitted(_decoded(raw), max_edge)
+    decoded = _decoded(raw)
+    fitted = _fitted(_centred(decoded) if square else decoded, max_edge)
     # Pasted onto a blank canvas rather than converted: a converted image keeps
     # its source's info dictionary and Pillow writes parts of it back out. A
     # fresh canvas has nothing to carry, so the camera model, the timestamp and
@@ -132,7 +149,7 @@ def store(raw: bytes, purpose: str) -> str:
     before the row exists, so that an upload this server will not store never
     leaves an id behind.
     """
-    encoded = encode(raw, MAX_EDGES[purpose])
+    encoded = encode(raw, MAX_EDGES[purpose], purpose in SQUARE)
     folder = directory()
     os.makedirs(folder, exist_ok=True)
     name = f"{secrets.token_hex(16)}{SUFFIX}"

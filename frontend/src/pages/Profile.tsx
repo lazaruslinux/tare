@@ -1,8 +1,10 @@
-import { useEffect, useState, type FormEvent } from 'react'
+import { useEffect, useRef, useState, type ChangeEvent, type FormEvent } from 'react'
 import { CircleHelp } from 'lucide-react'
 import { Sheet } from '../components/Sheet'
 
-import { api, errorText, type Me, type Profile as ProfileRow, type Sex } from '../api'
+import { api, errorText, uploadFile, type Me, type Profile as ProfileRow, type Sex } from '../api'
+import { Avatar } from '../components/Avatar'
+import { AvatarCrop } from '../components/AvatarCrop'
 import { dayLabel, today } from '../lib/day'
 import { SaveMarks, useSavedChip } from '../components/SaveMarks'
 import { heightParts, partsToCm, weightText } from '../lib/units'
@@ -41,6 +43,13 @@ export function Profile({
   const [error, setError] = useState('')
   const [saved, markSaved] = useSavedChip()
   const [saving, setSaving] = useState(false)
+  // The picture being framed, the request carrying it, and what went wrong.
+  const [picked, setPicked] = useState<File | null>(null)
+  const [sending, setSending] = useState(false)
+  const [pictureError, setPictureError] = useState('')
+  // The file input is reset after every pick, so choosing the same file twice
+  // in a row still opens the framing sheet the second time.
+  const chooser = useRef<HTMLInputElement>(null)
 
   useEffect(() => {
     let alive = true
@@ -63,6 +72,41 @@ export function Profile({
       alive = false
     }
   }, [])
+
+  const choose = (event: ChangeEvent<HTMLInputElement>) => {
+    const file = event.target.files?.[0] ?? null
+    event.target.value = ''
+    setPictureError('')
+    if (file !== null) setPicked(file)
+  }
+
+  const sendPicture = async (blob: Blob) => {
+    setSending(true)
+    setPictureError('')
+    try {
+      const answer = await uploadFile<{ avatar_url: string }>(
+        '/account/avatar',
+        new File([blob], 'avatar.jpg', { type: blob.type })
+      )
+      onChange({ ...me, avatar_url: answer.avatar_url })
+      setPicked(null)
+    } catch (failure) {
+      setPictureError(errorText(failure))
+    }
+    setSending(false)
+  }
+
+  const removePicture = async () => {
+    setSending(true)
+    setPictureError('')
+    try {
+      await api('/account/avatar', { method: 'DELETE' })
+      onChange({ ...me, avatar_url: null })
+    } catch (failure) {
+      setPictureError(errorText(failure))
+    }
+    setSending(false)
+  }
 
   const centimetres = (): number | null => {
     if (metric) return asNumber(heightCm)
@@ -114,6 +158,52 @@ export function Profile({
 
   return (
     <>
+    <div className="t-card mb-3">
+      <p className="t-micro mb-3">Avatar</p>
+      <div className="flex items-center gap-4">
+        <Avatar url={me.avatar_url} name={me.display_name || me.username} size="page" />
+        <div className="flex min-w-0 flex-col items-start gap-2">
+          <label className="t-btn cursor-pointer">
+            Choose a photo
+            <input
+              ref={chooser}
+              type="file"
+              accept="image/*"
+              className="hidden"
+              onChange={choose}
+            />
+          </label>
+          {me.avatar_url !== null && (
+            <button
+              type="button"
+              className="t-btn"
+              disabled={sending}
+              onClick={removePicture}
+            >
+              Remove
+            </button>
+          )}
+        </div>
+      </div>
+      {pictureError !== '' && picked === null && <p className="t-error mt-3">{pictureError}</p>}
+      <p className="mt-3 text-xs text-muted">
+        Other members see your avatar and display name.
+      </p>
+    </div>
+
+    {picked !== null && (
+      <AvatarCrop
+        file={picked}
+        busy={sending}
+        failed={pictureError}
+        onCancel={() => {
+          setPicked(null)
+          setPictureError('')
+        }}
+        onSave={sendPicture}
+      />
+    )}
+
     <form className="t-card mb-3" onSubmit={save}>
       <p className="t-label">Gender</p>
       <div className="mb-1 flex gap-3">
