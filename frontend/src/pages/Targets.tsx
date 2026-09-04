@@ -3,7 +3,7 @@ import { useCallback, useEffect, useState } from 'react'
 
 import { api, errorText, type Me, type Profile as ProfileRow, type Targets as TargetsRow } from '../api'
 import { useTopBar } from '../hooks/useTopBar'
-import { DISCLAIMER, GOAL_LABEL, LEVEL_LABEL, calText, dateText } from '../lib/targets'
+import { GOAL_LABEL, LEVEL_LABEL, calText, dateText } from '../lib/targets'
 import { ActivityLevels } from './ActivityLevels'
 import { DailyBudget } from './DailyBudget'
 import { WeightGoal } from './WeightGoal'
@@ -97,11 +97,6 @@ export function Targets({
   const saveProfile: Save = (body) => send('/health/profile', body)
   const saveTargets: Save = (body) => send('/health/targets', body)
 
-  const gotIt = async () => {
-    await api('/health/disclaimer', { method: 'POST' }).catch(() => undefined)
-    await reload()
-  }
-
   if (targets === null) {
     return error ? <p className="t-error mb-3">{error}</p> : null
   }
@@ -167,18 +162,6 @@ export function Targets({
   return (
     <>
       {error && <p className="t-error mb-3">{error}</p>}
-
-      {!targets.disclaimer_seen && (
-        <div className="t-card mb-3">
-          <p className="t-note">{DISCLAIMER}</p>
-          <button type="button" className="mt-2 block text-sm text-accent" onClick={onOpenGuide}>
-            More in the Guide
-          </button>
-          <button type="button" className="t-btn t-btn-primary mt-3" onClick={gotIt}>
-            Got it
-          </button>
-        </div>
-      )}
 
       <div className="t-card mb-3">
         <Row label="Weight goal" value={weightValue} onOpen={() => setView('weight')} />
