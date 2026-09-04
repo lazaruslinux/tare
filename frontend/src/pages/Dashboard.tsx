@@ -135,6 +135,14 @@ function Rings({ rings }: { rings: RingSpec[] }) {
   )
 }
 
+// A date as "Aug 31", for the span a week is named by.
+const monthDay = (iso: string): string =>
+  new Date(`${iso}T00:00:00Z`).toLocaleDateString(undefined, {
+    timeZone: 'UTC',
+    month: 'short',
+    day: 'numeric',
+  })
+
 // How many dates fit under a line on a phone without touching each other.
 const MAX_TICKS = 5
 
@@ -911,19 +919,27 @@ export function Dashboard({
         <Rings rings={rings} />
       </button>
 
+      {/* One heading for the week, over every card that reads it, so the
+          cards themselves do not each say it again. */}
+      <div className="mb-2 mt-1 flex items-baseline justify-between px-1">
+        <span className="text-base font-semibold tracking-tight">This week</span>
+        <span className="t-nums text-xs text-muted">
+          {monthDay(mondayIso)} to {monthDay(weekDates[WEEK - 1])}
+        </span>
+      </div>
+
       <div className="t-card mb-3">
         <CardHead label="Food" onOpen={onOpenJournal} onAdd={() => setPicking(true)} />
         {day !== null && <p className="t-nums mb-2 text-xs text-muted">{leftToday}</p>}
-        <p className="t-micro mb-2">This week</p>
         {loggedWeek.length === 0 ? (
           <p className="text-base font-semibold tracking-tight">Log a day to see your week.</p>
         ) : (
           <p className="text-base font-semibold tracking-tight">
-            Within calorie budget {underTarget} of {elapsed} days
+            Within calorie budget {underTarget} of {WEEK} days
           </p>
         )}
         <p className="mb-3 text-xs text-muted">
-          Completed {completedWeek} of {elapsed} days
+          Completed {completedWeek} of {WEEK} days
         </p>
         <DayBars
           bars={intake}
@@ -952,11 +968,10 @@ export function Dashboard({
           onOpen={onOpenFitness}
           onAdd={() => setExercising(true)}
         />
-        <p className="t-micro mb-2">This week</p>
         {fitness !== null && fitness.connected ? (
           <>
             <p className="text-base font-semibold tracking-tight">
-              Step goal met {goalMet} of {elapsed} days
+              Step goal met {goalMet} of {WEEK} days
             </p>
             <p className="mb-3 text-xs text-muted">{sessionsLine}</p>
             <DayBars
@@ -969,7 +984,7 @@ export function Dashboard({
         ) : (
           <>
             <p className="text-base font-semibold tracking-tight">
-              Exercise on {movedDays} of {elapsed} days
+              Exercise on {movedDays} of {WEEK} days
             </p>
             <p className="text-xs text-muted">Sync a device to see steps here.</p>
           </>
