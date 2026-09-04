@@ -68,6 +68,10 @@ export function shiftDay(iso: string, days: number): string {
   return at.toISOString().slice(0, 10)
 }
 
+// Which day of the week a date is, Sunday nought. Read as UTC for the reason
+// shiftDay is: a calendar day here is always twenty-four hours long.
+export const weekday = (iso: string): number => new Date(`${iso}T00:00:00Z`).getUTCDay()
+
 export function dayLabel(iso: string, todayIso: string): string {
   if (iso === todayIso) return 'Today'
   if (iso === shiftDay(todayIso, -1)) return 'Yesterday'

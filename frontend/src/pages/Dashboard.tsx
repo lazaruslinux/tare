@@ -25,7 +25,7 @@ import { MemberView } from '../components/MemberView'
 import { WorkoutDetails } from '../components/WorkoutDetails'
 import { useTopBar } from '../hooks/useTopBar'
 import { useWideLayout } from '../hooks/useWideLayout'
-import { dayLabel, slotByTime, today } from '../lib/day'
+import { dayLabel, shiftDay, slotByTime, today, weekday } from '../lib/day'
 import { personalNumber, calText, dateText } from '../lib/targets'
 import { round1, weightIn, weightText, weightUnit } from '../lib/units'
 
@@ -56,6 +56,83 @@ function rememberedWindow(): number {
   } catch {
     return WINDOWS[0].days
   }
+}
+
+// The ring, drawn by hand: a circle whose stroke is dashed to the share of the
+// day that has been consumed. No library, and nothing that moves.
+const RADIUS = 42
+const ROUND = 2 * Math.PI * RADIUS
+
+// What one ring is filled to, what stands in its middle, and the words under
+// that.
+type RingSpec = { key: string; filled: number; centre: string; caption: string }
+
+function Ring({ filled, small }: { filled: number; small?: boolean }) {
+  const share = Math.min(Math.max(filled, 0), 1)
+  return (
+    <svg
+      viewBox="0 0 100 100"
+      className={`${small ? 'h-24 w-24' : 'h-28 w-28'} -rotate-90`}
+      aria-hidden="true"
+    >
+      <circle
+        cx="50"
+        cy="50"
+        r={RADIUS}
+        fill="none"
+        stroke="var(--line-strong)"
+        strokeWidth="8"
+      />
+      <circle
+        cx="50"
+        cy="50"
+        r={RADIUS}
+        fill="none"
+        stroke="var(--accent)"
+        strokeWidth="8"
+        // A round cap on nothing is still a dot, and a ring with no answer in
+        // it has to read as empty.
+        strokeLinecap={share === 0 ? 'butt' : 'round'}
+        strokeDasharray={`${share * ROUND} ${ROUND}`}
+      />
+    </svg>
+  )
+}
+
+// A row of them, side by side and the same size. Three rings do not fit a
+// phone at the size two of them wear, so the whole row steps down together
+// rather than the last one running off the edge of the card.
+function Rings({ rings }: { rings: RingSpec[] }) {
+  const tight = rings.length > 2
+  return (
+    // Spread across a phone, clustered on a wide card: three rings a foot
+    // apart read as three cards.
+    <div
+      className={`flex items-center ${
+        tight ? 'justify-between gap-2 min-[900px]:justify-start min-[900px]:gap-12' : 'gap-4'
+      }`}
+    >
+      {rings.map((ring) => (
+        <div key={ring.key} className="relative shrink-0">
+          <Ring filled={ring.filled} small={tight} />
+          <div className={`absolute inset-0 flex flex-col items-center justify-center ${tight ? 'px-3' : 'px-2'}`}>
+            <span
+              className={`t-nums font-semibold leading-none ${tight ? 'text-xl' : 'text-2xl'}`}
+            >
+              {ring.centre}
+            </span>
+            <span
+              className={`text-center leading-tight text-muted ${
+                tight ? 'max-w-[3.75rem] text-[10px]' : 'text-xs'
+              }`}
+            >
+              {ring.caption}
+            </span>
+          </div>
+        </div>
+      ))}
+    </div>
+  )
 }
 
 // How many dates fit under a line on a phone without touching each other.
@@ -320,6 +397,7 @@ export function Dashboard({
   refresh,
   onOpenJournal,
   onOpenFitness,
+  onOpenTargets,
   onOpenProfile,
   onChanged,
   start,
@@ -335,6 +413,8 @@ export function Dashboard({
   onOpenJournal: () => void
   // The Fitness screen, which is where the Exercise card leads.
   onOpenFitness: () => void
+  // Targets, which is where the goals the rings are read against are set.
+  onOpenTargets: () => void
   onOpenProfile: () => void
   // Which screen to open on. Only ever set by something outside this tab
   // sending somebody straight to it, and handed back the moment it is read.
@@ -530,33 +610,49 @@ export function Dashboard({
     targets === null || targets.projection === null
       ? ''
       : ` · Goal ${dateText(targets.projection.date)}`
-  const week = run.slice(-WEEK)
+  // The week somebody is standing in, Monday first, the way a week is read.
+  // Sunday closes the week that began six days ago rather than opening one.
+  const elapsed = ((weekday(todayIso) + 6) % 7) + 1
+  const mondayIso = shiftDay(todayIso, -(elapsed - 1))
+  // The whole frame, Monday to Sunday. The days still to come are drawn as
+  // gaps, so the letters read as the week and not as however far into it the
+  // member is.
+  const weekDates = Array.from({ length: WEEK }, (_, index) => shiftDay(mondayIso, index))
+  const week = run.filter((row) => row.date >= mondayIso)
+  // What today is read against, which is what a day nobody has reached yet is
+  // drawn against as well.
+  const weekBudget = run.length === 0 ? 0 : run[run.length - 1].budget
 
   // The week as one picture: what was eaten against the day's number, and the
   // line under it. The bars and the sentences above them read the same rows.
-  const intake: Bar[] = week.map((row) => ({
-    date: row.date,
-    value: row.calories,
-    target: row.budget,
-    has: row.logged,
-  }))
+  const intake: Bar[] = weekDates.map((date) => {
+    const row = week.find((one) => one.date === date)
+    return row === undefined
+      ? { date, value: 0, target: weekBudget, has: false }
+      : { date, value: row.calories, target: row.budget, has: row.logged }
+  })
   const loggedWeek = week.filter((row) => row.logged)
   const underTarget = loggedWeek.filter((row) => row.calories <= row.budget).length
   const completedWeek = week.filter((row) => row.completed).length
-  const weekBudget = week.length === 0 ? 0 : week[week.length - 1].budget
   const intakeFooter =
     loggedWeek.length === 0
       ? 'Log a few days to see them here.'
       : `Average ${calText(barsAverage(intake))} cal a day · budget ${calText(weekBudget)}`
 
-  // The same week in steps, when a phone is sending them.
-  const stepGoal = fitness?.goals.steps ?? 0
-  const stepBars: Bar[] = (fitness?.week ?? []).map((row) => ({
-    date: row.date,
-    value: row.steps ?? 0,
-    target: stepGoal,
-    has: row.steps !== null,
-  }))
+  // The same week in steps, when a phone is sending them. The goal is the one
+  // set on Activity goals; the fitness answer carries the same figure and
+  // stands in until targets arrive.
+  const stepGoal = targets?.step_goal ?? fitness?.goals.steps ?? 0
+  const stepWeek = (fitness?.week ?? []).filter((row) => row.date >= mondayIso)
+  const stepBars: Bar[] = weekDates.map((date) => {
+    const row = stepWeek.find((one) => one.date === date)
+    return {
+      date,
+      value: row?.steps ?? 0,
+      target: stepGoal,
+      has: row !== undefined && row.steps !== null,
+    }
+  })
   const goalMet = stepBars.filter((row) => row.has && row.value >= stepGoal).length
   const stepsFooter =
     stepBars.every((row) => !row.has)
@@ -567,25 +663,40 @@ export function Dashboard({
     sessions === 0 ? 'No workouts' : sessions === 1 ? '1 workout' : `${sessions} workouts`
   const movedDays = week.filter((row) => row.exercise_kcal > 0).length
 
-  // Today in one line, in the words somebody would use out loud. Each part
-  // appears only when there is an answer for it.
-  const todayParts: string[] = []
-  if (day !== null) {
-    todayParts.push(
-      day.remaining_calories < 0
-        ? `${calText(Math.abs(day.remaining_calories))} cal over today`
-        : `${calText(day.remaining_calories)} cal left today`
-    )
-    const walked = fitness?.today.steps ?? null
-    if (fitness !== null && fitness.connected && walked !== null) {
-      todayParts.push(`${calText(walked)} steps`)
-    }
-    if (day.exercise.length > 0) {
-      todayParts.push(
-        day.exercise.length === 1 ? '1 workout' : `${day.exercise.length} workouts`
-      )
-    }
-  }
+  // Today as three rings: what was walked, what is left to eat, and what was
+  // worked. The row is always three, so a phone that sends nothing shows an
+  // empty steps ring rather than moving the other two.
+  const steps = day?.steps ?? null
+  const remaining = day?.remaining_calories ?? 0
+  const ringBudget = (day?.budget.calories ?? 0) + (day?.exercise_kcal ?? 0)
+  const minutesGoal = day?.exercise_minutes_goal ?? 0
+  const rings: RingSpec[] = [
+    {
+      key: 'steps',
+      filled: steps === null || stepGoal <= 0 ? 0 : steps / stepGoal,
+      centre: steps === null ? '\u2013' : calText(steps),
+      caption: steps === null ? 'Sync a device' : `of ${calText(stepGoal)} steps`,
+    },
+    {
+      key: 'calories',
+      filled: ringBudget <= 0 ? 0 : (day?.totals.calories ?? 0) / ringBudget,
+      centre: day === null ? '\u2013' : calText(Math.abs(remaining)),
+      caption: remaining < 0 ? 'over' : 'left',
+    },
+    {
+      key: 'exercise',
+      filled: minutesGoal <= 0 ? 0 : (day?.exercise_minutes ?? 0) / minutesGoal,
+      centre: day === null ? '\u2013' : String(day.exercise_minutes),
+      caption: `of ${minutesGoal} min`,
+    },
+  ]
+
+  // The same calories, said once more in small type on the card that is about
+  // eating. The big version of this number lives in the Journal.
+  const leftToday =
+    remaining < 0
+      ? `${calText(Math.abs(remaining))} cal over today`
+      : `${calText(remaining)} cal left today`
 
   const snackbar = pending !== null && (
     <div className="pointer-events-none fixed inset-x-0 bottom-24 z-30 px-4">
@@ -784,33 +895,43 @@ export function Dashboard({
     <>
       {error && <p className="t-error mb-3">{error}</p>}
 
-      {!wide && day !== null && todayParts.length > 0 && (
-        <button
-          type="button"
-          className="t-row t-card mb-3 min-h-11 w-full text-left"
-          onClick={onOpenJournal}
-        >
-          <span className="t-nums min-w-0 flex-1 truncate text-sm">
-            {todayParts.join(' · ')}
-          </span>
-          <ChevronRight className="h-4 w-4 shrink-0 text-muted" strokeWidth={2} />
-        </button>
-      )}
+      {/* The whole card is the way into the goals these are read against, so
+          the head is drawn rather than a CardHead: a button inside a button is
+          not a thing a screen reader can hand anybody. */}
+      <button
+        type="button"
+        className="t-card mb-3 block w-full text-left"
+        aria-label="Today's rings. Opens activity goals."
+        onClick={onOpenTargets}
+      >
+        <span className="t-micro mb-2 flex items-center gap-1">
+          Today
+          <ChevronRight className="h-3.5 w-3.5" strokeWidth={2.5} />
+        </span>
+        <Rings rings={rings} />
+      </button>
 
       <div className="t-card mb-3">
         <CardHead label="Food" onOpen={onOpenJournal} onAdd={() => setPicking(true)} />
-        <p className="t-micro mb-2">Last {WEEK} days</p>
+        {day !== null && <p className="t-nums mb-2 text-xs text-muted">{leftToday}</p>}
+        <p className="t-micro mb-2">This week</p>
         {loggedWeek.length === 0 ? (
           <p className="text-base font-semibold tracking-tight">Log a day to see your week.</p>
         ) : (
           <p className="text-base font-semibold tracking-tight">
-            Within calorie budget {underTarget} of {WEEK} days
+            Within calorie budget {underTarget} of {elapsed} days
           </p>
         )}
         <p className="mb-3 text-xs text-muted">
-          Completed {completedWeek} of {WEEK} days
+          Completed {completedWeek} of {elapsed} days
         </p>
-        <DayBars bars={intake} footer={intakeFooter} todayIso={todayIso} warnOver />
+        <DayBars
+          bars={intake}
+          footer={intakeFooter}
+          todayIso={todayIso}
+          warnOver
+          highlightToday
+        />
 
         {gap !== null && (
           <button
@@ -831,19 +952,24 @@ export function Dashboard({
           onOpen={onOpenFitness}
           onAdd={() => setExercising(true)}
         />
-        <p className="t-micro mb-2">Last {WEEK} days</p>
+        <p className="t-micro mb-2">This week</p>
         {fitness !== null && fitness.connected ? (
           <>
             <p className="text-base font-semibold tracking-tight">
-              Step goal met {goalMet} of {WEEK} days
+              Step goal met {goalMet} of {elapsed} days
             </p>
             <p className="mb-3 text-xs text-muted">{sessionsLine}</p>
-            <DayBars bars={stepBars} footer={stepsFooter} todayIso={todayIso} />
+            <DayBars
+              bars={stepBars}
+              footer={stepsFooter}
+              todayIso={todayIso}
+              highlightToday
+            />
           </>
         ) : (
           <>
             <p className="text-base font-semibold tracking-tight">
-              Exercise on {movedDays} of {WEEK} days
+              Exercise on {movedDays} of {elapsed} days
             </p>
             <p className="text-xs text-muted">Sync a device to see steps here.</p>
           </>

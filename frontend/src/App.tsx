@@ -332,6 +332,10 @@ export default function App() {
                         setMoreView('fitness')
                         select('more')
                       }}
+                      onOpenTargets={() => {
+                        setMoreView('targets')
+                        select('more')
+                      }}
                       onOpenProfile={() => {
                         setMoreView('profile')
                         select('more')

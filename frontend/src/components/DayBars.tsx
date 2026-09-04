@@ -1,3 +1,5 @@
+import { weekday } from '../lib/day'
+
 // A run of days as bars: one column a day, oldest on the left, today on the
 // right. Drawn by hand out of two divs a column, because a chart library for
 // seven numbers is a library nobody reads.
@@ -15,8 +17,6 @@ export type Bar = { date: string; value: number; target: number; has: boolean }
 // calendar day the server already worked out in the member's own zone.
 const INITIALS = ['S', 'M', 'T', 'W', 'T', 'F', 'S']
 const MONDAY = 1
-
-const weekday = (iso: string): number => new Date(`${iso}T00:00:00Z`).getUTCDay()
 
 // A share of the tallest thing on the chart, as a percentage of the block.
 const share = (value: number, ceiling: number): number =>
@@ -41,6 +41,9 @@ export function DayBars({
   // Whether going past the day's number is worth marking. Eating over a budget
   // is; walking past a step goal is the point.
   warnOver = false,
+  // Whether the run is the week somebody is standing in, which is the only
+  // time saying which column is today tells them anything.
+  highlightToday = false,
 }: {
   bars: Bar[]
   footer: string
@@ -48,6 +51,7 @@ export function DayBars({
   height?: number
   mondaysOnly?: boolean
   warnOver?: boolean
+  highlightToday?: boolean
 }) {
   const ceiling = Math.max(...bars.map((row) => Math.max(row.target, row.value)), 1)
   // One line across the block when every day is read against the same number,
@@ -108,6 +112,12 @@ export function DayBars({
               }`}
             >
               {shown === '' ? ' ' : shown}
+              {/* A short rule under today's letter. An outline around the
+                  column itself lands on the dashed target line and reads as
+                  part of the chart; this only marks where the reader is. */}
+              {highlightToday && row.date === todayIso && (
+                <span className="mx-auto mt-0.5 block h-0.5 w-3 rounded-full bg-accent" />
+              )}
             </span>
           )
         })}
