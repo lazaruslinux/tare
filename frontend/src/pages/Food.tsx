@@ -27,7 +27,14 @@ import {
   type RepeatRow,
 } from '../api'
 import { FoodForm } from '../components/FoodForm'
-import { Calories, FoodLine, MealLine, RecipeLine, subline } from '../components/FoodRows'
+import {
+  Calories,
+  FoodLine,
+  MealLine,
+  RecipeLine,
+  RemoveKeptSheet,
+  subline,
+} from '../components/FoodRows'
 import { PortionSheet } from '../components/PortionSheet'
 import { useTopBar } from '../hooks/useTopBar'
 import { SLOT_LABEL, slotByTime, today } from '../lib/day'
@@ -205,21 +212,15 @@ export function FoodTab({
     onOpened()
   }, [open, onOpened])
 
-  const remove = (food: FoodItem) => {
-    setFoods((rows) => rows.filter((row) => row.id !== food.id))
-    setView({ at: 'list' })
-    const waiting: Undo = {
-      message: `Deleted ${food.name}.`,
-      commit: () => {
-        api(`/foods/${food.id}`, { method: 'DELETE' }).then(onChanged, () => {
-          // The row is already off the screen. Saying so now, on a screen
-          // somebody has moved on from, would be noise; the list tells the
-          // truth the next time it is read.
-        })
-      },
-    }
-    hold(waiting)
-  }
+  // A food gone for good, asked about on its own page first. The page waits
+  // for the answer, so a refusal is read there and not on a list it left.
+  const erase = (food: FoodItem, back: View) =>
+    api(`/foods/${food.id}`, { method: 'DELETE' }).then(() => {
+      setFoods((rows) => rows.filter((row) => row.id !== food.id))
+      setView(back)
+      void loadRepeat()
+      onChanged()
+    })
 
   // Off the list at once; pinned rows unpin, the rest are kept off for good.
   const removeRepeat = (row: RepeatRow) => {
@@ -248,18 +249,25 @@ export function FoodTab({
     })
   }
 
-  // Off the list at once. A shared food only leaves this account's list: the
-  // food itself stays in the Tare database.
-  const removeKept = (row: MyFoodRow) => {
-    setFoods((rows) => rows.filter((item) => item.id !== row.id))
-    hold({
-      message: `Took ${row.name} off My foods.`,
-      commit: () => {
-        api(`/foods/${row.id}/keep`, { method: 'DELETE' }).then(onChanged, () => {})
-      },
-      revert: () => void load(),
+  // A shared food only leaves this account's list: the food itself stays in
+  // the Tare database. The X asks first, and the row goes once the server has
+  // said yes.
+  const [removing, setRemoving] = useState<MyFoodRow | null>(null)
+  const removeKept = (row: MyFoodRow) => setRemoving(row)
+  const confirmRemoveKept = (row: MyFoodRow) =>
+    api(`/foods/${row.id}/keep`, { method: 'DELETE' }).then(() => {
+      setFoods((rows) => rows.filter((item) => item.id !== row.id))
+      setRemoving(null)
+      onChanged()
     })
-  }
+  const removeSheet = (
+    <RemoveKeptSheet
+      key={removing?.id ?? 'none'}
+      row={removing}
+      onCancel={() => setRemoving(null)}
+      onRemove={confirmRemoveKept}
+    />
+  )
 
   const removeRecipe = (recipe: Recipe) => {
     setRecipes((rows) => rows.filter((row) => row.id !== recipe.id))
@@ -331,35 +339,38 @@ export function FoodTab({
     const kind = view.kind
     const back = () => setView({ at: 'list' })
     return (
-      <MyList
-        listed={
-          kind === 'foods'
-            ? { kind, rows: foods }
-            : kind === 'meals'
-              ? { kind, rows: meals }
-              : { kind, rows: recipes }
-        }
-        onBack={back}
-        onRemove={kind === 'foods' ? removeKept : undefined}
-        onOpen={(id) =>
-          setView(
+      <>
+        <MyList
+          listed={
             kind === 'foods'
-              ? { at: 'detail', id, from: { at: 'all', kind } }
+              ? { kind, rows: foods }
               : kind === 'meals'
-                ? { at: 'meal', id, from: { at: 'all', kind } }
-                : { at: 'recipe', id, from: { at: 'all', kind } }
-          )
-        }
-        onAdd={() =>
-          setView(
-            kind === 'foods'
-              ? { at: 'form', food: null }
-              : kind === 'meals'
-                ? { at: 'mealForm', meal: null }
-                : { at: 'recipeForm', recipe: null }
-          )
-        }
-      />
+                ? { kind, rows: meals }
+                : { kind, rows: recipes }
+          }
+          onBack={back}
+          onRemove={kind === 'foods' ? removeKept : undefined}
+          onOpen={(id) =>
+            setView(
+              kind === 'foods'
+                ? { at: 'detail', id, from: { at: 'all', kind } }
+                : kind === 'meals'
+                  ? { at: 'meal', id, from: { at: 'all', kind } }
+                  : { at: 'recipe', id, from: { at: 'all', kind } }
+            )
+          }
+          onAdd={() =>
+            setView(
+              kind === 'foods'
+                ? { at: 'form', food: null }
+                : kind === 'meals'
+                  ? { at: 'mealForm', meal: null }
+                  : { at: 'recipeForm', recipe: null }
+            )
+          }
+        />
+        {removeSheet}
+      </>
     )
   }
 
@@ -383,15 +394,8 @@ export function FoodTab({
         backLabel={nameOf(from)}
         onBack={() => setView(from)}
         onEdit={(food, opened) => setView({ at: 'form', food, ...opened })}
-        onDelete={remove}
-        onDeleteShared={(food) =>
-          api(`/foods/${food.id}`, { method: 'DELETE' }).then(() => {
-            setFoods((rows) => rows.filter((row) => row.id !== food.id))
-            setView(from)
-            void loadRepeat()
-            onChanged()
-          })
-        }
+        onDelete={(food) => erase(food, from)}
+        onDeleteShared={(food) => erase(food, from)}
         onSubmitted={() => {
           void load()
           onChanged()
@@ -813,6 +817,7 @@ export function FoodTab({
         />
       )}
 
+      {removeSheet}
       {undo !== null && (
         <div className="pointer-events-none fixed inset-x-0 bottom-24 z-30 px-4">
           <div className="pointer-events-auto mx-auto flex w-full max-w-md items-center justify-between gap-3 rounded-xl border border-line bg-surface-2 px-4 py-3 text-sm">

@@ -1,8 +1,10 @@
 import { Camera, X } from 'lucide-react'
+import { useState } from 'react'
 
-import type { Community, FoodRow, MealRow, RecipeRow } from '../api'
+import { errorText, type Community, type FoodRow, type MealRow, type RecipeRow } from '../api'
 import { scale, servingsText } from '../lib/units'
 import { nutrientText } from './NutritionLabel'
+import { Sheet } from './Sheet'
 
 // The three rows a member's own lists are made of, in one place because the
 // Food page's cards and the list screen behind them show the same rows and
@@ -119,6 +121,63 @@ export function FoodLine({
         <X className="h-4 w-4" strokeWidth={2.5} />
       </button>
     </div>
+  )
+}
+
+// The question before a shared food comes off a member's list. Asked rather
+// than undone, because the list is the member's own and the food itself is
+// not going anywhere: it stays in the Tare database to be added back.
+export function RemoveKeptSheet({
+  row,
+  onCancel,
+  onRemove,
+}: {
+  row: FoodRow | null
+  onCancel: () => void
+  onRemove: (row: FoodRow) => Promise<void>
+}) {
+  const [busy, setBusy] = useState(false)
+  const [error, setError] = useState('')
+  return (
+    <Sheet
+      center
+      open={row !== null}
+      label="Remove from your foods?"
+      onClose={() => {
+        if (!busy) onCancel()
+      }}
+    >
+      <p className="text-base font-semibold tracking-tight">Remove from your foods?</p>
+      {row !== null && <p className="mt-1 text-sm">{row.name}</p>}
+      <p className="mt-2 text-sm text-muted">
+        You can always add it back from the Tare database.
+      </p>
+      {error && <p className="t-error mt-2">{error}</p>}
+      <div className="mt-4 flex gap-3">
+        <button
+          type="button"
+          className="t-btn t-btn-primary flex-1"
+          disabled={busy}
+          onClick={() => {
+            if (row === null) return
+            setBusy(true)
+            setError('')
+            onRemove(row).then(
+              () => setBusy(false),
+              (failure) => {
+                setError(errorText(failure))
+                setBusy(false)
+              }
+            )
+          }}
+        >
+          Remove
+        </button>
+        <button type="button" className="t-btn" disabled={busy} onClick={onCancel}>
+          Cancel
+        </button>
+      </div>
+    </Sheet>
   )
 }
 

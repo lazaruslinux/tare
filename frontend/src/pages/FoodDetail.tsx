@@ -52,7 +52,9 @@ export function FoodDetail({
   // there; submitDefault is Resubmit, which is the same form with the switch
   // already on.
   onEdit: (food: Food, opened?: { notice?: string; submitDefault?: boolean }) => void
-  onDelete: (food: Food) => void
+  // A member deleting a food of their own. Asked on this page like the shared
+  // one, and gone for good once they say so.
+  onDelete: (food: Food) => Promise<void>
   // An administrator taking a food out of the shared database. Confirmed on
   // this page and done at once: there is no undo for something everybody had.
   onDeleteShared: (food: Food) => Promise<void>
@@ -476,7 +478,10 @@ export function FoodDetail({
             <button
               className="mb-3 flex min-h-11 w-full items-center text-sm text-danger"
               type="button"
-              onClick={() => onDelete(food)}
+              onClick={() => {
+                setErasingError('')
+                setErasing(true)
+              }}
             >
               Delete this food
             </button>
@@ -580,11 +585,12 @@ export function FoodDetail({
               onClose={() => setErasing(false)}
             >
               <p className="text-base font-semibold tracking-tight text-danger">
-                Delete {food.name} from the Tare database?
+                {shared ? `Delete ${food.name} from the Tare database?` : `Delete ${food.name}?`}
               </p>
               <p className="mt-2 text-sm text-muted">
-                This permanently removes it for every member and cannot be undone. Journal
-                entries that already logged it keep their numbers.
+                {shared
+                  ? 'This permanently removes it for every member and cannot be undone. Journal entries that already logged it keep their numbers.'
+                  : 'This food is private to you and cannot be recovered.'}
               </p>
               {erasingError && <p className="t-error mt-2">{erasingError}</p>}
               <div className="mt-4 flex gap-3">
@@ -594,13 +600,13 @@ export function FoodDetail({
                   disabled={erasingBusy}
                   onClick={() => {
                     setErasingBusy(true)
-                    onDeleteShared(food).catch((failure) => {
+                    ;(shared ? onDeleteShared : onDelete)(food).catch((failure) => {
                       setErasingError(errorText(failure))
                       setErasingBusy(false)
                     })
                   }}
                 >
-                  Delete permanently
+                  {shared ? 'Delete permanently' : 'Delete'}
                 </button>
                 <button type="button" className="t-btn" onClick={() => setErasing(false)}>
                   Cancel
