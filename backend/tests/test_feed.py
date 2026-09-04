@@ -141,6 +141,28 @@ def test_the_owner_alone_may_hide_a_workout(client, db_session, make_user):
     assert len(client.get("/api/feed").json()["items"]) == 1
 
 
+def test_a_member_who_shares_no_workouts_is_absent_from_the_feed(
+    client, db_session, make_user
+):
+    runner = make_user("runner")
+    make_user("reader")
+    workout = put_workout(db_session, runner, 30)
+    runner.share_workouts = False
+    db_session.commit()
+
+    sign_in(client, "reader")
+    assert client.get("/api/feed").json()["items"] == []
+    detail = client.get(f"/api/workouts/{workout.id}")
+    assert detail.status_code == 404
+    assert detail.json() == {"detail": "There is no such workout."}
+
+    # The owner still finds it in their own feed, marked as theirs alone.
+    sign_in(client, "runner")
+    rows = client.get("/api/feed").json()["items"]
+    assert [row["hidden"] for row in rows] == [True]
+    assert client.get(f"/api/workouts/{workout.id}").status_code == 200
+
+
 def test_the_feed_pages_without_repeating_itself(client, db_session, make_user):
     runner = make_user("runner")
     for step in range(35):
@@ -260,6 +282,7 @@ def test_what_is_hidden_is_said_back_with_the_account(client, make_user):
     assert saved["share_age"] is True
     assert saved["share_sex"] is False
     assert saved["share_location"] is True
+    assert saved["share_workouts"] is True
     assert client.get("/api/auth/me").json() == saved
 
 

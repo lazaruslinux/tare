@@ -69,11 +69,17 @@ def read_feed(
     A row this account hid is still in its own feed and says so, because the
     only way back to a hidden workout is through the list it was hidden from.
     """
+    # A row reaches the others when neither it nor its whole account is held
+    # back. The owner always sees their own.
     query = (
         select(models.Workout)
+        .join(models.User, models.User.id == models.Workout.user_id)
         .where(
             or_(
-                models.Workout.hidden_from_feed.is_(False),
+                and_(
+                    models.Workout.hidden_from_feed.is_(False),
+                    models.User.share_workouts.is_(True),
+                ),
                 models.Workout.user_id == user.id,
             )
         )
@@ -132,7 +138,7 @@ def read_feed(
             "source": workout.source,
         }
         if mine:
-            item["hidden"] = workout.hidden_from_feed
+            item["hidden"] = workout.hidden_from_feed or not user.share_workouts
         items.append(item)
 
     return {

@@ -143,7 +143,7 @@ export function FirstRun({
           />
         </div>
 
-        <p className="t-label">Sex</p>
+        <p className="t-label">Gender</p>
         <div className="mb-1 flex gap-3">
           {SEXES.map((choice) => (
             <button

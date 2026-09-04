@@ -8,7 +8,7 @@ import { useTopBar } from '../hooks/useTopBar'
 // The one screen that says what leaves this account. Nothing here saves until
 // the button: turning a switch is a draft, not an announcement.
 
-const SEX_LABEL: Record<string, string> = { female: 'Female', male: 'Male' }
+const GENDER_LABEL: Record<string, string> = { female: 'Female', male: 'Male' }
 
 // The three parts of a workout a member may keep back, by the names the server
 // holds them under.
@@ -32,12 +32,13 @@ export function Sharing({
   onChange: (me: Me) => void
   onBack: () => void
 }) {
-  // Read here rather than passed in: the sex a switch would show lives on the
-  // health profile, and this is the only screen that needs it.
+  // Read here rather than passed in: the gender a switch would show lives on
+  // the health profile, and this is the only screen that needs it.
   const [profile, setProfile] = useState<Profile | null>(null)
   const [age, setAge] = useState(me.share_age)
-  const [sex, setSex] = useState(me.share_sex)
+  const [gender, setGender] = useState(me.share_sex)
   const [place, setPlace] = useState(me.share_location)
+  const [workouts, setWorkouts] = useState(me.share_workouts)
   // Held the way the screen reads them: on means shown, and the server is
   // told what is hidden.
   const [hidden, setHidden] = useState<string[]>(me.feed_hidden)
@@ -59,8 +60,9 @@ export function Sharing({
 
   const dirty =
     age !== me.share_age ||
-    sex !== me.share_sex ||
+    gender !== me.share_sex ||
     place !== me.share_location ||
+    workouts !== me.share_workouts ||
     hidden.join() !== me.feed_hidden.join()
 
   const shows = (name: string) => !hidden.includes(name)
@@ -83,8 +85,9 @@ export function Sharing({
           body: {
             feed_hidden: hidden,
             share_age: age,
-            share_sex: sex,
+            share_sex: gender,
             share_location: place,
+            share_workouts: workouts,
           },
         })
       )
@@ -95,51 +98,45 @@ export function Sharing({
     setSaving(false)
   }
 
-  const ageNote =
-    me.birthdate === null
-      ? 'Add your date of birth on Profile'
-      : `${ageOf(me.birthdate)}, which is what they would see`
-  const sexNote =
+  // Each label carries the fact itself, so what a member turns on is exactly
+  // what they read here.
+  const MISSING = 'add it on Profile'
+  const ageLabel = `Age (${me.birthdate === null ? MISSING : ageOf(me.birthdate)})`
+  const genderLabel = `Gender (${
     profile === null || profile.sex === null
-      ? 'Add it on Profile'
-      : (SEX_LABEL[profile.sex] ?? profile.sex)
-  const placeNote = me.location === null ? 'Add it on Profile' : me.location
+      ? MISSING
+      : (GENDER_LABEL[profile.sex] ?? profile.sex)
+  })`
+  const placeLabel = `Location (${me.location === null ? MISSING : me.location})`
 
   return (
     <>
-      <p className="t-micro mb-1">About you</p>
+      <p className="t-micro mb-1">Privacy settings</p>
       <div className="t-card mb-3">
-        <Switch label="Show my age" note={ageNote} checked={age} onChange={setAge} />
-        <Switch label="Show my sex" note={sexNote} checked={sex} onChange={setSex} />
-        <Switch
-          label="Show where I live"
-          note={placeNote}
-          checked={place}
-          onChange={setPlace}
-        />
+        <p className="text-sm text-muted">Show my:</p>
+        <Switch label={ageLabel} checked={age} onChange={setAge} />
+        <Switch label={genderLabel} checked={gender} onChange={setGender} />
+        <Switch label={placeLabel} checked={place} onChange={setPlace} />
       </div>
 
-      <p className="t-micro mb-1">Your workouts</p>
+      <p className="t-micro mb-1">Workout privacy settings</p>
       <div className="t-card mb-3">
+        <Switch label="Share my workouts" checked={workouts} onChange={setWorkouts} />
         <Switch
-          label="Heart rate"
+          label="Heart rate (during workout only)"
           checked={shows('avg_hr')}
           onChange={(next) => show('avg_hr', next)}
         />
         <Switch
-          label="Calories"
+          label="Calories burned"
           checked={shows('kcal')}
           onChange={(next) => show('kcal', next)}
         />
         <Switch
-          label="Route line"
+          label="Route line (not GPS location)"
           checked={shows('route')}
           onChange={(next) => show('route', next)}
         />
-        <p className="mt-2 text-xs text-muted">
-          Workouts are shared with members unless you hide one from its own page. Workouts
-          from a file start hidden.
-        </p>
       </div>
 
       {error && <p className="t-error mb-3">{error}</p>}

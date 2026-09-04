@@ -127,6 +127,7 @@ def me_payload(user: models.User) -> dict[str, object]:
         "share_age": user.share_age,
         "share_sex": user.share_sex,
         "share_location": user.share_location,
+        "share_workouts": user.share_workouts,
     }
 
 

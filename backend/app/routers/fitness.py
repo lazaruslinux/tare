@@ -327,8 +327,12 @@ def readable_workout(db: Session, workout_id: int, user: models.User) -> models.
     that never existed all answer the same sentence.
     """
     row = db.get(models.Workout, workout_id)
-    if row is None or (row.user_id != user.id and row.hidden_from_feed):
+    if row is None:
         raise HTTPException(status.HTTP_404_NOT_FOUND, MISSING_WORKOUT)
+    if row.user_id != user.id:
+        owner = db.get(models.User, row.user_id)
+        if row.hidden_from_feed or owner is None or not owner.share_workouts:
+            raise HTTPException(status.HTTP_404_NOT_FOUND, MISSING_WORKOUT)
     return row
 
 

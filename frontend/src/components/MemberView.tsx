@@ -63,7 +63,7 @@ export function MemberView({
         <>
           {member.age !== undefined && <Fact label="Age" value={String(member.age)} />}
           {member.sex !== undefined && (
-            <Fact label="Sex" value={SEX_LABEL[member.sex] ?? member.sex} />
+            <Fact label="Gender" value={SEX_LABEL[member.sex] ?? member.sex} />
           )}
           {member.location !== undefined && <Fact label="Lives in" value={member.location} />}
         </>

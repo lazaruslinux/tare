@@ -155,6 +155,7 @@ def test_login_answers_with_the_me_payload(client, make_user):
         "share_age": False,
         "share_sex": False,
         "share_location": False,
+        "share_workouts": True,
     }
 
 

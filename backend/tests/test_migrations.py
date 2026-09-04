@@ -90,7 +90,7 @@ def test_upgrade_head_builds_the_identity_schema(tmp_path):
     assert "uq_fitness_daily_day_metric" in daily_unique
     assert "location" in user_columns
     # The three facts a member may show other members, each off until it is on.
-    assert {"share_age", "share_sex", "share_location"} <= user_columns
+    assert {"share_age", "share_sex", "share_location", "share_workouts"} <= user_columns
     assert "recipe_id" in {column["name"] for column in inspector.get_columns("diary_entries")}
     # The partial indexes are the one thing here a plain column cannot express,
     # so it is worth seeing that the migrations really emitted them.

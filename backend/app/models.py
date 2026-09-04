@@ -92,6 +92,8 @@ class User(Base):
     share_age: Mapped[bool] = mapped_column(Boolean, nullable=False, default=False)
     share_sex: Mapped[bool] = mapped_column(Boolean, nullable=False, default=False)
     share_location: Mapped[bool] = mapped_column(Boolean, nullable=False, default=False)
+    # Every workout at once. Off, and nothing of theirs reaches the feed.
+    share_workouts: Mapped[bool] = mapped_column(Boolean, nullable=False, default=True)
     created_at: Mapped[dt.datetime] = mapped_column(UtcDateTime, nullable=False, default=now_utc)
 
 

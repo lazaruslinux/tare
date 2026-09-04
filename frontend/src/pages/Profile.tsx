@@ -115,7 +115,7 @@ export function Profile({
   return (
     <>
     <form className="t-card mb-3" onSubmit={save}>
-      <p className="t-label">Sex</p>
+      <p className="t-label">Gender</p>
       <div className="mb-1 flex gap-3">
         {SEXES.map((choice) => (
           <button

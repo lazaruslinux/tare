@@ -100,7 +100,7 @@ export const personalNumber = (missing: string[]): PersonalGap => {
     return { label: 'Add a weigh-in for a personal number', needs: 'weight' }
   }
   if (missing.includes('sex') || missing.includes('height')) {
-    return { label: 'Add your height and sex for a personal number', needs: 'profile' }
+    return { label: 'Add your height and gender for a personal number', needs: 'profile' }
   }
   return { label: 'Add your birthdate for a personal number', needs: 'profile' }
 }

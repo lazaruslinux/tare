@@ -30,6 +30,7 @@ export type Me = {
   share_age: boolean
   share_sex: boolean
   share_location: boolean
+  share_workouts: boolean
 }
 
 export type Sex = 'female' | 'male'

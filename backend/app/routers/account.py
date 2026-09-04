@@ -57,6 +57,7 @@ class AccountPatch(BaseModel):
     share_age: bool | None = None
     share_sex: bool | None = None
     share_location: bool | None = None
+    share_workouts: bool | None = None
 
 
 @router.patch("/account")
@@ -109,7 +110,7 @@ def update_account(
         # Kept in the order Tare names them, and each name once.
         user.feed_hidden = [name for name in fitness.HIDEABLE if name in asked]
 
-    for field in ("share_age", "share_sex", "share_location"):
+    for field in ("share_age", "share_sex", "share_location", "share_workouts"):
         if field in sent:
             setattr(user, field, bool(getattr(body, field)))
 
