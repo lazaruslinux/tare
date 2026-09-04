@@ -1,3 +1,4 @@
+import { AnimatePresence, motion, useReducedMotion } from 'framer-motion'
 import { useEffect, useState } from 'react'
 
 import { api, errorText, type Me, type Profile } from '../api'
@@ -45,6 +46,7 @@ export function Sharing({
   const [error, setError] = useState('')
   const [saving, setSaving] = useState(false)
   const [saved, markSaved] = useSavedChip()
+  const reduced = useReducedMotion()
 
   useTopBar({ title: 'Sharing', back: { label: 'More', onBack } })
 
@@ -64,6 +66,13 @@ export function Sharing({
     place !== me.share_location ||
     workouts !== me.share_workouts ||
     hidden.join() !== me.feed_hidden.join()
+
+  // The master switch takes the three with it: off folds them away and turns
+  // them off, on brings them back at their defaults, all shown.
+  const shareWorkouts = (next: boolean) => {
+    setWorkouts(next)
+    setHidden(next ? [] : [...HIDEABLE])
+  }
 
   const shows = (name: string) => !hidden.includes(name)
   // Kept in the order the server names them, so a comparison against what was
@@ -122,22 +131,35 @@ export function Sharing({
 
       <p className="t-micro mb-1">Workout privacy settings</p>
       <div className="t-card mb-3">
-        <Switch label="Share my workouts" checked={workouts} onChange={setWorkouts} />
-        <Switch
-          label="Heart rate (during workout only)"
-          checked={shows('avg_hr')}
-          onChange={(next) => show('avg_hr', next)}
-        />
-        <Switch
-          label="Calories burned"
-          checked={shows('kcal')}
-          onChange={(next) => show('kcal', next)}
-        />
-        <Switch
-          label="Route line (not GPS location)"
-          checked={shows('route')}
-          onChange={(next) => show('route', next)}
-        />
+        <Switch label="Share my workouts" checked={workouts} onChange={shareWorkouts} />
+        <AnimatePresence initial={false}>
+          {workouts && (
+            <motion.div
+              key="parts"
+              className="overflow-hidden"
+              initial={reduced ? false : { height: 0, opacity: 0 }}
+              animate={{ height: 'auto', opacity: 1 }}
+              exit={reduced ? undefined : { height: 0, opacity: 0 }}
+              transition={{ duration: 0.18 }}
+            >
+              <Switch
+                label="Heart rate (during workout only)"
+                checked={shows('avg_hr')}
+                onChange={(next) => show('avg_hr', next)}
+              />
+              <Switch
+                label="Calories burned"
+                checked={shows('kcal')}
+                onChange={(next) => show('kcal', next)}
+              />
+              <Switch
+                label="Route line (not GPS location)"
+                checked={shows('route')}
+                onChange={(next) => show('route', next)}
+              />
+            </motion.div>
+          )}
+        </AnimatePresence>
       </div>
 
       {error && <p className="t-error mb-3">{error}</p>}
