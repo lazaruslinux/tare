@@ -188,7 +188,7 @@ export function Targets({
       </div>
 
       <p className="t-note mb-3">
-        Everything here is private to you. No other member and no administrator can see it.
+        These values are not shared anywhere on Tare; not even an administrator can see them.
       </p>
     </>
   )
