@@ -1,4 +1,7 @@
+from fastapi.testclient import TestClient
+
 from app import throttle
+from app.main import create_app
 
 
 def test_a_limiter_refuses_in_the_same_shape_as_everything_else(client):
@@ -77,3 +80,19 @@ def test_an_oversized_body_is_refused_before_it_is_parsed(client):
     )
     assert response.status_code == 413
     assert response.json() == {"detail": "Request body is too large."}
+
+
+def test_an_uncaught_error_answers_in_the_one_shape():
+    # A route that raises, on an app of its own: nothing in the real one is
+    # meant to, and this is about what happens when something does. The client
+    # is told not to re-raise, because the point is the answer that goes out.
+    app = create_app()
+
+    @app.get("/api/boom")
+    def boom() -> None:
+        raise RuntimeError("something the code did not expect")
+
+    with TestClient(app, raise_server_exceptions=False) as client:
+        response = client.get("/api/boom")
+    assert response.status_code == 500
+    assert response.json() == {"detail": "Something went wrong."}

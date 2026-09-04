@@ -1,4 +1,4 @@
-import { motion } from 'framer-motion'
+import { motion, useReducedMotion } from 'framer-motion'
 import {
   Apple,
   BookOpen,
@@ -59,6 +59,7 @@ export function TabBar({
   onSelect: (page: Page) => void
   onPlus: () => void
 }) {
+  const reduced = useReducedMotion()
   return (
     <nav aria-label="Main" className="t-tabbar">
       <div className="mx-auto flex w-full max-w-md items-end justify-around pt-1.5">
@@ -86,7 +87,12 @@ export function TabBar({
                 <motion.span
                   layoutId="tare-tab-highlight"
                   className="absolute inset-0 rounded-xl bg-surface-2"
-                  transition={{ type: 'spring', stiffness: 400, damping: 32 }}
+                  // Reduced motion gets the highlight where it belongs at
+                  // once: the glide is the whole of the effect, so there is
+                  // nothing to soften, only to switch off.
+                  transition={
+                    reduced ? { duration: 0 } : { type: 'spring', stiffness: 400, damping: 32 }
+                  }
                 />
               )}
               <span className="relative flex">

@@ -10,7 +10,7 @@ Tare is built with Claude Code.
 
 ## Status
 
-Early development. What runs today: invite-only accounts, private custom foods with unit and density conversion, the food journal, and the shared database with barcode scanning, browsing, reported issues and label photos, and an approval queue that decides all three. An approved food is corrected by an administrator; a member reports an issue with it instead of editing it. Administrators also mint invite links and read the member list from the app. Health sync and the feed are not built yet.
+Early development, and most of it is running. Today: invite-only accounts, private custom foods, the journal with meals, recipes, auto-logged daily foods and day completion, the shared database with barcode scanning, browsing by aisle, reported issues, label photos and the approval queue that decides all of it, calorie and macro targets worked out from a weight goal, weigh-ins and body measurements, health sync from a phone including workouts and routes, member profiles, and a community feed with a sharing switch over every part of it.
 
 ## Running it
 
@@ -25,6 +25,8 @@ docker compose up -d --build
 ```
 
 The api listens on `127.0.0.1:8200` and the web front end on `127.0.0.1:8210`. The development override file also publishes Postgres on `127.0.0.1:55434`; delete or rename that file on a deployment. Nothing is published beyond loopback, so reaching an instance from elsewhere means putting a reverse proxy in front of it.
+
+For a real deployment, with the proxy, the first account, backups and what each setting does, see [docs/DEPLOY.md](docs/DEPLOY.md).
 
 To work on the front end against a running api:
 
@@ -43,6 +45,12 @@ pip install --require-hashes -r requirements.txt
 pip install -r requirements-dev.txt
 ruff check . && mypy && pytest -q
 ```
+
+## Data sources
+
+Barcode lookups ask USDA FoodData Central first, then Open Food Facts. Open Food Facts data is available under the Open Database License (ODbL). Once a food is in the Tare database it is the members' own copy and is never refetched.
+
+Calorie and nutrient targets follow the Dietary Guidelines for Americans and the American Heart Association. Tare estimates. It is not medical advice.
 
 ## License
 

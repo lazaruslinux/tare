@@ -2,6 +2,8 @@
 
 from __future__ import annotations
 
+import logging
+
 from fastapi import FastAPI, Request
 from fastapi.exceptions import RequestValidationError
 from fastapi.responses import JSONResponse
@@ -33,6 +35,8 @@ from app.routers import (
 # proxy caps /api/ at the same figure; this is the cap that holds when the proxy
 # is not in front.
 MAX_BODY_BYTES = 64 * 1024
+
+log = logging.getLogger("tare.main")
 
 # The one address that takes a file, and the ceiling it takes one under. A
 # little above the ten megabytes the photo route itself allows, so an upload
@@ -176,6 +180,17 @@ async def _http_error(request: Request, exc: Exception) -> JSONResponse:
     )
 
 
+async def _unhandled_error(request: Request, exc: Exception) -> JSONResponse:
+    """The last catch: an error nobody expected, in the one shape.
+
+    The traceback goes to the log and nowhere else. What a caller gets is the
+    same {detail: sentence} every other refusal is written as, so a client
+    never has to read two kinds of error.
+    """
+    log.exception("unhandled error on %s %s", request.method, request.url.path)
+    return JSONResponse(status_code=500, content={"detail": "Something went wrong."})
+
+
 def create_app() -> FastAPI:
     # Before an engine, a route, or a port. A refusal here stops the process
     # rather than letting a misconfigured install answer a single request.
@@ -194,6 +209,7 @@ def create_app() -> FastAPI:
     app.add_middleware(BodySizeLimitMiddleware)
     app.add_exception_handler(RequestValidationError, _validation_error)
     app.add_exception_handler(StarletteHTTPException, _http_error)
+    app.add_exception_handler(Exception, _unhandled_error)
 
     @app.get("/api/version")
     def read_version() -> dict[str, object]:

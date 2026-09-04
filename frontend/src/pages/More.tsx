@@ -1,10 +1,12 @@
 import {
+  BookOpen,
   ChevronRight,
   ClipboardList,
   Eye,
   HeartPulse,
   IdCard,
   Inbox,
+  Info,
   Mail,
   MessageSquare,
   Monitor,
@@ -26,12 +28,14 @@ import { useRailLayout } from '../hooks/useWideLayout'
 import { today } from '../lib/day'
 import { ZONES, offList } from '../lib/zones'
 import { applyTheme, rememberTheme, useTheme, type Theme } from '../theme'
+import { About } from './About'
 import { AdminInvites } from './AdminInvites'
 import { AdminQueue } from './AdminQueue'
 import { AdminUploads } from './AdminUploads'
 import { AdminUsers } from './AdminUsers'
 import { Feedback, FeedbackLog } from './Feedback'
 import { Fitness } from './Fitness'
+import { Guide } from './Guide'
 import { Members } from './Members'
 import { MemberView } from '../components/MemberView'
 import { Profile } from './Profile'
@@ -55,6 +59,8 @@ export type Screen =
   | 'submissions'
   | 'display'
   | 'feedback'
+  | 'guide'
+  | 'about'
   | 'queue'
   | 'invites'
   | 'users'
@@ -206,6 +212,8 @@ export function More({
     display: 'Display',
     sync: 'Health data sync',
     feedback: 'Send feedback',
+    guide: 'Guide',
+    about: 'About',
     feedbacklog: 'Feedback log',
   }
   const named = screen === null ? null : NAMED[screen]
@@ -309,9 +317,18 @@ export function More({
 
   if (screen === 'targets') {
     return (
-      <Targets me={me} onBack={() => go(null)} onOpenProfile={() => go('profile')} />
+      <Targets
+        me={me}
+        onBack={() => go(null)}
+        onOpenProfile={() => go('profile')}
+        onOpenGuide={() => go('guide')}
+      />
     )
   }
+
+  if (screen === 'guide') return <Guide />
+
+  if (screen === 'about') return <About onOpenGuide={() => go('guide')} />
 
   if (screen === 'feedback') {
     return (
@@ -555,6 +572,8 @@ export function More({
         />
         <Row label="Display" icon={Monitor} onOpen={() => go('display')} />
         <Row label="Send feedback" icon={MessageSquare} onOpen={() => go('feedback')} />
+        <Row label="Guide" icon={BookOpen} onOpen={() => go('guide')} />
+        <Row label="About" icon={Info} onOpen={() => go('about')} />
         <Row label="My submissions" icon={Inbox} onOpen={() => go('submissions')} />
       </div>
 

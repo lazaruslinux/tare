@@ -38,12 +38,15 @@ export function Targets({
   me,
   onBack,
   onOpenProfile,
+  onOpenGuide,
 }: {
   me: Me
   onBack: () => void
   // The Activity Levels screen sends people to their details, which live one screen
   // over rather than inside this one.
   onOpenProfile: () => void
+  // The two places that promise the Guide open it rather than naming it.
+  onOpenGuide: () => void
 }) {
   const [targets, setTargets] = useState<TargetsRow | null>(null)
   const [profile, setProfile] = useState<ProfileRow | null>(null)
@@ -138,6 +141,7 @@ export function Targets({
         busy={busy}
         error={error}
         onSaveTargets={saveTargets}
+        onOpenGuide={onOpenGuide}
       />
     )
   }
@@ -167,6 +171,9 @@ export function Targets({
       {!targets.disclaimer_seen && (
         <div className="t-card mb-3">
           <p className="t-note">{DISCLAIMER}</p>
+          <button type="button" className="mt-2 text-sm text-accent" onClick={onOpenGuide}>
+            More in the Guide
+          </button>
           <button type="button" className="t-btn t-btn-primary mt-3" onClick={gotIt}>
             Got it
           </button>

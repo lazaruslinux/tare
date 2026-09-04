@@ -64,6 +64,7 @@ export function DailyBudget({
   busy,
   error,
   onSaveTargets,
+  onOpenGuide,
 }: {
   targets: TargetsRow
   // Which of the four details are still missing, so the line about a personal
@@ -72,6 +73,8 @@ export function DailyBudget({
   busy: boolean
   error: string
   onSaveTargets: Save
+  // The Guide the line under these ceilings promises.
+  onOpenGuide: () => void
 }) {
   const [view, setView] = useState<TargetMode>(targets.mode)
   const [saved, markSaved] = useSavedChip()
@@ -357,8 +360,10 @@ export function DailyBudget({
             </div>
           ))}
           <p className="t-note mt-3">
-            These follow the Dietary Guidelines and the American Heart Association. More
-            in the Guide.
+            These follow the Dietary Guidelines and the American Heart Association.{' '}
+            <button type="button" className="text-accent" onClick={onOpenGuide}>
+              More in the Guide.
+            </button>
           </p>
         </Fold>
       </div>
