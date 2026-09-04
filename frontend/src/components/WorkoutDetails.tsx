@@ -6,6 +6,12 @@ import { dayLabel, today } from '../lib/day'
 import { splitsOf } from '../lib/splits'
 import { distanceText, distanceUnit, durationText, paceText, round1 } from '../lib/units'
 import { RouteLine } from './RouteLine'
+import { Switch } from './Switch'
+
+// What another member's sharing left out is absent from the answer, so
+// everything drawn from one is asked whether it is there at all.
+const present = (value: number | null | undefined): value is number =>
+  value !== null && value !== undefined
 
 // The words for what looked odd about a session. A flag is never a refusal:
 // the workout is here, and this is Tare saying it does not quite believe one
@@ -26,7 +32,7 @@ function Stat({ label, value }: { label: string; value: string }) {
 function HeartLine({ detail }: { detail: WorkoutDetail }) {
   const beats = detail.samples
     .map((row) => ({ minute: row.minute, hr: row.hr_avg ?? row.hr_max ?? row.hr_min }))
-    .filter((row): row is { minute: number; hr: number } => row.hr !== null)
+    .filter((row): row is { minute: number; hr: number } => present(row.hr))
   if (beats.length < 2) return null
 
   const width = 320
@@ -97,14 +103,25 @@ function Splits({ detail, me }: { detail: WorkoutDetail; me: Me }) {
 export function WorkoutDetails({
   me,
   workoutId,
+  back = 'Fitness',
   onBack,
+  onOpenMember,
+  onChanged,
 }: {
   me: Me
   workoutId: number
+  // What the way back is called, because this screen is opened from four.
+  back?: string
   onBack: () => void
+  // Somebody else's workout names who did it, and the name is a way to them.
+  onOpenMember?: (userId: number) => void
+  // Hiding a workout changes a list that is very likely on screen already.
+  onChanged?: () => void
 }) {
   const [detail, setDetail] = useState<WorkoutDetail | null>(null)
   const [failed, setFailed] = useState('')
+  // What went wrong with the last hide, said under the switch it belongs to.
+  const [hideError, setHideError] = useState('')
 
   useEffect(() => {
     let alive = true
@@ -118,7 +135,7 @@ export function WorkoutDetails({
 
   useTopBar({
     title: detail?.activity ?? 'Workout',
-    back: { label: 'Fitness', onBack },
+    back: { label: back, onBack },
   })
 
   if (failed !== '') return <p className="t-error">{failed}</p>
@@ -126,11 +143,42 @@ export function WorkoutDetails({
 
   const pace =
     detail.distance_m === null ? null : paceText(detail.distance_m, detail.duration_s, me.units)
+  const route = detail.route ?? null
+
+  // The switch moves at once and moves back if the server says no: a member
+  // deciding who sees a morning should not wait on a round trip.
+  const setHidden = async (hidden: boolean) => {
+    const was = detail.hidden_from_feed
+    setHideError('')
+    setDetail({ ...detail, hidden_from_feed: hidden })
+    try {
+      await api(`/workouts/${detail.id}`, {
+        method: 'PATCH',
+        body: { hidden_from_feed: hidden },
+      })
+      onChanged?.()
+    } catch (failure) {
+      setDetail({ ...detail, hidden_from_feed: was })
+      setHideError(errorText(failure))
+    }
+  }
 
   return (
     <>
       <div className="t-card mb-3">
         <p className="mb-2 text-sm text-muted">
+          {!detail.mine && onOpenMember !== undefined && (
+            <>
+              <button
+                type="button"
+                className="underline decoration-line underline-offset-2"
+                onClick={() => onOpenMember(detail.user_id)}
+              >
+                {detail.display_name}
+              </button>
+              {' · '}
+            </>
+          )}
           {dayLabel(detail.date, today(me.timezone))}
           {detail.indoor ? ' · Indoors' : ''}
         </p>
@@ -139,13 +187,13 @@ export function WorkoutDetails({
           {detail.distance_m !== null && (
             <Stat label="Distance" value={distanceText(detail.distance_m, me.units)} />
           )}
-          {detail.kcal !== null && <Stat label="Calories" value={`${detail.kcal} cal`} />}
+          {present(detail.kcal) && <Stat label="Calories" value={`${detail.kcal} cal`} />}
           {pace !== null && <Stat label="Pace" value={pace} />}
-          {detail.avg_hr !== null && (
+          {present(detail.avg_hr) && (
             <Stat label="Average heart rate" value={`${detail.avg_hr} bpm`} />
           )}
-          {detail.max_hr !== null && <Stat label="Highest" value={`${detail.max_hr} bpm`} />}
-          {detail.elevation_gain_m !== null && (
+          {present(detail.max_hr) && <Stat label="Highest" value={`${detail.max_hr} bpm`} />}
+          {present(detail.elevation_gain_m) && (
             <Stat
               label="Climb"
               value={
@@ -156,17 +204,17 @@ export function WorkoutDetails({
             />
           )}
         </div>
-        {detail.flags.map((flag) => (
+        {(detail.flags ?? []).map((flag) => (
           <p key={flag} className="mt-3 text-xs text-muted">
             {FLAG_TEXT[flag] ?? 'One of these numbers looked unusual to Tare.'}
           </p>
         ))}
       </div>
 
-      {detail.route !== null && detail.route.length > 1 && (
+      {route !== null && route.length > 1 && (
         <div className="t-card mb-3">
           <p className="t-micro mb-2">Route</p>
-          <RouteLine points={detail.route} />
+          <RouteLine points={route} />
           <p className="mt-1 text-xs text-muted">
             The start and the end are left off every route Tare keeps.
           </p>
@@ -175,6 +223,18 @@ export function WorkoutDetails({
 
       <HeartLine detail={detail} />
       <Splits detail={detail} me={me} />
+
+      {detail.mine && (
+        <div className="t-card mb-3">
+          <Switch
+            label="Show in the community feed"
+            note="Members see the activity, time, distance and route line. Heart rate, calories and route follow your Sharing settings."
+            checked={!detail.hidden_from_feed}
+            onChange={(next) => setHidden(!next)}
+          />
+          {hideError && <p className="t-error mt-2">{hideError}</p>}
+        </div>
+      )}
     </>
   )
 }

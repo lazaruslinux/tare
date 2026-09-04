@@ -14,6 +14,7 @@ from app.config import settings
 from app.db import get_db
 from app.deps import require_user
 from app.models import now_utc
+from app.routers import fitness
 from app.routers.auth import CLEARED_BIRTHDATE, checked_birthdate, me_payload
 from app.routers.ingest import has_uploads
 
@@ -50,6 +51,12 @@ class AccountPatch(BaseModel):
     timezone: str | None = None
     birthdate: dt.date | None = None
     location: str | None = None
+    # The Sharing screen's four, saved together because they are one answer to
+    # one question: what other members see.
+    feed_hidden: list[str] | None = None
+    share_age: bool | None = None
+    share_sex: bool | None = None
+    share_location: bool | None = None
 
 
 @router.patch("/account")
@@ -93,6 +100,18 @@ def update_account(
 
     if "location" in sent:
         user.location = clean_location(body.location)
+
+    if "feed_hidden" in sent:
+        asked = body.feed_hidden or []
+        for name in asked:
+            if name not in fitness.HIDEABLE:
+                raise HTTPException(status.HTTP_400_BAD_REQUEST, fitness.BAD_HIDDEN)
+        # Kept in the order Tare names them, and each name once.
+        user.feed_hidden = [name for name in fitness.HIDEABLE if name in asked]
+
+    for field in ("share_age", "share_sex", "share_location"):
+        if field in sent:
+            setattr(user, field, bool(getattr(body, field)))
 
     db.commit()
     return me_payload(user)

@@ -21,9 +21,13 @@ import { BreakdownCard } from '../components/BreakdownCard'
 import { ExerciseSheet } from '../components/ExerciseSheet'
 import { FoodPicker } from '../components/FoodPicker'
 import { MeasurementsSheet } from '../components/MeasurementsSheet'
+import { Feed } from '../components/Feed'
 import { MacroBar } from '../components/MacroBar'
+import { MemberView } from '../components/MemberView'
 import { HEADLINE, nutrientText } from '../components/NutritionLabel'
+import { WorkoutDetails } from '../components/WorkoutDetails'
 import { useTopBar } from '../hooks/useTopBar'
+import { useWideLayout } from '../hooks/useWideLayout'
 import { dayLabel, slotByTime, today } from '../lib/day'
 import { personalNumber, calText, dateText } from '../lib/targets'
 import { round1, weightIn, weightText, weightUnit } from '../lib/units'
@@ -398,7 +402,7 @@ function WeighIn({
   )
 }
 
-export type DashScreen = 'progress' | null
+export type DashScreen = 'progress' | 'community' | null
 
 export function Dashboard({
   me,
@@ -406,12 +410,16 @@ export function Dashboard({
   onOpenJournal,
   onOpenFitness,
   onOpenProfile,
+  onChanged,
   start,
   onStarted,
   onScreen,
 }: {
   me: Me
   refresh: number
+  // Said upward when something on a sub-view changed a list the rest of the
+  // app is showing.
+  onChanged?: () => void
   // The Journal, on today. The Food card leads there.
   onOpenJournal: () => void
   // The Fitness screen, which is where the Exercise card leads.
@@ -426,6 +434,9 @@ export function Dashboard({
   onScreen?: (screen: DashScreen) => void
 }) {
   const todayIso = today(me.timezone)
+  // At the width the right-hand column appears, the feed lives there and this
+  // tab does not draw a card for it as well.
+  const wide = useWideLayout()
   const [day, setDay] = useState<DiaryDay | null>(null)
   const [profile, setProfile] = useState<Profile | null>(null)
   const [history, setHistory] = useState<Measurements | null>(null)
@@ -441,6 +452,11 @@ export function Dashboard({
   const [error, setError] = useState('')
   const [again, setAgain] = useState(0)
   const [screen, setScreen] = useState<DashScreen>(null)
+  // The two things a Dashboard row can open over the tab: one workout, and
+  // whoever did it. Held here rather than in the screen union, because each
+  // of them is about a row and not about a screen.
+  const [workout, setWorkout] = useState<number | null>(null)
+  const [member, setMember] = useState<number | null>(null)
   const [picking, setPicking] = useState(false)
   const [measuring, setMeasuring] = useState<string | null>(null)
   const [exercising, setExercising] = useState(false)
@@ -450,13 +466,16 @@ export function Dashboard({
   // The wordmark is the header here, and the rail's own name takes over
   // from it at the width the rail appears. The history is a sub-view, and it
   // names the way back.
+  // Nothing to say while one of the two sub-views is up: each names itself.
   useTopBar(
-    screen === null
-      ? { title: 'Dashboard', left: 'wordmark' }
-      : {
-          title: 'Progress',
-          back: { label: 'Dashboard', onBack: () => setScreen(null) },
-        }
+    workout !== null || member !== null
+      ? null
+      : screen === null
+        ? { title: 'Dashboard', left: 'wordmark' }
+        : {
+            title: screen === 'community' ? 'Community' : 'Progress',
+            back: { label: 'Dashboard', onBack: () => setScreen(null) },
+          }
   )
 
   // A screen asked for from outside is opened once, and then this tab owns
@@ -640,6 +659,39 @@ export function Dashboard({
       </div>
     </div>
   )
+
+  if (workout !== null) {
+    return (
+      <WorkoutDetails
+        me={me}
+        workoutId={workout}
+        back="Dashboard"
+        onBack={() => setWorkout(null)}
+        onOpenMember={(userId) => {
+          setWorkout(null)
+          setMember(userId)
+        }}
+        onChanged={onChanged}
+      />
+    )
+  }
+
+  if (member !== null) {
+    return <MemberView userId={member} back="Dashboard" onBack={() => setMember(null)} />
+  }
+
+  if (screen === 'community') {
+    return (
+      <div className="t-card mb-3">
+        <Feed
+          me={me}
+          refresh={refresh}
+          onOpenWorkout={setWorkout}
+          onOpenMember={setMember}
+        />
+      </div>
+    )
+  }
 
   if (screen === 'progress') {
     const line = windowed?.trend ?? []
@@ -829,15 +881,32 @@ export function Dashboard({
           <p className="text-sm text-muted">No exercise logged.</p>
         ) : (
           <>
-            {day.exercise.map((row) => (
-              <div key={row.id ?? `w${row.workout_id}`} className="t-row min-h-9 text-sm">
-                <span className="min-w-0 flex-1 truncate">{row.name}</span>
-                <span className="t-nums text-muted">
-                  {row.minutes} min
-                  {row.kcal === null ? '' : ` · about ${row.kcal} cal`}
-                </span>
-              </div>
-            ))}
+            {day.exercise.map((row) => {
+              const line = (
+                <>
+                  <span className="min-w-0 flex-1 truncate">{row.name}</span>
+                  <span className="t-nums text-muted">
+                    {row.minutes} min
+                    {row.kcal === null ? '' : ` · about ${row.kcal} cal`}
+                  </span>
+                </>
+              )
+              // A synced row opens its session; one somebody typed has none.
+              return row.workout_id !== null ? (
+                <button
+                  key={`w${row.workout_id}`}
+                  type="button"
+                  className="t-row min-h-9 w-full text-left text-sm"
+                  onClick={() => setWorkout(row.workout_id as number)}
+                >
+                  {line}
+                </button>
+              ) : (
+                <div key={row.id ?? row.name} className="t-row min-h-9 text-sm">
+                  {line}
+                </div>
+              )
+            })}
           </>
         )}
         {fitness !== null && fitness.connected && (
@@ -937,6 +1006,19 @@ export function Dashboard({
           <DayBars days={week} todayIso={todayIso} />
         </div>
       </div>
+
+      {!wide && (
+        <div className="t-card mb-3">
+          <CardHead label="Community" onOpen={() => setScreen('community')} />
+          <Feed
+            me={me}
+            limit={3}
+            refresh={refresh}
+            onOpenWorkout={setWorkout}
+            onOpenMember={setMember}
+          />
+        </div>
+      )}
 
       {picking && (
         <FoodPicker

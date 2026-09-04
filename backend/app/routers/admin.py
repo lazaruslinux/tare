@@ -200,11 +200,13 @@ def queue_item(
     }
 
 
-@router.get("/queue")
-def read_queue(
-    db: Session = Depends(get_db), admin: models.User = Depends(require_admin)
-) -> list[dict[str, object]]:
-    """Everything waiting, oldest first: a queue, not a feed."""
+def waiting_items(db: Session) -> list[dict[str, object]]:
+    """Everything waiting, oldest first: a queue, not a feed.
+
+    Its own function so the strip that says how many are waiting counts the
+    same rows this screen would draw, rather than a number that agrees with it
+    most of the time.
+    """
     rows = db.execute(
         select(models.FoodSubmission, models.User.username)
         .outerjoin(models.User, models.User.id == models.FoodSubmission.submitted_by_id)
@@ -219,6 +221,13 @@ def read_queue(
         if item is not None:
             queue.append(item)
     return queue
+
+
+@router.get("/queue")
+def read_queue(
+    db: Session = Depends(get_db), admin: models.User = Depends(require_admin)
+) -> list[dict[str, object]]:
+    return waiting_items(db)
 
 
 def approve_edit(

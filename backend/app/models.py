@@ -83,7 +83,15 @@ class User(Base):
     is_admin: Mapped[bool] = mapped_column(Boolean, nullable=False, default=False)
     units: Mapped[str] = mapped_column(String(16), nullable=False, default="imperial")
     timezone: Mapped[str] = mapped_column(String(64), nullable=False, default="UTC")
+    # Which parts of a shared workout this account keeps to itself: any of
+    # avg_hr, kcal and route. Another member is served the workout without
+    # them rather than with them emptied.
     feed_hidden: Mapped[list[Any]] = mapped_column(JSON, nullable=False, default=list)
+    # The only three facts another member may be shown, each off until it is
+    # turned on. Everything else about an account stays private.
+    share_age: Mapped[bool] = mapped_column(Boolean, nullable=False, default=False)
+    share_sex: Mapped[bool] = mapped_column(Boolean, nullable=False, default=False)
+    share_location: Mapped[bool] = mapped_column(Boolean, nullable=False, default=False)
     created_at: Mapped[dt.datetime] = mapped_column(UtcDateTime, nullable=False, default=now_utc)
 
 

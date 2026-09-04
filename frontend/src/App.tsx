@@ -2,14 +2,17 @@ import { AnimatePresence, motion, useReducedMotion } from 'framer-motion'
 import { useCallback, useEffect, useState } from 'react'
 
 import { api, type Me } from './api'
+import { Aside } from './components/Aside'
 import { ExerciseSheet } from './components/ExerciseSheet'
 import { FoodPicker } from './components/FoodPicker'
 import { MeasurementsSheet } from './components/MeasurementsSheet'
+import { MemberView } from './components/MemberView'
 import { PlusSheet } from './components/PlusSheet'
 import { ScanFlow } from './components/ScanFlow'
 import { SideRail } from './components/SideRail'
 import { TabBar, type Page, type RailTarget } from './components/TabBar'
 import { TopBar } from './components/TopBar'
+import { WorkoutDetails } from './components/WorkoutDetails'
 import { entry } from './entry'
 import { useResume } from './hooks/useResume'
 import { TopBarContext, useTopBarState } from './hooks/useTopBar'
@@ -26,6 +29,18 @@ import { More, type Screen } from './pages/More'
 import { ResetPassword } from './pages/ResetPassword'
 import { VerifyEmail } from './pages/VerifyEmail'
 import { Welcome } from './pages/Welcome'
+
+// What the right-hand column has opened over the tab: one workout, or the
+// member who did it.
+type Overlay = { kind: 'workout'; id: number } | { kind: 'member'; id: number } | null
+
+// What the way back out of one is called, which is the tab it is standing on.
+const TAB_TITLE: Record<Page, string> = {
+  dashboard: 'Dashboard',
+  journal: 'Journal',
+  food: 'Food',
+  more: 'More',
+}
 
 // Which screen the whole app is on. Everything except 'signedin' is a single
 // centred card, so the shell below is only ever built for somebody who is in.
@@ -70,6 +85,10 @@ export default function App() {
   const [journalDay, setJournalDay] = useState('')
   const [measuring, setMeasuring] = useState(false)
   const [exercising, setExercising] = useState(false)
+  // What the right-hand column opened, shown in the main well as a sub-view of
+  // whichever tab is underneath. One state, one place: the column is the same
+  // on every tab, so what it opens cannot belong to any one of them.
+  const [overlay, setOverlay] = useState<Overlay>(null)
   // The app-wide change tick. Bumped whenever something changed on the server,
   // wherever it was changed from, and whenever the app came back to the front
   // after being left. Every tab watches it and reads its lists again, so a food
@@ -121,6 +140,7 @@ export default function App() {
     // A tab is not a stop on the back journey, so the entry is rewritten
     // rather than added and back still means the way out of the app.
     window.history.replaceState({ tab: next }, '')
+    setOverlay(null)
     setPage(next)
     window.scrollTo(0, 0)
   }
@@ -243,7 +263,26 @@ export default function App() {
                   exit={{ opacity: 0, y: reduced ? 0 : -10 }}
                   transition={{ duration: 0.18 }}
                 >
-                  {page === 'more' ? (
+                  {overlay !== null ? (
+                    overlay.kind === 'workout' ? (
+                      <WorkoutDetails
+                        me={me}
+                        workoutId={overlay.id}
+                        back={TAB_TITLE[page]}
+                        onBack={() => setOverlay(null)}
+                        onOpenMember={(userId) =>
+                          setOverlay({ kind: 'member', id: userId })
+                        }
+                        onChanged={changed}
+                      />
+                    ) : (
+                      <MemberView
+                        userId={overlay.id}
+                        back={TAB_TITLE[page]}
+                        onBack={() => setOverlay(null)}
+                      />
+                    )
+                  ) : page === 'more' ? (
                     <More
                       me={me}
                       onChange={setMe}
@@ -280,6 +319,7 @@ export default function App() {
                         setMoreView('targets')
                         select('more')
                       }}
+                      onChanged={changed}
                     />
                   ) : (
                     <Dashboard
@@ -294,6 +334,7 @@ export default function App() {
                         setMoreView('profile')
                         select('more')
                       }}
+                      onChanged={changed}
                       start={dashView}
                       onStarted={() => setDashView(null)}
                       onScreen={setDashScreen}
@@ -311,8 +352,13 @@ export default function App() {
           </div>
           {wide && (
             <aside className="t-aside">
-              <p className="t-micro">Alongside</p>
-              <div className="t-card text-sm text-muted">Nothing here yet.</div>
+              <Aside
+                me={me}
+                refresh={logged}
+                waiting={queue}
+                onOpenWorkout={(id) => setOverlay({ kind: 'workout', id })}
+                onOpenMember={(id) => setOverlay({ kind: 'member', id })}
+              />
             </aside>
           )}
         </div>

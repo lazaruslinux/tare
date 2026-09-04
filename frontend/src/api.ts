@@ -24,6 +24,12 @@ export type Me = {
   // to the one screen that does.
   birthdate: string | null
   location: string | null
+  // What this account holds back on a workout other members can see, and the
+  // three facts it lets them see about the person.
+  feed_hidden: string[]
+  share_age: boolean
+  share_sex: boolean
+  share_location: boolean
 }
 
 export type Sex = 'female' | 'male'
@@ -657,6 +663,15 @@ async function send<T>(path: string, init: RequestInit): Promise<T> {
 // Where a workout came from. Only a manual entry can be deleted in Tare.
 export type WorkoutSource = 'manual' | 'apple' | 'hc' | 'upload'
 
+// The same thing in the words somebody would use for what is on their wrist,
+// rather than the name of a data format. Manual rows say nothing: a row
+// somebody typed does not need telling where it came from.
+export const SOURCE_LABEL: Record<string, string> = {
+  apple: 'Apple Watch',
+  hc: 'Health Connect',
+  upload: 'From a file',
+}
+
 // The four readings the Fitness screen draws, by the keys the API answers in.
 export type FitnessMetric = 'steps' | 'active_kcal' | 'exercise_minutes' | 'resting_hr'
 
@@ -680,6 +695,8 @@ export type Workout = {
   elevation_gain_m: number | null
   indoor: boolean
   source: WorkoutSource
+  // Whether the owner keeps this one out of the community feed.
+  hidden_from_feed: boolean
   // What looked odd about it, by key. Empty on almost every workout.
   flags: string[]
 }
@@ -696,11 +713,67 @@ export type WorkoutSample = {
   steps: number | null
 }
 
-export type WorkoutDetail = Workout & {
+// One session read whole. Every field the owner may hold back is optional
+// here: another member is served the workout without them, key and all, so
+// absent is what hidden looks like and null stays what was never measured.
+export type WorkoutDetail = Omit<
+  Workout,
+  'avg_hr' | 'max_hr' | 'kcal' | 'elevation_gain_m' | 'flags'
+> & {
+  user_id: number
+  display_name: string
+  mine: boolean
+  avg_hr?: number | null
+  max_hr?: number | null
+  kcal?: number | null
+  elevation_gain_m?: number | null
+  flags?: string[]
   samples: WorkoutSample[]
   // The line, with both its ends already thrown away, or null for a session
   // that recorded no route.
-  route: [number, number][] | null
+  route?: [number, number][] | null
+}
+
+// One workout as the community feed lists it: enough to recognise it and
+// nothing that belongs to whoever did it.
+export type FeedRow = {
+  id: number
+  user_id: number
+  display_name: string
+  mine: boolean
+  // Only ever on your own rows: a workout you kept out of everybody's feed.
+  hidden?: boolean
+  activity: string
+  date: string
+  started_at: string
+  duration_s: number
+  distance_m: number | null
+  has_route: boolean
+  indoor: boolean
+  source: WorkoutSource
+}
+
+// One page of the feed. The marker is opaque and only ever handed back.
+export type FeedPage = { items: FeedRow[]; next_cursor: string | null }
+
+// One member as other members see them. A fact that is not shared is absent
+// rather than null, so there is nothing here to read a withheld answer out of.
+export type MemberView = {
+  display_name: string
+  member_since: string
+  age?: number
+  sex?: Sex
+  location?: string
+}
+
+// The few figures the wide layout keeps beside whatever is on screen. The
+// waiting count is an administrator's alone.
+export type TodayStrip = {
+  calories_left: number | null
+  steps: number | null
+  latest_weight_kg: number | null
+  latest_weight_date: string | null
+  waiting?: number
 }
 
 export type FitnessSummary = {

@@ -115,7 +115,7 @@ def test_one_workout_carries_its_minutes_and_its_line(client, db_session, make_u
     assert len(body["route"]) >= 10
 
 
-def test_somebody_elses_workout_answers_what_a_missing_one_answers(
+def test_a_workout_kept_out_of_the_feed_answers_what_a_missing_one_answers(
     client, db_session, make_user
 ):
     stranger = make_user("stranger")
@@ -123,15 +123,40 @@ def test_somebody_elses_workout_answers_what_a_missing_one_answers(
     token = token_for(db_session, stranger)
     post(client, token, {"data": {"workouts": [run(day)]}})
     workout = db_session.scalar(select(models.Workout))
+    workout.hidden_from_feed = True
+    db_session.commit()
 
     make_user("member")
     client.post("/api/auth/login", json={"username": "member", "password": "correct-horse-9"})
 
-    mine = client.get(f"/api/workouts/{workout.id}")
+    hidden = client.get(f"/api/workouts/{workout.id}")
     theirs = client.get("/api/workouts/99999")
 
-    assert mine.status_code == theirs.status_code == 404
-    assert mine.json() == theirs.json() == {"detail": "There is no such workout."}
+    assert hidden.status_code == theirs.status_code == 404
+    assert hidden.json() == theirs.json() == {"detail": "There is no such workout."}
+
+
+def test_a_shared_workout_reads_for_another_member_without_what_was_held_back(
+    client, db_session, make_user
+):
+    stranger = make_user("stranger")
+    stranger.feed_hidden = ["avg_hr", "kcal"]
+    db_session.commit()
+    token = token_for(db_session, stranger)
+    post(client, token, {"data": {"workouts": [run(yesterday())]}})
+    workout = db_session.scalar(select(models.Workout))
+
+    make_user("member")
+    client.post("/api/auth/login", json={"username": "member", "password": "correct-horse-9"})
+
+    body = client.get(f"/api/workouts/{workout.id}").json()
+
+    assert body["mine"] is False
+    assert body["display_name"] == "stranger"
+    assert "avg_hr" not in body and "max_hr" not in body and "kcal" not in body
+    assert "flags" not in body
+    assert body["route"] is not None
+    assert "hr_avg" not in body["samples"][0] and "kcal" not in body["samples"][0]
 
 
 def test_the_fitness_screen_needs_an_account(client):

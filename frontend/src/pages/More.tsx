@@ -1,6 +1,7 @@
 import {
   ChevronRight,
   ClipboardList,
+  Eye,
   HeartPulse,
   IdCard,
   Inbox,
@@ -32,6 +33,7 @@ import { AdminUsers } from './AdminUsers'
 import { Feedback, FeedbackLog } from './Feedback'
 import { Fitness } from './Fitness'
 import { Profile } from './Profile'
+import { Sharing } from './Sharing'
 import { SyncDevice } from './SyncDevice'
 import { Targets } from './Targets'
 import { ScaleGlyph } from '../components/ScaleGlyph'
@@ -45,6 +47,7 @@ export type Screen =
   | 'targets'
   | 'fitness'
   | 'sync'
+  | 'sharing'
   | 'display'
   | 'feedback'
   | 'queue'
@@ -322,8 +325,17 @@ export function More({
 
   if (screen === 'fitness') {
     return (
-      <Fitness me={me} onBack={() => go(null)} onOpenSync={() => go('sync')} />
+      <Fitness
+        me={me}
+        refresh={refresh}
+        onBack={() => go(null)}
+        onOpenSync={() => go('sync')}
+      />
     )
+  }
+
+  if (screen === 'sharing') {
+    return <Sharing me={me} onChange={onChange} onBack={() => go(null)} />
   }
 
   if (screen === 'sync') return <SyncDevice />
@@ -516,6 +528,12 @@ export function More({
           icon={Smartphone}
           note={syncNote(sync)}
           onOpen={() => go('sync')}
+        />
+        <Row
+          label="Sharing"
+          icon={Eye}
+          note="What other members can see"
+          onOpen={() => go('sharing')}
         />
         <Row label="Display" icon={Monitor} onOpen={() => go('display')} />
         <Row label="Send feedback" icon={MessageSquare} onOpen={() => go('feedback')} />

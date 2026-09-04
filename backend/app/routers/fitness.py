@@ -1,8 +1,10 @@
 """What a phone sent, read back for the Fitness screen.
 
-Everything here is private without qualification, the way the diary is. There
-is no address in this file that answers for somebody else's day, and an
-administrator is nobody special.
+A day's readings are private without qualification, the way the diary is: no
+address here answers for somebody else's day, and an administrator is nobody
+special. One session is the exception, and only the one the member shared: a
+workout the feed carries reads for every member, minus whatever its owner
+keeps to themselves.
 
 The other half of the file is the seam: the diary and the targets both need to
 know what was imported for a day, and the rule for counting a day's exercise
@@ -14,6 +16,7 @@ from __future__ import annotations
 import datetime as dt
 
 from fastapi import APIRouter, Depends, HTTPException, status
+from pydantic import BaseModel
 from sqlalchemy import select
 from sqlalchemy.orm import Session
 
@@ -27,6 +30,11 @@ workouts_router = APIRouter(prefix="/workouts", tags=["fitness"])
 BAD_DATE = "That is not a date."
 BAD_METRIC = "That is not something Tare keeps."
 MISSING_WORKOUT = "There is no such workout."
+
+# The three parts of a shared session a member may keep back, by the names the
+# account's own list holds. Anything else is a name Tare has never had.
+HIDEABLE = ("avg_hr", "kcal", "route")
+BAD_HIDDEN = "That is not something Tare can hide."
 
 # How much history a screen may ask for at once, and what it gets by default.
 DEFAULT_DAYS = 30
@@ -139,6 +147,8 @@ def workout_row(row: models.Workout) -> dict[str, object]:
         "elevation_gain_m": row.elevation_gain_m,
         "indoor": row.indoor,
         "source": row.source,
+        # Whether the owner has kept this one out of the community feed.
+        "hidden_from_feed": row.hidden_from_feed,
         # What looked odd about it, so a screen can say so rather than quietly
         # showing a number nobody could have run.
         "flags": sorted(row.flags or {}),
@@ -299,6 +309,33 @@ def read_workouts(
     }
 
 
+def kept_back(owner: models.User) -> set[str]:
+    """What this account keeps to itself on a workout somebody else is reading.
+
+    Read through the three names Tare knows rather than trusted as stored: a
+    list is JSON, and a name nothing recognises must not quietly widen what is
+    shown.
+    """
+    held = owner.feed_hidden or []
+    return {name for name in HIDEABLE if name in held}
+
+
+def readable_workout(db: Session, workout_id: int, user: models.User) -> models.Workout:
+    """One session this account may read: its own, or one a member shared.
+
+    A workout that is not there, one somebody kept out of the feed, and one
+    that never existed all answer the same sentence.
+    """
+    row = db.get(models.Workout, workout_id)
+    if row is None or (row.user_id != user.id and row.hidden_from_feed):
+        raise HTTPException(status.HTTP_404_NOT_FOUND, MISSING_WORKOUT)
+    return row
+
+
+class HidePatch(BaseModel):
+    hidden_from_feed: bool
+
+
 @workouts_router.get("/{workout_id}")
 def read_workout(
     workout_id: int,
@@ -307,12 +344,14 @@ def read_workout(
 ) -> dict[str, object]:
     """One session, whole: its numbers, its minutes and its line.
 
-    Owner only. A workout that is not there and one that is somebody else's
-    answer the same thing.
+    The owner reads all of it. Another member reads what was shared: the parts
+    the owner holds back are left out of the answer rather than sent as null,
+    so nothing on the far side has to tell a hidden number from a missing one.
     """
-    row = db.get(models.Workout, workout_id)
-    if row is None or row.user_id != user.id:
-        raise HTTPException(status.HTTP_404_NOT_FOUND, MISSING_WORKOUT)
+    row = readable_workout(db, workout_id, user)
+    mine = row.user_id == user.id
+    owner = user if mine else db.get(models.User, row.user_id)
+    assert owner is not None
     minutes = list(
         db.execute(
             select(models.WorkoutSample)
@@ -321,19 +360,58 @@ def read_workout(
         ).scalars()
     )
     route = db.get(models.WorkoutRoute, row.id)
-    return {
+
+    detail: dict[str, object] = {
         **workout_row(row),
-        "samples": [
-            {
-                "minute": sample.minute,
-                "distance_m": sample.distance_m,
-                "hr_min": sample.hr_min,
-                "hr_avg": sample.hr_avg,
-                "hr_max": sample.hr_max,
-                "kcal": sample.kcal,
-                "steps": sample.steps,
-            }
-            for sample in minutes
-        ],
-        "route": None if route is None else route.points,
+        "user_id": row.user_id,
+        "display_name": owner.display_name or owner.username,
+        "mine": mine,
     }
+    samples = [
+        {
+            "minute": sample.minute,
+            "distance_m": sample.distance_m,
+            "hr_min": sample.hr_min,
+            "hr_avg": sample.hr_avg,
+            "hr_max": sample.hr_max,
+            "kcal": sample.kcal,
+            "steps": sample.steps,
+        }
+        for sample in minutes
+    ]
+    hidden = set() if mine else kept_back(owner)
+    if not mine:
+        # What Tare thought of the numbers is between Tare and whoever ran it.
+        detail.pop("flags", None)
+    if "avg_hr" in hidden:
+        detail.pop("avg_hr", None)
+        detail.pop("max_hr", None)
+        for sample in samples:
+            for beat in ("hr_min", "hr_avg", "hr_max"):
+                sample.pop(beat, None)
+    if "kcal" in hidden:
+        detail.pop("kcal", None)
+        for sample in samples:
+            sample.pop("kcal", None)
+    if "route" in hidden:
+        detail.pop("elevation_gain_m", None)
+    else:
+        detail["route"] = None if route is None else route.points
+    detail["samples"] = samples
+    return detail
+
+
+@workouts_router.patch("/{workout_id}")
+def update_workout(
+    workout_id: int,
+    body: HidePatch,
+    db: Session = Depends(get_db),
+    user: models.User = Depends(require_user),
+) -> dict[str, object]:
+    """Whether one session is in the community feed. The owner's call alone."""
+    row = db.get(models.Workout, workout_id)
+    if row is None or row.user_id != user.id:
+        raise HTTPException(status.HTTP_404_NOT_FOUND, MISSING_WORKOUT)
+    row.hidden_from_feed = body.hidden_from_feed
+    db.commit()
+    return workout_row(row)

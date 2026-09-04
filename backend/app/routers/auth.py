@@ -121,6 +121,12 @@ def me_payload(user: models.User) -> dict[str, object]:
         # it to the one screen that asks (decision 21).
         "birthdate": None if user.birthdate is None else user.birthdate.isoformat(),
         "location": user.location,
+        # What this account shows other members, and what it holds back on a
+        # workout they can see.
+        "feed_hidden": sorted(user.feed_hidden or []),
+        "share_age": user.share_age,
+        "share_sex": user.share_sex,
+        "share_location": user.share_location,
     }
 
 

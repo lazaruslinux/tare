@@ -151,6 +151,10 @@ def test_login_answers_with_the_me_payload(client, make_user):
         "timezone": "UTC",
         "birthdate": BIRTHDATE.isoformat(),
         "location": None,
+        "feed_hidden": [],
+        "share_age": False,
+        "share_sex": False,
+        "share_location": False,
     }
 
 

@@ -251,8 +251,8 @@ export function Profile({
       </div>
 
       <p className="mt-3 text-xs text-muted">
-        Everything on this screen is private to you. No other member and no
-        administrator can see it.
+        Everything on this screen is private to you unless you choose to share it on
+        the Sharing screen.
       </p>
     </form>
 

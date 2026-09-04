@@ -211,10 +211,14 @@ function MetricDetail({
 
 export function Fitness({
   me,
+  refresh,
   onBack,
   onOpenSync,
 }: {
   me: Me
+  // The app-wide change tick. A workout that arrived while this was open
+  // belongs on the screen, and reading again leaves what is up alone.
+  refresh: number
   // This screen names itself, because it holds two screens of its own and each
   // of them is a level deeper than the list it was reached from.
   onBack: () => void
@@ -235,7 +239,7 @@ export function Fitness({
     return () => {
       alive = false
     }
-  }, [todayIso])
+  }, [todayIso, refresh])
 
   useTopBar(screen === null ? { title: 'Fitness', back: { label: 'More', onBack } } : null)
 
@@ -334,7 +338,11 @@ export function Fitness({
         )}
       </div>
 
-      <AllWorkouts me={me} onOpen={(id) => setScreen({ kind: 'workout', id })} />
+      <AllWorkouts
+        me={me}
+        refresh={refresh}
+        onOpen={(id) => setScreen({ kind: 'workout', id })}
+      />
 
       <button
         type="button"
@@ -354,7 +362,15 @@ export function Fitness({
   )
 }
 
-function AllWorkouts({ me, onOpen }: { me: Me; onOpen: (id: number) => void }) {
+function AllWorkouts({
+  me,
+  refresh,
+  onOpen,
+}: {
+  me: Me
+  refresh: number
+  onOpen: (id: number) => void
+}) {
   const [workouts, setWorkouts] = useState<Workout[]>([])
   const [cursor, setCursor] = useState<number | null>(null)
   const [loaded, setLoaded] = useState(false)
@@ -372,7 +388,7 @@ function AllWorkouts({ me, onOpen }: { me: Me; onOpen: (id: number) => void }) {
     return () => {
       alive = false
     }
-  }, [])
+  }, [refresh])
 
   const more = async () => {
     if (cursor === null) return
@@ -396,12 +412,8 @@ function AllWorkouts({ me, onOpen }: { me: Me; onOpen: (id: number) => void }) {
         <>
           <WorkoutRows me={me} workouts={workouts} onOpen={onOpen} />
           {cursor !== null && (
-            <button
-              type="button"
-              className="t-row w-full text-left text-sm text-muted"
-              onClick={more}
-            >
-              See more
+            <button type="button" className="t-btn mt-3 w-full" onClick={more}>
+              Show more
             </button>
           )}
         </>

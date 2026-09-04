@@ -4,6 +4,7 @@ import { useEffect, useRef, useState } from 'react'
 import {
   api,
   errorText,
+  SOURCE_LABEL,
   type DiaryDay,
   type DiaryEntry,
   type Food,
@@ -18,18 +19,11 @@ import { MacroBar } from '../components/MacroBar'
 import { MeasurementsSheet } from '../components/MeasurementsSheet'
 import { HEADLINE, nutrientText } from '../components/NutritionLabel'
 import { PortionSheet } from '../components/PortionSheet'
+import { WorkoutDetails } from '../components/WorkoutDetails'
 import { useTopBar } from '../hooks/useTopBar'
 import { SLOTS, SLOT_LABEL, dayLabel, shiftDay, slotByTime, today, type Slot } from '../lib/day'
 import { calText } from '../lib/targets'
 import { portionText, round1, servingsText, weightText } from '../lib/units'
-
-// Where a row came from, in the words somebody would use for the thing on
-// their wrist rather than the name of a data format.
-const SOURCE_LABEL: Record<string, string> = {
-  apple: 'Apple Watch',
-  hc: 'Health Connect',
-  upload: 'From a file',
-}
 
 // How long a deleted row can be brought back. Short enough that nobody is
 // waiting on it, long enough to notice the mistake.
@@ -96,9 +90,12 @@ export function Journal({
   onDay,
   onScan,
   onOpenTargets,
+  onChanged,
 }: {
   me: Me
   refresh: number
+  // Said upward when a sub-view changed a list the rest of the app is showing.
+  onChanged?: () => void
   // Which day is on screen, told to the shell so its centre control adds to
   // the day being read rather than always to today.
   onDay: (date: string) => void
@@ -118,6 +115,8 @@ export function Journal({
   const [editing, setEditing] = useState<Editing | null>(null)
   const [measuring, setMeasuring] = useState(false)
   const [exercising, setExercising] = useState(false)
+  // The one workout this tab opens over itself, when a synced row is tapped.
+  const [viewing, setViewing] = useState<number | null>(null)
   // A logged recipe is edited by the serving, which is the only thing about it
   // that can change.
   const [servings, setServings] = useState<{ entry: DiaryEntry; slot: Slot } | null>(null)
@@ -127,15 +126,22 @@ export function Journal({
   // The day chooser is this tab's header, so the day is picked in one place
   // and the page below is only the day itself. The plus adds to the day on
   // screen, at the meal the hour makes likely.
-  useTopBar({
-    title: dayLabel(date, todayIso),
-    pager: {
-      atToday: date >= todayIso,
-      onStep: (days) => setDate(shiftDay(date, days)),
-      onToday: () => setDate(todayIso),
-    },
-    action: { label: 'Add food', onAct: () => setPicking(slotByTime(me.timezone)) },
-  })
+  useTopBar(
+    viewing !== null
+      ? null
+      : {
+          title: dayLabel(date, todayIso),
+          pager: {
+            atToday: date >= todayIso,
+            onStep: (days) => setDate(shiftDay(date, days)),
+            onToday: () => setDate(todayIso),
+          },
+          action: {
+            label: 'Add food',
+            onAct: () => setPicking(slotByTime(me.timezone)),
+          },
+        }
+  )
 
   useEffect(() => onDay(date), [date, onDay])
 
@@ -242,6 +248,18 @@ export function Journal({
 
   const empty = day !== null && SLOTS.every((slot) => day.slots[slot].entries.length === 0)
   const weighed = day?.measurement ?? null
+
+  if (viewing !== null) {
+    return (
+      <WorkoutDetails
+        me={me}
+        workoutId={viewing}
+        back="Journal"
+        onBack={() => setViewing(null)}
+        onChanged={onChanged}
+      />
+    )
+  }
 
   return (
     <>
@@ -354,8 +372,8 @@ export function Journal({
           {day.exercise.length === 0 ? (
             <p className="text-sm text-muted">No exercise logged.</p>
           ) : (
-            day.exercise.map((row) => (
-              <div key={row.id ?? `w${row.workout_id}`} className="t-row">
+            day.exercise.map((row) => {
+              const line = (
                 <span className="min-w-0 flex-1">
                   <span className="block truncate text-sm">{row.name}</span>
                   <span className="block text-xs text-muted">
@@ -364,12 +382,23 @@ export function Journal({
                     {row.source === 'manual' ? '' : ` · ${SOURCE_LABEL[row.source]}`}
                   </span>
                 </span>
-                {row.id === null ? (
-                  // Nothing to delete here. A workout that arrived from a phone
-                  // is corrected on the phone, and this row follows what it
-                  // sends.
+              )
+              // A synced row opens the session it came from. Nothing to delete
+              // there: a workout that arrived from a phone is corrected on the
+              // phone, and this row follows what it sends.
+              return row.workout_id !== null ? (
+                <button
+                  key={`w${row.workout_id}`}
+                  type="button"
+                  className="t-row w-full text-left"
+                  onClick={() => setViewing(row.workout_id as number)}
+                >
+                  {line}
                   <span className="shrink-0 text-xs text-muted">Synced</span>
-                ) : (
+                </button>
+              ) : (
+                <div key={row.id ?? row.name} className="t-row">
+                  {line}
                   <button
                     type="button"
                     className="t-tap44 shrink-0 text-sm text-muted"
@@ -377,9 +406,9 @@ export function Journal({
                   >
                     Delete
                   </button>
-                )}
-              </div>
-            ))
+                </div>
+              )
+            })
           )}
           <button
             type="button"
