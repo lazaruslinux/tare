@@ -3,7 +3,7 @@ import { useEffect, useState, type FormEvent } from 'react'
 
 import { api, errorText, type Food, type FoodRow, type Me, type RepeatRow } from '../api'
 import { slotByTime, today, type Slot } from '../lib/day'
-import { Calories, subline } from './FoodRows'
+import { Calories, Verified, subline } from './FoodRows'
 import { PortionSheet } from './PortionSheet'
 import { Sheet } from './Sheet'
 
@@ -27,6 +27,7 @@ function Row({ row, onOpen }: { row: FoodRow & { pinned?: boolean }; onOpen: () 
         <span className="flex items-center gap-1.5">
           {row.pinned && <Pin className="h-3 w-3 shrink-0 text-accent" strokeWidth={2.5} />}
           <span className="truncate text-sm">{row.name}</span>
+          {row.status === 'approved' && <Verified />}
         </span>
         {subline(row) && (
           <span className="block truncate text-xs text-muted">{subline(row)}</span>

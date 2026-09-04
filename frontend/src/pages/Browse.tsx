@@ -1,7 +1,7 @@
 import { useEffect, useRef, useState } from 'react'
 
 import { api, errorText, type BrowsePage, type FoodRow } from '../api'
-import { Calories, PhotoThumb, subline } from '../components/FoodRows'
+import { Calories, PhotoThumb, Verified, subline } from '../components/FoodRows'
 import { useTopBar } from '../hooks/useTopBar'
 import { SECTIONS, sectionLabel } from '../lib/community'
 
@@ -37,7 +37,11 @@ function Row({ row, onOpen }: { row: FoodRow; onOpen: () => void }) {
     <button type="button" className="t-row w-full text-left" onClick={onOpen}>
       <PhotoThumb url={row.photo_url} />
       <span className="min-w-0 flex-1">
-        <span className="block truncate text-sm">{row.name}</span>
+        {/* Every row here is in the database, so every one wears the mark. */}
+        <span className="flex items-center gap-1.5">
+          <span className="truncate text-sm">{row.name}</span>
+          <Verified />
+        </span>
         {subline(row) && (
           <span className="block truncate text-xs text-muted">{subline(row)}</span>
         )}

@@ -1,4 +1,4 @@
-import { Camera, X } from 'lucide-react'
+import { BadgeCheck, Camera, X } from 'lucide-react'
 import { useState } from 'react'
 
 import { errorText, type Community, type FoodRow, type MealRow, type RecipeRow } from '../api'
@@ -20,6 +20,8 @@ export function subline(row: FoodRow): string {
 // Where a food stands with the shared database, as one dot before its name.
 // A word for each of these on every row would be a column of shouting; the
 // colour carries it and the label is there for anybody reading with their ears.
+// A food already in the database wears the check instead, so the dots are only
+// ever a member's own food on its way there.
 const DOTS: Record<Community, { label: string; look: string }> = {
   none: { label: 'Not submitted', look: 'border border-line-strong' },
   pending: { label: 'Waiting for review', look: 'bg-pending' },
@@ -34,6 +36,19 @@ export function Dot({ state }: { state: Community }) {
       className={`h-2 w-2 shrink-0 rounded-full ${dot.look}`}
       role="img"
       aria-label={dot.label}
+    />
+  )
+}
+
+// The mark a food in the Tare database wears, after its name, everywhere its
+// name is read. One mark, one meaning: this one is the database's, not yours.
+export function Verified({ className = 'h-4 w-4' }: { className?: string }) {
+  return (
+    <BadgeCheck
+      className={`${className} shrink-0 text-accent`}
+      strokeWidth={2.25}
+      role="img"
+      aria-label="In the Tare database"
     />
   )
 }
@@ -85,9 +100,10 @@ export function FoodLine({
     <>
       <PhotoThumb url={row.photo_url} />
       <span className="min-w-0 flex-1">
-        <span className="flex items-center gap-2">
-          <Dot state={row.community} />
+        <span className="flex items-center gap-1.5">
+          {row.status !== 'approved' && <Dot state={row.community} />}
           <span className="truncate text-sm">{row.name}</span>
+          {row.status === 'approved' && <Verified />}
         </span>
         {subline(row) && (
           <span className="block truncate text-xs text-muted">{subline(row)}</span>

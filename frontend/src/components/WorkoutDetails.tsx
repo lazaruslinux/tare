@@ -5,6 +5,7 @@ import { useTopBar } from '../hooks/useTopBar'
 import { dayLabel, today } from '../lib/day'
 import { splitsOf } from '../lib/splits'
 import { distanceText, distanceUnit, durationText, paceText, round1 } from '../lib/units'
+import { ActivityIcon } from './ActivityIcon'
 import { RouteLine } from './RouteLine'
 import { Switch } from './Switch'
 
@@ -166,6 +167,12 @@ export function WorkoutDetails({
   return (
     <>
       <div className="t-card mb-3">
+        {/* The bar carries the name too, but a page about one morning ought to
+            say what it was without being scrolled to the top. */}
+        <p className="mb-1 flex items-center gap-2 text-base font-semibold tracking-tight">
+          <ActivityIcon name={detail.activity} className="h-5 w-5 shrink-0 text-muted" />
+          <span className="min-w-0 truncate">{detail.activity}</span>
+        </p>
         <p className="mb-2 text-sm text-muted">
           {!detail.mine && onOpenMember !== undefined && (
             <>

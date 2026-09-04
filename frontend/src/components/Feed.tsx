@@ -2,6 +2,7 @@ import { ChevronRight, Route } from 'lucide-react'
 import { useEffect, useState } from 'react'
 
 import { api, type FeedJournal, type FeedPage, type FeedRow, type FeedWorkout, type Me } from '../api'
+import { ActivityIcon } from './ActivityIcon'
 import { dayLabel, today } from '../lib/day'
 import { distanceText, durationText } from '../lib/units'
 
@@ -88,13 +89,16 @@ function Row({
 }) {
   return (
     <button type="button" className="t-row w-full text-left" onClick={onOpen}>
-      <span className="min-w-0 flex-1">
-        <span className="block truncate text-sm">{row.activity}</span>
-        <span className="block text-xs text-muted">
-          <Name row={row} onOpenMember={onOpenMember} />
-          {` · ${dayLabel(row.date, todayIso)} ${timeText(row.started_at, me.timezone)}`}
-          {` · ${durationText(row.duration_s)}`}
-          {row.distance_m === null ? '' : ` · ${distanceText(row.distance_m, me.units)}`}
+      <span className="flex min-w-0 flex-1 items-center gap-2">
+        <ActivityIcon name={row.activity} className="h-4 w-4 shrink-0 text-muted" />
+        <span className="min-w-0 flex-1">
+          <span className="block truncate text-sm">{row.activity}</span>
+          <span className="block text-xs text-muted">
+            <Name row={row} onOpenMember={onOpenMember} />
+            {` · ${dayLabel(row.date, todayIso)} ${timeText(row.started_at, me.timezone)}`}
+            {` · ${durationText(row.duration_s)}`}
+            {row.distance_m === null ? '' : ` · ${distanceText(row.distance_m, me.units)}`}
+          </span>
         </span>
       </span>
       {row.hidden === true && <span className="t-chip shrink-0">Only you</span>}

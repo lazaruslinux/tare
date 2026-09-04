@@ -6,11 +6,13 @@ import {
   Pencil,
   Pin,
   PinOff,
+  ThumbsUp,
   Trash2,
 } from 'lucide-react'
 import { useEffect, useState, type ChangeEvent } from 'react'
 
 import { api, errorText, upload, type AutoLog, type Food, type Me } from '../api'
+import { Verified } from '../components/FoodRows'
 import { NutritionLabel } from '../components/NutritionLabel'
 import { PortionSheet } from '../components/PortionSheet'
 import { Lightbox } from '../components/Lightbox'
@@ -271,7 +273,10 @@ export function FoodDetail({
         <>
           <div className="flex items-start justify-between gap-3">
             <div className="min-w-0">
-              <p className="text-xl font-semibold tracking-tight">{food.name}</p>
+              <div className="flex items-center gap-2">
+                <p className="min-w-0 text-xl font-semibold tracking-tight">{food.name}</p>
+                {shared && <Verified className="h-5 w-5" />}
+              </div>
               <div className="mb-3 flex items-center gap-2">
                 <p className="truncate text-sm text-muted">{food.brand || 'No brand'}</p>
                 {/* Which aisle it is browsed under, on the foods that are
@@ -323,13 +328,9 @@ export function FoodDetail({
             )}
           </div>
           {offered && (
-            <p className="mb-3 text-xs text-muted">
-              You submitted this food. {offered.edited ? 'Approved with edits' : 'Approved'}{' '}
-              {dayLabel(
-                dayOf(me.timezone, offered.decided_at ?? offered.created_at),
-                today(me.timezone)
-              ).toLowerCase()}
-              .
+            <p className="mb-3 flex items-center gap-1.5 text-xs text-muted">
+              <ThumbsUp className="h-4 w-4 text-accent" strokeWidth={2.25} aria-hidden="true" />
+              You created this item
             </p>
           )}
 

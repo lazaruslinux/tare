@@ -12,6 +12,7 @@ import {
   type Me,
   type Workout,
 } from '../api'
+import { ActivityIcon } from '../components/ActivityIcon'
 import { WorkoutDetails } from '../components/WorkoutDetails'
 import { useTopBar } from '../hooks/useTopBar'
 import { dayLabel, today } from '../lib/day'
@@ -133,12 +134,15 @@ function WorkoutRows({
           className="t-row w-full text-left"
           onClick={() => onOpen(row.id)}
         >
-          <span className="min-w-0 flex-1">
-            <span className="block truncate text-sm">{row.activity}</span>
-            <span className="block text-xs text-muted">
-              {dayLabel(row.date, todayIso)} · {durationText(row.duration_s)}
-              {row.distance_m === null ? '' : ` · ${distanceText(row.distance_m, me.units)}`}
-              {row.kcal === null ? '' : ` · about ${row.kcal} cal`}
+          <span className="flex min-w-0 flex-1 items-center gap-2">
+            <ActivityIcon name={row.activity} className="h-4 w-4 shrink-0 text-muted" />
+            <span className="min-w-0 flex-1">
+              <span className="block truncate text-sm">{row.activity}</span>
+              <span className="block text-xs text-muted">
+                {dayLabel(row.date, todayIso)} · {durationText(row.duration_s)}
+                {row.distance_m === null ? '' : ` · ${distanceText(row.distance_m, me.units)}`}
+                {row.kcal === null ? '' : ` · about ${row.kcal} cal`}
+              </span>
             </span>
           </span>
           <ChevronRight className="h-4 w-4 shrink-0 text-muted" strokeWidth={2} />

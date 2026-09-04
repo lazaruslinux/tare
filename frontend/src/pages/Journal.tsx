@@ -12,6 +12,7 @@ import {
   type Headline,
   type Me,
 } from '../api'
+import { ActivityIcon } from '../components/ActivityIcon'
 import { BreakdownCard } from '../components/BreakdownCard'
 import { ExerciseSheet } from '../components/ExerciseSheet'
 import { FoodPicker } from '../components/FoodPicker'
@@ -437,12 +438,15 @@ export function Journal({
           ) : (
             day.exercise.map((row) => {
               const line = (
-                <span className="min-w-0 flex-1">
-                  <span className="block truncate text-sm">{row.name}</span>
-                  <span className="block text-xs text-muted">
-                    {row.minutes} min
-                    {row.kcal === null ? '' : ` · about ${row.kcal} cal`}
-                    {row.source === 'manual' ? '' : ` · ${SOURCE_LABEL[row.source]}`}
+                <span className="flex min-w-0 flex-1 items-center gap-2">
+                  <ActivityIcon name={row.name} className="h-4 w-4 shrink-0 text-muted" />
+                  <span className="min-w-0 flex-1">
+                    <span className="block truncate text-sm">{row.name}</span>
+                    <span className="block text-xs text-muted">
+                      {row.minutes} min
+                      {row.kcal === null ? '' : ` · about ${row.kcal} cal`}
+                      {row.source === 'manual' ? '' : ` · ${SOURCE_LABEL[row.source]}`}
+                    </span>
                   </span>
                 </span>
               )
