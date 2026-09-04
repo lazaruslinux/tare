@@ -505,10 +505,27 @@ export type DiaryEntry = {
   // Set instead of food_id when what was eaten was a recipe, in which case the
   // amount is a number of its servings.
   recipe_id: number | null
+  // Which standing auto-log wrote this row. Null on one somebody logged.
+  auto_log_id: number | null
   calories: number | null
   protein_g: number | null
   carbs_g: number | null
   fat_g: number | null
+}
+
+// A food set to log itself into the same meal every day. The unit is the
+// portion as the diary takes it: a measure, or "serving:<id>" for one of the
+// food's own, with the serving's name beside it for the row to read.
+export type AutoLog = {
+  id: number
+  food_id: number
+  name: string
+  brand: string
+  amount: number
+  unit: string
+  serving_label: string | null
+  slot: Slot
+  started_on: string
 }
 
 // Null is a nutrient no entry on the day carried, which is not none of it.

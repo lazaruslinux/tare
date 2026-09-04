@@ -394,7 +394,12 @@ export function Journal({
                 const line = (
                   <>
                     <span className="min-w-0 flex-1">
-                      <span className="block truncate text-sm">{entry.name}</span>
+                      <span className="flex items-center gap-1.5">
+                        <span className="truncate text-sm">{entry.name}</span>
+                        {/* Written by a standing auto-log rather than logged
+                            by hand. It is edited and deleted like any row. */}
+                        {entry.auto_log_id !== null && <span className="t-chip shrink-0">Auto</span>}
+                      </span>
                       {under(entry) && (
                         <span className="block truncate text-xs text-muted">{under(entry)}</span>
                       )}

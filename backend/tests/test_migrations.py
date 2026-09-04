@@ -8,7 +8,7 @@ BACKEND = Path(__file__).resolve().parents[1]
 
 IDENTITY_TABLES = {"users", "sessions", "email_tokens", "invites", "ingest_tokens"}
 FOOD_TABLES = {"foods", "food_servings"}
-DIARY_TABLES = {"diary_entries", "saved_foods"}
+DIARY_TABLES = {"diary_entries", "saved_foods", "auto_logs", "auto_log_days"}
 COMMUNITY_TABLES = {"food_photos", "food_submissions"}
 RECIPE_TABLES = {"recipes", "recipe_ingredients", "meal_templates", "meal_template_items"}
 HEALTH_TABLES = {
@@ -105,7 +105,14 @@ def test_upgrade_head_builds_the_identity_schema(tmp_path):
         "share_journal",
     } <= user_columns
     assert journal_columns == {"user_id", "date", "completed_at"}
-    assert "recipe_id" in {column["name"] for column in inspector.get_columns("diary_entries")}
+    entry_columns = {column["name"] for column in inspector.get_columns("diary_entries")}
+    assert "recipe_id" in entry_columns
+    # Which standing auto-log wrote a row, and the one instruction a member
+    # may have per food per meal.
+    assert "auto_log_id" in entry_columns
+    assert "uq_auto_logs_user_food_slot" in {
+        constraint["name"] for constraint in inspector.get_unique_constraints("auto_logs")
+    }
     # The partial indexes are the one thing here a plain column cannot express,
     # so it is worth seeing that the migrations really emitted them.
     assert "uq_foods_barcode_approved" in food_indexes

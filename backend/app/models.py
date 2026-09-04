@@ -539,7 +539,65 @@ class DiaryEntry(Base):
     fiber_g: Mapped[float | None] = mapped_column(Float, nullable=True)
     sugar_g: Mapped[float | None] = mapped_column(Float, nullable=True)
 
+    # Which standing auto-log wrote this row, when one did. SET NULL: turning
+    # an auto-log off stops tomorrow and leaves what it already wrote standing,
+    # the same way deleting a food leaves the meals it was part of.
+    auto_log_id: Mapped[int | None] = mapped_column(
+        ForeignKey("auto_logs.id", ondelete="SET NULL"), nullable=True, index=True
+    )
+
     created_at: Mapped[dt.datetime] = mapped_column(UtcDateTime, nullable=False, default=now_utc)
+
+
+class AutoLog(Base):
+    """A food somebody eats every day, set once so it logs itself.
+
+    It holds a portion and a meal and nothing about any particular day: what it
+    has already written down lives in auto_log_days beside it, so a day whose
+    entry was deleted is a day that stays deleted.
+    """
+
+    __tablename__ = "auto_logs"
+    __table_args__ = (
+        UniqueConstraint("user_id", "food_id", "slot", name="uq_auto_logs_user_food_slot"),
+    )
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True)
+    user_id: Mapped[int] = mapped_column(
+        ForeignKey("users.id", ondelete="CASCADE"), nullable=False, index=True
+    )
+    # CASCADE, like a pin: an instruction to log a food that is gone is nothing.
+    food_id: Mapped[int] = mapped_column(
+        ForeignKey("foods.id", ondelete="CASCADE"), nullable=False
+    )
+    amount: Mapped[float] = mapped_column(Float, nullable=False)
+    # The portion as the diary route takes it: a unit from a measure family, or
+    # "serving:<id>" for one of the food's own. Kept that way so a fill-in is
+    # measured by exactly the code a manual log is.
+    unit: Mapped[str] = mapped_column(String(24), nullable=False)
+    slot: Mapped[str] = mapped_column(
+        Enum(*DIARY_SLOTS, name="diary_slot", native_enum=False), nullable=False
+    )
+    # The first day it may fill in, in the member's own zone. Nothing before it
+    # is ever written: an auto-log is a promise about days to come.
+    started_on: Mapped[dt.date] = mapped_column(Date, nullable=False)
+    created_at: Mapped[dt.datetime] = mapped_column(UtcDateTime, nullable=False, default=now_utc)
+
+
+class AutoLogDay(Base):
+    """One day an auto-log has already been filled in for.
+
+    The row is the whole answer, like a completed day: it exists, so that day
+    has had its turn. Deleting the entry it wrote does not delete this, which
+    is what keeps a deleted entry deleted.
+    """
+
+    __tablename__ = "auto_log_days"
+
+    auto_log_id: Mapped[int] = mapped_column(
+        ForeignKey("auto_logs.id", ondelete="CASCADE"), primary_key=True
+    )
+    date: Mapped[dt.date] = mapped_column(Date, primary_key=True)
 
 
 class JournalDay(Base):

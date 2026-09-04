@@ -208,6 +208,28 @@ class DiaryIn(BaseModel):
     fat_g: float | None = Field(default=None, ge=0)
 
 
+class AutoLogIn(BaseModel):
+    """A food set to log itself into the same meal every day.
+
+    The portion arrives the way one on a diary entry does, because it is
+    measured by the same code: a unit from a measure family, or "serving:<id>"
+    for one of the food's own.
+    """
+
+    food_id: int
+    amount: float = Field(gt=0)
+    unit: str = Field(max_length=MAX_UNIT)
+    slot: str
+
+
+class AutoLogPatch(BaseModel):
+    """A change to a standing auto-log. A field left out is left alone."""
+
+    amount: float | None = Field(default=None, gt=0)
+    unit: str | None = Field(default=None, max_length=MAX_UNIT)
+    slot: str | None = None
+
+
 class CompleteIn(BaseModel):
     """The day somebody is finished with. Left out means today."""
 

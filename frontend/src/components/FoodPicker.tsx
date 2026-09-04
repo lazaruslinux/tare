@@ -254,7 +254,7 @@ export function FoodPicker({
             )
           ) : (
             <>
-              <p className="t-micro mb-1">Repeat</p>
+              <p className="t-micro mb-1">Quick add</p>
               {repeat.length === 0 ? (
                 <p className="text-sm text-muted">
                   The foods you pin and the ones you log will show up here.

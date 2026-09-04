@@ -26,7 +26,7 @@ from app import clock, health, models
 from app.db import get_db
 from app.deps import require_user
 from app.routers.admin import waiting_items
-from app.routers.diary import exercise_credit, total
+from app.routers.diary import exercise_credit, fill_auto_logs, total
 from app.routers.fitness import day_exercise, kept_back, steps_on, workouts_on
 from app.routers.health import Reckoning, day_budget, exercise_on
 
@@ -297,6 +297,8 @@ def read_today(
     strip and the card can never disagree about a day.
     """
     day = clock.user_today(user)
+    # The strip is a reading of today, so today owes its auto-logs first.
+    fill_auto_logs(db, user, day, day)
     entries = list(
         db.execute(
             select(models.DiaryEntry).where(

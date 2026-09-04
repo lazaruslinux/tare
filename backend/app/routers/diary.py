@@ -16,6 +16,7 @@ import datetime as dt
 
 from fastapi import APIRouter, Depends, HTTPException, status
 from sqlalchemy import func, select
+from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session
 
 from app import clock, health, models, schemas, units
@@ -44,6 +45,10 @@ BAD_DATE = "That is not a date."
 DAY_COMPLETE = "This day is complete."
 FUTURE_DAY = "That day has not happened yet."
 BAD_SLOT = "That is not a meal."
+# One auto-log that is not there and one that is somebody else's read the same,
+# and the refusal for a second one on the same food and meal.
+MISSING_AUTO_LOG = "There is no such auto-log."
+AUTO_LOG_CLASH = "That food already auto-logs at {slot}."
 BAD_UNIT = "That is not a unit this can measure in."
 NO_AMOUNT = "Say how much of it you had."
 NO_QUICK_ADD = "A quick add needs a name and its calories."
@@ -215,6 +220,9 @@ def entry_row(entry: models.DiaryEntry) -> dict[str, object]:
         "food_id": entry.food_id,
         # Set instead, when what was eaten was a recipe.
         "recipe_id": entry.recipe_id,
+        # Which standing auto-log wrote this row, and null on one somebody
+        # logged themselves.
+        "auto_log_id": entry.auto_log_id,
         "calories": entry.calories,
         "protein_g": entry.protein_g,
         "carbs_g": entry.carbs_g,
@@ -312,6 +320,262 @@ def refuse_if_complete(db: Session, user: models.User, day: dt.date) -> None:
         raise HTTPException(status.HTTP_409_CONFLICT, DAY_COMPLETE)
 
 
+def serving_names(db: Session, standing: list[models.AutoLog]) -> dict[int, str]:
+    """What each auto-log's serving is called, in one query for the whole list.
+
+    Only the ones counted in a food's own servings have a name to look up; a
+    portion in grams reads as its own unit.
+    """
+    wanted: dict[int, int] = {}
+    for row in standing:
+        if row.unit.startswith(SERVING_PREFIX):
+            try:
+                wanted[row.id] = int(row.unit[len(SERVING_PREFIX) :])
+            except ValueError:
+                continue
+    if not wanted:
+        return {}
+    names = {
+        serving_id: name
+        for serving_id, name in db.execute(
+            select(models.FoodServing.id, models.FoodServing.name).where(
+                models.FoodServing.id.in_(set(wanted.values()))
+            )
+        )
+    }
+    return {row_id: names[serving_id] for row_id, serving_id in wanted.items() if serving_id in names}
+
+
+def auto_log_row(row: models.AutoLog, food: models.Food, label: str | None) -> dict[str, object]:
+    """One standing auto-log as its list reads it: what, how much, which meal."""
+    return {
+        "id": row.id,
+        "food_id": row.food_id,
+        "name": food.name,
+        "brand": food.brand,
+        "amount": row.amount,
+        # The portion as it was set, which is what the sheet opens on again.
+        "unit": row.unit,
+        # The name of the serving it counts in, or null when it is measured.
+        "serving_label": label,
+        "slot": row.slot,
+        "started_on": row.started_on.isoformat(),
+    }
+
+
+def standing_auto_logs(db: Session, user: models.User) -> list[models.AutoLog]:
+    return list(
+        db.execute(
+            select(models.AutoLog)
+            .where(models.AutoLog.user_id == user.id)
+            .order_by(models.AutoLog.id)
+        ).scalars()
+    )
+
+
+def own_auto_log(db: Session, user: models.User, auto_log_id: int) -> models.AutoLog:
+    row = db.get(models.AutoLog, auto_log_id)
+    if row is None or row.user_id != user.id:
+        raise HTTPException(status.HTTP_404_NOT_FOUND, MISSING_AUTO_LOG)
+    return row
+
+
+def fill_auto_logs(db: Session, user: models.User, first: dt.date, last: dt.date) -> None:
+    """Write in what the standing auto-logs owe across a run of days.
+
+    Every day is filled in once and once only: the day rows beside the auto-log
+    are the record of that, so a day whose entry was deleted stays deleted and a
+    day read twice is not logged twice. Nothing is written onto a day that has
+    not happened yet or onto one the member has closed.
+
+    Two queries and a set rather than a lookup a day, because a month of days
+    is read in one request.
+    """
+    last = min(last, clock.user_today(user))
+    if last < first:
+        return
+    standing = list(
+        db.execute(
+            select(models.AutoLog).where(
+                models.AutoLog.user_id == user.id, models.AutoLog.started_on <= last
+            )
+        ).scalars()
+    )
+    if not standing:
+        return
+
+    written = {
+        (row.auto_log_id, row.date)
+        for row in db.execute(
+            select(models.AutoLogDay.auto_log_id, models.AutoLogDay.date).where(
+                models.AutoLogDay.auto_log_id.in_([row.id for row in standing]),
+                models.AutoLogDay.date >= first,
+                models.AutoLogDay.date <= last,
+            )
+        )
+    }
+    marked = completed_days(db, user, first, last)
+    foods = {
+        food.id: food
+        for food in db.execute(
+            select(models.Food).where(models.Food.id.in_({row.food_id for row in standing}))
+        ).scalars()
+    }
+
+    added = False
+    for row in standing:
+        food = foods.get(row.food_id)
+        if food is None:
+            continue
+        day = max(first, row.started_on)
+        while day <= last:
+            if day not in marked and (row.id, day) not in written:
+                try:
+                    entry = log_food(user, day, row.slot, food, row.amount, row.unit)
+                except HTTPException:
+                    # The portion no longer resolves, which is a serving that
+                    # has been deleted since. Nothing is written rather than
+                    # something nobody chose, and the list still shows the row
+                    # so it can be set again or taken off.
+                    break
+                entry.auto_log_id = row.id
+                db.add(entry)
+                db.add(models.AutoLogDay(auto_log_id=row.id, date=day))
+                added = True
+            day += dt.timedelta(days=1)
+
+    if not added:
+        return
+    try:
+        db.commit()
+    except IntegrityError:
+        # Two reads of the same day at once. The day rows are the referee, and
+        # whichever request lost reads what the other one wrote.
+        db.rollback()
+
+
+@router.get("/auto-logs")
+def read_auto_logs(
+    db: Session = Depends(get_db),
+    user: models.User = Depends(require_user),
+) -> list[dict[str, object]]:
+    """Every food this account has set to log itself, oldest first."""
+    standing = standing_auto_logs(db, user)
+    if not standing:
+        return []
+    foods = {
+        food.id: food
+        for food in db.execute(
+            select(models.Food).where(models.Food.id.in_({row.food_id for row in standing}))
+        ).scalars()
+    }
+    labels = serving_names(db, standing)
+    return [
+        auto_log_row(row, food, labels.get(row.id))
+        for row in standing
+        if (food := foods.get(row.food_id)) is not None
+    ]
+
+
+@router.post("/auto-logs", status_code=status.HTTP_201_CREATED)
+def add_auto_log(
+    body: schemas.AutoLogIn,
+    db: Session = Depends(get_db),
+    user: models.User = Depends(require_user),
+) -> dict[str, object]:
+    """Set a food to log itself into the same meal every day from today on."""
+    slot = checked_slot(body.slot)
+    food = readable_food(db, user, body.food_id)
+    # Measured once here so a portion that cannot be worked out is refused now,
+    # rather than at a fill-in nobody is watching.
+    measure(food, body.amount, body.unit)
+    clash = db.execute(
+        select(models.AutoLog).where(
+            models.AutoLog.user_id == user.id,
+            models.AutoLog.food_id == food.id,
+            models.AutoLog.slot == slot,
+        )
+    ).scalar_one_or_none()
+    if clash is not None:
+        raise HTTPException(status.HTTP_409_CONFLICT, AUTO_LOG_CLASH.format(slot=slot))
+
+    today = clock.user_today(user)
+    row = models.AutoLog(
+        user_id=user.id,
+        food_id=food.id,
+        amount=body.amount,
+        unit=body.unit,
+        slot=slot,
+        started_on=today,
+    )
+    db.add(row)
+    db.flush()
+    # Setting this up after eating the thing is not eating it twice: a meal
+    # that already holds this food today has had its turn.
+    eaten = db.execute(
+        select(models.DiaryEntry.id).where(
+            models.DiaryEntry.user_id == user.id,
+            models.DiaryEntry.date_for == today,
+            models.DiaryEntry.slot == slot,
+            models.DiaryEntry.food_id == food.id,
+        )
+    ).first()
+    if eaten is not None:
+        db.add(models.AutoLogDay(auto_log_id=row.id, date=today))
+    db.commit()
+    return auto_log_row(row, food, serving_names(db, [row]).get(row.id))
+
+
+@router.patch("/auto-logs/{auto_log_id}")
+def update_auto_log(
+    auto_log_id: int,
+    body: schemas.AutoLogPatch,
+    db: Session = Depends(get_db),
+    user: models.User = Depends(require_user),
+) -> dict[str, object]:
+    """Change the portion or the meal. The days already written stand: this is
+    an instruction about the days to come."""
+    row = own_auto_log(db, user, auto_log_id)
+    sent = body.model_fields_set
+    food = db.get(models.Food, row.food_id)
+    if food is None:
+        raise HTTPException(status.HTTP_404_NOT_FOUND, MISSING_AUTO_LOG)
+
+    slot = checked_slot(body.slot) if "slot" in sent else row.slot
+    amount = body.amount if body.amount is not None else row.amount
+    unit = body.unit if "unit" in sent and body.unit else row.unit
+    measure(food, amount, unit)
+    if slot != row.slot:
+        clash = db.execute(
+            select(models.AutoLog).where(
+                models.AutoLog.user_id == user.id,
+                models.AutoLog.food_id == row.food_id,
+                models.AutoLog.slot == slot,
+            )
+        ).scalar_one_or_none()
+        if clash is not None:
+            raise HTTPException(status.HTTP_409_CONFLICT, AUTO_LOG_CLASH.format(slot=slot))
+
+    row.amount = amount
+    row.unit = unit
+    row.slot = slot
+    db.commit()
+    return auto_log_row(row, food, serving_names(db, [row]).get(row.id))
+
+
+@router.delete("/auto-logs/{auto_log_id}", status_code=status.HTTP_204_NO_CONTENT)
+def delete_auto_log(
+    auto_log_id: int,
+    db: Session = Depends(get_db),
+    user: models.User = Depends(require_user),
+) -> None:
+    """Stop it. Tomorrow is not written; what it already wrote is eaten and
+    stays where it is."""
+    row = own_auto_log(db, user, auto_log_id)
+    db.delete(row)
+    db.commit()
+
+
 @router.get("/day")
 def read_day(
     date: str = "",
@@ -326,6 +590,9 @@ def read_day(
     request was still out.
     """
     day = asked_day(date, user)
+    # Whatever the standing auto-logs owe this day is written before it is
+    # read, so the Journal never shows a day half filled in.
+    fill_auto_logs(db, user, day, day)
     entries = list(
         db.execute(
             select(models.DiaryEntry)
@@ -403,6 +670,9 @@ def read_days(
     span = max(1, min(days, MAX_HISTORY))
     today = clock.user_today(user)
     first = today - dt.timedelta(days=span - 1)
+    # The whole run at once, for the same reason the day view does it: a bar
+    # is drawn from what the day holds.
+    fill_auto_logs(db, user, first, today)
 
     eaten = {
         row.date_for: row

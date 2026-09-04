@@ -1,7 +1,15 @@
 import { Scale } from 'lucide-react'
 import { useState } from 'react'
 
-import { api, errorText, type DiaryEntry, type Food, type Headline, type Units } from '../api'
+import {
+  api,
+  errorText,
+  type AutoLog,
+  type DiaryEntry,
+  type Food,
+  type Headline,
+  type Units,
+} from '../api'
 import { SLOTS, SLOT_LABEL, type Slot } from '../lib/day'
 import {
   UNIT_GROUPS,
@@ -73,13 +81,31 @@ function entryChoice(food: Food, entry: DiaryEntry): string | null {
   return index < 0 ? null : `${SERVING}${index}`
 }
 
+// What a standing auto-log was set to, as a choice the control understands. A
+// serving is found again by its id, which is what the auto-log kept.
+function autoChoice(food: Food, row: AutoLog): string | null {
+  if (row.unit.startsWith(SERVING)) {
+    const index = food.servings.findIndex((serving) => serving.id === Number(row.unit.slice(SERVING.length)))
+    return index < 0 ? null : `${SERVING}${index}`
+  }
+  return row.unit in UNIT_TO_BASE ? row.unit : null
+}
+
 // One of a serving, a hundred of the food's own base unit, and one of anything
 // else: nobody's portion is a hundred ounces.
 const startingAmount = (food: Food, choice: string): string =>
   choice.startsWith(SERVING) || choice !== food.base_unit ? '1' : '100'
 
-function opening(food: Food | null, entry?: DiaryEntry): { amount: string; choice: string } {
+function opening(
+  food: Food | null,
+  entry?: DiaryEntry,
+  standing?: AutoLog | null
+): { amount: string; choice: string } {
   if (food === null) return { amount: entry?.amount == null ? '' : String(entry.amount), choice: '' }
+  if (standing) {
+    const choice = autoChoice(food, standing)
+    if (choice !== null) return { amount: String(standing.amount), choice }
+  }
   if (entry) {
     const choice = entryChoice(food, entry)
     if (choice !== null) return { amount: String(entry.amount ?? 1), choice }
@@ -98,6 +124,7 @@ export function PortionSheet({
   onDone,
   onDelete,
   onPick,
+  autoLog,
 }: {
   // Null when the food an entry came from has been deleted. What is left is a
   // portion and a set of numbers, and only the amount can still change.
@@ -113,11 +140,19 @@ export function PortionSheet({
   // is how a recipe and a kept meal are filled in. Nothing is logged: the
   // measurement is handed back and the sheet closes.
   onPick?: (food: Food, amount: number, unit: string) => void
+  // Given instead when the portion being chosen is a standing one: the same
+  // sheet, ending in the meal it lands in every day. `existing` is the one
+  // already set for this food, or null for a new one.
+  autoLog?: {
+    existing: AutoLog | null
+    onSaved: () => void
+    onStopped: () => void
+  }
 }) {
-  const [start] = useState(() => opening(food, entry))
+  const [start] = useState(() => opening(food, entry, autoLog?.existing))
   const [amount, setAmount] = useState(start.amount)
   const [choice, setChoice] = useState(start.choice)
-  const [meal, setMeal] = useState<Slot>(slot)
+  const [meal, setMeal] = useState<Slot>(autoLog?.existing?.slot ?? slot)
   const [error, setError] = useState('')
   const [saving, setSaving] = useState(false)
 
@@ -174,6 +209,27 @@ export function PortionSheet({
       onPick(food, typed, chosenUnit(food, pick))
       return
     }
+    if (autoLog && food !== null && pick !== null) {
+      setSaving(true)
+      setError('')
+      const standing = autoLog.existing
+      try {
+        await api(standing === null ? '/diary/auto-logs' : `/diary/auto-logs/${standing.id}`, {
+          method: standing === null ? 'POST' : 'PATCH',
+          body: {
+            ...(standing === null ? { food_id: food.id } : {}),
+            amount: typed,
+            unit: chosenUnit(food, pick),
+            slot: meal,
+          },
+        })
+        autoLog.onSaved()
+      } catch (failure) {
+        setError(errorText(failure))
+        setSaving(false)
+      }
+      return
+    }
     setSaving(true)
     setError('')
     try {
@@ -189,16 +245,34 @@ export function PortionSheet({
     }
   }
 
+  // Turning it off. What it has already written down is eaten and stays.
+  const stop = async () => {
+    if (!autoLog?.existing) return
+    setSaving(true)
+    setError('')
+    try {
+      await api(`/diary/auto-logs/${autoLog.existing.id}`, { method: 'DELETE' })
+      autoLog.onStopped()
+    } catch (failure) {
+      setError(errorText(failure))
+      setSaving(false)
+    }
+  }
+
   const name = food?.name ?? entry?.name ?? ''
   const brand = food?.brand ?? entry?.brand ?? ''
 
   return (
     <Sheet
       open
-      label={picking ? 'Choose a portion' : entry ? 'Edit entry' : 'Log food'}
+      label={
+        autoLog ? 'Auto-log' : picking ? 'Choose a portion' : entry ? 'Edit entry' : 'Log food'
+      }
       onClose={onClose}
     >
-      <p className="t-micro mb-1">{picking ? 'How much' : entry ? 'Edit' : 'Log'}</p>
+      <p className="t-micro mb-1">
+        {autoLog ? 'Auto-log' : picking ? 'How much' : entry ? 'Edit' : 'Log'}
+      </p>
       <p className="text-base font-semibold tracking-tight">{name}</p>
       {brand && <p className="text-xs text-muted">{brand}</p>}
       {food?.status === 'pending' && (
@@ -328,18 +402,38 @@ export function PortionSheet({
           disabled={saving || (needsAmount && !valid)}
           onClick={save}
         >
-          {picking ? 'Add' : entry ? 'Save' : 'Log'}
+          {autoLog ? 'Auto-log every day' : picking ? 'Add' : entry ? 'Save' : 'Log'}
         </button>
         {entry && onDelete ? (
           <button type="button" className="t-btn text-danger" onClick={() => onDelete(entry)}>
             Delete
           </button>
         ) : (
-          <button type="button" className="t-btn" onClick={onClose}>
-            Cancel
-          </button>
+          !autoLog && (
+            <button type="button" className="t-btn" onClick={onClose}>
+              Cancel
+            </button>
+          )
         )}
       </div>
+      {autoLog !== undefined && (
+        <div className="mt-3 flex gap-3">
+          {autoLog.existing === null ? (
+            <button type="button" className="t-btn flex-1" onClick={onClose}>
+              Cancel
+            </button>
+          ) : (
+            <button
+              type="button"
+              className="t-btn flex-1 text-danger"
+              disabled={saving}
+              onClick={() => void stop()}
+            >
+              Stop auto-logging
+            </button>
+          )}
+        </div>
+      )}
     </Sheet>
   )
 }

@@ -1,4 +1,5 @@
 import {
+  CalendarSync,
   ChevronRight,
   CookingPot,
   Pin,
@@ -15,6 +16,7 @@ import {
   api,
   errorText,
   foodPhoto,
+  type AutoLog,
   type Food as FoodItem,
   type Meal,
   type MealRow,
@@ -28,7 +30,8 @@ import { FoodForm } from '../components/FoodForm'
 import { Calories, FoodLine, MealLine, RecipeLine, subline } from '../components/FoodRows'
 import { PortionSheet } from '../components/PortionSheet'
 import { useTopBar } from '../hooks/useTopBar'
-import { slotByTime, today } from '../lib/day'
+import { SLOT_LABEL, slotByTime, today } from '../lib/day'
+import { portionText } from '../lib/units'
 import { Browse } from './Browse'
 import { FoodDetail } from './FoodDetail'
 import { MealDetail } from './MealDetail'
@@ -110,8 +113,12 @@ export function FoodTab({
   const [recipes, setRecipes] = useState<RecipeRow[]>([])
   const [meals, setMeals] = useState<MealRow[]>([])
   const [repeat, setRepeat] = useState<RepeatRow[]>([])
-  // The food a repeat row is being logged at, which is the picker's own sheet.
+  const [autos, setAutos] = useState<AutoLog[]>([])
+  // The food a quick add row is being logged at, which is the picker's own
+  // sheet.
   const [logging, setLogging] = useState<FoodItem | null>(null)
+  // The standing auto-log open in the same sheet, with the food it is about.
+  const [autoEdit, setAutoEdit] = useState<{ food: FoodItem; row: AutoLog } | null>(null)
   const [error, setError] = useState('')
 
   // The list is the tab's root, and its header carries the way to a new food.
@@ -153,6 +160,8 @@ export function FoodTab({
 
   const loadRepeat = () => api<RepeatRow[]>('/foods/repeat').then(setRepeat, () => {})
 
+  const loadAutos = () => api<AutoLog[]>('/diary/auto-logs').then(setAutos, () => {})
+
   useEffect(() => {
     let alive = true
     api<MyFoodRow[]>('/foods/mine')
@@ -166,6 +175,9 @@ export function FoodTab({
       .catch(() => {})
     api<RepeatRow[]>('/foods/repeat')
       .then((rows) => alive && setRepeat(rows))
+      .catch(() => {})
+    api<AutoLog[]>('/diary/auto-logs')
+      .then((rows) => alive && setAutos(rows))
       .catch(() => {})
     return () => {
       alive = false
@@ -213,7 +225,7 @@ export function FoodTab({
   const removeRepeat = (row: RepeatRow) => {
     setRepeat((rows) => rows.filter((item) => item.id !== row.id))
     hold({
-      message: row.pinned ? `Unpinned ${row.name}.` : `Took ${row.name} off Repeat.`,
+      message: row.pinned ? `Unpinned ${row.name}.` : `Took ${row.name} off Quick add.`,
       commit: () => {
         api(`/foods/${row.id}/${row.pinned ? 'pin' : 'repeat'}`, { method: 'DELETE' }).then(
           onChanged,
@@ -221,6 +233,18 @@ export function FoodTab({
         )
       },
       revert: () => void loadRepeat(),
+    })
+  }
+
+  // Off the list at once, and the request waits out the undo window with it.
+  const removeAuto = (row: AutoLog) => {
+    setAutos((rows) => rows.filter((item) => item.id !== row.id))
+    hold({
+      message: `Took ${row.name} off Auto-log.`,
+      commit: () => {
+        api(`/diary/auto-logs/${row.id}`, { method: 'DELETE' }).then(onChanged, () => {})
+      },
+      revert: () => void loadAutos(),
     })
   }
 
@@ -248,11 +272,22 @@ export function FoodTab({
     hold(waiting)
   }
 
-  // A repeat row is logged the way the picker logs one, at the portion sheet.
+  // A quick add row is logged the way the picker logs one, at the portion
+  // sheet.
   const openRepeat = async (id: number) => {
     setError('')
     try {
       setLogging(await api<FoodItem>(`/foods/${id}`))
+    } catch (failure) {
+      setError(errorText(failure))
+    }
+  }
+
+  // The same sheet the food page opens, on the food this instruction is about.
+  const openAuto = async (row: AutoLog) => {
+    setError('')
+    try {
+      setAutoEdit({ food: await api<FoodItem>(`/foods/${row.food_id}`), row })
     } catch (failure) {
       setError(errorText(failure))
     }
@@ -267,6 +302,7 @@ export function FoodTab({
     void loadRecipes()
     void loadMeals()
     void loadRepeat()
+    void loadAutos()
   }
 
   // What the screen behind a detail is called, for the control that goes back
@@ -349,6 +385,7 @@ export function FoodTab({
         onSeen={onSeen}
         onChanged={() => {
           void loadRepeat()
+          void loadAutos()
           onChanged()
         }}
       />
@@ -634,7 +671,7 @@ export function FoodTab({
       <div className="t-card mb-3">
         <p className="t-section mb-1">
           <Repeat className="h-4 w-4" strokeWidth={2} />
-          Repeat items
+          Quick add
         </p>
         {repeat.length === 0 ? (
           <p className="text-sm text-muted">
@@ -664,8 +701,45 @@ export function FoodTab({
               <button
                 type="button"
                 className="t-tap44 shrink-0 text-muted"
-                aria-label={row.pinned ? `Unpin ${row.name}` : `Take ${row.name} off Repeat`}
+                aria-label={row.pinned ? `Unpin ${row.name}` : `Take ${row.name} off Quick add`}
                 onClick={() => removeRepeat(row)}
+              >
+                <X className="h-4 w-4" strokeWidth={2.5} />
+              </button>
+            </div>
+          ))
+        )}
+      </div>
+
+      <div className="t-card mb-3">
+        <p className="t-section mb-1">
+          <CalendarSync className="h-4 w-4" strokeWidth={2} />
+          Auto-log
+        </p>
+        {autos.length === 0 ? (
+          <p className="text-sm text-muted">
+            Foods you eat every day can log themselves. Set it on a food's page.
+          </p>
+        ) : (
+          autos.map((row) => (
+            <div key={row.id} className="t-row">
+              <button
+                type="button"
+                className="flex min-w-0 flex-1 items-center gap-3 text-left"
+                onClick={() => openAuto(row)}
+              >
+                <span className="min-w-0 flex-1">
+                  <span className="block truncate text-sm">{row.name}</span>
+                  <span className="block truncate text-xs text-muted">
+                    {portionText(row)} · {SLOT_LABEL[row.slot]}
+                  </span>
+                </span>
+              </button>
+              <button
+                type="button"
+                className="t-tap44 shrink-0 text-muted"
+                aria-label={`Take ${row.name} off Auto-log`}
+                onClick={() => removeAuto(row)}
               >
                 <X className="h-4 w-4" strokeWidth={2.5} />
               </button>
@@ -693,6 +767,30 @@ export function FoodTab({
             setLogging(null)
             void loadRepeat()
             onChanged()
+          }}
+        />
+      )}
+
+      {autoEdit !== null && (
+        <PortionSheet
+          food={autoEdit.food}
+          date={today(me.timezone)}
+          slot={autoEdit.row.slot}
+          units={me.units}
+          onClose={() => setAutoEdit(null)}
+          onDone={() => setAutoEdit(null)}
+          autoLog={{
+            existing: autoEdit.row,
+            onSaved: () => {
+              setAutoEdit(null)
+              void loadAutos()
+              onChanged()
+            },
+            onStopped: () => {
+              setAutoEdit(null)
+              void loadAutos()
+              onChanged()
+            },
           }}
         />
       )}

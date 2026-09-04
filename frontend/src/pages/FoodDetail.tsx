@@ -1,7 +1,7 @@
-import { Camera, Pencil, Pin, PinOff, Trash2 } from 'lucide-react'
+import { CalendarSync, Camera, Pencil, Pin, PinOff, Trash2 } from 'lucide-react'
 import { useEffect, useState, type ChangeEvent } from 'react'
 
-import { api, errorText, upload, type Food, type Me } from '../api'
+import { api, errorText, upload, type AutoLog, type Food, type Me } from '../api'
 import { NutritionLabel } from '../components/NutritionLabel'
 import { PortionSheet } from '../components/PortionSheet'
 import { Lightbox } from '../components/Lightbox'
@@ -52,13 +52,16 @@ export function FoodDetail({
   // worth asking again.
   onSeen: () => void
   // Something about this food changed that a screen behind this one shows too.
-  // Repeat is the one that does: pinning puts a food on it and unpinning takes
-  // it off, and the list was read once when that screen opened.
+  // Quick add is the one that does: pinning puts a food on it and unpinning
+  // takes it off, and the list was read once when that screen opened.
   onChanged?: () => void
 }) {
   const [food, setFood] = useState<Food | null>(null)
   const [error, setError] = useState('')
   const [logging, setLogging] = useState(false)
+  // Whether this food already logs itself, and the sheet that sets it up.
+  const [standing, setStanding] = useState<AutoLog | null>(null)
+  const [autoOpen, setAutoOpen] = useState(false)
   const [sending, setSending] = useState(false)
   // The front picture, shown big.
   const [viewing, setViewing] = useState<string | null>(null)
@@ -75,6 +78,23 @@ export function FoodDetail({
     api<Food>(`/foods/${id}`)
       .then((loaded) => alive && setFood(loaded))
       .catch((failure) => alive && setError(errorText(failure)))
+    return () => {
+      alive = false
+    }
+  }, [id])
+
+  // The instruction is the member's rather than the food's, so it is read
+  // here rather than carried on the food.
+  const loadStanding = () =>
+    api<AutoLog[]>('/diary/auto-logs')
+      .then((rows) => setStanding(rows.find((row) => row.food_id === id) ?? null))
+      .catch(() => {})
+
+  useEffect(() => {
+    let alive = true
+    api<AutoLog[]>('/diary/auto-logs')
+      .then((rows) => alive && setStanding(rows.find((row) => row.food_id === id) ?? null))
+      .catch(() => {})
     return () => {
       alive = false
     }
@@ -291,7 +311,8 @@ export function FoodDetail({
           <NutritionLabel food={food} />
 
           {/* One row across the whole card rather than the capped one every
-              other screen uses: these three belong to the panel above them. */}
+              other screen uses: these belong to the panel above them. Two to a
+              line on a phone, because four labels do not fit across 390. */}
           <div className="mb-3 flex flex-wrap gap-3">
             <button
               className="t-btn t-btn-primary w-full min-[640px]:w-auto min-[640px]:flex-1"
@@ -301,7 +322,7 @@ export function FoodDetail({
               Log
             </button>
             <button
-              className="t-btn flex-1 min-[640px]:flex-none"
+              className="t-btn flex-1 basis-[calc(50%-0.375rem)] min-[640px]:flex-none min-[640px]:basis-auto"
               type="button"
               aria-pressed={food.pinned}
               onClick={() => togglePin(food)}
@@ -311,11 +332,20 @@ export function FoodDetail({
               ) : (
                 <Pin className="h-4 w-4" strokeWidth={2} />
               )}
-              {food.pinned ? 'Unpin' : 'Pin to Repeat'}
+              {food.pinned ? 'Unpin' : 'Pin to Quick add'}
+            </button>
+            <button
+              className="t-btn flex-1 basis-[calc(50%-0.375rem)] min-[640px]:flex-none min-[640px]:basis-auto"
+              type="button"
+              aria-pressed={standing !== null}
+              onClick={() => setAutoOpen(true)}
+            >
+              <CalendarSync className="h-4 w-4" strokeWidth={2} />
+              {standing === null ? 'Auto-log' : 'Auto-logging'}
             </button>
             {((food.mine && !shared) || (me.is_admin && shared)) && (
               <button
-                className="t-btn flex-1 min-[640px]:flex-none"
+                className="t-btn flex-1 basis-[calc(50%-0.375rem)] min-[640px]:flex-none min-[640px]:basis-auto"
                 type="button"
                 onClick={() => onEdit(food)}
               >
@@ -477,6 +507,29 @@ export function FoodDetail({
               units={me.units}
               onClose={() => setLogging(false)}
               onDone={() => setLogging(false)}
+            />
+          )}
+          {autoOpen && (
+            <PortionSheet
+              food={food}
+              date={today(me.timezone)}
+              slot={slotByTime(me.timezone)}
+              units={me.units}
+              onClose={() => setAutoOpen(false)}
+              onDone={() => setAutoOpen(false)}
+              autoLog={{
+                existing: standing,
+                onSaved: () => {
+                  setAutoOpen(false)
+                  void loadStanding()
+                  onChanged?.()
+                },
+                onStopped: () => {
+                  setAutoOpen(false)
+                  setStanding(null)
+                  onChanged?.()
+                },
+              }}
             />
           )}
           {food !== null && (
