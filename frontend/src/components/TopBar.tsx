@@ -1,4 +1,4 @@
-import { ChevronLeft, ChevronRight, Circle, CircleCheck, Plus } from 'lucide-react'
+import { ChevronLeft, ChevronRight, CircleCheck, Plus } from 'lucide-react'
 
 import type { TopBarView } from '../hooks/useTopBar'
 import { TareMark } from './TareMark'
@@ -113,10 +113,17 @@ export function TopBar({
             aria-pressed={mark.done}
             onClick={onToggleMark}
           >
+            {/* The same check either way: hollow while the day is open, a
+                filled green disc once it is complete. */}
             {mark.done ? (
-              <CircleCheck className="h-5 w-5" strokeWidth={2.5} />
+              <CircleCheck
+                className="h-5 w-5"
+                strokeWidth={2.5}
+                fill="currentColor"
+                stroke="var(--bg)"
+              />
             ) : (
-              <Circle className="h-5 w-5" strokeWidth={2.5} />
+              <CircleCheck className="h-5 w-5" strokeWidth={2.5} />
             )}
           </button>
         )}

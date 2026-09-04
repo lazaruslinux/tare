@@ -297,7 +297,6 @@ export function Journal({
     setAgain(again + 1)
   }
 
-  const empty = day !== null && SLOTS.every((slot) => day.slots[slot].entries.length === 0)
   const weighed = day?.measurement ?? null
 
   if (viewing !== null) {
@@ -363,22 +362,9 @@ export function Journal({
         </BreakdownCard>
       )}
 
-      {day !== null && empty && (
-        <div className="t-card mb-3">
-          <p className="text-sm text-muted">Nothing logged yet. Add your first food.</p>
-          {!locked && (
-            <button
-              type="button"
-              className="t-btn t-btn-primary mt-3"
-              onClick={() => setPicking(slotByTime(me.timezone))}
-            >
-              Add food
-            </button>
-          )}
-        </div>
-      )}
-
-      {day !== null && !empty && (
+      {/* Every meal card is on the page from the start, empty or not, so the
+          day reads the same shape every time and each meal has its own Add. */}
+      {day !== null && (
         <>
           {SLOTS.map((slot) => (
             <div key={slot} className="t-card mb-3">
