@@ -37,19 +37,17 @@ export function About({ onOpenGuide }: { onOpenGuide: () => void }) {
       </div>
 
       <div className="t-card mb-3">
-        <p className="t-micro mb-2">What Tare is</p>
+        <p className="t-micro mb-2">What is Tare?</p>
         <p className="text-sm">{WHAT_TARE_IS}</p>
-        <p className="t-note mt-3">
-          Named for the tare button on a kitchen scale: zero it, then weigh what matters.
-        </p>
       </div>
 
       <div className="t-card mb-3">
-        <p className="t-micro mb-2">Where the numbers come from</p>
+        <p className="t-micro mb-2">How it works</p>
         <p className="text-sm">
-          Barcode lookups ask USDA FoodData Central first, then Open Food Facts. Open Food
-          Facts data is available under the Open Database License (ODbL). Once a food is in
-          the Tare database it is the members' own copy and is never refetched.
+          The barcode scanner first searches the Tare database for existing items. If it
+          doesn't exist, it searches Open Food Facts, whose data is available under the Open
+          Database License (ODbL). Once an item is approved, it's stored on Tare's server and
+          doesn't have to reach out to the internet.
         </p>
         <p className="mt-3 text-sm">
           Calorie and nutrient targets follow the Dietary Guidelines for Americans and the
@@ -58,9 +56,9 @@ export function About({ onOpenGuide }: { onOpenGuide: () => void }) {
       </div>
 
       <div className="t-card mb-3">
-        <p className="t-micro mb-2">Made by</p>
+        <p className="t-micro mb-2">Team Tare</p>
         <p className="text-sm">
-          Tare is built by{' '}
+          Tare is built & maintained by{' '}
           <a
             className="text-accent"
             href="https://lazaruslinux.com"
@@ -68,10 +66,10 @@ export function About({ onOpenGuide }: { onOpenGuide: () => void }) {
             rel="noopener"
           >
             Lazarus Labs
-          </a>{' '}
-          with Claude Code.
+          </a>
+          . This web-app was built by a human using Claude Code, an agentic coding platform.
         </p>
-        <p className="t-note mt-3">Free software under the AGPL-3.0 license.</p>
+        <p className="t-note mt-3">Tare is open-source under the AGPL-3.0 license.</p>
       </div>
 
       <div className="t-card mb-3">

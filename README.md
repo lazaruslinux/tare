@@ -48,9 +48,9 @@ ruff check . && mypy && pytest -q
 
 ## Data sources
 
-Barcode lookups ask USDA FoodData Central first, then Open Food Facts. Open Food Facts data is available under the Open Database License (ODbL). Once a food is in the Tare database it is the members' own copy and is never refetched.
+The barcode scanner first searches the Tare database for existing items. If it doesn't exist, it searches Open Food Facts, whose data is available under the Open Database License (ODbL). Once an item is approved, it's stored on Tare's server and doesn't have to reach out to the internet.
 
-Calorie and nutrient targets follow the Dietary Guidelines for Americans and the American Heart Association. Tare estimates. It is not medical advice.
+Calorie and nutrient targets follow the Dietary Guidelines for Americans and the American Heart Association. Tare uses math to make estimates, and does not provide medical advice. Talk to your doctor/clinician before changing how you eat, especially if pregnant, breastfeeding, under care for a medical condition, or have a history of eating disorders.
 
 ## License
 

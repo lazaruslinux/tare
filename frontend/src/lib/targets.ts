@@ -107,10 +107,10 @@ export const personalNumber = (missing: string[]): PersonalGap => {
 
 // Decision 30, word for word, said once and then reachable from the Guide.
 export const DISCLAIMER =
-  'Tare estimates. It is not medical advice. The numbers come from population ' +
-  'averages and can be off by a few hundred calories for any one person. Talk to ' +
-  'a clinician before changing how you eat if you are pregnant or breastfeeding, ' +
-  'under care for a medical condition, or have a history of disordered eating.'
+  'Tare uses math to make estimates, and does not provide medical advice. Talk to ' +
+  'your doctor/clinician before changing how you eat, especially if pregnant, ' +
+  'breastfeeding, under care for a medical condition, or have a history of eating ' +
+  'disorders.'
 
 // Decision 18's second sentence, which always travels with the month.
 export const PACE_CAVEAT =
