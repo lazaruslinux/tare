@@ -1305,3 +1305,28 @@ def test_approving_a_correction_hands_its_panel_to_the_shared_food(
 
     db_session.expire_all()
     assert db_session.get(models.Food, target.id).label_photo_id == label_id
+
+
+def test_an_administrator_deletes_a_shared_food_and_a_journal_keeps_its_row(
+    client, db_session, signed_in, admin
+):
+    food = put_food(db_session, status="approved", name="Shared then gone", barcode=None)
+    logged = client.post(
+        "/api/diary",
+        json={"date": "2026-09-04", "slot": "lunch", "food_id": food.id, "amount": 100, "unit": "g"},
+    )
+    assert logged.status_code == 201
+    # A member may not take a shared food away.
+    assert client.delete(f"/api/foods/{food.id}").status_code in (403, 404)
+
+    client.post("/api/auth/login", json={"username": "admin", "password": PASSWORD})
+    assert client.delete(f"/api/foods/{food.id}").status_code == 204
+    assert client.get(f"/api/foods/{food.id}").status_code == 404
+
+    client.post("/api/auth/login", json={"username": "member", "password": PASSWORD})
+    day = client.get("/api/diary/day?date=2026-09-04").json()
+    row = day["slots"]["lunch"]["entries"][0]
+    assert row["name"] == "Shared then gone"
+    assert row["food_id"] is None
+    assert round(row["calories"]) == round(logged.json()["calories"])
+

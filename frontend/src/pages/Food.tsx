@@ -334,6 +334,14 @@ export function FoodTab({
         onBack={() => setView(from)}
         onEdit={(food, opened) => setView({ at: 'form', food, ...opened })}
         onDelete={remove}
+        onDeleteShared={(food) =>
+          api(`/foods/${food.id}`, { method: 'DELETE' }).then(() => {
+            setFoods((rows) => rows.filter((row) => row.id !== food.id))
+            setView(from)
+            void loadRepeat()
+            onChanged()
+          })
+        }
         onSubmitted={() => {
           void load()
           onChanged()

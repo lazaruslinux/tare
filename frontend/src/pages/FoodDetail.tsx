@@ -1,4 +1,4 @@
-import { Camera, Pencil, Pin, PinOff } from 'lucide-react'
+import { Camera, Pencil, Pin, PinOff, Trash2 } from 'lucide-react'
 import { useEffect, useState, type ChangeEvent } from 'react'
 
 import { api, errorText, upload, type Food, type Me } from '../api'
@@ -28,6 +28,7 @@ export function FoodDetail({
   onBack,
   onEdit,
   onDelete,
+  onDeleteShared,
   onSubmitted,
   onSeen,
   onChanged,
@@ -43,6 +44,9 @@ export function FoodDetail({
   // already on.
   onEdit: (food: Food, opened?: { notice?: string; submitDefault?: boolean }) => void
   onDelete: (food: Food) => void
+  // An administrator taking a food out of the shared database. Confirmed on
+  // this page and done at once: there is no undo for something everybody had.
+  onDeleteShared: (food: Food) => Promise<void>
   onSubmitted: () => void
   // The answers on this page have been read, so the badge that counted them is
   // worth asking again.
@@ -195,6 +199,10 @@ export function FoodDetail({
   }
 
   const shared = food !== null && food.status === 'approved'
+  // The red popup, and the request it fires.
+  const [erasing, setErasing] = useState(false)
+  const [erasingBusy, setErasingBusy] = useState(false)
+  const [erasingError, setErasingError] = useState('')
   // The request that made a shared food shared, when it was this account's.
   // The page says so in one line; the full history lives on the Food tab.
   const offered = shared
@@ -403,6 +411,19 @@ export function FoodDetail({
               Delete this food
             </button>
           )}
+          {me.is_admin && shared && (
+            <button
+              className="t-btn t-btn-danger mb-3 w-full"
+              type="button"
+              onClick={() => {
+                setErasingError('')
+                setErasing(true)
+              }}
+            >
+              <Trash2 className="h-4 w-4" strokeWidth={2} />
+              Delete from the Tare database
+            </button>
+          )}
 
           {notice && (
             <div className="pointer-events-none fixed inset-x-0 bottom-24 z-30 px-4">
@@ -457,6 +478,42 @@ export function FoodDetail({
               onClose={() => setLogging(false)}
               onDone={() => setLogging(false)}
             />
+          )}
+          {food !== null && (
+            <Sheet
+              center
+              open={erasing}
+              label={`Delete ${food.name}?`}
+              onClose={() => setErasing(false)}
+            >
+              <p className="text-base font-semibold tracking-tight text-danger">
+                Delete {food.name} from the Tare database?
+              </p>
+              <p className="mt-2 text-sm text-muted">
+                This permanently removes it for every member and cannot be undone. Journal
+                entries that already logged it keep their numbers.
+              </p>
+              {erasingError && <p className="t-error mt-2">{erasingError}</p>}
+              <div className="mt-4 flex gap-3">
+                <button
+                  type="button"
+                  className="t-btn t-btn-danger flex-1"
+                  disabled={erasingBusy}
+                  onClick={() => {
+                    setErasingBusy(true)
+                    onDeleteShared(food).catch((failure) => {
+                      setErasingError(errorText(failure))
+                      setErasingBusy(false)
+                    })
+                  }}
+                >
+                  Delete permanently
+                </button>
+                <button type="button" className="t-btn" onClick={() => setErasing(false)}>
+                  Cancel
+                </button>
+              </div>
+            </Sheet>
           )}
           {viewing && (
             <Lightbox

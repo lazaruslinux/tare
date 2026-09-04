@@ -281,6 +281,13 @@
     background: var(--accent);
     color: var(--bg);
   }
+  /* The one button that destroys something shared. Red, and never next to
+     the primary one. */
+  .t-btn-danger {
+    border-color: transparent;
+    background: var(--danger);
+    color: var(--bg);
+  }
 
   /* The actions a screen offers, in one row. Capped where the reading column
      is wide, so a button never stretches across the whole of it. */
