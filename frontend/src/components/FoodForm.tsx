@@ -381,12 +381,11 @@ export function FoodForm({
       setError(NO_SERVING)
       return
     }
-    // A shared food is browsed by its aisle, so it is picked before it goes.
-    if ((on && offerable) || review !== undefined) {
-      if (!section) {
-        setSectionError(NO_SECTION)
-        return
-      }
+    // Whoever offers a food may leave the aisle to the reviewer, and the
+    // reviewer is the one who cannot: it is what the approved food is browsed by.
+    if (review !== undefined && !section) {
+      setSectionError(NO_SECTION)
+      return
     }
     setSectionError('')
     // Nothing is sent without both pictures, because the reviewer has only
@@ -644,7 +643,7 @@ export function FoodForm({
           {asksSection && (
             <div className="mt-3">
               <label className="t-label" htmlFor="food-section">
-                Section
+                {review !== undefined ? 'Section' : 'Section (optional)'}
               </label>
               <select
                 id="food-section"
@@ -655,7 +654,9 @@ export function FoodForm({
                   setSectionError('')
                 }}
               >
-                <option value="">Pick a section</option>
+                <option value="">
+                  {review !== undefined ? 'Pick a section' : 'Let the reviewer pick'}
+                </option>
                 {SECTIONS.map((row) => (
                   <option key={row.slug} value={row.slug}>
                     {row.label}

@@ -42,7 +42,6 @@ MAX_SERVING_NAME = 60
 # An aisle nobody stocks, and a food that has not been put in one. Both are
 # said here because the form, the browse list and the queue all lean on them.
 BAD_SECTION = "That is not a section Tare has."
-NO_SECTION = "Pick a section."
 
 # A serving is measured in the food's own family or not at all: a cup of a
 # food weighed in grams would need a density to mean anything, and a label

@@ -494,6 +494,9 @@ export function AdminQueue({
                 </p>
                 {description && <p className="truncate text-sm text-muted">{description}</p>}
                 <p className="truncate text-sm text-muted">{about?.brand || 'No brand'}</p>
+                {item.kind === 'new' && item.food && (
+                  <p className="truncate text-sm text-muted">{sectionLabel(item.food.section)}</p>
+                )}
                 {item.kind === 'new' && item.food?.barcode && (
                   <p className="t-nums text-xs text-muted">{item.food.barcode}</p>
                 )}

@@ -38,7 +38,6 @@ from app.routers.foods import (
     BARCODE_PATTERN,
     LISTED,
     MISSING_FOOD,
-    NO_SECTION,
     apply_body,
     food_detail,
     open_submission,
@@ -122,17 +121,6 @@ def attach_label(db: Session, user: models.User, photo_id: int | None) -> int | 
     if taken is not None:
         raise HTTPException(status.HTTP_400_BAD_REQUEST, MISSING_PHOTO)
     return photo.id
-
-
-def check_section(section: str) -> None:
-    """Refuse a food nobody has said which aisle it belongs in.
-
-    Asked here rather than of every food, because it is what the shared
-    database is browsed by and a private food is never browsed at all. Which
-    slugs are real is the form's rule, checked where the food is written.
-    """
-    if not section.strip():
-        raise HTTPException(status.HTTP_400_BAD_REQUEST, NO_SECTION)
 
 
 def check_photos(front: bool, label: bool) -> None:
@@ -258,10 +246,10 @@ def submit_new_food(
             raise HTTPException(status.HTTP_400_BAD_REQUEST, ALREADY_MINE)
 
     # Both checks before anything is written, so a refusal leaves the upload
-    # exactly where it was and the form can be sent again.
+    # exactly where it was and the form can be sent again. The aisle is not
+    # asked for: a reviewer picks it when the food is approved.
     check_photos(body.photo_id is not None, body.label_photo_id is not None)
     check_serving(body.servings)
-    check_section(body.section)
     food = models.Food(
         status="pending",
         owner_id=user.id,

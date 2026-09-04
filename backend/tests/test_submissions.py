@@ -635,15 +635,18 @@ def test_an_offer_says_which_aisle_it_belongs_in(client, db_session, signed_in):
     assert db_session.get(models.Food, made.json()["food"]["id"]).section == SECTION
 
 
-def test_an_offer_without_a_section_is_refused(client, signed_in):
-    response = client.post(
+def test_an_offer_without_a_section_lands_in_other_for_the_reviewer(
+    client, db_session, signed_in
+):
+    made = client.post(
         "/api/submissions/food",
         json=body(
             section="", photo_id=a_photo(client), label_photo_id=a_photo(client, "label")
         ),
     )
-    assert response.status_code == 400
-    assert response.json() == {"detail": "Pick a section."}
+    assert made.status_code == 201
+    assert made.json()["food"]["section"] == "other"
+    assert db_session.get(models.Food, made.json()["food"]["id"]).section == "other"
 
 
 def test_a_section_tare_does_not_have_is_refused(client, signed_in):
