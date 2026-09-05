@@ -24,6 +24,7 @@ import {
   type Pick,
   type Unit,
 } from '../lib/units'
+import { Verified } from './FoodRows'
 import { HEADLINE, nutrientText } from './NutritionLabel'
 import { Sheet } from './Sheet'
 
@@ -273,8 +274,15 @@ export function PortionSheet({
       <p className="t-micro mb-1">
         {autoLog ? 'Auto-log' : picking ? 'How much' : entry ? 'Edit' : 'Log'}
       </p>
-      <p className="text-base font-semibold tracking-tight">{name}</p>
+      {/* A food the shared database holds wears the same check it wears in every
+          list, and says so in words: a scan that lands here has found a food
+          Tare already knows. */}
+      <p className="flex items-center gap-1.5 text-base font-semibold tracking-tight">
+        <span className="min-w-0">{name}</span>
+        {food?.status === 'approved' && <Verified className="h-4 w-4" />}
+      </p>
       {brand && <p className="text-xs text-muted">{brand}</p>}
+      {food?.status === 'approved' && <p className="text-xs text-muted">In Tare database</p>}
       {food?.status === 'pending' && (
         // Theirs to log today, and not anybody else's until it is approved.
         <span className="t-chip mt-2">Waiting for approval</span>
