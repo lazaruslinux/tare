@@ -79,7 +79,9 @@ const QUESTIONS: { q: string; a: string }[] = [
       'also choose whether heart rate, calories burned and the route line are shown. ' +
       'Your age, gender and location are hidden unless you switch them on. Your food ' +
       'journal, weight, measurements and targets are private: other members never see ' +
-      'them, and neither does an administrator.',
+      'them, and neither does an administrator. Your weight stays private unless you ' +
+      'turn on Share weight lost since last weigh-in, which tells the feed how much you ' +
+      'lost and nothing else.',
   },
 ]
 

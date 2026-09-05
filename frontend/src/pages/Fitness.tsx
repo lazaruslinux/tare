@@ -15,6 +15,7 @@ import {
 import { ActivityIcon } from '../components/ActivityIcon'
 import { WorkoutDetails } from '../components/WorkoutDetails'
 import { useTopBar } from '../hooks/useTopBar'
+import { stampText, useClock } from '../lib/clock'
 import { dayLabel, today } from '../lib/day'
 import { distanceText, durationText } from '../lib/units'
 import { Moves } from './Moves'
@@ -234,6 +235,8 @@ export function Fitness({
   const [summary, setSummary] = useState<FitnessSummary | null>(null)
   const [failed, setFailed] = useState('')
   const [screen, setScreen] = useState<FitnessScreen>(null)
+  // The sync line is a stamp, so it redraws when the clock changes.
+  useClock()
 
   useEffect(() => {
     let alive = true
@@ -269,7 +272,6 @@ export function Fitness({
   if (failed !== '') return <p className="t-error">{failed}</p>
   if (summary === null) return <p className="text-sm text-muted">Loading.</p>
 
-  const synced = summary.last_sync === null ? null : new Date(summary.last_sync)
 
   return (
     <>
@@ -279,14 +281,9 @@ export function Fitness({
             <p className="text-sm">Connected</p>
             <p className="text-xs text-muted">
               Last health data sync:{' '}
-              {synced === null
+              {summary.last_sync === null
                 ? 'nothing has arrived yet'
-                : synced.toLocaleString(undefined, {
-                    month: 'short',
-                    day: 'numeric',
-                    hour: 'numeric',
-                    minute: '2-digit',
-                  })}
+                : stampText(summary.last_sync)}
             </p>
             <button
               type="button"

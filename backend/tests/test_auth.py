@@ -149,6 +149,7 @@ def test_login_answers_with_the_me_payload(client, make_user):
         "is_admin": False,
         "units": "imperial",
         "timezone": "UTC",
+        "clock": "12h",
         "birthdate": BIRTHDATE.isoformat(),
         "location": None,
         "avatar_url": None,
@@ -158,6 +159,7 @@ def test_login_answers_with_the_me_payload(client, make_user):
         "share_location": False,
         "share_workouts": True,
         "share_journal": False,
+        "share_weight_loss": False,
     }
 
 

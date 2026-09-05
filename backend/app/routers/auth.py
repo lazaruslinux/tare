@@ -117,6 +117,7 @@ def me_payload(user: models.User) -> dict[str, object]:
         "is_admin": user.is_admin,
         "units": user.units,
         "timezone": user.timezone,
+        "clock": user.clock,
         # Null on an account made before the gate existed, which is what sends
         # it to the one screen that asks (decision 21).
         "birthdate": None if user.birthdate is None else user.birthdate.isoformat(),
@@ -132,6 +133,7 @@ def me_payload(user: models.User) -> dict[str, object]:
         "share_location": user.share_location,
         "share_workouts": user.share_workouts,
         "share_journal": user.share_journal,
+        "share_weight_loss": user.share_weight_loss,
     }
 
 

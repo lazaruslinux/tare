@@ -1,27 +1,30 @@
-import { ChevronRight, Route } from 'lucide-react'
+import { BookOpen, ChevronRight, Route } from 'lucide-react'
 import { useEffect, useState } from 'react'
 
-import { api, type FeedJournal, type FeedPage, type FeedRow, type FeedWorkout, type Me } from '../api'
+import {
+  api,
+  type FeedJournal,
+  type FeedPage,
+  type FeedRow,
+  type FeedWeight,
+  type FeedWorkout,
+  type Me,
+} from '../api'
 import { ActivityIcon } from './ActivityIcon'
+import { ScaleGlyph } from './ScaleGlyph'
+import { clockText, dateText, useClock } from '../lib/clock'
 import { dayLabel, today } from '../lib/day'
-import { distanceText, durationText } from '../lib/units'
+import { distanceText, durationText, weightText } from '../lib/units'
 
-// What the members of this instance are doing, read only. Two kinds of row:
-// a workout somebody did, and a day somebody finished. No food, no weight, no
-// answering back.
+// What the members of this instance are doing, read only. Three kinds of row:
+// a workout somebody did, a day somebody finished, and a weigh-in that came in
+// lower. No food, no answering back.
 
-function timeText(iso: string, timezone: string): string {
-  try {
-    return new Date(iso).toLocaleTimeString(undefined, {
-      timeZone: timezone,
-      hour: 'numeric',
-      minute: '2-digit',
-    })
-  } catch {
-    // A zone this browser has never heard of. The device's own is the next
-    // best answer, and it is the one the person is standing in.
-    return new Date(iso).toLocaleTimeString(undefined, { hour: 'numeric', minute: '2-digit' })
-  }
+// The two nearest days keep their words. Anything older is the stamp the rest
+// of the app writes a date in.
+function dayText(iso: string, todayIso: string): string {
+  const said = dayLabel(iso, todayIso)
+  return said === 'Today' || said === 'Yesterday' ? said : dateText(iso)
 }
 
 // The member's name, which is the one thing on a row that opens something.
@@ -61,12 +64,47 @@ function JournalRow({
 }) {
   return (
     <div className="t-row">
-      <span className="min-w-0 flex-1">
-        <span className="block truncate text-sm">
-          <Name row={row} onOpenMember={onOpenMember} /> completed {row.pronoun} journal
+      <span className="flex min-w-0 flex-1 items-center gap-2">
+        <BookOpen className="h-4 w-4 shrink-0 text-muted" strokeWidth={2} />
+        <span className="min-w-0 flex-1">
+          <span className="block text-sm">
+            <Name row={row} onOpenMember={onOpenMember} /> completed {row.pronoun} journal
+          </span>
+          <span className="block text-xs text-muted">
+            {`${dayText(row.date, todayIso)} ${clockText(row.at, me.timezone)}`}
+          </span>
         </span>
-        <span className="block text-xs text-muted">
-          {`${dayLabel(row.date, todayIso)} ${timeText(row.at, me.timezone)}`}
+      </span>
+      {row.hidden === true && <span className="t-chip shrink-0">Only you</span>}
+    </div>
+  )
+}
+
+// A weigh-in that came in under the one before it. How much came off, in the
+// reader's own units, and nothing either weight was.
+function WeightRow({
+  me,
+  row,
+  todayIso,
+  onOpenMember,
+}: {
+  me: Me
+  row: FeedWeight
+  todayIso: string
+  onOpenMember: () => void
+}) {
+  return (
+    <div className="t-row">
+      <span className="flex min-w-0 flex-1 items-center gap-2">
+        <ScaleGlyph className="h-4 w-4 shrink-0 text-muted" />
+        <span className="min-w-0 flex-1">
+          <span className="block text-sm">
+            <Name row={row} onOpenMember={onOpenMember} /> has lost{' '}
+            {weightText(row.lost_kg, me.units)} since {row.pronoun} last weigh-in
+          </span>
+          <span className="block text-xs text-muted">
+            {`${dayText(row.date, todayIso)} ${clockText(row.at, me.timezone)}`}
+          </span>
         </span>
       </span>
       {row.hidden === true && <span className="t-chip shrink-0">Only you</span>}
@@ -95,7 +133,7 @@ function Row({
           <span className="block truncate text-sm">{row.activity}</span>
           <span className="block text-xs text-muted">
             <Name row={row} onOpenMember={onOpenMember} />
-            {` · ${dayLabel(row.date, todayIso)} ${timeText(row.started_at, me.timezone)}`}
+            {` · ${dayText(row.date, todayIso)} ${clockText(row.started_at, me.timezone)}`}
             {` · ${durationText(row.duration_s)}`}
             {row.distance_m === null ? '' : ` · ${distanceText(row.distance_m, me.units)}`}
           </span>
@@ -129,6 +167,9 @@ export function Feed({
   const [cursor, setCursor] = useState<string | null>(null)
   const [busy, setBusy] = useState(false)
   const todayIso = today(me.timezone)
+  // Every row carries a time, so the whole list redraws when the preference
+  // behind them moves.
+  useClock()
 
   useEffect(() => {
     let alive = true
@@ -161,7 +202,8 @@ export function Feed({
   if (rows.length === 0) {
     return (
       <p className="text-sm text-muted">
-        Nothing shared yet. Workouts and finished days appear here as members share them.
+        Nothing shared yet. Workouts, finished days and weigh-ins appear here as members share
+        them.
       </p>
     )
   }
@@ -173,6 +215,14 @@ export function Feed({
         row.kind === 'journal' ? (
           <JournalRow
             key={`j${row.id}`}
+            me={me}
+            row={row}
+            todayIso={todayIso}
+            onOpenMember={() => onOpenMember(row.user_id)}
+          />
+        ) : row.kind === 'weight' ? (
+          <WeightRow
+            key={`s${row.id}`}
             me={me}
             row={row}
             todayIso={todayIso}

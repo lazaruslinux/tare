@@ -49,14 +49,14 @@ export function Aside({
   return (
     <>
       <div>
-        <p className="t-micro mb-2">Today so far</p>
+        <p className="t-micro mb-2">Today's numbers</p>
         <div className="t-card grid grid-cols-2 gap-3">
           <Figure
-            label="Calories left"
+            label="Consumed"
             value={
-              strip === null || strip.calories_left === null
+              strip === null || strip.calories_eaten === null
                 ? '-'
-                : Math.round(strip.calories_left).toLocaleString()
+                : `${Math.round(strip.calories_eaten).toLocaleString()} cal`
             }
           />
           <Figure
@@ -68,7 +68,15 @@ export function Aside({
             }
           />
           <Figure
-            label="Last weigh-in"
+            label="Exercise (in min)"
+            value={
+              strip === null || strip.exercise_min === null
+                ? '-'
+                : Math.round(strip.exercise_min).toLocaleString()
+            }
+          />
+          <Figure
+            label="Weight"
             value={
               strip === null || strip.latest_weight_kg === null
                 ? '-'

@@ -442,15 +442,154 @@ def test_the_pronoun_follows_what_the_member_shared(client, db_session, make_use
     assert all("sex" not in row for row in rows)
 
 
-def test_a_page_of_both_kinds_reads_through_without_repeating_itself(
+# Weigh-ins
+# ---------
+
+# Two days close enough to now that a member may still write to either.
+LATER = dt.date(2026, 1, 2)
+EARLIER = dt.date(2026, 1, 1)
+
+
+def put_weigh_in(db_session, user, kg, day, minutes_ago=0):
+    """A weigh-in straight into the database, at a known moment. What the feed
+    pages by is when a reading arrived, so that is set here rather than left to
+    the order the rows happen to be written in."""
+    row = models.WeightEntry(
+        user_id=user.id,
+        date_for=day,
+        weight_kg=kg,
+        source="manual",
+        created_at=now_utc() - dt.timedelta(minutes=minutes_ago),
+    )
+    db_session.add(row)
+    db_session.commit()
+    return row
+
+
+def losing(db_session, make_user, name="loser"):
+    """An account whose last weigh-in came in a kilogram under the one before."""
+    member = make_user(name, timezone="UTC")
+    put_weigh_in(db_session, member, 82.0, EARLIER, minutes_ago=10)
+    put_weigh_in(db_session, member, 81.0, LATER, minutes_ago=5)
+    return member
+
+
+def test_a_loss_reaches_the_others_only_once_it_is_shared(client, db_session, make_user):
+    loser = losing(db_session, make_user)
+    make_user("member")
+    sign_in(client, "member")
+
+    assert client.get("/api/feed").json()["items"] == []
+
+    loser.share_weight_loss = True
+    db_session.commit()
+
+    rows = client.get("/api/feed").json()["items"]
+    assert [row["kind"] for row in rows] == ["weight"]
+    assert rows[0]["display_name"] == "loser"
+    assert rows[0]["lost_kg"] == 1.0
+    assert rows[0]["date"] == LATER.isoformat()
+    # How much came off, and neither of the two weights it was worked out from.
+    assert set(rows[0]) == {
+        "kind",
+        "id",
+        "user_id",
+        "display_name",
+        "mine",
+        "date",
+        "at",
+        "lost_kg",
+        "pronoun",
+    }
+
+
+def test_a_gain_is_never_a_row(client, db_session, make_user):
+    gainer = make_user("gainer", timezone="UTC")
+    gainer.share_weight_loss = True
+    db_session.commit()
+    put_weigh_in(db_session, gainer, 80.0, EARLIER, minutes_ago=10)
+    put_weigh_in(db_session, gainer, 81.0, LATER, minutes_ago=5)
+
+    make_user("member")
+    sign_in(client, "member")
+    assert client.get("/api/feed").json()["items"] == []
+
+
+def test_a_loss_too_small_to_read_is_never_a_row(client, db_session, make_user):
+    """Under the floor a sentence would say 0.0, which is not worth saying."""
+    steady = make_user("steady", timezone="UTC")
+    steady.share_weight_loss = True
+    db_session.commit()
+    put_weigh_in(db_session, steady, 80.0, EARLIER, minutes_ago=10)
+    put_weigh_in(db_session, steady, 79.98, LATER, minutes_ago=5)
+
+    make_user("member")
+    sign_in(client, "member")
+    assert client.get("/api/feed").json()["items"] == []
+
+
+def test_an_unshared_loss_is_the_owners_alone_and_says_so(client, db_session, make_user):
+    loser = losing(db_session, make_user)
+    sign_in(client, "loser")
+
+    rows = client.get("/api/feed").json()["items"]
+    assert [row["hidden"] for row in rows] == [True]
+
+    loser.share_weight_loss = True
+    db_session.commit()
+    assert client.get("/api/feed").json()["items"][0]["hidden"] is False
+
+
+def test_replacing_a_days_weigh_in_moves_the_loss_and_not_the_moment(
     client, db_session, make_user
 ):
-    runner = make_user("runner")
+    losing(db_session, make_user)
+    sign_in(client, "loser")
+    was = client.get("/api/feed").json()["items"][0]
+
+    written = client.put(
+        f"/api/health/measurements/{LATER.isoformat()}", json={"weight_kg": 80.0}
+    )
+    assert written.status_code == 200
+
+    now = client.get("/api/feed").json()["items"][0]
+    assert now["lost_kg"] == 2.0
+    # The row is the same reading corrected, so it keeps its place in the list.
+    assert now["at"] == was["at"]
+    assert now["id"] == was["id"]
+
+
+def test_deleting_the_newer_weigh_in_takes_the_row_out(client, db_session, make_user):
+    losing(db_session, make_user)
+    sign_in(client, "loser")
+    assert len(client.get("/api/feed").json()["items"]) == 1
+
+    gone = client.delete(f"/api/health/measurements/{LATER.isoformat()}")
+    assert gone.status_code == 204
+    assert client.get("/api/feed").json()["items"] == []
+
+
+def test_a_page_of_every_kind_reads_through_without_repeating_itself(
+    client, db_session, make_user
+):
+    runner = make_user("runner", timezone="UTC")
     runner.share_journal = True
+    runner.share_weight_loss = True
     db_session.commit()
-    for step in range(20):
-        put_workout(db_session, runner, minutes_ago=step * 2)
-        put_journal(db_session, runner, minutes_ago=step * 2 + 1, day=dt.date(2026, 1, 1) + dt.timedelta(days=step))
+    start = dt.date(2026, 1, 1)
+    # One weigh-in more than the rows they make: the first has nothing before
+    # it to have come down from.
+    put_weigh_in(db_session, runner, 90.0, start, minutes_ago=100)
+    for step in range(14):
+        put_workout(db_session, runner, minutes_ago=step * 3)
+        put_journal(db_session, runner, minutes_ago=step * 3 + 1, day=start + dt.timedelta(days=step))
+        put_weigh_in(
+            db_session,
+            runner,
+            89.5 - step * 0.5,
+            start + dt.timedelta(days=step + 1),
+            minutes_ago=step * 3 + 2,
+        )
     make_user("member")
     sign_in(client, "member")
 
@@ -461,8 +600,8 @@ def test_a_page_of_both_kinds_reads_through_without_repeating_itself(
     assert second["next_cursor"] is None
 
     seen = [f"{row['kind']}{row['id']}" for row in first["items"] + second["items"]]
-    assert len(seen) == 40
-    assert len(set(seen)) == 40
+    assert len(seen) == 42
+    assert len(set(seen)) == 42
     # Newest first, whichever table a row came out of.
     times = [row.get("started_at") or row["at"] for row in first["items"] + second["items"]]
     assert times == sorted(times, reverse=True)
@@ -485,8 +624,10 @@ def test_the_strip_carries_the_days_figures(client, db_session, make_user):
 
     body = client.get("/api/feed/today").json()
 
-    assert isinstance(body["calories_left"], int)
+    assert isinstance(body["calories_eaten"], int)
     assert body["steps"] is None
+    assert body["exercise_min"] == 0
+    assert "calories_left" not in body
     assert body["latest_weight_kg"] == 80.0
     assert body["latest_weight_date"] == today.isoformat()
     assert "waiting" not in body

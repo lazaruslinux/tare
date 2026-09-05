@@ -41,6 +41,7 @@ export function Sharing({
   const [place, setPlace] = useState(me.share_location)
   const [workouts, setWorkouts] = useState(me.share_workouts)
   const [journal, setJournal] = useState(me.share_journal)
+  const [loss, setLoss] = useState(me.share_weight_loss)
   // Held the way the screen reads them: on means shown, and the server is
   // told what is hidden.
   const [hidden, setHidden] = useState<string[]>(me.feed_hidden)
@@ -67,6 +68,7 @@ export function Sharing({
     place !== me.share_location ||
     workouts !== me.share_workouts ||
     journal !== me.share_journal ||
+    loss !== me.share_weight_loss ||
     hidden.join() !== me.feed_hidden.join()
 
   // The master switch takes the three with it: off folds them away and turns
@@ -100,6 +102,7 @@ export function Sharing({
             share_location: place,
             share_workouts: workouts,
             share_journal: journal,
+            share_weight_loss: loss,
           },
         })
       )
@@ -172,6 +175,18 @@ export function Sharing({
           checked={journal}
           onChange={setJournal}
         />
+      </div>
+
+      <p className="t-micro mb-1">Weight privacy settings</p>
+      <div className="t-card mb-3">
+        <Switch
+          label="Share weight lost since last weigh-in"
+          checked={loss}
+          onChange={setLoss}
+        />
+        <p className="mt-2 text-xs text-muted">
+          Members see how much you lost since your last weigh-in, never your weight.
+        </p>
       </div>
 
       {error && <p className="t-error mb-3">{error}</p>}

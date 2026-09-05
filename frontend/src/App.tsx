@@ -18,6 +18,7 @@ import { useResume } from './hooks/useResume'
 import { TopBarContext, useTopBarState } from './hooks/useTopBar'
 import { useWaitingCount } from './hooks/useWaitingCount'
 import { useWideLayout } from './hooks/useWideLayout'
+import { setClock } from './lib/clock'
 import { slotByTime, today, type Slot } from './lib/day'
 import { Birthdate } from './pages/Birthdate'
 import { Dashboard, type DashScreen } from './pages/Dashboard'
@@ -103,6 +104,12 @@ export default function App() {
   const bar = useTopBarState()
   const { waiting, queue, refresh: refreshWaiting } = useWaitingCount(me)
   const changed = useCallback(() => setLogged((n) => n + 1), [])
+  // Every way the account arrives or changes goes through here, so the clock
+  // preference the formatters read is never a save behind what was saved.
+  const remember = useCallback((who: Me | null) => {
+    if (who !== null) setClock(who.clock)
+    setMe(who)
+  }, [])
 
   // Back from wherever somebody went. Everything on screen is read again, the
   // badge included, because time passed and another device may have moved.
@@ -118,7 +125,7 @@ export default function App() {
     api<Me>('/auth/me')
       .then((who) => {
         if (!alive) return
-        setMe(who)
+        remember(who)
         // An account made before tare asked for a birthdate answers that one
         // question before anything else opens.
         setPhase(who.birthdate === null ? 'birthdate' : 'signedin')
@@ -176,19 +183,19 @@ export default function App() {
   const enterFirstRun = async () => {
     // Registration answered "ready", which means the session cookie is already
     // set; this is the account it belongs to.
-    setMe(await api<Me>('/auth/me'))
+    remember(await api<Me>('/auth/me'))
     setPhase('firstrun')
   }
 
   const enter = (who: Me) => {
-    setMe(who)
+    remember(who)
     // The same question the first load asks: an account without a birthdate
     // answers it before the app opens, whichever door it came through.
     setPhase(who.birthdate === null ? 'birthdate' : 'signedin')
   }
 
   const leave = () => {
-    setMe(null)
+    remember(null)
     setPage('dashboard')
     setPhase('anon')
   }
@@ -286,7 +293,7 @@ export default function App() {
                   ) : page === 'more' ? (
                     <More
                       me={me}
-                      onChange={setMe}
+                      onChange={remember}
                       onSignedOut={leave}
                       waiting={queue}
                       refresh={logged}

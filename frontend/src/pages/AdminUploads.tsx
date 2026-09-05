@@ -1,21 +1,13 @@
 import { useEffect, useState } from 'react'
 
 import { api, errorText, type Upload } from '../api'
+import { stampText, useClock } from '../lib/clock'
 import { useTopBar } from '../hooks/useTopBar'
 
 // Every health export that has been handed to this instance as a file. A file
 // is the one thing here that arrives by hand and can carry anything, so who
 // sent one, when, and how large it was is worth being able to read. What was
 // inside it is not kept and is not here.
-
-function when(stamp: string): string {
-  return new Date(stamp).toLocaleString(undefined, {
-    month: 'short',
-    day: 'numeric',
-    hour: 'numeric',
-    minute: '2-digit',
-  })
-}
 
 // Rounded to the unit somebody would say out loud, because the exact byte
 // count of a file nobody can open says nothing.
@@ -29,6 +21,8 @@ function size(bytes: number | null): string {
 export function AdminUploads({ onBack }: { onBack: () => void }) {
   const [rows, setRows] = useState<Upload[] | null>(null)
   const [error, setError] = useState('')
+  // Every row carries a stamp, so the list redraws when the clock changes.
+  useClock()
 
   useTopBar({ title: 'Uploads', back: { label: 'More', onBack } })
 
@@ -55,7 +49,7 @@ export function AdminUploads({ onBack }: { onBack: () => void }) {
             <span className="min-w-0 flex-1">
               <span className="block truncate text-sm">{row.display_name || row.username}</span>
               <span className="block truncate text-xs text-muted">
-                {when(row.received_at)} · {size(row.bytes)}
+                {stampText(row.received_at)} · {size(row.bytes)}
               </span>
             </span>
             <span className="t-nums shrink-0 text-right text-xs text-muted">

@@ -25,6 +25,7 @@ import { type Glyph } from '../components/TabBar'
 import { SaveMarks, useSavedChip } from '../components/SaveMarks'
 import { useTopBar, type TopBarHeader } from '../hooks/useTopBar'
 import { useRailLayout } from '../hooks/useWideLayout'
+import { type Clock } from '../lib/clock'
 import { today } from '../lib/day'
 import { ZONES, offList } from '../lib/zones'
 import { applyTheme, rememberTheme, useTheme, type Theme } from '../theme'
@@ -73,6 +74,13 @@ export type Screen =
 const UNITS: { value: Units; label: string }[] = [
   { value: 'imperial', label: 'Imperial (lb, oz)' },
   { value: 'metric', label: 'Metric (g, ml)' },
+]
+
+// Which clock times are read on. Twelve hours first: it is the default and
+// what nearly everybody here reads.
+const CLOCKS: { value: Clock; label: string }[] = [
+  { value: '12h', label: '12-hour' },
+  { value: '24h', label: '24-hour' },
 ]
 
 // What the sync row says under itself, or nothing at all before a key exists.
@@ -170,6 +178,7 @@ export function More({
 
   const [displayName, setDisplayName] = useState(me.display_name ?? '')
   const [units, setUnits] = useState<Units>(me.units)
+  const [clock, setClock] = useState<Clock>(me.clock)
   const [timezone, setTimezone] = useState(me.timezone)
   const [accountError, setAccountError] = useState('')
   const [accountSaved, markAccountSaved] = useSavedChip()
@@ -242,7 +251,7 @@ export function More({
   // The name is edited on one screen and the two server-side preferences on
   // another, but they are one record and one request either way.
   const nameDirty = displayName !== (me.display_name ?? '')
-  const displayDirty = units !== me.units || timezone !== me.timezone
+  const displayDirty = units !== me.units || clock !== me.clock || timezone !== me.timezone
 
   const saveAccount = async (event: FormEvent) => {
     event.preventDefault()
@@ -252,7 +261,7 @@ export function More({
       onChange(
         await api<Me>('/account', {
           method: 'PATCH',
-          body: { display_name: displayName, units, timezone },
+          body: { display_name: displayName, units, clock, timezone },
         })
       )
       markAccountSaved()
@@ -485,6 +494,23 @@ export function More({
               onChange={(event) => setUnits(event.target.value as Units)}
             >
               {UNITS.map((option) => (
+                <option key={option.value} value={option.value}>
+                  {option.label}
+                </option>
+              ))}
+            </select>
+          </div>
+          <div className="t-row">
+            <label className="flex-1 text-sm" htmlFor="settings-clock">
+              Time format
+            </label>
+            <select
+              id="settings-clock"
+              className="t-input max-w-[55%]"
+              value={clock}
+              onChange={(event) => setClock(event.target.value as Clock)}
+            >
+              {CLOCKS.map((option) => (
                 <option key={option.value} value={option.value}>
                   {option.label}
                 </option>

@@ -22,6 +22,10 @@ router = APIRouter(tags=["account"])
 
 UNITS = ("imperial", "metric")
 
+# Which clock a time is read on. Twelve hours is the default because that is
+# what this app's members read; the other is here for whoever prefers it.
+CLOCKS = ("12h", "24h")
+
 MAX_DISPLAY_NAME = 60
 
 # Free text, "City, State". Never geocoded, never looked up, never checked
@@ -49,6 +53,7 @@ class AccountPatch(BaseModel):
     display_name: str | None = None
     units: str | None = None
     timezone: str | None = None
+    clock: str | None = None
     birthdate: dt.date | None = None
     location: str | None = None
     # The Sharing screen's switches, saved together because they are one answer
@@ -59,6 +64,7 @@ class AccountPatch(BaseModel):
     share_location: bool | None = None
     share_workouts: bool | None = None
     share_journal: bool | None = None
+    share_weight_loss: bool | None = None
 
 
 @router.patch("/account")
@@ -86,6 +92,13 @@ def update_account(
                 status.HTTP_400_BAD_REQUEST, "Units must be either imperial or metric."
             )
         user.units = body.units
+
+    if "clock" in sent:
+        if body.clock not in CLOCKS:
+            raise HTTPException(
+                status.HTTP_400_BAD_REQUEST, "Time format must be either 12h or 24h."
+            )
+        user.clock = body.clock
 
     if "timezone" in sent:
         if body.timezone is None or not security.known_timezone(body.timezone):
@@ -117,6 +130,7 @@ def update_account(
         "share_location",
         "share_workouts",
         "share_journal",
+        "share_weight_loss",
     ):
         if field in sent:
             setattr(user, field, bool(getattr(body, field)))

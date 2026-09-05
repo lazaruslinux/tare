@@ -87,6 +87,9 @@ class User(Base):
     is_admin: Mapped[bool] = mapped_column(Boolean, nullable=False, default=False)
     units: Mapped[str] = mapped_column(String(16), nullable=False, default="imperial")
     timezone: Mapped[str] = mapped_column(String(64), nullable=False, default="UTC")
+    # Which clock this account reads times on, "12h" or "24h". A preference
+    # rather than a fact about the data: every time is stored in UTC either way.
+    clock: Mapped[str] = mapped_column(String(4), nullable=False, default="12h")
     # Which parts of a shared workout this account keeps to itself: any of
     # avg_hr, kcal and route. Another member is served the workout without
     # them rather than with them emptied.
@@ -100,6 +103,9 @@ class User(Base):
     share_workouts: Mapped[bool] = mapped_column(Boolean, nullable=False, default=True)
     # Whether finishing a day says so in the feed. Off until it is turned on.
     share_journal: Mapped[bool] = mapped_column(Boolean, nullable=False, default=False)
+    # Whether a weigh-in that came in lower than the one before it says so in
+    # the feed. The weight itself never goes, only how much of it went.
+    share_weight_loss: Mapped[bool] = mapped_column(Boolean, nullable=False, default=False)
     created_at: Mapped[dt.datetime] = mapped_column(UtcDateTime, nullable=False, default=now_utc)
 
 

@@ -1,10 +1,11 @@
 """What the members of this instance show each other.
 
-One list, read only, and it holds two kinds of thing: a workout somebody did,
-and a day somebody finished. No food, no weight, no steps, no likes and no
-comments: the feed is here so a small group can see that somebody else went out
-this morning, not so anybody can be scored against them. A finished day says
-that and nothing else, never what was in it.
+One list, read only, and it holds three kinds of thing: a workout somebody did,
+a day somebody finished, and a weigh-in that came in under the one before it.
+No food, no steps, no likes and no comments: the feed is here so a small group
+can see that somebody else went out this morning, not so anybody can be scored
+against them. A finished day says that and nothing else, never what was in it,
+and a weigh-in says how much came off, never the weight itself.
 
 What a member is shown about another member is the shortest list the app
 could work with: a name, how long they have been here, and up to three facts
@@ -17,6 +18,8 @@ from __future__ import annotations
 import base64
 import binascii
 import datetime as dt
+from collections.abc import Callable
+from typing import Any
 
 from fastapi import APIRouter, Depends, HTTPException, status
 from sqlalchemy import and_, func, or_, select
@@ -27,9 +30,9 @@ from app.db import get_db
 from app.deps import require_user
 from app.profiles import avatar_url, submission_counts
 from app.routers.admin import waiting_items
-from app.routers.diary import exercise_credit, fill_auto_logs, total
+from app.routers.diary import fill_auto_logs, total
 from app.routers.fitness import day_exercise, kept_back, steps_on, workouts_on
-from app.routers.health import Reckoning, day_budget, exercise_on
+from app.routers.health import Reckoning, exercise_on
 
 router = APIRouter(prefix="/feed", tags=["feed"])
 
@@ -41,12 +44,19 @@ BAD_CURSOR = "That page marker is not one of ours."
 MISSING_MEMBER = "There is no such member."
 
 
-# The two kinds of row, and how they break a tie at the same instant: a
-# workout is listed before a finished day stamped to the same moment. One rule,
-# written once, so the page filter and the merge cannot disagree.
+# The three kinds of row, and how they break a tie at the same instant: the
+# higher rank is listed first, so a workout comes before a weigh-in and a
+# weigh-in before a finished day. One rule, written once, so the page filter
+# and the merge cannot disagree.
 WORKOUT = "workout"
 JOURNAL = "journal"
-RANK = {JOURNAL: 0, WORKOUT: 1}
+WEIGHT = "weight"
+RANK = {JOURNAL: 0, WEIGHT: 1, WORKOUT: 2}
+
+# How much has to have come off before a weigh-in is worth a row. Under this a
+# sentence would read "lost 0.0", because 0.05 kg is the smallest difference
+# that still rounds to a tenth in both pounds and kilograms.
+MIN_LOSS_KG = 0.05
 
 
 def write_cursor(at: dt.datetime, kind: str, anchor: str) -> str:
@@ -72,6 +82,39 @@ def read_cursor(cursor: str) -> tuple[dt.datetime, str, str]:
         raise HTTPException(status.HTTP_400_BAD_REQUEST, BAD_CURSOR) from None
 
 
+def journal_behind(anchor: str) -> Any:
+    """A finished day listed after the one a marker named. That row has no id
+    of its own, so whose day it was and which day is what orders it."""
+    was_user, was_date = anchor.split(":", 1)
+    return or_(
+        models.JournalDay.user_id < int(was_user),
+        and_(
+            models.JournalDay.user_id == int(was_user),
+            models.JournalDay.date < dt.date.fromisoformat(was_date),
+        ),
+    )
+
+
+def still_to_come(
+    rows_of: str,
+    when: Any,
+    behind: Callable[[], Any],
+    at: dt.datetime,
+    kind: str,
+) -> Any:
+    """What a page starting after one marker may still hold, for one kind.
+
+    One rule for all three kinds rather than a branch each. A row of the
+    marker's own kind is past it when it is older, or stamped to the same
+    instant and behind it in the order. Any other kind is settled by the rank
+    alone: the kinds listed after the marker at that instant were not sent, so
+    they keep the instant itself, and the kinds listed before it lose it.
+    """
+    if rows_of == kind:
+        return or_(when < at, and_(when == at, behind()))
+    return when <= at if RANK[rows_of] < RANK[kind] else when < at
+
+
 def pronoun_for(member: models.User, profile: models.HealthProfile | None) -> str:
     """The word a sentence about somebody uses, and the only thing the feed
     learns from the gender they may have shared. The field itself never leaves
@@ -88,14 +131,14 @@ def read_feed(
     db: Session = Depends(get_db),
     user: models.User = Depends(require_user),
 ) -> dict[str, object]:
-    """Every member's shared workouts and finished days, newest first, a page
-    at a time.
+    """Every member's shared workouts, finished days and weigh-ins, newest
+    first, a page at a time.
 
-    Two tables, one list. They are read separately with the same "before this
+    Three tables, one list. They are read separately with the same "after this
     marker" filter, merged here, and cut to a page; the marker written back
     names the last row's time, its kind and which row it was, so the next page
     starts exactly after it whichever table that row came out of. Sorting them
-    in the database instead would mean a union of two unlike shapes for no
+    in the database instead would mean a union of three unlike shapes for no
     gain: a page is thirty rows.
 
     A row this account hid is still in its own feed and says so, because the
@@ -141,50 +184,83 @@ def read_feed(
         .limit(PAGE + 1)
     )
 
+    # A weigh-in is only a row when it came in under the one before it, which
+    # is the reading the window function beside it carries. The comparison has
+    # to be made before it can be filtered on, so it is made in a subquery and
+    # the loss is read out of that.
+    readings = select(
+        models.WeightEntry.id,
+        models.WeightEntry.user_id,
+        models.WeightEntry.date_for,
+        models.WeightEntry.weight_kg,
+        models.WeightEntry.created_at,
+        func.lag(models.WeightEntry.weight_kg)
+        .over(
+            partition_by=models.WeightEntry.user_id,
+            order_by=models.WeightEntry.date_for,
+        )
+        .label("prev_kg"),
+    ).subquery()
+    weights = (
+        select(readings)
+        .join(models.User, models.User.id == readings.c.user_id)
+        .where(
+            readings.c.prev_kg.is_not(None),
+            readings.c.prev_kg - readings.c.weight_kg >= MIN_LOSS_KG,
+            or_(
+                models.User.share_weight_loss.is_(True),
+                readings.c.user_id == user.id,
+            ),
+        )
+        .order_by(readings.c.created_at.desc(), readings.c.id.desc())
+        .limit(PAGE + 1)
+    )
+
     if at is not None:
-        if kind == WORKOUT:
-            workouts = workouts.where(
-                or_(
-                    models.Workout.started_at < at,
-                    and_(
-                        models.Workout.started_at == at, models.Workout.id < int(anchor)
-                    ),
-                )
+        workouts = workouts.where(
+            still_to_come(
+                WORKOUT,
+                models.Workout.started_at,
+                lambda: models.Workout.id < int(anchor),
+                at,
+                kind,
             )
-            # A day stamped to the same instant as the workout the last page
-            # ended on is listed after it, so it is still to come.
-            journals = journals.where(models.JournalDay.completed_at <= at)
-        else:
-            was_user, was_date = anchor.split(":", 1)
-            workouts = workouts.where(models.Workout.started_at < at)
-            journals = journals.where(
-                or_(
-                    models.JournalDay.completed_at < at,
-                    and_(
-                        models.JournalDay.completed_at == at,
-                        or_(
-                            models.JournalDay.user_id < int(was_user),
-                            and_(
-                                models.JournalDay.user_id == int(was_user),
-                                models.JournalDay.date < dt.date.fromisoformat(was_date),
-                            ),
-                        ),
-                    ),
-                )
+        )
+        weights = weights.where(
+            still_to_come(
+                WEIGHT,
+                readings.c.created_at,
+                lambda: readings.c.id < int(anchor),
+                at,
+                kind,
             )
+        )
+        journals = journals.where(
+            still_to_come(
+                JOURNAL,
+                models.JournalDay.completed_at,
+                lambda: journal_behind(anchor),
+                at,
+                kind,
+            )
+        )
 
     sessions = list(db.execute(workouts).scalars())
     finished = list(db.execute(journals).scalars())
+    weighed = list(db.execute(weights))
 
-    # Both lists in one order, by the rule the cursor is written to. The last
+    # Every list in one order, by the rule the cursor is written to. The last
     # two parts of the key are only ever compared inside one kind, because the
     # rank ahead of them is what separates the kinds.
-    Row = models.Workout | models.JournalDay
     Key = tuple[dt.datetime, int, int, str]
-    ordered: list[tuple[Key, str, Row]] = [
+    ordered: list[tuple[Key, str, Any]] = [
         *(
             ((row.started_at, RANK[WORKOUT], row.id, ""), WORKOUT, row)
             for row in sessions
+        ),
+        *(
+            ((row.created_at, RANK[WEIGHT], row.id, ""), WEIGHT, row)
+            for row in weighed
         ),
         *(
             (
@@ -200,8 +276,8 @@ def read_feed(
     page = ordered[:PAGE]
 
     # Three queries for the whole page rather than three per row: who each one
-    # belongs to, which workouts recorded a line, and the gender a finished day
-    # is spoken about in.
+    # belongs to, which workouts recorded a line, and the gender a row about a
+    # person is spoken about in.
     owner_ids = {each.user_id for _, _, each in page}
     owners = {
         row.id: row
@@ -223,18 +299,38 @@ def read_feed(
         db.execute(
             select(models.WorkoutRoute.workout_id).where(
                 models.WorkoutRoute.workout_id.in_(
-                    {each.id for _, _, each in page if isinstance(each, models.Workout)}
+                    {each.id for _, of, each in page if of == WORKOUT}
                 )
             )
         ).scalars()
     )
 
     items: list[dict[str, object]] = []
-    for _, _, each in page:
+    for _, of, each in page:
         owner = owners.get(each.user_id)
         mine = each.user_id == user.id
         name = "" if owner is None else (owner.display_name or owner.username)
-        if isinstance(each, models.JournalDay):
+        said = "their" if owner is None else pronoun_for(owner, profiles.get(owner.id))
+        if of == WEIGHT:
+            # How much came off, and nothing either weight was. The reading
+            # before it is what made this a row and does not leave the server.
+            lost: dict[str, object] = {
+                "kind": WEIGHT,
+                "id": each.id,
+                "user_id": each.user_id,
+                "display_name": name,
+                "mine": mine,
+                "date": each.date_for.isoformat(),
+                "at": each.created_at.isoformat(),
+                "lost_kg": each.prev_kg - each.weight_kg,
+                "pronoun": said,
+            }
+            if mine:
+                lost["hidden"] = not user.share_weight_loss
+            items.append(lost)
+            continue
+
+        if of == JOURNAL:
             journal: dict[str, object] = {
                 "kind": JOURNAL,
                 # The row has no id of its own: whose day it was and which day
@@ -245,11 +341,7 @@ def read_feed(
                 "mine": mine,
                 "date": each.date.isoformat(),
                 "at": each.completed_at.isoformat(),
-                "pronoun": (
-                    "their"
-                    if owner is None
-                    else pronoun_for(owner, profiles.get(owner.id))
-                ),
+                "pronoun": said,
             }
             if mine:
                 journal["hidden"] = not user.share_journal
@@ -308,16 +400,15 @@ def read_today(
             )
         ).scalars()
     )
-    state = Reckoning(db, user)
-    budget = day_budget(state)
-    kcal, _ = day_exercise(exercise_on(db, user, day), workouts_on(db, user, day))
+    _, minutes = day_exercise(exercise_on(db, user, day), workouts_on(db, user, day))
     eaten = total(entries, "calories") or 0.0
-    latest = state.latest
+    latest = Reckoning(db, user).latest
     db.commit()
 
     figures: dict[str, object] = {
-        "calories_left": round(budget["calories"] + exercise_credit(kcal) - eaten),
+        "calories_eaten": round(eaten),
         "steps": steps_on(db, user, [day]).get(day),
+        "exercise_min": minutes,
         "latest_weight_kg": None if latest is None else latest.weight_kg,
         "latest_weight_date": None if latest is None else latest.date_for.isoformat(),
     }

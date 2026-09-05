@@ -99,13 +99,16 @@ def test_upgrade_head_builds_the_identity_schema(tmp_path):
     # And one figure per metric per day, whatever the metric turns out to be.
     assert "uq_fitness_daily_day_metric" in daily_unique
     assert "location" in user_columns
-    # The three facts a member may show other members, each off until it is on.
+    # The facts a member may show other members, each off until it is on, and
+    # the clock they read times on.
     assert {
         "share_age",
         "share_sex",
         "share_location",
         "share_workouts",
         "share_journal",
+        "share_weight_loss",
+        "clock",
     } <= user_columns
     assert journal_columns == {"user_id", "date", "completed_at"}
     entry_columns = {column["name"] for column in inspector.get_columns("diary_entries")}

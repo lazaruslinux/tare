@@ -11,6 +11,7 @@ import {
   type SyncKey,
 } from '../api'
 import { Sheet } from '../components/Sheet'
+import { stampText, useClock } from '../lib/clock'
 
 type Platform = 'iphone' | 'android'
 
@@ -34,16 +35,6 @@ const ALREADY_MADE =
 const NEW_KEY_ASK =
   'This will create a new sync key that must be replaced in your export app. Continue?'
 const WIPE_ASK = 'Remove every number that came from a file? Synced data stays.'
-
-// When a key was last used, in the words the Fitness screen uses for it.
-function lastSync(stamp: string): string {
-  return new Date(stamp).toLocaleString(undefined, {
-    month: 'short',
-    day: 'numeric',
-    hour: 'numeric',
-    minute: '2-digit',
-  })
-}
 
 // What each phone needs, in the order somebody does it. Written for a person
 // who has never set up an automation, so every step is one thing to do.
@@ -114,6 +105,8 @@ export function SyncDevice() {
   const [wiping, setWiping] = useState(false)
   const [wiped, setWiped] = useState('')
   const field = useId()
+  // The last-sync line is a stamp, so it redraws when the clock changes.
+  useClock()
 
   useEffect(() => {
     let alive = true
@@ -225,7 +218,7 @@ export function SyncDevice() {
             <p className="mt-2 text-sm text-muted">
               {status.last_used_at === null
                 ? 'Key created, nothing received yet.'
-                : `Connected. Last health data sync: ${lastSync(status.last_used_at)}.`}
+                : `Connected. Last health data sync: ${stampText(status.last_used_at)}.`}
             </p>
           ) : (
             <p className="mt-2 text-sm text-muted">

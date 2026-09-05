@@ -41,6 +41,27 @@ def test_units_outside_the_two_are_refused(client, signed_in):
     assert response.json() == {"detail": "Units must be either imperial or metric."}
 
 
+def test_the_clock_can_be_switched(client, db_session, signed_in):
+    assert patch(client, clock="24h").json()["clock"] == "24h"
+    db_session.refresh(signed_in)
+    assert signed_in.clock == "24h"
+
+
+def test_a_clock_off_the_two_is_refused(client, signed_in):
+    response = patch(client, clock="sundial")
+    assert response.status_code == 400
+    assert response.json() == {"detail": "Time format must be either 12h or 24h."}
+
+
+def test_the_defaults_a_new_account_reads_on(client, signed_in):
+    """The two answers nobody is asked for: a twelve-hour clock, and a weight
+    loss that goes nowhere until it is turned on."""
+    me = client.get("/api/auth/me").json()
+    assert me["clock"] == "12h"
+    assert me["share_weight_loss"] is False
+    assert patch(client, share_weight_loss=True).json()["share_weight_loss"] is True
+
+
 def test_the_timezone_can_be_moved(client, db_session, signed_in):
     assert patch(client, timezone="America/Phoenix").json()["timezone"] == "America/Phoenix"
     db_session.refresh(signed_in)

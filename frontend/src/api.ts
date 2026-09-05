@@ -2,6 +2,7 @@
 // so the session cookie, the JSON headers, and the shape of a failure are
 // decided once instead of at each call site.
 
+import type { Clock } from './lib/clock'
 import type { Slot } from './lib/day'
 import type { BaseUnit, Unit } from './lib/units'
 
@@ -20,6 +21,8 @@ export type Me = {
   is_admin: boolean
   units: Units
   timezone: string
+  // Which clock this account reads times on.
+  clock: Clock
   // Null on an account made before tare asked for one, which is what sends it
   // to the one screen that does.
   birthdate: string | null
@@ -36,6 +39,8 @@ export type Me = {
   share_workouts: boolean
   // Whether finishing a day says so in the community feed.
   share_journal: boolean
+  // Whether a weigh-in that came in lower says how much came off.
+  share_weight_loss: boolean
 }
 
 export type Sex = 'female' | 'male'
@@ -812,7 +817,22 @@ export type FeedJournal = {
   pronoun: string
 }
 
-export type FeedRow = FeedWorkout | FeedJournal
+// One weigh-in that came in under the one before it. How much came off, and
+// never either weight it was worked out from.
+export type FeedWeight = {
+  kind: 'weight'
+  id: number
+  user_id: number
+  display_name: string
+  mine: boolean
+  hidden?: boolean
+  date: string
+  at: string
+  lost_kg: number
+  pronoun: string
+}
+
+export type FeedRow = FeedWorkout | FeedJournal | FeedWeight
 
 // One page of the feed. The marker is opaque and only ever handed back.
 export type FeedPage = { items: FeedRow[]; next_cursor: string | null }
@@ -847,8 +867,9 @@ export type MemberRow = {
 // The few figures the wide layout keeps beside whatever is on screen. The
 // waiting count is an administrator's alone.
 export type TodayStrip = {
-  calories_left: number | null
+  calories_eaten: number | null
   steps: number | null
+  exercise_min: number | null
   latest_weight_kg: number | null
   latest_weight_date: string | null
   waiting?: number
