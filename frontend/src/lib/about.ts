@@ -19,6 +19,5 @@ export const WHAT_TARE_DOES: [string, string][] = [
   ['Dashboard', 'This week at a glance, and trends over months.'],
   ['Fitness', 'Steps by the hour, sessions and trends from your phone.'],
   ['Community', 'Workouts, finished journals and weight lost, as members choose to share them.'],
-  ['Recipes & meals', 'Your own dishes and combinations, logged as one line.'],
-  ['Quick add & auto-log', 'The foods you eat every day, on the page or logged for you.'],
+  ['Recipes & Meals', 'Combine multiple food items into recipes for faster journal entries.'],
 ]
