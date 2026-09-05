@@ -6,8 +6,9 @@ import {
   Plus,
   Repeat,
   Sandwich,
+  Library,
   ScanBarcode,
-  ScanLine,
+  Search,
   X,
 } from 'lucide-react'
 import { useEffect, useRef, useState } from 'react'
@@ -27,6 +28,7 @@ import {
   type RepeatRow,
 } from '../api'
 import { FoodForm } from '../components/FoodForm'
+import { FoodPicker } from '../components/FoodPicker'
 import {
   Calories,
   FoodLine,
@@ -41,7 +43,6 @@ import { useTopBar } from '../hooks/useTopBar'
 import { SLOT_LABEL, slotByTime, today } from '../lib/day'
 import { reviews } from '../lib/roles'
 import { portionText } from '../lib/units'
-import { Browse } from './Browse'
 import { FoodDetail } from './FoodDetail'
 import { MealDetail } from './MealDetail'
 import { MyList, LIST_TITLE, type ListKind } from './MyList'
@@ -56,9 +57,10 @@ const SHOWN = 3
 // waiting on it, long enough to notice the mistake.
 const UNDO = 6000
 
-// Where going back from something lands, because a food is opened from the
-// page, from the shared database and from a list screen alike.
-type From = { at: 'list' } | { at: 'browse' }
+// Where going back from something lands. Everything on this tab is opened
+// from the tab's own list, the catalogs and the search sheet included, so
+// there is one answer.
+type From = { at: 'list' }
 
 type View =
   | From
@@ -128,6 +130,9 @@ export function FoodTab({
   const [logging, setLogging] = useState<FoodItem | null>(null)
   // The standing auto-log open in the same sheet, with the food it is about.
   const [autoEdit, setAutoEdit] = useState<{ food: FoodItem; row: AutoLog } | null>(null)
+  // The shared database, open over the tab: a box to type in, and the whole
+  // database to read under it until somebody does.
+  const [searching, setSearching] = useState(false)
   const [error, setError] = useState('')
 
   // The list is the tab's root, and its header carries the way to a new food.
@@ -343,28 +348,13 @@ export function FoodTab({
     void loadAutos()
   }
 
-  // What the screen behind a detail is called, for the control that goes back
-  // to it.
-  const nameOf = (from: From) => (from.at === 'browse' ? 'Browse Tare database' : 'Food')
-
-  if (view.at === 'browse') {
-    return (
-      <Browse
-        refresh={refresh}
-        onBack={() => setView({ at: 'list' })}
-        onOpen={(id) => setView({ at: 'detail', id, from: { at: 'browse' } })}
-        onScan={onScan}
-      />
-    )
-  }
-
   if (view.at === 'detail') {
     const from = view.from
     return (
       <FoodDetail
         id={view.id}
         me={me}
-        backLabel={nameOf(from)}
+        backLabel="Food"
         onBack={() => setView(from)}
         onEdit={(food, opened) => setView({ at: 'form', food, ...opened })}
         onDelete={(food) => erase(food, from)}
@@ -390,7 +380,7 @@ export function FoodTab({
       <RecipeDetail
         id={view.id}
         me={me}
-        backLabel={nameOf(from)}
+        backLabel="Food"
         onBack={() => setView(from)}
         onEdit={(recipe) => setView({ at: 'recipeForm', recipe })}
         onDelete={removeRecipe}
@@ -405,7 +395,7 @@ export function FoodTab({
       <MealDetail
         id={view.id}
         me={me}
-        backLabel={nameOf(from)}
+        backLabel="Food"
         onBack={() => setView(from)}
         onEdit={(meal) => setView({ at: 'mealForm', meal })}
         onDelete={removeMeal}
@@ -513,20 +503,34 @@ export function FoodTab({
     <>
       {error && <p className="t-error mb-3">{error}</p>}
 
-      {/* The empty state below carries its own way in, so this is only here
-          once there is a list for it to sit above. */}
-      {foods.length > 0 && (
-        <button type="button" className="t-btn t-btn-primary mb-3 w-full" onClick={onScan}>
-          <ScanLine className="h-4 w-4" strokeWidth={2} />
-          Scan a barcode
+      {/* The two ways into the shared database, on one line above everything
+          this account keeps: type the name, or hold the packet up. The field is
+          a button rather than a box, because what it opens is a sheet with a
+          box of its own and the database underneath it. */}
+      <div className="mb-3 flex items-center gap-2">
+        <button
+          type="button"
+          className="t-input flex flex-1 items-center gap-2 text-left text-muted"
+          onClick={() => setSearching(true)}
+        >
+          <Search className="h-4 w-4 shrink-0" strokeWidth={2} />
+          Search Tare database
         </button>
-      )}
+        <button
+          type="button"
+          className="t-btn t-tap44 w-11 shrink-0 px-0"
+          aria-label="Scan a barcode"
+          onClick={onScan}
+        >
+          <ScanBarcode className="h-5 w-5" strokeWidth={2} />
+        </button>
+      </div>
 
       <div className="t-card mb-3">
         <div className="mb-1 flex items-center justify-between">
           <p className="t-section">
-            <ScanBarcode className="h-4 w-4" strokeWidth={2} />
-            My foods (recently added)
+            <Library className="h-4 w-4" strokeWidth={2} />
+            My foods (recently used)
           </p>
           <button
             type="button"
@@ -753,13 +757,20 @@ export function FoodTab({
         )}
       </div>
 
-      <button
-        type="button"
-        className="t-card mb-3 w-full text-left"
-        onClick={() => setView({ at: 'browse' })}
-      >
-        <p className="t-section">Browse Tare database</p>
-      </button>
+      {searching && (
+        <FoodPicker
+          me={me}
+          onClose={() => setSearching(false)}
+          browse={{
+            refresh,
+            onScan,
+            onOpen: (id) => {
+              setSearching(false)
+              setView({ at: 'detail', id, from: { at: 'list' } })
+            },
+          }}
+        />
+      )}
 
       {logging !== null && (
         <PortionSheet
@@ -801,7 +812,7 @@ export function FoodTab({
       )}
 
       {catalog !== null && (
-        <Sheet open tall label={LIST_TITLE[catalog]} onClose={() => setCatalog(null)}>
+        <Sheet open wide label={LIST_TITLE[catalog]} onClose={() => setCatalog(null)}>
           <MyList
             listed={
               catalog === 'foods'

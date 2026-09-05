@@ -55,7 +55,12 @@ export function Verified({ className = 'h-4 w-4' }: { className?: string }) {
 
 // The picture beside a food in a list, or where one would be. Decorative: the
 // row itself is what opens the food.
-export function PhotoThumb({ url }: { url: string | null }) {
+//
+// The small copy where the server has written one, which is the whole picture
+// again on a food photographed before there were any. Loaded lazily, so a list
+// of three hundred rows fetches the dozen somebody is looking at.
+export function PhotoThumb({ row }: { row: FoodRow }) {
+  const url = row.thumb_url ?? row.photo_url
   if (url === null) {
     return (
       <span className="t-phototile h-10 w-10" aria-hidden="true">
@@ -64,7 +69,13 @@ export function PhotoThumb({ url }: { url: string | null }) {
     )
   }
   return (
-    <img src={url} alt="" className="h-10 w-10 shrink-0 rounded-lg border border-line object-cover" />
+    <img
+      src={url}
+      alt=""
+      loading="lazy"
+      decoding="async"
+      className="h-10 w-10 shrink-0 rounded-lg border border-line object-cover"
+    />
   )
 }
 
@@ -98,7 +109,7 @@ export function FoodLine({
 }) {
   const line = (
     <>
-      <PhotoThumb url={row.photo_url} />
+      <PhotoThumb row={row} />
       <span className="min-w-0 flex-1">
         <span className="flex items-center gap-1.5">
           {row.status !== 'approved' && <Dot state={row.community} />}

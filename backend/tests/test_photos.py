@@ -11,7 +11,7 @@ import os
 
 from PIL import Image
 
-from app import caps, models, photos
+from app import caps, models, photos, thumbs
 from app.models import now_utc
 from app.routers import photos as photos_router
 from tests.conftest import PASSWORD
@@ -370,3 +370,127 @@ def test_a_member_may_only_upload_so_many_pictures_in_one_day(client, db_session
     refused = upload(client)
     assert refused.status_code == 429
     assert refused.json()["detail"] == caps.TOO_MANY_PHOTOS
+
+
+# ---- The small copy a list of rows draws ----
+
+
+def test_a_front_photo_is_stored_with_a_small_square_copy_beside_it(
+    client, db_session, signed_in
+):
+    response = upload(client, picture(size=(400, 200)))
+    row = db_session.get(models.FoodPhoto, response.json()["photo_id"])
+
+    small = photos.thumb_name(row.path)
+    assert small.endswith(".thumb.webp")
+    assert on_disk(small)
+    with Image.open(photos.path_for(small)) as thumb:
+        # Square, because every row draws it in a square box, and cut out of
+        # the middle rather than squashed.
+        assert thumb.size == (photos.THUMB_EDGE, photos.THUMB_EDGE)
+    # And smaller than the picture it stands for, which is the whole point.
+    assert os.path.getsize(photos.path_for(small)) < os.path.getsize(
+        photos.path_for(row.path)
+    )
+
+
+def test_a_label_photo_gets_no_small_copy(client, db_session, signed_in):
+    response = upload(client, purpose="label")
+    row = db_session.get(models.FoodPhoto, response.json()["photo_id"])
+    assert not on_disk(photos.thumb_name(row.path))
+
+
+def test_the_small_copy_is_served_beside_the_picture_it_is_of(client, signed_in):
+    photo_id = upload(client).json()["photo_id"]
+    response = client.get(f"/api/photos/{photo_id}.thumb.webp")
+    assert response.status_code == 200
+    assert response.headers["content-type"] == "image/webp"
+
+
+def test_a_picture_with_no_small_copy_answers_that_it_has_none(
+    client, db_session, signed_in
+):
+    photo_id = upload(client).json()["photo_id"]
+    row = db_session.get(models.FoodPhoto, photo_id)
+    # A picture stored before there were thumbs, which is what the backfill is
+    # for. The full-size one is still there and still served.
+    os.remove(photos.path_for(photos.thumb_name(row.path)))
+
+    missing = client.get(f"/api/photos/{photo_id}.thumb.webp")
+    assert missing.status_code == 404
+    assert missing.json() == {"detail": "There is no such photo."}
+    assert client.get(f"/api/photos/{photo_id}.webp").status_code == 200
+
+
+def test_a_small_copy_is_nobody_s_who_may_not_see_the_picture(
+    client, make_user, signed_in
+):
+    photo_id = upload(client).json()["photo_id"]
+    make_user("stranger")
+    sign_in(client, "stranger")
+    assert client.get(f"/api/photos/{photo_id}.thumb.webp").status_code == 404
+
+
+def test_the_small_copy_goes_with_the_picture(client, db_session, signed_in):
+    photo_id = upload(client).json()["photo_id"]
+    row = db_session.get(models.FoodPhoto, photo_id)
+    name, small = row.path, photos.thumb_name(row.path)
+
+    photos.remove(name)
+
+    assert not on_disk(name)
+    assert not on_disk(small)
+
+
+def test_the_backfill_writes_the_copies_the_stored_pictures_never_had(
+    client, db_session, signed_in
+):
+    rows = [
+        db_session.get(models.FoodPhoto, upload(client).json()["photo_id"]) for _ in range(2)
+    ]
+    label_id = upload(client, purpose="label").json()["photo_id"]
+    label = db_session.get(models.FoodPhoto, label_id)
+    for row in rows:
+        os.remove(photos.path_for(photos.thumb_name(row.path)))
+
+    assert thumbs.backfill(db_session) == 2
+    assert all(on_disk(photos.thumb_name(row.path)) for row in rows)
+    # A label is read at full size, so the backfill leaves it alone.
+    assert not on_disk(photos.thumb_name(label.path))
+
+    # Run again and there is nothing left to do.
+    assert thumbs.backfill(db_session) == 0
+
+
+def test_a_list_row_carries_both_addresses_of_the_picture(client, db_session, signed_in):
+    made = client.post(
+        "/api/foods",
+        json={
+            "name": "Rolled oats",
+            "base_unit": "g",
+            "calories": 379,
+            "protein_g": 13,
+            "carbs_g": 68,
+            "fat_g": 6.5,
+        },
+    ).json()
+    # Nothing attached yet, which is a food with no picture rather than one
+    # whose picture failed to load.
+    row = next(r for r in client.get("/api/foods/mine").json() if r["id"] == made["id"])
+    assert (row["photo_url"], row["thumb_url"]) == (None, None)
+
+    photo_id = upload(client).json()["photo_id"]
+    attached = client.post(f"/api/foods/{made['id']}/photo", json={"photo_id": photo_id})
+    assert attached.status_code == 204
+
+    row = next(r for r in client.get("/api/foods/mine").json() if r["id"] == made["id"])
+    assert row["photo_url"] == f"/api/photos/{photo_id}.webp"
+    assert row["thumb_url"] == f"/api/photos/{photo_id}.thumb.webp"
+
+    # And a picture stored before there were thumbs keeps its full-size
+    # address and says it has no small copy.
+    name = db_session.get(models.FoodPhoto, photo_id).path
+    os.remove(photos.path_for(photos.thumb_name(name)))
+    row = next(r for r in client.get("/api/foods/mine").json() if r["id"] == made["id"])
+    assert row["photo_url"] == f"/api/photos/{photo_id}.webp"
+    assert row["thumb_url"] is None

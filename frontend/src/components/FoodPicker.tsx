@@ -3,13 +3,18 @@ import { useEffect, useState, type FormEvent } from 'react'
 
 import { api, errorText, type Food, type FoodRow, type Me, type RepeatRow } from '../api'
 import { slotByTime, today, type Slot } from '../lib/day'
-import { Calories, Verified, subline } from './FoodRows'
+import { BrowseList } from './BrowseList'
+import { Calories, PhotoThumb, Verified, subline } from './FoodRows'
 import { PortionSheet } from './PortionSheet'
 import { Sheet } from './Sheet'
 
 // Long enough that typing a word is one request rather than five.
 const DEBOUNCE = 250
 const MIN_QUERY = 2
+
+// How many results are on screen before the rest are one tap away. A list
+// somebody has to scroll past to reach anything is a list nobody reads.
+const PAGE = 30
 
 // A typed field as a number, or nothing. An empty box is a figure nobody gave,
 // which is not the same as zero of it.
@@ -23,6 +28,7 @@ function num(raw: string): number | null {
 function Row({ row, onOpen }: { row: FoodRow & { pinned?: boolean }; onOpen: () => void }) {
   return (
     <button type="button" className="t-row w-full text-left" onClick={onOpen}>
+      <PhotoThumb row={row} />
       <span className="min-w-0 flex-1">
         <span className="flex items-center gap-1.5">
           {row.pinned && <Pin className="h-3 w-3 shrink-0 text-accent" strokeWidth={2.5} />}
@@ -150,6 +156,7 @@ export function FoodPicker({
   onLogged,
   onPick,
   onScan,
+  browse,
 }: {
   me: Me
   // The day and the meal a food is being logged into. Left out when nothing is
@@ -164,9 +171,20 @@ export function FoodPicker({
   // Given instead when a food is being chosen for a recipe or a kept meal. The
   // portion is handed back and nothing is written to the diary.
   onPick?: (food: Food, amount: number, unit: string) => void
+  // Given instead when this is the Food page's way into the shared database.
+  // A row opens the food's own page rather than a portion to log, and before
+  // anybody types the sheet is the database itself, read by letter and aisle.
+  browse?: {
+    refresh: number
+    onOpen: (id: number) => void
+    onScan: () => void
+  }
 }) {
   const day = date ?? today(me.timezone)
   const meal = slot ?? slotByTime(me.timezone)
+  // Whether this sheet is the Food page's way into the shared database, which
+  // decides what a row does and what sits under the box before anybody types.
+  const browsing = browse !== undefined
   const [query, setQuery] = useState('')
   // Null is not an empty result: it is a box nobody has typed two letters into.
   const [results, setResults] = useState<FoodRow[] | null>(null)
@@ -174,8 +192,14 @@ export function FoodPicker({
   const [chosen, setChosen] = useState<Food | null>(null)
   const [quick, setQuick] = useState(false)
   const [error, setError] = useState('')
+  // How many results are drawn. Back to the first page whenever the results
+  // are a different question's answer.
+  const [shown, setShown] = useState(PAGE)
 
   useEffect(() => {
+    // Not asked for when the sheet is the shared database: nothing there shows
+    // the quick add list.
+    if (browsing) return
     let alive = true
     api<RepeatRow[]>('/foods/repeat')
       .then((rows) => alive && setRepeat(rows))
@@ -183,10 +207,11 @@ export function FoodPicker({
     return () => {
       alive = false
     }
-  }, [])
+  }, [browsing])
 
   useEffect(() => {
     const needle = query.trim()
+    setShown(PAGE)
     if (needle.length < MIN_QUERY) {
       setResults(null)
       return
@@ -224,8 +249,11 @@ export function FoodPicker({
     )
   }
 
+  // What this sheet is, in one phrase, used as its name and above its box.
+  const title = browsing ? 'Search Tare database' : onPick ? 'Choose a food' : 'Add food'
+
   return (
-    <Sheet open label={onPick ? 'Choose a food' : 'Add food'} onClose={onClose}>
+    <Sheet open tall={browsing} label={title} onClose={onClose}>
       {quick ? (
         <QuickAdd
           date={day}
@@ -235,12 +263,12 @@ export function FoodPicker({
         />
       ) : (
         <>
-          <p className="t-micro mb-2">{onPick ? 'Choose a food' : 'Add food'}</p>
+          <p className="t-micro mb-2">{title}</p>
           <input
             className="t-input mb-3"
             type="search"
-            placeholder="Search foods"
-            aria-label="Search foods"
+            placeholder={title}
+            aria-label={title}
             value={query}
             onChange={(event) => setQuery(event.target.value)}
           />
@@ -251,8 +279,32 @@ export function FoodPicker({
             results.length === 0 ? (
               <p className="text-sm text-muted">Nothing here goes by that name.</p>
             ) : (
-              results.map((row) => <Row key={row.id} row={row} onOpen={() => open(row.id)} />)
+              <>
+                {results.slice(0, shown).map((row) => (
+                  <Row
+                    key={row.id}
+                    row={row}
+                    onOpen={() => (browse ? browse.onOpen(row.id) : open(row.id))}
+                  />
+                ))}
+                {results.length > shown && (
+                  <button
+                    type="button"
+                    className="t-btn mt-3 w-full"
+                    onClick={() => setShown(shown + PAGE)}
+                  >
+                    Show more
+                  </button>
+                )}
+              </>
             )
+          ) : browse ? (
+            // Nothing typed yet, so the sheet is the shared database itself.
+            <BrowseList
+              refresh={browse.refresh}
+              onOpen={browse.onOpen}
+              onScan={browse.onScan}
+            />
           ) : (
             <>
               <p className="t-micro mb-1">Quick add</p>
@@ -278,8 +330,8 @@ export function FoodPicker({
           )}
 
           {/* A typed-in food is logged and forgotten, so there is nothing in
-              it to put in a recipe or a kept meal. */}
-          {!onPick && (
+              it to put in a recipe or a kept meal, and nothing to look up. */}
+          {!onPick && !browsing && (
             <button
               type="button"
               className="t-row w-full text-left text-sm text-muted"

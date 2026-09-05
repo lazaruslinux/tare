@@ -74,6 +74,14 @@ On an instance that sends no mail, an address is marked verified by hand:
 docker compose exec api python manage.py verify-email --username someone
 ```
 
+Every food photo is stored with a small square copy beside it, which is what a
+list of rows draws. Pictures stored before that get theirs from one command,
+run once after an upgrade and safe to run again:
+
+```
+docker compose exec api python manage.py make-thumbnails
+```
+
 ## Reviewers
 
 There are two roles. An administrator runs the instance: invites, accounts,

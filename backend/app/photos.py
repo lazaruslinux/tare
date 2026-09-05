@@ -38,6 +38,18 @@ Image.MAX_IMAGE_PIXELS = MAX_PIXELS
 MAX_EDGES = {"front": 1200, "label": 1600, "avatar": 512}
 QUALITY = 78
 
+# The small copy of a front photo, written beside it. A list of forty rows
+# draws forty of these, and none of them is worth the full picture: square,
+# because a row draws it in a square box, and cheap enough that the whole list
+# costs less than one of the pictures it stands for.
+THUMB_EDGE = 96
+THUMB_QUALITY = 70
+THUMB_SUFFIX = ".thumb.webp"
+
+# Which kinds get one. A label is read at full size and an avatar is already
+# small, so only the front photo a list shows is worth a second file.
+THUMBED = ("front",)
+
 # What is stored as a square, cropped to the middle of whatever arrived. An
 # avatar is drawn in a square box everywhere it appears, so the shape is
 # settled once here rather than left to every screen that shows one. The
@@ -63,6 +75,18 @@ def path_for(name: str) -> str:
     """Where one stored photo lives. The name came from store(), never from a
     request, and is joined to nothing a caller supplied."""
     return os.path.join(directory(), name)
+
+
+def thumb_name(name: str) -> str:
+    """What the small copy of a stored photo is called, beside it."""
+    return name.removesuffix(SUFFIX) + THUMB_SUFFIX
+
+
+def stored(name: str) -> bool:
+    """Whether that file is on the disk. A thumb is written after the picture
+    it is of, and the ones from before there were any are written by hand, so
+    a list has to ask rather than assume."""
+    return os.path.isfile(path_for(name))
 
 
 def _decoded(raw: bytes) -> Image.Image:
@@ -127,7 +151,7 @@ def _centred(image: Image.Image) -> Image.Image:
     return image.crop((left, top, left + edge, top + edge))
 
 
-def encode(raw: bytes, max_edge: int, square: bool = False) -> bytes:
+def encode(raw: bytes, max_edge: int, square: bool = False, quality: int = QUALITY) -> bytes:
     """The webp this server will serve, built from the bytes that arrived."""
     decoded = _decoded(raw)
     fitted = _fitted(_centred(decoded) if square else decoded, max_edge)
@@ -138,8 +162,39 @@ def encode(raw: bytes, max_edge: int, square: bool = False) -> bytes:
     clean = Image.new("RGB", fitted.size)
     clean.paste(fitted)
     out = io.BytesIO()
-    clean.save(out, format="WEBP", quality=QUALITY, method=4)
+    clean.save(out, format="WEBP", quality=quality, method=4)
     return out.getvalue()
+
+
+def _write(name: str, data: bytes) -> None:
+    """One file into the photo directory, whole or not at all.
+
+    Written under a scratch name and renamed into place, so a request dying
+    halfway cannot leave a half-written file where a whole one is expected.
+    """
+    folder = directory()
+    os.makedirs(folder, exist_ok=True)
+    handle, temporary = tempfile.mkstemp(dir=folder, prefix="upload-", suffix=".tmp")
+    try:
+        with os.fdopen(handle, "wb") as out:
+            out.write(data)
+        os.replace(temporary, path_for(name))
+    except OSError:
+        try:
+            os.remove(temporary)
+        except OSError:
+            pass
+        raise
+
+
+def write_thumb(raw: bytes, name: str) -> None:
+    """Write the small square copy of one stored photo, beside it.
+
+    Built from the bytes that arrived rather than from the stored picture: the
+    original has the detail, and a 96 px square cut out of it is sharper than
+    the same square cut out of something already scaled down.
+    """
+    _write(thumb_name(name), encode(raw, THUMB_EDGE, square=True, quality=THUMB_QUALITY))
 
 
 def store(raw: bytes, purpose: str) -> str:
@@ -150,27 +205,14 @@ def store(raw: bytes, purpose: str) -> str:
     leaves an id behind.
     """
     encoded = encode(raw, MAX_EDGES[purpose], purpose in SQUARE)
-    folder = directory()
-    os.makedirs(folder, exist_ok=True)
     name = f"{secrets.token_hex(16)}{SUFFIX}"
-    # Written under a scratch name and renamed into place, so a request dying
-    # halfway cannot leave a half-written file where a whole one is expected.
-    handle, temporary = tempfile.mkstemp(dir=folder, prefix="upload-", suffix=".tmp")
-    try:
-        with os.fdopen(handle, "wb") as out:
-            out.write(encoded)
-        os.replace(temporary, path_for(name))
-    except OSError:
-        try:
-            os.remove(temporary)
-        except OSError:
-            pass
-        raise
+    _write(name, encoded)
+    if purpose in THUMBED:
+        write_thumb(raw, name)
     return name
 
 
-def remove(name: str) -> None:
-    """Delete one stored photo. Already gone is not a failure."""
+def _unlink(name: str) -> None:
     try:
         os.remove(path_for(name))
     except FileNotFoundError:
@@ -180,3 +222,10 @@ def remove(name: str) -> None:
         # something for whoever runs the instance, not a reason to fail the
         # request that removed the row.
         log.warning("Could not delete photo %s", name)
+
+
+def remove(name: str) -> None:
+    """Delete one stored photo, and the small copy beside it. Already gone is
+    not a failure, and a picture that never had a thumb is the ordinary case."""
+    _unlink(name)
+    _unlink(thumb_name(name))

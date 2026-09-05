@@ -278,6 +278,31 @@ def read_avatar(
     )
 
 
+@router.get("/{photo_id}.thumb.webp")
+def read_thumb(
+    photo_id: int,
+    db: Session = Depends(get_db),
+    user: models.User = Depends(require_user),
+) -> FileResponse:
+    """The small copy of a picture, for a row in a list.
+
+    Declared before the full-size route so it wins the address, and read by
+    exactly the same rule: a thumb is the same picture, so whoever may not see
+    one may not see the other.
+    """
+    photo = readable_photo(db, user, photo_id)
+    stored = photos.path_for(photos.thumb_name(photo.path))
+    # A picture stored before there were thumbs has none until the backfill
+    # writes it, and that reads as a thumb that is not there.
+    if not os.path.isfile(stored):
+        raise HTTPException(status.HTTP_404_NOT_FOUND, MISSING_PHOTO)
+    return FileResponse(
+        stored,
+        media_type=photos.MEDIA_TYPE,
+        headers={"Cache-Control": "private, max-age=3600"},
+    )
+
+
 @router.get("/{photo_id}.webp")
 def read_photo(
     photo_id: int,

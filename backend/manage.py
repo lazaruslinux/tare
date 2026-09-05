@@ -16,7 +16,7 @@ from getpass import getpass
 
 from sqlalchemy import func, or_, select
 
-from app import health, models, security
+from app import health, models, security, thumbs
 from app.config import check_deploy_config
 from app.db import SessionLocal
 from app.models import now_utc
@@ -140,6 +140,14 @@ def verify_email(args: argparse.Namespace) -> int:
     return 0
 
 
+def make_thumbnails(args: argparse.Namespace) -> int:
+    """Write the small copy of every front photo that is missing one."""
+    with SessionLocal() as db:
+        written = thumbs.backfill(db)
+    print(f"Wrote {written} thumbnails.")
+    return 0
+
+
 def build_parser() -> argparse.ArgumentParser:
     parser = argparse.ArgumentParser(prog="manage.py", description="Tare administration")
     commands = parser.add_subparsers(dest="command", metavar="command")
@@ -159,6 +167,11 @@ def build_parser() -> argparse.ArgumentParser:
     verify = commands.add_parser("verify-email", help="mark an account verified")
     verify.add_argument("--username", required=True)
     verify.set_defaults(run=verify_email)
+
+    photos = commands.add_parser(
+        "make-thumbnails", help="write the missing small copies of stored front photos"
+    )
+    photos.set_defaults(run=make_thumbnails)
 
     return parser
 

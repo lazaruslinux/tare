@@ -14,6 +14,7 @@ export function Sheet({
   tall,
   center,
   full,
+  wide,
   onClose,
   children,
 }: {
@@ -27,6 +28,11 @@ export function Sheet({
   // screen on a phone, a wide panel on a desktop, and a column, so what is in
   // it takes the room the words below it leave.
   full?: boolean
+  // For a sheet that is a long list somebody is looking something up in. The
+  // same sheet as ever on a phone; on a desktop it takes the width to read the
+  // list in two columns, because a column of three hundred rows down the
+  // middle of a wide window is a scroll and not a catalog.
+  wide?: boolean
   // A short message that should sit in the middle of the screen at every
   // width, the way a thank-you does, rather than rise from the bottom.
   center?: boolean
@@ -58,7 +64,11 @@ export function Sheet({
                 : center
                 ? 'w-full max-w-sm overflow-y-auto rounded-2xl border border-line bg-surface p-4 max-h-[86svh]'
                 : `w-full max-w-md overflow-y-auto rounded-t-2xl border-t border-line bg-surface px-4 pt-4 pb-[calc(1rem+env(safe-area-inset-bottom))] min-[900px]:rounded-2xl min-[900px]:border min-[900px]:pb-4 ${
-                    tall ? 'max-h-[94svh] min-[900px]:max-w-md' : 'max-h-[86svh] min-[900px]:max-w-sm'
+                    wide
+                      ? 'max-h-[94svh] min-[900px]:max-h-[86svh] min-[900px]:max-w-3xl'
+                      : tall
+                        ? 'max-h-[94svh] min-[900px]:max-w-md'
+                        : 'max-h-[86svh] min-[900px]:max-w-sm'
                   }`
             }
             initial={{ y: reduced ? 0 : 24, opacity: 0 }}

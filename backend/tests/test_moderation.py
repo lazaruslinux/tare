@@ -21,6 +21,7 @@ from PIL import Image
 
 from app import foods_api, models, photos
 from app.routers import invites
+from app.routers.foods import BROWSE_PAGE
 from tests.conftest import PASSWORD
 
 CODE = "034000002405"
@@ -946,7 +947,7 @@ def test_browse_puts_the_photographed_foods_first_and_pages_the_rest(
     db_session.commit()
 
     first = client.get("/api/foods/browse").json()
-    assert len(first["items"]) == 40
+    assert len(first["items"]) == BROWSE_PAGE
     assert [row["id"] for row in first["items"][:2]] == pictured
     assert first["items"][0]["photo_url"] is not None
     # The rest are in id order, and none of them claims a picture.
@@ -990,7 +991,7 @@ def test_browse_by_letter_still_pages(client, db_session, signed_in):
         for index in range(45)
     ]
     first = client.get("/api/foods/browse?letter=p").json()
-    assert len(first["items"]) == 40
+    assert len(first["items"]) == BROWSE_PAGE
     assert first["next_cursor"]
 
     second = client.get(

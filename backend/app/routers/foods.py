@@ -12,12 +12,13 @@ import base64
 import binascii
 import re
 from collections.abc import Sequence
+from typing import NamedTuple
 
 from fastapi import APIRouter, Depends, HTTPException, Response, status
 from sqlalchemy import Select, Subquery, and_, case, delete, func, or_, select, update
 from sqlalchemy.orm import InstrumentedAttribute, Session
 
-from app import models, profiles, schemas, units
+from app import models, photos, profiles, schemas, units
 from app.db import get_db
 from app.deps import require_user, reviews
 from app.models import DEFAULT_SECTION, FOOD_NUTRIENTS, FOOD_SECTIONS
@@ -103,14 +104,37 @@ ADMIN_MAY_DELETE = ("approved",)
 # cannot be given more than.
 MY_LIST_CAP = 1000
 
-# How many foods one page of the browse list holds.
-BROWSE_PAGE = 40
+# How many foods one page of the browse list holds. The same thirty every
+# list on the Food page shows before it offers to show more.
+BROWSE_PAGE = 30
 BAD_CURSOR = "That page marker is not one of ours."
 BAD_LETTER = "Pick a letter."
 
 
 def photo_url(photo_id: int) -> str:
     return f"/api/photos/{photo_id}.webp"
+
+
+def thumb_url(photo_id: int) -> str:
+    return f"/api/photos/{photo_id}.thumb.webp"
+
+
+class Picture(NamedTuple):
+    """A stored photo as a list reads it: the picture, and the small copy of it
+    where one has been written. A row draws the small one and the page the
+    other, so both addresses travel together."""
+
+    url: str
+    thumb: str | None
+
+
+def picture_of(photo_id: int, path: str) -> Picture:
+    """One photo's two addresses. The thumb is null where the file is not
+    there, which is a picture stored before there were thumbs."""
+    return Picture(
+        photo_url(photo_id),
+        thumb_url(photo_id) if photos.stored(photos.thumb_name(path)) else None,
+    )
 
 
 def write_cursor(has_photo: int, food_id: int) -> str:
@@ -150,7 +174,7 @@ def read_name_cursor(cursor: str) -> tuple[str, int]:
         raise HTTPException(status.HTTP_400_BAD_REQUEST, BAD_CURSOR) from None
 
 
-def photo_urls(db: Session, food_ids: Sequence[int]) -> dict[int, str]:
+def photo_urls(db: Session, food_ids: Sequence[int]) -> dict[int, Picture]:
     """The published picture of each of these foods, where there is one.
 
     One query for the lot: every list here would otherwise ask the same
@@ -159,17 +183,21 @@ def photo_urls(db: Session, food_ids: Sequence[int]) -> dict[int, str]:
     if not food_ids:
         return {}
     rows = db.execute(
-        select(models.FoodPhoto.food_id, models.FoodPhoto.id).where(
+        select(models.FoodPhoto.food_id, models.FoodPhoto.id, models.FoodPhoto.path).where(
             models.FoodPhoto.food_id.in_(food_ids),
             models.FoodPhoto.status == "approved",
         )
     ).all()
-    return {food_id: photo_url(photo_id) for food_id, photo_id in rows if food_id is not None}
+    return {
+        food_id: picture_of(photo_id, path)
+        for food_id, photo_id, path in rows
+        if food_id is not None
+    }
 
 
 def pictures_for(
     db: Session, user: models.User, foods: Sequence[models.Food]
-) -> dict[int, str]:
+) -> dict[int, Picture]:
     """The picture each of these foods shows to this account.
 
     The published one wherever there is one, and on a food of this account's
@@ -190,7 +218,7 @@ def pictures_for(
     # Newest first, so the one an owner attached last is the one they see. The
     # attach route replaces rather than piles up, so in practice there is one.
     rows = db.execute(
-        select(models.FoodPhoto.food_id, models.FoodPhoto.id)
+        select(models.FoodPhoto.food_id, models.FoodPhoto.id, models.FoodPhoto.path)
         .where(
             models.FoodPhoto.food_id.in_(waiting),
             models.FoodPhoto.status == "pending",
@@ -198,9 +226,9 @@ def pictures_for(
         )
         .order_by(models.FoodPhoto.id)
     ).all()
-    for food_id, photo_id in rows:
+    for food_id, photo_id, path in rows:
         if food_id is not None:
-            shown[food_id] = photo_url(photo_id)
+            shown[food_id] = picture_of(photo_id, path)
     return shown
 
 
@@ -235,7 +263,7 @@ def first_servings(
 
 def food_row(
     food: models.Food,
-    picture: str | None = None,
+    picture: Picture | None = None,
     community: str = "none",
     serving: dict[str, object] | None = None,
 ) -> dict[str, object]:
@@ -252,7 +280,10 @@ def food_row(
         "calories": food.calories,
         "base_unit": food.base_unit,
         "status": food.status,
-        "photo_url": picture,
+        "photo_url": None if picture is None else picture.url,
+        # The same picture at the size a row draws it. Null where none has been
+        # written, and a row falls back to the full one.
+        "thumb_url": None if picture is None else picture.thumb,
         # Where this food stands with the shared database, from where the
         # person reading is standing.
         "community": community,
@@ -861,27 +892,30 @@ def list_my_foods(
     food out of the shared database they put on this list, which is how a food
     they offered and had approved stays here after it stops being theirs.
 
-    Ordered by when each was added, newest first: when it was entered for their
-    own, when it was kept for the rest. What was eaten last is Quick add's
-    question, not this one.
+    Ordered by when each was last eaten, newest first, which is the Journal's
+    own order: what somebody ate this morning is what they reach for again.
+    Under those, the ones nobody has logged yet, by when each was added: when
+    it was entered for their own, when it was kept for the rest.
     """
     kept = (
         select(models.KeptFood.food_id, models.KeptFood.added_at)
         .where(models.KeptFood.user_id == user.id)
         .subquery()
     )
+    logged = last_logged_by(models.DiaryEntry.food_id, user)
     # One sortable date for both kinds of row.
     added = func.coalesce(kept.c.added_at, models.Food.created_at)
     query = (
         select(models.Food)
         .outerjoin(kept, kept.c.food_id == models.Food.id)
+        .outerjoin(logged, logged.c.owner == models.Food.id)
         .where(
             or_(
                 and_(models.Food.owner_id == user.id, models.Food.status.in_(LISTED)),
                 and_(models.Food.status == "approved", kept.c.food_id.is_not(None)),
             )
         )
-        .order_by(added.desc(), models.Food.id.desc())
+        .order_by(logged.c.last_logged.desc().nullslast(), added.desc(), models.Food.id.desc())
         # A ceiling rather than paging: this is one person's own list, and the
         # screen that reads it filters what it was given rather than asking
         # again.
@@ -995,7 +1029,7 @@ def browse_foods(
     has_photo = case((published.c.photo_id.is_not(None), 1), else_=0)
 
     query = (
-        select(models.Food, published.c.photo_id, has_photo.label("has_photo"))
+        select(models.Food, has_photo.label("has_photo"))
         .outerjoin(published, published.c.food_id == models.Food.id)
         .where(models.Food.status == "approved")
         # One more than a page, which is how the answer knows whether there is
@@ -1030,16 +1064,15 @@ def browse_foods(
 
     rows = db.execute(query).all()
     page = rows[:BROWSE_PAGE]
-    states = community_states(db, user, [food for food, _, _ in page])
-    servings = first_servings(db, [food for food, _, _ in page])
+    foods = [food for food, _ in page]
+    states = community_states(db, user, foods)
+    servings = first_servings(db, foods)
+    # The pictures the same way every other list reads them, so a row here and
+    # a row anywhere else carry the same two addresses.
+    pictures = photo_urls(db, [food.id for food in foods])
     items = [
-        food_row(
-            food,
-            None if photo_id is None else photo_url(photo_id),
-            states[food.id],
-            servings.get(food.id),
-        )
-        for food, photo_id, _ in page
+        food_row(food, pictures.get(food.id), states[food.id], servings.get(food.id))
+        for food in foods
     ]
     more = len(rows) > BROWSE_PAGE
     if not more or not page:
@@ -1047,7 +1080,7 @@ def browse_foods(
     elif letter:
         marker = write_name_cursor(page[-1][0].name.lower(), page[-1][0].id)
     else:
-        marker = write_cursor(page[-1][2], page[-1][0].id)
+        marker = write_cursor(page[-1][1], page[-1][0].id)
     return {"items": items, "next_cursor": marker}
 
 

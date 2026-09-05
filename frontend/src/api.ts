@@ -273,6 +273,9 @@ export type FoodRow = {
   // The picture the shared database publishes for it, when it has one. Null is
   // a food nobody has photographed, not a picture that failed to load.
   photo_url: string | null
+  // The same picture at the size a row draws it. Null where none has been
+  // written, and a row falls back to the full one.
+  thumb_url: string | null
 }
 
 // A row of somebody's own list. The list is ordered by when each was added,

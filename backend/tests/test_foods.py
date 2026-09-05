@@ -267,6 +267,29 @@ def test_the_food_list_is_newest_first(client, signed_in):
     assert [row["name"] for row in listed] == ["Second one", "First one"]
 
 
+def test_the_food_list_leads_with_what_was_eaten_last(client, signed_in):
+    """Recently used, which is the Journal's own order. What nobody has logged
+    keeps its place underneath, newest addition first."""
+    first = create(client, name="First one").json()
+    create(client, name="Second one")
+    create(client, name="Third one")
+
+    logged = client.post(
+        "/api/diary",
+        json={
+            "date": "2026-09-01",
+            "slot": "breakfast",
+            "food_id": first["id"],
+            "amount": 100,
+            "unit": "g",
+        },
+    )
+    assert logged.status_code == 201
+
+    listed = client.get("/api/foods/mine").json()
+    assert [row["name"] for row in listed] == ["First one", "Third one", "Second one"]
+
+
 def test_a_shared_food_nobody_kept_is_not_in_my_list(client, db_session, signed_in):
     put_food(db_session, None, name="Shared bar", status="approved")
     create(client, name="Mine")
