@@ -1,10 +1,10 @@
+import { X } from 'lucide-react'
 import { useEffect, useRef, useState } from 'react'
 
 import type { MealRow, MyFoodRow, RecipeRow } from '../api'
 import { FoodLine, MealLine, RecipeLine } from '../components/FoodRows'
-import { useTopBar } from '../hooks/useTopBar'
 
-// Everything a member has of one kind, on a screen of its own. The Food page
+// Everything a member has of one kind, in a sheet over the Food tab. The page
 // shows the few they are most likely to want; this is where the other three
 // hundred live, and the only work it does is narrowing a list it was handed.
 // Nothing here asks the server anything: the page above has already read the
@@ -47,18 +47,18 @@ function folded(text: string): string {
 
 export function MyList({
   listed,
-  onBack,
+  onClose,
   onOpen,
   onAdd,
   onRemove,
 }: {
   listed: Listed
-  onBack: () => void
+  onClose: () => void
   onOpen: (id: number) => void
   // Taking a shared food off My foods, the same way the card above does it.
   // Absent on the lists where a row is not taken off anything.
   onRemove?: (row: MyFoodRow) => void
-  // The same thing the card's plus does, in the bar of the screen that grew
+  // The same thing the card's plus does, in the header of the sheet that grew
   // out of that card.
   onAdd: () => void
 }) {
@@ -67,20 +67,14 @@ export function MyList({
   const [chip, setChip] = useState<Chip>('all')
   const box = useRef<HTMLInputElement>(null)
 
-  useTopBar({
-    title: LIST_TITLE[listed.kind],
-    back: { label: 'Food', onBack },
-    action: { label: 'Add', onAct: onAdd },
-  })
-
   useEffect(() => {
     if (window.matchMedia(ROOMY).matches) box.current?.focus()
   }, [])
 
   const needle = folded(query)
   // Alphabetical whatever order the list arrived in. The page above leads with
-  // what was eaten last, which is the right answer for five rows and the wrong
-  // one for three hundred: a long list is read by looking something up.
+  // what was added last, which is the right answer for three rows and the
+  // wrong one for three hundred: a long list is read by looking something up.
   const rows = [...listed.rows].sort((one, two) =>
     folded(one.name).localeCompare(folded(two.name))
   )
@@ -111,6 +105,26 @@ export function MyList({
 
   return (
     <>
+      {/* The sheet's own bar. It takes the sheet's own padding with it, and
+          sticks a padding's worth above the content edge, so the list scrolls
+          under it and never past it. */}
+      <div className="sticky -top-4 z-10 -mx-4 -mt-4 flex items-center gap-2 bg-surface px-4 pt-4 pb-3">
+        <p className="min-w-0 flex-1 truncate text-base font-semibold">
+          {LIST_TITLE[listed.kind]}
+        </p>
+        <button type="button" className="t-tap44 shrink-0 text-accent" onClick={onAdd}>
+          Add
+        </button>
+        <button
+          type="button"
+          className="t-tap44 shrink-0 text-muted"
+          aria-label="Close"
+          onClick={onClose}
+        >
+          <X className="h-5 w-5" strokeWidth={2.5} />
+        </button>
+      </div>
+
       <input
         ref={box}
         className="t-input mb-3"

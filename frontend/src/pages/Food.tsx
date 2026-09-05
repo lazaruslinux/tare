@@ -36,6 +36,7 @@ import {
   subline,
 } from '../components/FoodRows'
 import { PortionSheet } from '../components/PortionSheet'
+import { Sheet } from '../components/Sheet'
 import { useTopBar } from '../hooks/useTopBar'
 import { SLOT_LABEL, slotByTime, today } from '../lib/day'
 import { portionText } from '../lib/units'
@@ -47,16 +48,16 @@ import { PartsForm } from './PartsForm'
 import { RecipeDetail } from './RecipeDetail'
 
 // How many rows a card on this page shows before it stops being a card and
-// starts being a list. Five is what fits above the fold beside four other
-// cards; the rest are one tap away on a screen built to search them.
-const SHOWN = 5
+// starts being a list. Three keeps all five cards in reach; the rest are one
+// tap away in a catalog built to search them.
+const SHOWN = 3
 // How long something taken back can be put back. Short enough that nobody is
 // waiting on it, long enough to notice the mistake.
 const UNDO = 6000
 
 // Where going back from something lands, because a food is opened from the
 // page, from the shared database and from a list screen alike.
-type From = { at: 'list' } | { at: 'browse' } | { at: 'all'; kind: ListKind }
+type From = { at: 'list' } | { at: 'browse' }
 
 type View =
   | From
@@ -269,6 +270,21 @@ export function FoodTab({
     />
   )
 
+  // A list a card holds more of, open as a catalog over the tab. The tab stays
+  // rendered underneath, so closing it has nothing to put back.
+  const [catalog, setCatalog] = useState<ListKind | null>(null)
+
+  // The sheet closes on Escape. The confirm above it does not listen, so while
+  // that one is up the key is left alone.
+  useEffect(() => {
+    if (catalog === null || removing !== null) return
+    const onKey = (event: KeyboardEvent) => {
+      if (event.key === 'Escape') setCatalog(null)
+    }
+    window.addEventListener('keydown', onKey)
+    return () => window.removeEventListener('keydown', onKey)
+  }, [catalog, removing])
+
   const removeRecipe = (recipe: Recipe) => {
     setRecipes((rows) => rows.filter((row) => row.id !== recipe.id))
     setView({ at: 'list' })
@@ -328,51 +344,7 @@ export function FoodTab({
 
   // What the screen behind a detail is called, for the control that goes back
   // to it.
-  const nameOf = (from: From) =>
-    from.at === 'browse'
-      ? 'Browse Tare database'
-      : from.at === 'all'
-        ? LIST_TITLE[from.kind]
-        : 'Food'
-
-  if (view.at === 'all') {
-    const kind = view.kind
-    const back = () => setView({ at: 'list' })
-    return (
-      <>
-        <MyList
-          listed={
-            kind === 'foods'
-              ? { kind, rows: foods }
-              : kind === 'meals'
-                ? { kind, rows: meals }
-                : { kind, rows: recipes }
-          }
-          onBack={back}
-          onRemove={kind === 'foods' ? removeKept : undefined}
-          onOpen={(id) =>
-            setView(
-              kind === 'foods'
-                ? { at: 'detail', id, from: { at: 'all', kind } }
-                : kind === 'meals'
-                  ? { at: 'meal', id, from: { at: 'all', kind } }
-                  : { at: 'recipe', id, from: { at: 'all', kind } }
-            )
-          }
-          onAdd={() =>
-            setView(
-              kind === 'foods'
-                ? { at: 'form', food: null }
-                : kind === 'meals'
-                  ? { at: 'mealForm', meal: null }
-                  : { at: 'recipeForm', recipe: null }
-            )
-          }
-        />
-        {removeSheet}
-      </>
-    )
-  }
+  const nameOf = (from: From) => (from.at === 'browse' ? 'Browse Tare database' : 'Food')
 
   if (view.at === 'browse') {
     return (
@@ -586,7 +558,7 @@ export function FoodTab({
             {foods.length > SHOWN && (
               <SeeAll
                 count={foods.length}
-                onOpen={() => setView({ at: 'all', kind: 'foods' })}
+                onOpen={() => setCatalog('foods')}
               />
             )}
           </>
@@ -634,7 +606,7 @@ export function FoodTab({
             {meals.length > SHOWN && (
               <SeeAll
                 count={meals.length}
-                onOpen={() => setView({ at: 'all', kind: 'meals' })}
+                onOpen={() => setCatalog('meals')}
               />
             )}
           </>
@@ -682,7 +654,7 @@ export function FoodTab({
             {recipes.length > SHOWN && (
               <SeeAll
                 count={recipes.length}
-                onOpen={() => setView({ at: 'all', kind: 'recipes' })}
+                onOpen={() => setCatalog('recipes')}
               />
             )}
           </>
@@ -816,6 +788,44 @@ export function FoodTab({
         />
       )}
 
+      {catalog !== null && (
+        <Sheet open tall label={LIST_TITLE[catalog]} onClose={() => setCatalog(null)}>
+          <MyList
+            listed={
+              catalog === 'foods'
+                ? { kind: catalog, rows: foods }
+                : catalog === 'meals'
+                  ? { kind: catalog, rows: meals }
+                  : { kind: catalog, rows: recipes }
+            }
+            onClose={() => setCatalog(null)}
+            onRemove={catalog === 'foods' ? removeKept : undefined}
+            onOpen={(id) => {
+              setCatalog(null)
+              setView(
+                catalog === 'foods'
+                  ? { at: 'detail', id, from: { at: 'list' } }
+                  : catalog === 'meals'
+                    ? { at: 'meal', id, from: { at: 'list' } }
+                    : { at: 'recipe', id, from: { at: 'list' } }
+              )
+            }}
+            onAdd={() => {
+              setCatalog(null)
+              setView(
+                catalog === 'foods'
+                  ? { at: 'form', food: null }
+                  : catalog === 'meals'
+                    ? { at: 'mealForm', meal: null }
+                    : { at: 'recipeForm', recipe: null }
+              )
+            }}
+          />
+        </Sheet>
+      )}
+
+      {/* Later than the catalog on purpose: two sheets share one layer, so the
+          confirm is the one that paints on top. */}
       {removeSheet}
       {undo !== null && (
         <div className="pointer-events-none fixed inset-x-0 bottom-24 z-30 px-4">
