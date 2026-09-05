@@ -432,6 +432,29 @@ def submissions_for(
     ]
 
 
+def submitter_name(db: Session, food: models.Food) -> str | None:
+    """Who offered this food to the shared database, by the name they go by.
+
+    The newest approved offer of it, and None where there is none or the
+    account has since gone: a submission keeps its row and drops the person.
+    """
+    row = db.execute(
+        select(models.User.display_name, models.User.username)
+        .join(models.FoodSubmission, models.FoodSubmission.submitted_by_id == models.User.id)
+        .where(
+            models.FoodSubmission.food_id == food.id,
+            models.FoodSubmission.kind == "new",
+            models.FoodSubmission.status == "approved",
+        )
+        .order_by(models.FoodSubmission.decided_at.desc(), models.FoodSubmission.id.desc())
+        .limit(1)
+    ).first()
+    if row is None:
+        return None
+    display_name, username = row
+    return display_name or username
+
+
 def food_detail(db: Session, food: models.Food, user: models.User) -> dict[str, object]:
     """The whole food, its panel per 100 of its base unit, and its servings.
 
@@ -463,6 +486,9 @@ def food_detail(db: Session, food: models.Food, user: models.User) -> dict[str, 
         # says instead of one line about the last answer. Empty for everybody
         # else.
         "submissions": submissions_for(db, user, food),
+        # Who the shared database has this food from. Sent to the submitter as
+        # well: which of the two lines to show is the client's call.
+        "submitted_by": submitter_name(db, food) if food.status == "approved" else None,
         # The nutrition label on file, for a reviewer correcting a shared food
         # to check the numbers against. Nobody else is served it.
         "label_photo_url": (

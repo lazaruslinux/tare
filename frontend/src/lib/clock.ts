@@ -64,13 +64,14 @@ const DATE_ONLY = /^\d{4}-\d{2}-\d{2}$/
 function spelled(at: Date, timezone: string | undefined): string {
   const parts = new Intl.DateTimeFormat('en-US', {
     timeZone: timezone,
-    month: 'short',
-    day: '2-digit',
-    year: 'numeric',
+    weekday: 'short',
+    month: 'numeric',
+    day: 'numeric',
+    year: '2-digit',
   }).formatToParts(at)
   const of = (type: Intl.DateTimeFormatPartTypes): string =>
     parts.find((part) => part.type === type)?.value ?? ''
-  return `${of('month').toUpperCase()} ${of('day')} ${of('year')}`
+  return `${of('weekday').toUpperCase()} ${of('month')}/${of('day')}/${of('year')}`
 }
 
 export function dateText(iso: string, timezone?: string): string {
@@ -86,5 +87,5 @@ export function dateText(iso: string, timezone?: string): string {
   }
 }
 
-// A moment written out whole, in the device's own zone: SEP 04 2026 5:53AM.
+// A moment written out whole, in the device's own zone: WED 9/2/26 5:53AM.
 export const stampText = (iso: string): string => `${dateText(iso)} ${clockText(iso)}`

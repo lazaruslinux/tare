@@ -326,6 +326,8 @@ export type Food = FoodRow & {
   // What this account has asked about this food of theirs, newest first.
   // Empty for a food that is not yours.
   submissions: FoodSubmissionRow[]
+  // Who offered it to the shared database. Null for a private food.
+  submitted_by: string | null
   servings: FoodServing[]
   protein_g: number | null
   carbs_g: number | null

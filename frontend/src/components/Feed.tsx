@@ -1,4 +1,4 @@
-import { BookOpen, ChevronRight, Route } from 'lucide-react'
+import { ArrowDown, BookCheck, ChevronRight, CircleCheck } from 'lucide-react'
 import { useEffect, useState } from 'react'
 
 import {
@@ -11,10 +11,9 @@ import {
   type Me,
 } from '../api'
 import { ActivityIcon } from './ActivityIcon'
-import { ScaleGlyph } from './ScaleGlyph'
 import { clockText, dateText, useClock } from '../lib/clock'
 import { dayLabel, today } from '../lib/day'
-import { distanceText, durationText, weightText } from '../lib/units'
+import { distanceCompact, hmsText, weightCompact } from '../lib/units'
 
 // What the members of this instance are doing, read only. Three kinds of row:
 // a workout somebody did, a day somebody finished, and a weigh-in that came in
@@ -26,6 +25,13 @@ function dayText(iso: string, todayIso: string): string {
   const said = dayLabel(iso, todayIso)
   return said === 'Today' || said === 'Yesterday' ? said : dateText(iso)
 }
+
+const JOURNAL_DONE = 'Journal complete'
+
+// Line one of a row is inline text, so a narrow column wraps it like a
+// sentence instead of clipping the distance and the time, which are the point
+// of the line. Each item is one unbreakable piece (the glyph with its first
+// words, a distance, a time), so a wrap only ever falls between items.
 
 // The member's name, which is the one thing on a row that opens something.
 function Name({ row, onOpenMember }: { row: FeedRow; onOpenMember: () => void }) {
@@ -64,15 +70,16 @@ function JournalRow({
 }) {
   return (
     <div className="t-row">
-      <span className="flex min-w-0 flex-1 items-center gap-2">
-        <BookOpen className="h-4 w-4 shrink-0 text-muted" strokeWidth={2} />
-        <span className="min-w-0 flex-1">
-          <span className="block text-sm">
-            <Name row={row} onOpenMember={onOpenMember} /> completed {row.pronoun} journal
+      <span className="min-w-0 flex-1">
+        <span className="block text-sm">
+          <Name row={row} onOpenMember={onOpenMember} />:{' '}
+          <span className="whitespace-nowrap">
+            <BookCheck className="inline h-4 w-4 align-[-3px] text-accent" strokeWidth={2} aria-hidden="true" />{' '}
+            {JOURNAL_DONE}
           </span>
-          <span className="block text-xs text-muted">
-            {`${dayText(row.date, todayIso)} ${clockText(row.at, me.timezone)}`}
-          </span>
+        </span>
+        <span className="block text-xs text-muted">
+          {dayText(row.date, todayIso)} {clockText(row.at, me.timezone)}
         </span>
       </span>
       {row.hidden === true && <span className="t-chip shrink-0">Only you</span>}
@@ -95,16 +102,18 @@ function WeightRow({
 }) {
   return (
     <div className="t-row">
-      <span className="flex min-w-0 flex-1 items-center gap-2">
-        <ScaleGlyph className="h-4 w-4 shrink-0 text-muted" />
-        <span className="min-w-0 flex-1">
-          <span className="block text-sm">
-            <Name row={row} onOpenMember={onOpenMember} /> has lost{' '}
-            {weightText(row.lost_kg, me.units)} since {row.pronoun} last weigh-in
+      <span className="min-w-0 flex-1">
+        <span className="block text-sm">
+          <Name row={row} onOpenMember={onOpenMember} />:{' '}
+          <span className="whitespace-nowrap">
+            <ArrowDown className="inline h-4 w-4 align-[-3px] text-orange" strokeWidth={2} aria-hidden="true" />{' '}
+            {weightCompact(row.lost_kg, me.units)}
           </span>
-          <span className="block text-xs text-muted">
-            {`${dayText(row.date, todayIso)} ${clockText(row.at, me.timezone)}`}
-          </span>
+          {' '}
+          <span className="whitespace-nowrap">since last weigh-in</span>
+        </span>
+        <span className="block text-xs text-muted">
+          {dayText(row.date, todayIso)} {clockText(row.at, me.timezone)}
         </span>
       </span>
       {row.hidden === true && <span className="t-chip shrink-0">Only you</span>}
@@ -130,17 +139,34 @@ function Row({
       <span className="flex min-w-0 flex-1 items-center gap-2">
         <ActivityIcon name={row.activity} className="h-4 w-4 shrink-0 text-muted" />
         <span className="min-w-0 flex-1">
-          <span className="block truncate text-sm">{row.activity}</span>
+          <span className="block text-sm">
+            <Name row={row} onOpenMember={onOpenMember} />:{' '}
+            <span>
+              <span className="whitespace-nowrap">
+                <CircleCheck
+                  className="inline h-4 w-4 align-[-3px] text-blue"
+                  strokeWidth={2}
+                  aria-hidden="true"
+                />{' '}
+                <span className="text-blue">{row.activity}</span>
+              </span>
+              {row.distance_m !== null && (
+                <>
+                  {' '}
+                  <span className="whitespace-nowrap">
+                    - {distanceCompact(row.distance_m, me.units)}
+                  </span>
+                </>
+              )}{' '}
+              <span className="whitespace-nowrap">- {hmsText(row.duration_s)}</span>
+            </span>
+          </span>
           <span className="block text-xs text-muted">
-            <Name row={row} onOpenMember={onOpenMember} />
-            {` · ${dayText(row.date, todayIso)} ${clockText(row.started_at, me.timezone)}`}
-            {` · ${durationText(row.duration_s)}`}
-            {row.distance_m === null ? '' : ` · ${distanceText(row.distance_m, me.units)}`}
+            {dayText(row.date, todayIso)} {clockText(row.started_at, me.timezone)}
           </span>
         </span>
       </span>
       {row.hidden === true && <span className="t-chip shrink-0">Only you</span>}
-      {row.has_route && <Route className="h-4 w-4 shrink-0 text-muted" strokeWidth={2} />}
       <ChevronRight className="h-4 w-4 shrink-0 text-muted" strokeWidth={2} />
     </button>
   )

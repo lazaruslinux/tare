@@ -8,6 +8,7 @@ import {
   PinOff,
   ThumbsUp,
   Trash2,
+  UserRound,
 } from 'lucide-react'
 import { useEffect, useState, type ChangeEvent } from 'react'
 
@@ -331,6 +332,14 @@ export function FoodDetail({
             <p className="mb-3 flex items-center gap-1.5 text-xs text-muted">
               <ThumbsUp className="h-4 w-4 text-accent" strokeWidth={2.25} aria-hidden="true" />
               You created this item
+            </p>
+          )}
+          {/* Who the shared database has it from, for everybody but them. The
+              line above is the same fact said to the person who offered it. */}
+          {!offered && food.submitted_by !== null && (
+            <p className="mb-3 flex items-center gap-1.5 text-xs text-muted">
+              <UserRound className="h-4 w-4 text-muted" strokeWidth={2.25} aria-hidden="true" />
+              Submitted by {food.submitted_by}
             </p>
           )}
 

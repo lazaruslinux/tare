@@ -27,13 +27,17 @@
   --pending: #d9a441;
   --danger: #d98b83;
   --ring: rgba(143, 199, 160, 0.35);
-  /* The three extra lines the Progress chart draws, beside the accent green
-     (weight) and the pending amber (body fat). Each reads at better than 3:1
-     on the card and sits in a hue of its own, so five lines in one box stay
-     told apart. Nothing else uses them. */
+  /* Two of the lines the Progress chart draws, beside the accent green
+     (weight), the pending amber (body fat) and the violet below (muscle). Each
+     reads at better than 3:1 on the card and sits in a hue of its own, so five
+     lines in one box stay told apart. */
   --chart-water: #6fb2e0;
-  --chart-muscle: #b79bdd;
   --chart-bone: #c2a98d;
+  /* Row glyphs and chips. Violet is the Progress muscle line as well. */
+  --blue: #7cb8ea;
+  --coral: #ef8a7c;
+  --orange: #efa25a;
+  --violet: #b79bdd;
 }
 
 [data-theme='light'] {
@@ -54,10 +58,14 @@
   /* Same measurement: #b3554b sat at 4.16:1 on --surface-2. */
   --danger: #ab4f45;
   --ring: rgba(53, 104, 79, 0.3);
-  /* The same three, darkened for the cream ground. */
+  /* The same two, darkened for the cream ground. */
   --chart-water: #1f6f9c;
-  --chart-muscle: #6b4aa0;
   --chart-bone: #7a6248;
+  --blue: #2a6ca8;
+  --coral: #b9453b;
+  /* Orange darkened so chip text clears 4.5:1. */
+  --orange: #9c5512;
+  --violet: #6b4aa0;
 }
 
 /* Bridged rather than redeclared, so bg-surface and text-muted resolve to the
@@ -78,6 +86,10 @@
   --color-pending: var(--pending);
   --color-danger: var(--danger);
   --color-ring: var(--ring);
+  --color-blue: var(--blue);
+  --color-coral: var(--coral);
+  --color-orange: var(--orange);
+  --color-violet: var(--violet);
   --font-sans: 'Inter Variable', ui-sans-serif, system-ui, sans-serif;
 }
 

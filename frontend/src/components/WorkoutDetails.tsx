@@ -197,9 +197,9 @@ export function WorkoutDetails({
           {present(detail.kcal) && <Stat label="Calories" value={`${detail.kcal} cal`} />}
           {pace !== null && <Stat label="Pace" value={pace} />}
           {present(detail.avg_hr) && (
-            <Stat label="Average heart rate" value={`${detail.avg_hr} bpm`} />
+            <Stat label="AVG H.R" value={`${detail.avg_hr} bpm`} />
           )}
-          {present(detail.max_hr) && <Stat label="Highest" value={`${detail.max_hr} bpm`} />}
+          {present(detail.max_hr) && <Stat label="MAX H.R" value={`${detail.max_hr} bpm`} />}
           {present(detail.elevation_gain_m) && (
             <Stat
               label="Climb"
@@ -223,7 +223,7 @@ export function WorkoutDetails({
           <p className="t-micro mb-2">Route</p>
           <RouteLine points={route} />
           <p className="mt-1 text-xs text-muted">
-            The start and the end are left off every route Tare keeps.
+            Start and end areas hidden
           </p>
         </div>
       )}

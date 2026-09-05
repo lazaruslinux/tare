@@ -678,3 +678,64 @@ def test_a_food_kept_privately_is_never_asked_which_aisle(client, db_session, si
     assert made.status_code == 201
     assert made.json()["section"] == "other"
     assert db_session.get(models.Food, made.json()["id"]).section == "other"
+
+
+# ---- Who the shared database has a food from ----
+
+
+def test_a_shared_food_says_who_offered_it(client, db_session, make_user, signed_in):
+    """The name the submitter goes by, to everybody and to them.
+
+    The page decides which line to draw from it: somebody else reads who the
+    food came from, and the person who offered it reads that they did.
+    """
+    signed_in.display_name = "Member Name"
+    db_session.commit()
+    make_user("reviewer", admin=True)
+    made = offer(client).json()
+    food_id = made["food"]["id"]
+
+    sign_in(client, "reviewer")
+    assert (
+        client.post(f"/api/admin/queue/{made['submission_id']}/approve", json={}).status_code
+        == 200
+    )
+
+    make_user("stranger")
+    sign_in(client, "stranger")
+    assert client.get(f"/api/foods/{food_id}").json()["submitted_by"] == "Member Name"
+
+    sign_in(client, "member")
+    assert client.get(f"/api/foods/{food_id}").json()["submitted_by"] == "Member Name"
+
+
+def test_a_submitter_with_no_display_name_is_read_by_their_username(
+    client, make_user, signed_in
+):
+    """The same fallback the feed and a workout page use."""
+    make_user("reviewer", admin=True)
+    made = offer(client).json()
+
+    sign_in(client, "reviewer")
+    assert (
+        client.post(f"/api/admin/queue/{made['submission_id']}/approve", json={}).status_code
+        == 200
+    )
+    assert client.get(f"/api/foods/{made['food']['id']}").json()["submitted_by"] == "member"
+
+
+def test_a_food_kept_privately_names_nobody(client, signed_in):
+    """Nobody offered it, so there is nothing to say and no query to run."""
+    made = client.post(
+        "/api/foods",
+        json={
+            "name": "Leftover rice",
+            "base_unit": "g",
+            "calories": 130,
+            "protein_g": 2.4,
+            "carbs_g": 28,
+            "fat_g": 0.3,
+        },
+    )
+    assert made.status_code == 201
+    assert client.get(f"/api/foods/{made.json()['id']}").json()["submitted_by"] is None

@@ -199,3 +199,29 @@ export function paceText(
   const carried = rest === 60 ? { minutes: minutes + 1, rest: 0 } : { minutes, rest }
   return `${carried.minutes}:${String(carried.rest).padStart(2, '0')} /${distanceUnit(units)}`
 }
+
+// The feed's tighter spellings. A row is one line of small text, so a distance
+// and a duration there drop the spaces and keep a fixed shape.
+export const distanceCompact = (metres: number, units: 'imperial' | 'metric'): string =>
+  `${distanceIn(metres, units).toFixed(2)}${distanceUnit(units)}`
+
+export const weightCompact = (kg: number, units: 'imperial' | 'metric'): string =>
+  `${weightIn(kg, units)}${weightUnit(units)}`
+
+// A clock reading of a finished session: 01:19:02, hours always written.
+export function hmsText(seconds: number): string {
+  const whole = Math.max(0, Math.round(seconds))
+  const pad = (value: number): string => String(value).padStart(2, '0')
+  return `${pad(Math.floor(whole / 3600))}:${pad(Math.floor((whole % 3600) / 60))}:${pad(whole % 60)}`
+}
+
+// A running count, which starts short and only grows an hours part when it
+// earns one: 7:04, then 1:07:04.
+export function elapsedText(seconds: number): string {
+  const whole = Math.max(0, Math.round(seconds))
+  const hours = Math.floor(whole / 3600)
+  const minutes = Math.floor((whole % 3600) / 60)
+  const pad = (value: number): string => String(value).padStart(2, '0')
+  if (hours === 0) return `${minutes}:${pad(whole % 60)}`
+  return `${hours}:${pad(minutes)}:${pad(whole % 60)}`
+}

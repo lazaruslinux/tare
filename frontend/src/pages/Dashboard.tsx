@@ -87,7 +87,7 @@ const LINE_SPECS: {
     label: 'Muscle',
     word: 'muscle',
     field: 'muscle_pct',
-    colour: 'var(--chart-muscle)',
+    colour: 'var(--violet)',
   },
   { key: 'bone', label: 'Bone', word: 'bone', field: 'bone_pct', colour: 'var(--chart-bone)' },
 ]
@@ -137,7 +137,7 @@ function rememberedSpan(): number {
 
 // The ring, drawn by hand: a circle whose stroke is dashed to the share of the
 // day that has been consumed. No library, and nothing that moves.
-const RADIUS = 42
+const RADIUS = 45
 const ROUND = 2 * Math.PI * RADIUS
 
 // What one ring is filled to, what stands in its middle, the words under that,
@@ -153,16 +153,12 @@ type RingSpec = {
   wide?: boolean
 }
 
-function Ring({ filled, small }: { filled: number; small?: boolean }) {
+function Ring({ filled }: { filled: number }) {
   const share = Math.min(Math.max(filled, 0), 1)
   return (
-    <svg
-      viewBox="0 0 100 100"
-      className={`${
-        small ? 'h-24 w-24 min-[900px]:h-20 min-[900px]:w-20' : 'h-28 w-28'
-      } -rotate-90`}
-      aria-hidden="true"
-    >
+    // As wide as the column it stands in, so the room a screen has is the room
+    // the ring takes.
+    <svg viewBox="0 0 100 100" className="h-auto w-full -rotate-90" aria-hidden="true">
       <circle
         cx="50"
         cy="50"
@@ -187,47 +183,39 @@ function Ring({ filled, small }: { filled: number; small?: boolean }) {
   )
 }
 
-// A row of them, side by side and the same size. Three rings do not fit a
-// phone at the size two of them wear, so the whole row steps down together
-// rather than the last one running off the edge of the card. A wide card holds
-// six, one to a column, and each one is its own way into what it counts.
+// A row of them, side by side and the same size. Each ring takes an even share
+// of the row up to 112px, so a wider phone draws a wider ring instead of
+// leaving the room unused. A wide card holds six, one to a column, and each one
+// is its own way into what it counts.
 function Rings({ rings }: { rings: RingSpec[] }) {
-  const tight = rings.length > 2
   return (
     // Spread across a phone, six even columns on a wide card.
-    <div
-      className={`flex items-center ${
-        tight
-          ? 'justify-between gap-2 min-[900px]:grid min-[900px]:grid-cols-6 min-[900px]:gap-0'
-          : 'gap-4'
-      }`}
-    >
+    <div className="flex items-center justify-between gap-2 min-[900px]:grid min-[900px]:grid-cols-6 min-[900px]:gap-0">
       {rings.map((ring) => (
         <button
           key={ring.key}
           type="button"
-          className={`t-ring relative shrink-0 hover:opacity-90 min-[900px]:mx-auto ${
+          className={`t-ring relative min-w-0 max-w-28 flex-1 hover:opacity-90 min-[900px]:mx-auto min-[900px]:w-full ${
             ring.wide === true ? 'hidden min-[900px]:block' : ''
           }`}
           aria-label={ring.label}
           onClick={ring.onOpen}
         >
-          <Ring filled={ring.filled} small={tight} />
-          <div className={`absolute inset-0 flex flex-col items-center justify-center ${tight ? 'px-3' : 'px-2'}`}>
+          <Ring filled={ring.filled} />
+          <div className="absolute inset-0 flex flex-col items-center justify-center px-1">
             <span
+              // Five digits and a comma is the widest number a ring holds. At
+              // the sizes a phone and a narrow column draw, that only fits one
+              // size down, so long values step and short ones stay alike.
               className={`t-nums font-semibold leading-none ${
-                tight ? 'text-xl min-[900px]:text-lg' : 'text-2xl'
+                ring.centre.length >= 6
+                  ? 'text-lg min-[900px]:text-base'
+                  : 'text-xl min-[900px]:text-lg'
               }`}
             >
               {ring.centre}
             </span>
-            <span
-              className={`text-center leading-tight text-muted ${
-                tight
-                  ? 'max-w-[3.75rem] text-[10px] min-[900px]:max-w-[3.5rem]'
-                  : 'text-xs'
-              }`}
-            >
+            <span className="max-w-[4rem] text-center text-[10px] leading-tight text-muted">
               {ring.caption}
             </span>
           </div>
