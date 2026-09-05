@@ -680,6 +680,7 @@
     .t-choice,
     button.t-card,
     .t-stepper > button,
+    .t-bar,
     .t-tap44 {
       transition:
         background-color 0.12s ease,
@@ -711,6 +712,16 @@
     }
     .t-tap44:hover {
       color: var(--text);
+    }
+    /* A ring under the pointer: its track comes up a step, so the whole ring
+       reads as live without the filled arc changing colour. */
+    .t-ring:hover circle:first-child {
+      stroke: var(--muted);
+    }
+    /* A week bar under the pointer, so the tooltip is clearly about that day.
+       The cursor stays an arrow: a bar opens nothing. */
+    .t-bar:hover {
+      filter: brightness(1.1);
     }
   }
 }

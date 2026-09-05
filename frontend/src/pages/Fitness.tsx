@@ -53,38 +53,76 @@ function figure(value: number | null, unit: string): string {
   return unit === '' ? whole(value) : `${whole(value)} ${unit}`
 }
 
-function MiniBars({ values, label }: { values: (number | null)[]; label: string }) {
+// "Tue Sep 2", for the tooltip a pointer gets on a bar.
+const dayTitle = (iso: string): string =>
+  new Date(`${iso}T00:00:00Z`)
+    .toLocaleDateString(undefined, {
+      timeZone: 'UTC',
+      weekday: 'short',
+      month: 'short',
+      day: 'numeric',
+    })
+    .replace(',', '')
+
+// The hour a bar stands for, said the way a clock face says it.
+const hourTitle = (hour: number): string =>
+  `${hour % 12 === 0 ? 12 : hour % 12} ${hour < 12 ? 'am' : 'pm'}`
+
+function MiniBars({
+  values,
+  label,
+  // The day each column stands for, when the caller has them. Without them
+  // there is nothing to name a bar by, so it gets no tooltip.
+  dates,
+  unit = '',
+}: {
+  values: (number | null)[]
+  label: string
+  dates?: string[]
+  unit?: string
+}) {
   const highest = Math.max(...values.map((value) => value ?? 0), 1)
   return (
-    <svg
-      viewBox={`0 0 ${values.length * 8 - 2} 24`}
-      className="mt-2 h-6 w-full"
-      preserveAspectRatio="none"
-      role="img"
-      aria-label={label}
-    >
-      {values.map((value, index) => {
-        const height = value === null ? 1 : Math.max((value / highest) * 24, 1)
-        return (
-          <rect
-            key={index}
-            x={index * 8}
-            y={24 - height}
-            width={6}
-            height={height}
-            rx={1}
-            className={value === null ? 'fill-surface-2' : 'fill-accent'}
-          />
-        )
-      })}
-    </svg>
+    // Stretched to the card on a phone. On a wide card that turns the bars
+    // into slabs, so the picture is capped and the rects read as bars again.
+    <div className="mt-2 w-full min-[900px]:max-w-56">
+      <svg
+        viewBox={`0 0 ${values.length * 8 - 2} 24`}
+        className="h-6 w-full min-[900px]:h-8"
+        preserveAspectRatio="none"
+        role="img"
+        aria-label={label}
+      >
+        {values.map((value, index) => {
+          const height = value === null ? 1 : Math.max((value / highest) * 24, 1)
+          const day = dates?.[index]
+          return (
+            <rect
+              key={index}
+              x={index * 8}
+              y={24 - height}
+              width={6}
+              height={height}
+              rx={1}
+              className={value === null ? 'fill-surface-2' : 'fill-accent'}
+            >
+              {value !== null && day !== undefined && (
+                <title>{`${dayTitle(day)}: ${figure(value, unit)}`}</title>
+              )}
+            </rect>
+          )
+        })}
+      </svg>
+    </div>
   )
 }
 
 function HourBars({ hours }: { hours: (number | null)[] }) {
   const highest = Math.max(...hours.map((value) => value ?? 0), 1)
   return (
-    <>
+    // The svg and its three labels are capped together, so the words stay
+    // under the hours they name.
+    <div className="w-full min-[900px]:max-w-lg">
       <svg
         viewBox="0 0 288 60"
         className="h-16 w-full"
@@ -103,7 +141,9 @@ function HourBars({ hours }: { hours: (number | null)[] }) {
               height={height}
               rx={1}
               className={value === null ? 'fill-surface-2' : 'fill-accent'}
-            />
+            >
+              {value !== null && <title>{`${hourTitle(hour)}: ${whole(value)}`}</title>}
+            </rect>
           )
         })}
       </svg>
@@ -112,7 +152,7 @@ function HourBars({ hours }: { hours: (number | null)[] }) {
         <span>Noon</span>
         <span>11 pm</span>
       </div>
-    </>
+    </div>
   )
 }
 
@@ -186,6 +226,7 @@ function MetricDetail({
   }, [metric, date, tile.hours])
 
   const values = history?.days.map((row) => row.value) ?? []
+  const dates = history?.days.map((row) => row.date) ?? []
   const known = values.filter((value): value is number => value !== null)
   const average = known.length === 0 ? null : known.reduce((a, b) => a + b, 0) / known.length
 
@@ -199,7 +240,12 @@ function MetricDetail({
           <>
             <p className="t-nums text-3xl">{figure(average, tile.unit)}</p>
             <p className="text-sm text-muted">on an average day</p>
-            <MiniBars values={values} label={`${tile.label}, last ${HISTORY_DAYS} days`} />
+            <MiniBars
+              values={values}
+              dates={dates}
+              unit={tile.unit}
+              label={`${tile.label}, last ${HISTORY_DAYS} days`}
+            />
           </>
         )}
       </div>
@@ -320,6 +366,8 @@ export function Fitness({
             </p>
             <MiniBars
               values={summary.week.map((row) => row[tile.metric])}
+              dates={summary.week.map((row) => row.date)}
+              unit={tile.unit}
               label={`${tile.label}, last seven days`}
             />
           </button>

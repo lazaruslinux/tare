@@ -62,16 +62,27 @@ function rememberedWindow(): number {
 const RADIUS = 42
 const ROUND = 2 * Math.PI * RADIUS
 
-// What one ring is filled to, what stands in its middle, and the words under
-// that.
-type RingSpec = { key: string; filled: number; centre: string; caption: string }
+// What one ring is filled to, what stands in its middle, the words under that,
+// what a screen reader is told, and where tapping it goes. `wide` marks the
+// three that only a wide card has room for.
+type RingSpec = {
+  key: string
+  filled: number
+  centre: string
+  caption: string
+  label: string
+  onOpen: () => void
+  wide?: boolean
+}
 
 function Ring({ filled, small }: { filled: number; small?: boolean }) {
   const share = Math.min(Math.max(filled, 0), 1)
   return (
     <svg
       viewBox="0 0 100 100"
-      className={`${small ? 'h-24 w-24' : 'h-28 w-28'} -rotate-90`}
+      className={`${
+        small ? 'h-24 w-24 min-[900px]:h-20 min-[900px]:w-20' : 'h-28 w-28'
+      } -rotate-90`}
       aria-hidden="true"
     >
       <circle
@@ -100,39 +111,57 @@ function Ring({ filled, small }: { filled: number; small?: boolean }) {
 
 // A row of them, side by side and the same size. Three rings do not fit a
 // phone at the size two of them wear, so the whole row steps down together
-// rather than the last one running off the edge of the card.
+// rather than the last one running off the edge of the card. A wide card holds
+// six, one to a column, and each one is its own way into what it counts.
 function Rings({ rings }: { rings: RingSpec[] }) {
   const tight = rings.length > 2
   return (
-    // Spread across a phone, clustered on a wide card: three rings a foot
-    // apart read as three cards.
+    // Spread across a phone, six even columns on a wide card.
     <div
       className={`flex items-center ${
-        tight ? 'justify-between gap-2 min-[900px]:justify-start min-[900px]:gap-12' : 'gap-4'
+        tight
+          ? 'justify-between gap-2 min-[900px]:grid min-[900px]:grid-cols-6 min-[900px]:gap-0'
+          : 'gap-4'
       }`}
     >
       {rings.map((ring) => (
-        <div key={ring.key} className="relative shrink-0">
+        <button
+          key={ring.key}
+          type="button"
+          className={`t-ring relative shrink-0 hover:opacity-90 min-[900px]:mx-auto ${
+            ring.wide === true ? 'hidden min-[900px]:block' : ''
+          }`}
+          aria-label={ring.label}
+          onClick={ring.onOpen}
+        >
           <Ring filled={ring.filled} small={tight} />
           <div className={`absolute inset-0 flex flex-col items-center justify-center ${tight ? 'px-3' : 'px-2'}`}>
             <span
-              className={`t-nums font-semibold leading-none ${tight ? 'text-xl' : 'text-2xl'}`}
+              className={`t-nums font-semibold leading-none ${
+                tight ? 'text-xl min-[900px]:text-lg' : 'text-2xl'
+              }`}
             >
               {ring.centre}
             </span>
             <span
               className={`text-center leading-tight text-muted ${
-                tight ? 'max-w-[3.75rem] text-[10px]' : 'text-xs'
+                tight
+                  ? 'max-w-[3.75rem] text-[10px] min-[900px]:max-w-[3.5rem]'
+                  : 'text-xs'
               }`}
             >
               {ring.caption}
             </span>
           </div>
-        </div>
+        </button>
       ))}
     </div>
   )
 }
+
+// Steps over a bar, short enough to sit in a narrow column.
+const stepsLabel = (value: number): string =>
+  value >= 1000 ? `${(value / 1000).toFixed(1)}k` : String(Math.round(value))
 
 // A date as "Aug 31", for the span a week is named by.
 const monthDay = (iso: string): string =>
@@ -404,7 +433,6 @@ export function Dashboard({
   refresh,
   onOpenJournal,
   onOpenFitness,
-  onOpenTargets,
   onChanged,
   start,
   onStarted,
@@ -419,8 +447,6 @@ export function Dashboard({
   onOpenJournal: () => void
   // The Fitness screen, which is where the Exercise card leads.
   onOpenFitness: () => void
-  // Targets, which is where the goals the rings are read against are set.
-  onOpenTargets: () => void
   // Which screen to open on. Only ever set by something outside this tab
   // sending somebody straight to it, and handed back the moment it is read.
   start?: DashScreen
@@ -660,32 +686,58 @@ export function Dashboard({
     sessions === 0 ? 'No workouts' : sessions === 1 ? '1 workout' : `${sessions} workouts`
   const movedDays = week.filter((row) => row.exercise_kcal > 0).length
 
-  // Today as three rings: what was walked, what is left to eat, and what was
-  // worked. The row is always three, so a phone that sends nothing shows an
-  // empty steps ring rather than moving the other two.
+  // Today as rings: what was walked, what is left to eat, and what was worked,
+  // then the three the day's food is made of. The row is always the same
+  // length, so a phone that sends nothing shows an empty steps ring rather
+  // than moving the other two. The last three only appear where there is room.
   const steps = day?.steps ?? null
   const remaining = day?.remaining_calories ?? 0
   const ringBudget = (day?.budget.calories ?? 0) + (day?.exercise_kcal ?? 0)
   const minutesGoal = day?.exercise_minutes_goal ?? 0
+  const macroRing = (
+    key: 'protein_g' | 'carbs_g' | 'fat_g',
+    word: string,
+  ): RingSpec => {
+    const eaten = day?.totals[key] ?? 0
+    const budget = day?.budget[key] ?? 0
+    return {
+      key,
+      filled: day === null || budget <= 0 ? 0 : eaten / budget,
+      centre: day === null ? '\u2013' : `${calText(eaten)} g`,
+      caption: `of ${calText(budget)} g ${word}`,
+      label: `${word[0].toUpperCase()}${word.slice(1)} today. Opens the Journal.`,
+      onOpen: onOpenJournal,
+      wide: true,
+    }
+  }
   const rings: RingSpec[] = [
     {
       key: 'steps',
       filled: steps === null || stepGoal <= 0 ? 0 : steps / stepGoal,
       centre: steps === null ? '\u2013' : calText(steps),
       caption: steps === null ? 'Sync a device' : `of ${calText(stepGoal)} steps`,
+      label: 'Steps today. Opens Fitness.',
+      onOpen: onOpenFitness,
     },
     {
       key: 'calories',
       filled: ringBudget <= 0 ? 0 : (day?.totals.calories ?? 0) / ringBudget,
       centre: day === null ? '\u2013' : calText(Math.abs(remaining)),
       caption: remaining < 0 ? 'cal over' : 'cal remaining',
+      label: 'Calories today. Opens the Journal.',
+      onOpen: onOpenJournal,
     },
     {
       key: 'exercise',
       filled: minutesGoal <= 0 ? 0 : (day?.exercise_minutes ?? 0) / minutesGoal,
       centre: day === null ? '\u2013' : String(day.exercise_minutes),
       caption: `of ${minutesGoal} min`,
+      label: 'Exercise minutes today. Opens Fitness.',
+      onOpen: onOpenFitness,
     },
+    macroRing('protein_g', 'protein'),
+    macroRing('carbs_g', 'carbs'),
+    macroRing('fat_g', 'fat'),
   ]
 
   // The same calories, said once more in small type on the card that is about
@@ -892,21 +944,21 @@ export function Dashboard({
     <>
       {error && <p className="t-error mb-3">{error}</p>}
 
-      {/* The whole card is the way into the goals these are read against, so
-          the head is drawn rather than a CardHead: a button inside a button is
-          not a thing a screen reader can hand anybody. */}
-      <button
-        type="button"
-        className="t-card mb-3 block w-full text-left"
-        aria-label="Today's rings. Opens activity goals."
-        onClick={onOpenTargets}
-      >
-        <span className="t-micro mb-2 flex items-center gap-1">
+      {/* Every ring is its own way in, so the card is a plain card and the
+          head is a button of its own: a button inside a button is not a thing
+          a screen reader can hand anybody. */}
+      <div className="t-card mb-3">
+        <button
+          type="button"
+          className="t-micro t-tap44 mb-2 flex items-center gap-1"
+          aria-label="Today. Opens the Journal."
+          onClick={onOpenJournal}
+        >
           Today
           <ChevronRight className="h-3.5 w-3.5" strokeWidth={2.5} />
-        </span>
+        </button>
         <Rings rings={rings} />
-      </button>
+      </div>
 
       {/* One heading for the week, over every card that reads it, so the
           cards themselves do not each say it again. */}
@@ -936,6 +988,8 @@ export function Dashboard({
           todayIso={todayIso}
           warnOver
           highlightToday
+          label={calText}
+          titleUnit="cal"
         />
       </div>
 
@@ -956,6 +1010,8 @@ export function Dashboard({
               footer={stepsFooter}
               todayIso={todayIso}
               highlightToday
+              label={stepsLabel}
+              titleUnit="steps"
             />
           </>
         ) : (

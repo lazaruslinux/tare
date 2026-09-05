@@ -339,10 +339,6 @@ export default function App() {
                         setMoreView('fitness')
                         select('more')
                       }}
-                      onOpenTargets={() => {
-                        setMoreView('targets')
-                        select('more')
-                      }}
                       onChanged={changed}
                       start={dashView}
                       onStarted={() => setDashView(null)}
