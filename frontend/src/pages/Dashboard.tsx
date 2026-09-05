@@ -409,6 +409,17 @@ function LineChips({ lines, onPick }: { lines: Lines; onPick: (next: Lines) => v
 
 // Every card wears the same head: the category, which is a way into it, and a
 // plus that adds to it.
+// A count of days with its name under it, the way the rings say their number
+// first and what it is second.
+function Stat({ value, label }: { value: string; label: string }) {
+  return (
+    <div>
+      <p className="t-nums text-lg font-semibold leading-tight tracking-tight">{value}</p>
+      <p className="t-micro">{label}</p>
+    </div>
+  )
+}
+
 function CardHead({ label, onOpen, onAdd }: {
   label: string
   onOpen: () => void
@@ -1153,18 +1164,13 @@ export function Dashboard({
       <div className="t-card mb-3">
         <CardHead label="Food" onOpen={onOpenJournal} onAdd={() => setPicking(true)} />
         {day !== null && <p className="t-nums mb-2 text-xs text-muted">{leftToday}</p>}
-        {logged.length === 0 ? (
-          <p className="text-base font-semibold tracking-tight">
-            Log a day to see your {chosen.label.toLowerCase()}.
-          </p>
-        ) : (
-          <p className="text-base font-semibold tracking-tight">
-            Within calorie budget {underTarget} of {dates.length} days
-          </p>
+        {logged.length === 0 && (
+          <p className="mb-2 text-sm">Log a day to see your {chosen.label.toLowerCase()}.</p>
         )}
-        <p className="mb-3 text-xs text-muted">
-          Completed {completedDays} of {dates.length} days
-        </p>
+        <div className="mb-3 flex gap-6">
+          <Stat value={`${underTarget} of ${dates.length}`} label="Days within budget" />
+          <Stat value={`${completedDays} of ${dates.length}`} label="Days completed" />
+        </div>
         <DayBars
           bars={intake}
           footer={intakeFooter}
@@ -1186,11 +1192,9 @@ export function Dashboard({
         />
         {fitness !== null && fitness.connected ? (
           <>
-            <p
-              className={`text-base font-semibold tracking-tight ${isWeek ? '' : 'mb-3'}`}
-            >
-              Step goal met {goalMet} of {dates.length} days
-            </p>
+            <div className={`flex gap-6 ${isWeek ? 'mb-1' : 'mb-3'}`}>
+              <Stat value={`${goalMet} of ${dates.length}`} label="Days at step goal" />
+            </div>
             {/* How many sessions the week holds. The summary counts no other
                 span, so no other span says it. */}
             {isWeek && <p className="mb-3 text-xs text-muted">{sessionsLine}</p>}

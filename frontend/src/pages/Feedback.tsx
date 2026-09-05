@@ -83,6 +83,11 @@ export function Feedback({ onSent }: { onSent: () => void }) {
 
   return (
     <div className="t-card mb-3">
+      <p className="mb-4 text-sm text-muted">
+        Your ideas, bug reports and comments are read by a human, and then implemented
+        quickly by coding agents (if approved). You will not receive a notification. If
+        you'd like a notification, you can request one using this form.
+      </p>
       <Chips label="Section" options={AREAS} chosen={area} onPick={setArea} />
       <Chips label="Type" options={KINDS} chosen={kind} onPick={setKind} />
 

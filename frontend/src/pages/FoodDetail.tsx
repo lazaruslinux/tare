@@ -5,6 +5,7 @@ import {
   Camera,
   Pencil,
   Pin,
+  ReceiptText,
   PinOff,
   ThumbsUp,
   Trash2,
@@ -405,6 +406,18 @@ export function FoodDetail({
                 Edit
               </button>
             )}
+            {/* The label picture is served to admins alone; this is where they
+                open it without going through the editor. */}
+            {me.is_admin && food.label_photo_url && (
+              <button
+                className="t-btn flex-1 basis-[calc(50%-0.375rem)] min-[640px]:flex-none min-[640px]:basis-auto"
+                type="button"
+                onClick={() => setViewing(food.label_photo_url ?? null)}
+              >
+                <ReceiptText className="h-4 w-4" strokeWidth={2} />
+                View nutrition label
+              </button>
+            )}
           </div>
 
           {shared && !me.is_admin && (
@@ -627,7 +640,11 @@ export function FoodDetail({
           {viewing && (
             <Lightbox
               src={viewing}
-              alt={`The front of ${food.name}`}
+              alt={
+                viewing === food.label_photo_url
+                  ? `The nutrition label of ${food.name}`
+                  : `The front of ${food.name}`
+              }
               onClose={() => setViewing(null)}
             />
           )}
