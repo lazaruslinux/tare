@@ -38,6 +38,10 @@ def totals(recipe: models.Recipe) -> dict[str, float | None]:
     for field in NUTRIENTS:
         carried = [getattr(row, field) for row in recipe.ingredients]
         whole[field] = None if any(value is None for value in carried) else sum(carried)
+    # An ingredient keeps the ten a portion carries and nothing a packet says
+    # about itself, so how much sugar was added to a recipe is unknown here
+    # rather than none: the panel reads it as the blank it is.
+    whole["added_sugars_g"] = None
     return whole
 
 

@@ -575,8 +575,26 @@ def test_what_the_reviewer_changed_reads_on_the_submitter_s_own_list(
 
     sign_in(client, "member")
     row = client.get("/api/submissions/mine").json()[0]
-    assert (row["status"], row["edited"], row["changes"]) == ("approved", True, ["Sugar"])
+    assert (row["status"], row["edited"], row["changes"]) == (
+        "approved",
+        True,
+        ["Total sugars"],
+    )
     assert row["seen_at"] is None
+
+
+def test_the_change_list_names_the_two_sugar_lines_apart(client, make_user):
+    made = member_and_admin(client, make_user)
+
+    sign_in(client, "reviewer")
+    # The panel offered carried the total and not the split, which is the
+    # ordinary case: a reviewer reads both off the photograph of the label.
+    adjusted(client, made["food"]["id"], sugar_g=50, added_sugars_g=48)
+    client.post(f"/api/admin/queue/{made['submission_id']}/approve", json={})
+
+    sign_in(client, "member")
+    row = client.get("/api/submissions/mine").json()[0]
+    assert row["changes"] == ["Total sugars", "Added sugars"]
 
 
 def test_a_food_nobody_touched_is_approved_without_an_edit_on_it(client, make_user):

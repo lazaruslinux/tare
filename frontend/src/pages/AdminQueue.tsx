@@ -25,7 +25,7 @@ import {
 import { scale } from '../lib/units'
 
 // The queue, which is the only door into the shared database. It is read dense
-// on purpose: whoever is here is comparing ten numbers against a photograph of
+// on purpose: whoever is here is comparing eleven numbers against a photograph of
 // a label, and a screen that shows four of them at a time makes that harder.
 
 // What each kind of request is called on screen, in the words a reviewer would

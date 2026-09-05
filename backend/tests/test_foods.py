@@ -54,6 +54,15 @@ def test_a_food_is_created_with_the_minimum_panel(client, db_session, signed_in)
     assert (kept.owner_id, kept.created_by_id, kept.source) == (signed_in.id, signed_in.id, "user")
 
 
+def test_added_sugars_are_kept_apart_from_the_sugars_already_there(client, db_session, signed_in):
+    made = create(client, sugar_g=24, added_sugars_g=0).json()
+    assert (made["sugar_g"], made["added_sugars_g"]) == (24, 0)
+    assert db_session.get(models.Food, made["id"]).added_sugars_g == 0
+    # A label that never printed the line leaves it unanswered, which is not
+    # the same as none of it.
+    assert create(client).json()["added_sugars_g"] is None
+
+
 def test_the_name_is_trimmed_and_a_blank_one_is_refused(client, signed_in):
     assert create(client, name="  Oat milk  ").json()["name"] == "Oat milk"
     response = create(client, name="   ")

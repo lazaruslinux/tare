@@ -20,7 +20,7 @@ from sqlalchemy.orm import InstrumentedAttribute, Session
 from app import models, schemas, units
 from app.db import get_db
 from app.deps import require_user
-from app.models import DEFAULT_SECTION, FOOD_SECTIONS, NUTRIENTS
+from app.models import DEFAULT_SECTION, FOOD_NUTRIENTS, FOOD_SECTIONS
 
 router = APIRouter(prefix="/foods", tags=["foods"])
 
@@ -522,7 +522,7 @@ def food_detail(db: Session, food: models.Food, user: models.User) -> dict[str, 
             for serving in food.servings
         ],
     }
-    for field in NUTRIENTS:
+    for field in FOOD_NUTRIENTS:
         detail[field] = getattr(food, field)
     return detail
 
@@ -588,18 +588,20 @@ def like_literal(text: str) -> str:
 
 
 # What each nutrient is called when the list of what a reviewer changed has to
-# name one. The panel fields first, in the order a label prints them.
+# name one. The panel fields first, in the order a label prints them, which is
+# also the order the screens read them in.
 NUTRIENT_LABELS = {
     "calories": "Calories",
-    "protein_g": "Protein",
-    "carbs_g": "Carbs",
     "fat_g": "Fat",
     "saturated_fat_g": "Saturated fat",
     "trans_fat_g": "Trans fat",
     "cholesterol_mg": "Cholesterol",
     "sodium_mg": "Sodium",
+    "carbs_g": "Carbs",
     "fiber_g": "Fiber",
-    "sugar_g": "Sugar",
+    "sugar_g": "Total sugars",
+    "added_sugars_g": "Added sugars",
+    "protein_g": "Protein",
 }
 
 # Everything a reviewer can change about a waiting proposal, in the words the
@@ -715,7 +717,7 @@ def apply_body(food: models.Food, body: schemas.FoodIn) -> None:
     food.base_unit = body.base_unit
     food.density_g_per_ml = body.density_g_per_ml
     food.ingredients_text = body.ingredients_text.strip()
-    for field in NUTRIENTS:
+    for field in FOOD_NUTRIENTS:
         setattr(food, field, getattr(body, field))
 
     if body.servings is None:

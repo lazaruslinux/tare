@@ -338,6 +338,9 @@ export type Food = FoodRow & {
   sodium_mg: number | null
   fiber_g: number | null
   sugar_g: number | null
+  // How much of the sugars above was put in. Null on every food nobody has
+  // read that line off, which is most of them.
+  added_sugars_g: number | null
 }
 
 // A food offered before anybody searches: kept on purpose, or eaten lately.
@@ -356,6 +359,7 @@ export type Panel = {
   sodium_mg: number | null
   fiber_g: number | null
   sugar_g: number | null
+  added_sugars_g: number | null
 }
 
 // What a barcode lookup came back with. Not a food: it has no id, because there

@@ -68,7 +68,7 @@ NOT_YOURS_TO_OFFER = "Only your own foods can be submitted to the Tare database.
 MISSING_PHOTO = "That photo is not there to attach."
 # What a food everybody will eat out of has to be photographed from. The front
 # is what somebody recognises it by on a shelf; the label is what a reviewer
-# checks the ten numbers against. A packaged food has both printed on it, so a
+# checks the eleven numbers against. A packaged food has both printed on it, so a
 # food with a barcode is held to both; loose food often has neither, and the
 # front alone is what can honestly be asked for.
 NO_FRONT = "Add a photo of the front of the pack."

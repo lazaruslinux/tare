@@ -27,7 +27,7 @@ from sqlalchemy.orm import Session
 from app import models, schemas
 from app.db import get_db
 from app.deps import require_admin
-from app.models import NUTRIENTS, SUBMISSION_STATUSES, now_utc
+from app.models import FOOD_NUTRIENTS, SUBMISSION_STATUSES, now_utc
 from app.routers import invites
 from app.routers.foods import (
     FRONT_LABEL,
@@ -100,7 +100,7 @@ def proposed(food: models.Food) -> dict[str, object]:
             for serving in food.servings
         ],
     }
-    for field in NUTRIENTS:
+    for field in FOOD_NUTRIENTS:
         payload[field] = getattr(food, field)
     return payload
 
@@ -256,7 +256,7 @@ def approve_edit(
     # with them or the numbers underneath it change meaning.
     target.base_unit = shadow.base_unit
     target.density_g_per_ml = shadow.density_g_per_ml
-    for field in NUTRIENTS:
+    for field in FOOD_NUTRIENTS:
         setattr(target, field, getattr(shadow, field))
     # Written again rather than moved across: the copy is about to go, and its
     # servings go with it.

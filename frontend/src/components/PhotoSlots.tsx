@@ -7,7 +7,7 @@ import { Lightbox } from './Lightbox'
 
 // The two pictures a food submitted to everybody carries: the front of the
 // item, which is what somebody recognises it by, and the nutrition label,
-// which is what whoever reviews it checks the ten numbers against.
+// which is what whoever reviews it checks the eleven numbers against.
 //
 // The label one is served to nobody but its uploader and an administrator.
 // The tiles say what is required and nothing else: a slot with a paragraph

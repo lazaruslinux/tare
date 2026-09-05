@@ -211,6 +211,10 @@ NUTRIENTS = (
     "sugar_g",
 )
 
+# The panel plus what only a food carries. Added sugars is read off a packet,
+# so it lives on the food; a portion that was eaten keeps the ten above.
+FOOD_NUTRIENTS = (*NUTRIENTS, "added_sugars_g")
+
 
 class Food(Base):
     """One food, and its nutrition per 100 of whatever it is measured in."""
@@ -280,6 +284,9 @@ class Food(Base):
     sodium_mg: Mapped[float | None] = mapped_column(Float, nullable=True)
     fiber_g: Mapped[float | None] = mapped_column(Float, nullable=True)
     sugar_g: Mapped[float | None] = mapped_column(Float, nullable=True)
+    # Of the sugars above, the ones put in rather than grown in. Null is a
+    # label that never printed the line, which most older foods here are.
+    added_sugars_g: Mapped[float | None] = mapped_column(Float, nullable=True)
 
     ingredients_text: Mapped[str] = mapped_column(Text, nullable=False, default="")
     # The nutrition panel this food keeps, once a reviewer has approved

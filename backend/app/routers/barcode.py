@@ -24,7 +24,7 @@ from sqlalchemy.orm import Session
 from app import foods_api, models
 from app.db import get_db
 from app.deps import require_user
-from app.models import NUTRIENTS, now_utc
+from app.models import FOOD_NUTRIENTS, now_utc
 from app.routers.foods import (
     BAD_BARCODE,
     BARCODE_PATTERN,
@@ -76,7 +76,7 @@ def prefill(food: models.Food) -> dict[str, object]:
             "base_amount": serving.base_amount,
         },
     }
-    for field in NUTRIENTS:
+    for field in FOOD_NUTRIENTS:
         payload[field] = getattr(food, field)
     return payload
 
@@ -103,7 +103,7 @@ def remember(db: Session, code: str, result: foods_api.FoodResult) -> models.Foo
     row.base_unit = result.base_unit
     row.density_g_per_ml = result.density_g_per_ml
     row.ingredients_text = result.ingredients_text
-    for field in NUTRIENTS:
+    for field in FOOD_NUTRIENTS:
         setattr(row, field, getattr(result, field))
     row.fetched_at = now_utc()
 

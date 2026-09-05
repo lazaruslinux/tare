@@ -35,6 +35,7 @@ OFF_PRODUCT = {
             "sodium_100g": 0.081,
             "fiber_100g": 2.3,
             "sugars_100g": 51.2,
+            "added-sugars_100g": 48.9,
         },
     },
 }
@@ -74,6 +75,8 @@ def test_a_product_reads_back_with_its_whole_panel():
     assert found.brand == "Hershey's"
     assert (found.calories, found.protein_g, found.carbs_g, found.fat_g) == (535, 7, 58.1, 32.6)
     assert found.fiber_g == 2.3
+    # The two sugar lines are read apart, because the label prints them apart.
+    assert (found.sugar_g, found.added_sugars_g) == (51.2, 48.9)
     assert found.ingredients_text.startswith("Sugar, milk")
     assert found.base_unit == "g"
     assert (found.serving, found.serving_amount) == ("1 bar (43 g)", 43)
@@ -104,6 +107,18 @@ def test_a_record_carrying_only_kilojoules_still_has_calories():
 
     assert found is not None
     assert found.calories == 43.0
+
+
+def test_a_record_that_never_says_how_much_sugar_was_added_leaves_it_unanswered():
+    payload = {
+        "status": 1,
+        "product": {"product_name": "Rolled oats", "nutriments": {"sugars_100g": 1}},
+    }
+    with transport(answering(payload)) as client:
+        found = foods_api.lookup_off("12345678", client)
+
+    assert found is not None
+    assert (found.sugar_g, found.added_sugars_g) == (1, None)
 
 
 def test_a_source_that_will_not_answer_raises_the_one_error():

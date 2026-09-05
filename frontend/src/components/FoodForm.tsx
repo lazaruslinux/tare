@@ -24,7 +24,7 @@ import {
   type Unit,
 } from '../lib/units'
 import { BarcodeScanner } from './BarcodeScanner'
-import { HEADLINE, MORE_FACTS, type Nutrient } from './NutritionLabel'
+import { HEADLINE, LABEL_ORDER, type Fact, type Nutrient } from './NutritionLabel'
 import { PhotoSlots } from './PhotoSlots'
 import { Sheet } from './Sheet'
 
@@ -103,7 +103,7 @@ function perServingDraft(values: Values, amount: number): Record<Nutrient, strin
   return draft
 }
 
-// The ten as they stand on a food or on a lookup, per 100 of the base unit.
+// The eleven as they stand on a food or on a lookup, per 100 of the base unit.
 function panelOf(carrier: Food | Prefill | null): Values {
   const values = {} as Values
   for (const fact of SHARED_FACTS) values[fact.key] = carrier === null ? null : carrier[fact.key]
@@ -544,6 +544,9 @@ export function FoodForm({
   // Never what the numbers are stored per. The words on the package where
   // somebody has typed them, and the size on its own until they do.
   const per = `Per ${serving.name.trim() || 'serving'}${size}`
+  // Folded, a private food only needs the four. Open, the boxes are the label
+  // itself, so the four move into the places the label prints them in.
+  const boxes: (Fact & { sub?: boolean })[] = more ? LABEL_ORDER : HEADLINE
 
   return (
     <>
@@ -728,9 +731,12 @@ export function FoodForm({
           </div>
 
           <p className="t-label mb-1">{per}</p>
-          {HEADLINE.map((fact) => (
+          {boxes.map((fact) => (
             <div key={fact.key} className="t-row">
-              <label className="flex-1 text-sm" htmlFor={`food-${fact.key}`}>
+              <label
+                className={`flex-1 text-sm ${fact.sub ? 'pl-4' : ''}`}
+                htmlFor={`food-${fact.key}`}
+              >
                 {fact.label}
                 {fact.unit && <span className="text-muted"> ({fact.unit})</span>}
               </label>
@@ -753,25 +759,6 @@ export function FoodForm({
             More facts
             <ChevronDown className={`h-3.5 w-3.5 ${more ? 'rotate-180' : ''}`} strokeWidth={2.5} />
           </button>
-
-          {more && (
-            <div className="mt-1">
-              {MORE_FACTS.map((fact) => (
-                <div key={fact.key} className="t-row">
-                  <label className="flex-1 text-sm" htmlFor={`food-${fact.key}`}>
-                    {fact.label} <span className="text-muted">({fact.unit})</span>
-                  </label>
-                  <input
-                    id={`food-${fact.key}`}
-                    className="t-input t-nums max-w-[40%] text-right"
-                    inputMode="decimal"
-                    value={panel[fact.key]}
-                    onChange={(event) => setFact(fact.key, event.target.value)}
-                  />
-                </div>
-              ))}
-            </div>
-          )}
         </div>
 
         {offerable && (

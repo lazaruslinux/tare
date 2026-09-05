@@ -69,6 +69,7 @@ class FoodIn(BaseModel):
     sodium_mg: float | None = Field(default=None, ge=0)
     fiber_g: float | None = Field(default=None, ge=0)
     sugar_g: float | None = Field(default=None, ge=0)
+    added_sugars_g: float | None = Field(default=None, ge=0)
 
     ingredients_text: str = ""
     # None means the list was left out, which on an edit leaves the servings
@@ -144,7 +145,7 @@ class ReportIn(BaseModel):
 
     No panel and no picture. A member holding the packet knows what is wrong
     with the row long before they know what the row should say instead, and
-    asking them to rewrite ten numbers to report one of them is what put an
+    asking them to rewrite eleven numbers to report one of them is what put an
     edit form in front of them in the first place.
     """
 

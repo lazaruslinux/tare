@@ -59,6 +59,9 @@ class FoodResult:
     sodium_mg: float | None = None
     fiber_g: float | None = None
     sugar_g: float | None = None
+    # How much of the sugars above was put in. A record that never says stays
+    # null, which is what the panel then shows.
+    added_sugars_g: float | None = None
 
     # 'g' or 'ml'. Every number above is per 100 of this.
     base_unit: str = "g"
@@ -344,6 +347,7 @@ def lookup_off(barcode: str, client: httpx.Client | None = None) -> FoodResult |
             sodium_mg=_scaled(nutriments.get("sodium_100g"), 1000),
             fiber_g=_num(nutriments.get("fiber_100g")),
             sugar_g=_num(nutriments.get("sugars_100g")),
+            added_sugars_g=_num(nutriments.get("added-sugars_100g")),
             base_unit=measured.base_unit,
             density_g_per_ml=measured.density_g_per_ml,
             serving=serving_text,

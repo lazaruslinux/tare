@@ -5,9 +5,9 @@ import type { Food, Headline, Panel } from '../api'
 import { UNIT_LABEL, round1, scale } from '../lib/units'
 
 // The panel, as it is stored and as it reads. The form fills in the same list,
-// so the two can only ever ask for and show the same ten numbers in the same
-// order. Four of them are the ones anybody looks at; the rest are on the label
-// when the label bothered.
+// so the two can only ever ask for and show the same eleven numbers in the
+// same order. Five of them are the ones anybody looks at; the rest are on the
+// label when the label bothered.
 export type Nutrient =
   | 'calories'
   | 'protein_g'
@@ -19,11 +19,13 @@ export type Nutrient =
   | 'sodium_mg'
   | 'fiber_g'
   | 'sugar_g'
+  | 'added_sugars_g'
 
 export type Fact = { key: Nutrient; label: string; unit: string }
 
 // Narrowed to the four, because these are also the four an entry carries and
-// the four a day is totalled by.
+// the four a day is totalled by. The Journal and the portion sheet read this
+// one and nothing else.
 export const HEADLINE: { key: Headline; label: string; unit: string }[] = [
   { key: 'calories', label: 'Calories', unit: '' },
   { key: 'protein_g', label: 'Protein', unit: 'g' },
@@ -31,13 +33,28 @@ export const HEADLINE: { key: Headline; label: string; unit: string }[] = [
   { key: 'fat_g', label: 'Fat', unit: 'g' },
 ]
 
-export const MORE_FACTS: Fact[] = [
-  { key: 'saturated_fat_g', label: 'Saturated fat', unit: 'g' },
-  { key: 'trans_fat_g', label: 'Trans fat', unit: 'g' },
+// What a food says about itself at a glance: the four above and the sugar,
+// which is the line worth seeing without asking for it.
+export const QUICK_FACTS: Fact[] = [
+  ...HEADLINE,
+  { key: 'sugar_g', label: 'Sugar', unit: 'g' },
+]
+
+// The whole panel in the order a label prints it, indented where a label
+// indents. Sugar is "Total sugars" here, because the line under it is the
+// other half of the same answer.
+export const LABEL_ORDER: (Fact & { sub?: boolean })[] = [
+  { key: 'calories', label: 'Calories', unit: '' },
+  { key: 'fat_g', label: 'Fat', unit: 'g' },
+  { key: 'saturated_fat_g', label: 'Saturated fat', unit: 'g', sub: true },
+  { key: 'trans_fat_g', label: 'Trans fat', unit: 'g', sub: true },
   { key: 'cholesterol_mg', label: 'Cholesterol', unit: 'mg' },
   { key: 'sodium_mg', label: 'Sodium', unit: 'mg' },
-  { key: 'fiber_g', label: 'Fiber', unit: 'g' },
-  { key: 'sugar_g', label: 'Sugar', unit: 'g' },
+  { key: 'carbs_g', label: 'Carbs', unit: 'g' },
+  { key: 'fiber_g', label: 'Fiber', unit: 'g', sub: true },
+  { key: 'sugar_g', label: 'Total sugars', unit: 'g', sub: true },
+  { key: 'added_sugars_g', label: 'Added sugars', unit: 'g', sub: true },
+  { key: 'protein_g', label: 'Protein', unit: 'g' },
 ]
 
 // A number the label never gave. Not zero, and not left blank either: an empty
@@ -51,9 +68,16 @@ export function nutrientText(key: Nutrient, value: number | null): string {
   return String(key === 'calories' ? Math.round(value) : round1(value))
 }
 
-// The figures themselves: the four anybody reads, the line saying what they
-// are for, and the six behind "More". Everything that shows a panel goes
-// through this, so a food and a recipe are read the same way.
+// The sugar tile says how much of it was put in, when that is known. A food
+// nobody has read the added-sugars line off keeps the plain word.
+function tileLabel(fact: Fact, values: Panel): string {
+  if (fact.key !== 'sugar_g' || values.added_sugars_g === null) return fact.label
+  return `Sugar (${nutrientText('added_sugars_g', values.added_sugars_g)}g added)`
+}
+
+// The figures themselves: the five anybody reads, the line saying what they
+// are for, and the whole label behind "More". Everything that shows a panel
+// goes through this, so a food and a recipe are read the same way.
 export function PanelFacts({
   values,
   note,
@@ -72,13 +96,13 @@ export function PanelFacts({
       {/* Natural width rather than four stretched columns, so the figures read
           as one group on a wide screen and still wrap on a phone. */}
       <div className="flex flex-wrap gap-x-8 gap-y-3">
-        {HEADLINE.map((fact) => (
+        {QUICK_FACTS.map((fact) => (
           <div key={fact.key}>
             <span className="t-nums block text-xl font-semibold">
               {nutrientText(fact.key, values[fact.key])}
               {fact.unit && <span className="text-sm font-normal text-muted">{fact.unit}</span>}
             </span>
-            <span className="block text-xs text-muted">{fact.label}</span>
+            <span className="block text-xs text-muted">{tileLabel(fact, values)}</span>
           </div>
         ))}
       </div>
@@ -97,9 +121,9 @@ export function PanelFacts({
 
       {more && (
         <div className="mt-1">
-          {MORE_FACTS.map((fact) => (
+          {LABEL_ORDER.map((fact) => (
             <div key={fact.key} className="t-row min-h-9 text-sm">
-              <span className="flex-1 text-muted">{fact.label}</span>
+              <span className={`flex-1 text-muted ${fact.sub ? 'pl-4' : ''}`}>{fact.label}</span>
               <span className="t-nums">
                 {nutrientText(fact.key, values[fact.key])} {fact.unit}
               </span>
@@ -114,7 +138,7 @@ export function PanelFacts({
 // A food's panel at some amount of it, which is what the figures above read.
 function panelAt(food: Food, baseAmount: number): Panel {
   const values = {} as Panel
-  for (const fact of [...HEADLINE, ...MORE_FACTS]) {
+  for (const fact of LABEL_ORDER) {
     values[fact.key] = scale(food[fact.key], baseAmount)
   }
   return values

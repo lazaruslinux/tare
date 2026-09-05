@@ -5,11 +5,12 @@
 // invent one. What is still asked for is a serving, said in the words of the
 // two boxes it is typed in rather than in the rule behind them.
 
-import { HEADLINE, MORE_FACTS, type Nutrient } from '../components/NutritionLabel'
+import { HEADLINE, LABEL_ORDER, type Nutrient } from '../components/NutritionLabel'
 
-// The ten, in the order the server checks them, so the field named on screen
-// is the field the server would have named.
-export const SHARED_FACTS = [...HEADLINE, ...MORE_FACTS]
+// The eleven, in the order a label prints them, which is the order the server
+// names them in too, so the field named on screen is the field the server
+// would have named.
+export const SHARED_FACTS = LABEL_ORDER
 
 // Every retail code printed on food: EAN-8 at the short end, GTIN-14 at the
 // long. The same shape the server holds one to, so a frame that decodes to
