@@ -3,6 +3,7 @@
 // follow, then the app.
 import './theme'
 import '@fontsource-variable/inter'
+import '@fontsource/zen-dots'
 import './index.css'
 
 import { StrictMode } from 'react'

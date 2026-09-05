@@ -133,6 +133,19 @@
     border-bottom: 0;
   }
 
+  /* The name of the app beside its mark. Zen Dots, capitals only, spaced a
+     little wider than the face sets them; the size comes from the component so
+     the capitals stand exactly as tall as the mark. The negative margin takes
+     back the tracking the last letter carries, so the pair centres true. */
+  .t-wordmark {
+    font-family: 'Zen Dots', ui-sans-serif, system-ui, sans-serif;
+    font-weight: 400;
+    line-height: 1;
+    letter-spacing: 0.14em;
+    margin-right: -0.14em;
+    text-transform: uppercase;
+  }
+
   /* The quiet label above a group. Upper case with letter spacing rather than
      font-variant-caps, which several families here render unevenly. */
   .t-micro {

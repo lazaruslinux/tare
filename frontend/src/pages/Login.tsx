@@ -1,7 +1,7 @@
 import { useEffect, useState, type FormEvent } from 'react'
 
 import { api, errorText, type Me } from '../api'
-import { TareMark } from '../components/TareMark'
+import { TareWordmark } from '../components/TareWordmark'
 
 type Version = { version: string; mail: boolean }
 type Answer = { detail: string }
@@ -72,9 +72,8 @@ export function Login({ onSignedIn }: { onSignedIn: (me: Me) => void }) {
     return (
       <div className="t-center">
         <div className="w-full max-w-sm">
-          <p className="mb-5 flex items-center justify-center gap-2 text-center text-2xl font-semibold tracking-tight">
-            <TareMark className="h-8 w-8" />
-            Tare
+          <p className="mb-5 flex justify-center">
+            <TareWordmark size={32} />
           </p>
           {answered ? (
             <div className="t-card">
@@ -122,10 +121,9 @@ export function Login({ onSignedIn }: { onSignedIn: (me: Me) => void }) {
   return (
     <div className="t-center">
       <div className="w-full max-w-sm">
-        <p className="mb-5 flex items-center justify-center gap-2 text-center text-2xl font-semibold tracking-tight">
-            <TareMark className="h-8 w-8" />
-            Tare
-          </p>
+        <p className="mb-5 flex justify-center">
+          <TareWordmark size={32} />
+        </p>
         <form className="t-card flex flex-col gap-3" onSubmit={submit}>
           <div>
             <label className="t-label" htmlFor="username">

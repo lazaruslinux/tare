@@ -1,10 +1,19 @@
+import type { CSSProperties } from 'react'
+
 // The mark: a balance scale whose post is a cross. It takes the text colour
 // of wherever it sits, so one drawing serves both themes.
-export function TareMark({ className = 'h-5 w-5' }: { className?: string }) {
+export function TareMark({
+  className = 'h-5 w-5',
+  style,
+}: {
+  className?: string
+  style?: CSSProperties
+}) {
   return (
     <svg
       viewBox="0 0 1000 1000"
       className={`shrink-0 ${className}`}
+      style={style}
       fill="currentColor"
       aria-hidden="true"
       focusable="false"

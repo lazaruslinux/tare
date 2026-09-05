@@ -2,7 +2,7 @@ import { BookOpen, ChevronRight } from 'lucide-react'
 import { useEffect, useState } from 'react'
 
 import { api } from '../api'
-import { TareMark } from '../components/TareMark'
+import { TareWordmark } from '../components/TareWordmark'
 import { WHAT_TARE_IS } from '../lib/about'
 import { DISCLAIMER } from '../lib/targets'
 
@@ -29,9 +29,8 @@ export function About({ onOpenGuide }: { onOpenGuide: () => void }) {
   return (
     <>
       <div className="t-card mb-3">
-        <p className="flex items-center gap-2 text-xl font-semibold tracking-tight">
-          <TareMark className="h-6 w-6" />
-          Tare
+        <p className="flex">
+          <TareWordmark size={22} />
         </p>
         {version !== '' && <p className="mt-1 text-sm text-muted">Version {version}</p>}
       </div>

@@ -4,7 +4,7 @@ import { useRef } from 'react'
 import type { DashScreen } from '../pages/Dashboard'
 import type { Screen } from '../pages/More'
 import { TABS, type Page, type RailTarget, type Tab } from './TabBar'
-import { TareMark } from './TareMark'
+import { TareWordmark } from './TareWordmark'
 
 // The desktop navigation. It reads the same TABS list as the bar, so the two
 // can only ever show the same destinations in the same order. The centre
@@ -46,9 +46,8 @@ export function SideRail({
 
   return (
     <nav aria-label="Main" className="t-rail">
-      <span className="flex items-center gap-2 px-3 pb-4 text-xl font-semibold tracking-tight">
-        <TareMark className="h-6 w-6" />
-        Tare
+      <span className="flex px-3 pb-4">
+        <TareWordmark size={22} />
       </span>
       <button
         ref={plus}

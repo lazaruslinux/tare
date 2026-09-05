@@ -1,7 +1,7 @@
 import { ChevronLeft, ChevronRight, CircleCheck, Plus } from 'lucide-react'
 
 import type { TopBarView } from '../hooks/useTopBar'
-import { TareMark } from './TareMark'
+import { TareWordmark } from './TareWordmark'
 
 // The bar every screen is read under. Each top-level tab wears its own: the
 // dashboard the wordmark, the journal its day chooser, the other two a large
@@ -45,14 +45,11 @@ export function TopBar({
           <>
             <button
               type="button"
-              className="t-topbar-mark t-tap44 px-2 text-lg font-semibold tracking-tight"
+              className="t-topbar-mark t-tap44 px-2"
               aria-label="Dashboard"
               onClick={onHome}
             >
-              <span className="flex items-center gap-1.5">
-                <TareMark className="h-5 w-5" />
-                Tare
-              </span>
+              <TareWordmark size={18} />
             </button>
             {/* The rail carries the name at rail width, so the slot says which
                 screen this is instead. */}
