@@ -352,9 +352,61 @@ def lookup_off(barcode: str, client: httpx.Client | None = None) -> FoodResult |
             density_g_per_ml=measured.density_g_per_ml,
             serving=serving_text,
             serving_amount=measured.amount,
-            ingredients_text=str(product.get("ingredients_text") or "").strip(),
+            ingredients_text=clean_ingredients(str(product.get("ingredients_text") or "")),
         )
     )
+
+
+# Where an ingredient list stops and the rest of the package begins. A
+# contributor sometimes types in the whole panel, trademarks and helpline
+# included; an ingredient list ends before any of these.
+_INGREDIENTS_END = (
+    "distributed by",
+    "manufactured by",
+    "manufactured for",
+    "produced by",
+    "packed by",
+    "made in a",
+    "made in the",
+    "www.",
+    "http",
+    "all rights reserved",
+    "trademark",
+    "questions",
+    "comments",
+    "call ",
+    "keep refrigerated",
+    "store in",
+    "best if",
+    "best by",
+    "proof of purchase",
+    "nutrition facts",
+    "serving size",
+    "per serving",
+    "\u00a9",
+    "\u00ae",
+    "\u2122",
+)
+_INGREDIENTS_CAP = 600
+
+
+def clean_ingredients(text: str) -> str:
+    """The ingredient list alone, on one line, without the word "ingredients"
+    in front of it and without whatever the package went on to say."""
+    flat = " ".join(text.split())
+    low = flat.lower()
+    for lead in ("ingredients:", "ingredient:", "ingredients "):
+        if low.startswith(lead):
+            flat = flat[len(lead) :].lstrip()
+            low = flat.lower()
+            break
+    ends = [at for mark in _INGREDIENTS_END if (at := low.find(mark)) > 0]
+    if ends:
+        flat = flat[: min(ends)]
+    if len(flat) > _INGREDIENTS_CAP:
+        flat = flat[:_INGREDIENTS_CAP]
+        flat = flat[: flat.rfind(",")] if "," in flat else flat
+    return flat.rstrip(" ,;.-")
 
 
 def session() -> httpx.Client:
