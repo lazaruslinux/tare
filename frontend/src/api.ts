@@ -195,15 +195,19 @@ export type Latest = {
 }
 
 export type TrendPoint = { date: string; kg: number }
-export type FatPoint = { date: string; pct: number }
+export type SharePoint = { date: string; pct: number }
+
+// The short name each share is lined under, which the chart's lines and chips
+// are keyed on.
+export type ShareKey = 'fat' | 'water' | 'muscle' | 'bone'
 
 export type Measurements = {
   days: number
   latest: Latest
   measurements: Measurement[]
   trend: TrendPoint[]
-  // The body fat laid out the same way, so both lines carry their gaps.
-  fat_trend: FatPoint[]
+  // The shares laid out the same way, so every line carries its gaps.
+  trends: Record<ShareKey, SharePoint[]>
 }
 
 // One workout somebody typed in. estimated is set only on the answer to

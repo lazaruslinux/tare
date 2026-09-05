@@ -378,7 +378,7 @@ def test_the_body_fat_line_carries_its_gaps_like_the_weight(client, member):
     assert log_fat(client, 25, TODAY - dt.timedelta(days=2)).status_code == 200
     assert log_fat(client, 24).status_code == 200
 
-    line = client.get("/api/health/measurements").json()["fat_trend"]
+    line = client.get("/api/health/measurements").json()["trends"]["fat"]
     # Three days for two readings: the day nobody measured keeps the one before.
     assert [row["date"] for row in line] == [
         (TODAY - dt.timedelta(days=2)).isoformat(),
@@ -386,6 +386,25 @@ def test_the_body_fat_line_carries_its_gaps_like_the_weight(client, member):
         TODAY.isoformat(),
     ]
     assert [row["pct"] for row in line] == [25.0, 25.0, 24.9]
+
+
+def test_every_share_gets_its_own_line_and_an_unread_one_is_empty(client, member):
+    assert client.put(
+        f"/api/health/measurements/{(TODAY - dt.timedelta(days=1)).isoformat()}",
+        json={"weight_kg": 80, "body_fat_pct": 25, "body_water_pct": 55, "muscle_pct": 40},
+    ).status_code == 200
+    assert client.put(
+        f"/api/health/measurements/{TODAY.isoformat()}",
+        json={"body_fat_pct": 24, "body_water_pct": 56, "muscle_pct": 41},
+    ).status_code == 200
+
+    trends = client.get("/api/health/measurements").json()["trends"]
+    assert sorted(trends) == ["bone", "fat", "muscle", "water"]
+    assert [row["pct"] for row in trends["fat"]] == [25.0, 24.9]
+    assert [row["pct"] for row in trends["water"]] == [55.0, 55.1]
+    assert [row["pct"] for row in trends["muscle"]] == [40.0, 40.1]
+    # Nobody has read a bone share, so that line has nothing to draw.
+    assert trends["bone"] == []
 
 
 def test_a_day_without_a_weight_is_not_the_latest_weight(client, member):

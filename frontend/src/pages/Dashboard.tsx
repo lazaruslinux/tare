@@ -11,8 +11,9 @@ import {
   type FitnessSummary,
   type Me,
   type Measurement,
-  type FatPoint,
   type Measurements,
+  type ShareKey,
+  type SharePoint,
   type Stamp,
   type Targets,
   type TrendPoint,
@@ -55,24 +56,66 @@ const SPANS = [
 ]
 const SPAN_KEY = 'tare.dashboard.span'
 
-// Which lines the weight chart draws, remembered on the device. The body fat
-// is drawn in the pending amber: it is the one token that stays apart from the
-// accent green in both themes.
-type Lines = { weight: boolean; fat: boolean }
+// Which lines the chart draws, remembered on the device. Every measured
+// number can have one: the weight in the accent green, the body fat in the
+// pending amber, and three tokens of their own for the rest.
+type LineKey = 'weight' | ShareKey
+type Lines = Record<LineKey, boolean>
 const LINES_KEY = 'tare.progress.lines'
-const BOTH: Lines = { weight: true, fat: true }
-const FAT_COLOUR = 'var(--pending)'
+
+// What each line is called on its chip, the word the change sentence names it
+// with so two percentages cannot be read as one another, the reading it is
+// drawn from, and the colour it and its chip wear.
+const LINE_SPECS: {
+  key: LineKey
+  label: string
+  word: string
+  field: 'weight_kg' | 'body_fat_pct' | 'body_water_pct' | 'muscle_pct' | 'bone_pct'
+  colour: string
+}[] = [
+  { key: 'weight', label: 'Weight', word: '', field: 'weight_kg', colour: 'var(--accent)' },
+  { key: 'fat', label: 'Body fat', word: 'fat', field: 'body_fat_pct', colour: 'var(--pending)' },
+  {
+    key: 'water',
+    label: 'Body water',
+    word: 'water',
+    field: 'body_water_pct',
+    colour: 'var(--chart-water)',
+  },
+  {
+    key: 'muscle',
+    label: 'Muscle',
+    word: 'muscle',
+    field: 'muscle_pct',
+    colour: 'var(--chart-muscle)',
+  },
+  { key: 'bone', label: 'Bone', word: 'bone', field: 'bone_pct', colour: 'var(--chart-bone)' },
+]
+
+// The two that were on before any of this was a choice.
+const DEFAULT_LINES: Lines = {
+  weight: true,
+  fat: true,
+  water: false,
+  muscle: false,
+  bone: false,
+}
+
+// Nothing measured yet, so every line has nothing to draw.
+const NO_TRENDS: Record<ShareKey, SharePoint[]> = { fat: [], water: [], muscle: [], bone: [] }
 
 function readLines(): Lines {
   try {
     const raw = localStorage.getItem(LINES_KEY)
-    if (raw === null) return BOTH
+    if (raw === null) return DEFAULT_LINES
     const on = raw.split(',')
-    const kept = { weight: on.includes('weight'), fat: on.includes('fat') }
+    const kept = Object.fromEntries(
+      LINE_SPECS.map((spec) => [spec.key, on.includes(spec.key)]),
+    ) as Lines
     // Nothing on is not a chart, so a key that says so is not believed.
-    return kept.weight || kept.fat ? kept : BOTH
+    return LINE_SPECS.some((spec) => kept[spec.key]) ? kept : DEFAULT_LINES
   } catch {
-    return BOTH
+    return DEFAULT_LINES
   }
 }
 
@@ -349,27 +392,27 @@ function Spark({ series, tall, axis }: {
   )
 }
 
-// The two lines the chart can draw, each chip in its own line's colour.
-// Turning off the last one is ignored: an empty chart says nothing.
+// The lines the chart can draw, each chip in its own line's colour. Five of
+// them wrap onto a second row on a phone. Turning off the last one is
+// ignored: an empty chart says nothing.
 function LineChips({ lines, onPick }: { lines: Lines; onPick: (next: Lines) => void }) {
-  const rows: { key: keyof Lines; label: string; on: string }[] = [
-    { key: 'weight', label: 'Weight', on: 'border-accent text-accent' },
-    { key: 'fat', label: 'Body fat', on: 'border-pending text-pending' },
-  ]
   return (
     <div className="mt-2 flex flex-wrap gap-2">
-      {rows.map((row) => (
+      {LINE_SPECS.map((spec) => (
         <button
-          key={row.key}
+          key={spec.key}
           type="button"
-          aria-pressed={lines[row.key]}
-          className={`t-chip ${lines[row.key] ? row.on : ''}`}
+          aria-pressed={lines[spec.key]}
+          className="t-chip"
+          // The colours are chart tokens rather than palette ones, so a chip
+          // wears its line's colour directly.
+          style={lines[spec.key] ? { borderColor: spec.colour, color: spec.colour } : undefined}
           onClick={() => {
-            const next = { ...lines, [row.key]: !lines[row.key] }
-            if (next.weight || next.fat) onPick(next)
+            const next = { ...lines, [spec.key]: !lines[spec.key] }
+            if (LINE_SPECS.some((one) => next[one.key])) onPick(next)
           }}
         >
-          {row.label}
+          {spec.label}
         </button>
       ))}
     </div>
@@ -422,20 +465,26 @@ function moveText(points: number[], unit: string): string {
   return size < 0.1 ? '' : `${moved < 0 ? '−' : '+'}${size}${unit}`
 }
 
-// What the lines on the chart have done, weight first, and the window said
-// once at the end. A line that is off, flat or too short says nothing, and a
-// sentence with nothing in it is the one that says so.
+// What the lines on the chart have done, weight first and bare, every share
+// named by its word, and the window said once at the end. A line that is off,
+// flat or too short says nothing, and a sentence with nothing in it is the one
+// that says so.
 function changeText(
   weight: TrendPoint[],
-  fat: FatPoint[],
+  shares: Record<ShareKey, SharePoint[]>,
   units: Me['units'],
   over: string,
   lines: Lines,
 ): string {
-  const parts = [
-    lines.weight ? moveText(weight.map((row) => weightIn(row.kg, units)), ` ${weightUnit(units)}`) : '',
-    lines.fat ? moveText(fat.map((row) => row.pct), '%') : '',
-  ].filter((part) => part !== '')
+  const parts = LINE_SPECS.filter((spec) => lines[spec.key])
+    .map((spec) => {
+      if (spec.key === 'weight') {
+        return moveText(weight.map((row) => weightIn(row.kg, units)), ` ${weightUnit(units)}`)
+      }
+      const moved = moveText(shares[spec.key].map((row) => row.pct), '%')
+      return moved === '' ? '' : `${spec.word} ${moved}`
+    })
+    .filter((part) => part !== '')
   return parts.length === 0 ? `No change ${over}` : `${parts.join(' · ')} ${over}`
 }
 
@@ -505,19 +554,25 @@ function WeighIn({
             <span className="t-nums">{round1(row.body_water_pct)}%</span>
           </div>
         )}
-        {row.muscle_pct !== null && row.muscle_kg !== null && (
+        {row.muscle_pct !== null && (
           <div className="t-row min-h-9 text-sm">
             <span className="flex-1 text-muted">Muscle</span>
+            {/* A share read on a day with no weight has no mass to stand
+                beside it, so the share is the whole row. */}
             <span className="t-nums">
-              {round1(row.muscle_pct)}% · {weightText(row.muscle_kg, units)}
+              {round1(row.muscle_pct)}%
+              {row.muscle_kg !== null && ` · ${weightText(row.muscle_kg, units)}`}
             </span>
           </div>
         )}
-        {row.bone_pct !== null && row.bone_kg !== null && (
+        {row.bone_pct !== null && (
           <div className="t-row min-h-9 text-sm">
             <span className="flex-1 text-muted">Bone</span>
+            {/* A share read on a day with no weight has no mass to stand
+                beside it, so the share is the whole row. */}
             <span className="t-nums">
-              {round1(row.bone_pct)}% · {weightText(row.bone_kg, units)}
+              {round1(row.bone_pct)}%
+              {row.bone_kg !== null && ` · ${weightText(row.bone_kg, units)}`}
             </span>
           </div>
         )}
@@ -696,7 +751,7 @@ export function Dashboard({
 
   const pickLines = (next: Lines) => {
     setLines(next)
-    const on = [next.weight ? 'weight' : '', next.fat ? 'fat' : ''].filter((one) => one !== '')
+    const on = LINE_SPECS.filter((spec) => next[spec.key]).map((spec) => spec.key)
     try {
       window.localStorage.setItem(LINES_KEY, on.join(','))
     } catch {
@@ -753,31 +808,21 @@ export function Dashboard({
   // both draw, and how a move across it is said.
   const chosen = SPANS.find((row) => row.days === span) ?? SPANS[0]
   const line = windowed?.trend ?? []
-  const fatLine = windowed?.fat_trend ?? []
+  const shares = windowed?.trends ?? NO_TRENDS
   const recorded = windowed?.measurements ?? []
   // The chart draws the readings themselves and the sentence reads the trend
   // under them, which is how the weight line has always worked.
-  const chart: Line[] = []
-  if (lines.weight) {
-    chart.push({
-      key: 'weight',
-      colour: 'var(--accent)',
-      points: recorded.flatMap((row) =>
-        row.weight_kg === null ? [] : [{ date: row.date, value: row.weight_kg }],
-      ),
-    })
-  }
-  if (lines.fat) {
-    chart.push({
-      key: 'fat',
-      colour: FAT_COLOUR,
-      points: recorded.flatMap((row) =>
-        row.body_fat_pct === null ? [] : [{ date: row.date, value: row.body_fat_pct }],
-      ),
-    })
-  }
-  // Either line is enough to be worth drawing.
-  const trending = line.length > 1 || fatLine.length > 1
+  const chart: Line[] = LINE_SPECS.filter((spec) => lines[spec.key]).map((spec) => ({
+    key: spec.key,
+    colour: spec.colour,
+    points: recorded.flatMap((row) => {
+      const value = row[spec.field]
+      return value === null ? [] : [{ date: row.date, value }]
+    }),
+  }))
+  // Any one line is enough to be worth drawing.
+  const trending =
+    line.length > 1 || Object.values(shares).some((one) => one.length > 1)
 
   // The month the goal is reached at, said once and shown wherever the weight
   // is. Nothing at all without a goal weight.
@@ -989,7 +1034,7 @@ export function Dashboard({
               )}
               <span className="block text-xs text-muted">
                 {newest === null ? '' : `${dayLabel(newest.date, todayIso)} · `}
-                {changeText(line, fatLine, me.units, chosen.over, lines)}
+                {changeText(line, shares, me.units, chosen.over, lines)}
                 {goalMonth}
               </span>
               <LineChips lines={lines} onPick={pickLines} />
@@ -1217,7 +1262,7 @@ export function Dashboard({
             ) : (
               <>
                 <span className="block text-xs text-muted">
-                  {changeText(line, fatLine, me.units, chosen.over, lines)}
+                  {changeText(line, shares, me.units, chosen.over, lines)}
                   {goalMonth}
                 </span>
                 <LineChips lines={lines} onPick={pickLines} />

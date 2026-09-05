@@ -18,10 +18,10 @@ const WINDOW = 90
 
 // Which form the sheet is showing. A day with nothing on it starts at the
 // chooser; a day already recorded opens on what it holds.
-type Mode = 'pick' | 'weight' | 'other' | 'edit'
+type Mode = 'pick' | 'weight' | 'fat' | 'other' | 'edit'
 
 // The numbers beyond the weight, in the order a scale prints them. Body fat
-// leads: it is the one the Other form asks for on its own.
+// leads: it is the one that has a form to itself.
 type Extra = {
   key: 'body_fat_pct' | 'body_water_pct' | 'muscle_pct' | 'bone_pct'
   label: string
@@ -71,7 +71,8 @@ type Fields = Record<string, string>
 const LABEL: Record<Mode, string> = {
   pick: 'Biometrics',
   weight: 'Log weigh-in',
-  other: 'Log body fat',
+  fat: 'Log body fat',
+  other: 'Log other measurements',
   edit: 'Biometrics',
 }
 
@@ -138,9 +139,18 @@ export function MeasurementsSheet({
   // nothing to work the share out against, so those fields are percentages.
   const byMass = (extra: Extra): boolean =>
     extra.mass === true && kg !== null && modes[extra.key] === 'mass'
-  // The weight form asks for the weight alone, so the day's body fat is left
-  // where it is. The others show body fat, and the rest once asked for.
-  const shown = mode === 'weight' ? [] : more ? EXTRAS : EXTRAS.slice(0, 1)
+  // Each form asks for its own: the weight alone, the body fat alone, the
+  // three a scale adds beyond it, or on a recorded day whatever it holds.
+  const shown =
+    mode === 'weight'
+      ? []
+      : mode === 'fat'
+        ? EXTRAS.slice(0, 1)
+        : mode === 'other'
+          ? EXTRAS.slice(1)
+          : more
+            ? EXTRAS
+            : EXTRAS.slice(0, 1)
 
   const submit = async (event: FormEvent) => {
     event.preventDefault()
@@ -150,7 +160,7 @@ export function MeasurementsSheet({
       return
     }
     const body: Record<string, number | null> = {}
-    if (mode !== 'other') body.weight_kg = kg
+    if (mode === 'weight' || mode === 'edit') body.weight_kg = kg
     for (const extra of shown) {
       const value = asNumber(fields[extra.key] ?? '')
       // A mass typed in is stored as the share of the weight it is.
@@ -159,8 +169,12 @@ export function MeasurementsSheet({
           ? value
           : (weightFrom(value, units) / kg) * 100
     }
-    if (mode === 'other' && body.body_fat_pct === null) {
+    if (mode === 'fat' && body.body_fat_pct === null) {
       setError('Enter a body fat percentage.')
+      return
+    }
+    if (mode === 'other' && shown.every((extra) => body[extra.key] === null)) {
+      setError('Enter at least one measurement.')
       return
     }
     if (Object.values(body).every((value) => value === null)) {
@@ -185,6 +199,9 @@ export function MeasurementsSheet({
         <button type="button" className="t-row w-full text-left" onClick={() => setMode('weight')}>
           Weight
         </button>
+        <button type="button" className="t-row w-full text-left" onClick={() => setMode('fat')}>
+          Body fat percentage
+        </button>
         <button type="button" className="t-row w-full text-left" onClick={() => setMode('other')}>
           Other
         </button>
@@ -198,7 +215,7 @@ export function MeasurementsSheet({
         <p className="text-base font-semibold">{LABEL[mode]}</p>
         <p className="mb-3 text-xs text-muted">{dayLabel(day, today(me.timezone))}</p>
 
-        {mode !== 'other' && (
+        {(mode === 'weight' || mode === 'edit') && (
           <div className="mb-3">
             <label className="t-label" htmlFor="measure-weight">
               Weight ({weightUnit(units)})
@@ -257,7 +274,7 @@ export function MeasurementsSheet({
           </div>
         ))}
 
-        {mode !== 'weight' && !more && (
+        {mode === 'edit' && !more && (
           <button type="button" className="t-btn mt-1" onClick={() => setMore(true)}>
             <Plus className="h-4 w-4" strokeWidth={2.5} />
             Add more details

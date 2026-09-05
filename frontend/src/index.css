@@ -27,6 +27,13 @@
   --pending: #d9a441;
   --danger: #d98b83;
   --ring: rgba(143, 199, 160, 0.35);
+  /* The three extra lines the Progress chart draws, beside the accent green
+     (weight) and the pending amber (body fat). Each reads at better than 3:1
+     on the card and sits in a hue of its own, so five lines in one box stay
+     told apart. Nothing else uses them. */
+  --chart-water: #6fb2e0;
+  --chart-muscle: #b79bdd;
+  --chart-bone: #c2a98d;
 }
 
 [data-theme='light'] {
@@ -47,6 +54,10 @@
   /* Same measurement: #b3554b sat at 4.16:1 on --surface-2. */
   --danger: #ab4f45;
   --ring: rgba(53, 104, 79, 0.3);
+  /* The same three, darkened for the cream ground. */
+  --chart-water: #1f6f9c;
+  --chart-muscle: #6b4aa0;
+  --chart-bone: #7a6248;
 }
 
 /* Bridged rather than redeclared, so bg-surface and text-muted resolve to the

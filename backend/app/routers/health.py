@@ -71,6 +71,15 @@ EXTRA_FIELDS = ("body_fat_pct", "body_water_pct", "muscle_pct", "bone_pct")
 # asks for them and the order they are checked in.
 MEASURED = ("weight_kg", *EXTRA_FIELDS)
 
+# The short name each share is drawn under on the chart, which is what its
+# line and its chip are keyed on.
+TREND_KEYS = {
+    "body_fat_pct": "fat",
+    "body_water_pct": "water",
+    "muscle_pct": "muscle",
+    "bone_pct": "bone",
+}
+
 MIN_HEIGHT_CM = 90.0
 MAX_HEIGHT_CM = 250.0
 MAX_MINUTES = 720
@@ -226,6 +235,16 @@ def weighed_days(rows: list[models.WeightEntry]) -> list[tuple[dt.date, float]]:
     """The days a weight was actually read on, which is what a weight trend is
     drawn from. A day holding a body fat alone is not one of them."""
     return [(row.date_for, row.weight_kg) for row in rows if row.weight_kg is not None]
+
+
+def read_days(rows: list[models.WeightEntry], field: str) -> list[tuple[dt.date, float]]:
+    """The days one share was actually read on, which is what its line is drawn
+    from. A day that holds nothing for it is not one of them."""
+    return [
+        (row.date_for, value)
+        for row in rows
+        if (value := getattr(row, field)) is not None
+    ]
 
 
 def latest_weight_kg(db: Session, user: models.User) -> float | None:
@@ -935,9 +954,15 @@ def read_measurements(
     today = clock.user_today(user)
     rows = readings(db, user, today - dt.timedelta(days=window - 1))
     line = health.trend_by_day(weighed_days(rows))
-    fat = health.trend_by_day(
-        [(row.date_for, row.body_fat_pct) for row in rows if row.body_fat_pct is not None]
-    )
+    # Muscle and bone are lined as the stored share, not the mass they work out
+    # to, so a day with no weight on it does not step the line.
+    trends = {
+        name: [
+            {"date": day.isoformat(), "pct": round(value, 1)}
+            for day, value in health.trend_by_day(read_days(rows, field))
+        ]
+        for field, name in TREND_KEYS.items()
+    }
     db.commit()
     return {
         "days": window,
@@ -947,9 +972,7 @@ def read_measurements(
             {"date": day.isoformat(), "kg": health.round_for_display(value, "kg")}
             for day, value in line
         ],
-        "fat_trend": [
-            {"date": day.isoformat(), "pct": round(value, 1)} for day, value in fat
-        ],
+        "trends": trends,
     }
 
 

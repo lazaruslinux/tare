@@ -516,16 +516,28 @@ export function Journal({
                   <span className="t-nums">{round1(weighed.body_water_pct)}%</span>
                 </div>
               )}
-              {weighed.muscle_kg !== null && (
+              {weighed.muscle_pct !== null && (
                 <div className="t-row min-h-9 text-sm">
                   <span className="flex-1 text-muted">Muscle</span>
-                  <span className="t-nums">{weightText(weighed.muscle_kg, me.units)}</span>
+                  {/* No weight on the day means no mass to show it as, so the
+                      share stands on its own. */}
+                  <span className="t-nums">
+                    {weighed.muscle_kg === null
+                      ? `${round1(weighed.muscle_pct)}%`
+                      : weightText(weighed.muscle_kg, me.units)}
+                  </span>
                 </div>
               )}
-              {weighed.bone_kg !== null && (
+              {weighed.bone_pct !== null && (
                 <div className="t-row min-h-9 text-sm">
                   <span className="flex-1 text-muted">Bone</span>
-                  <span className="t-nums">{weightText(weighed.bone_kg, me.units)}</span>
+                  {/* No weight on the day means no mass to show it as, so the
+                      share stands on its own. */}
+                  <span className="t-nums">
+                    {weighed.bone_kg === null
+                      ? `${round1(weighed.bone_pct)}%`
+                      : weightText(weighed.bone_kg, me.units)}
+                  </span>
                 </div>
               )}
             </>
