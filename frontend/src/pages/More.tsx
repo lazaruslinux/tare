@@ -176,7 +176,6 @@ export function More({
   // Which member's profile is open on the Members screen, if any.
   const [member, setMember] = useState<number | null>(null)
 
-  const [displayName, setDisplayName] = useState(me.display_name ?? '')
   const [units, setUnits] = useState<Units>(me.units)
   const [clock, setClock] = useState<Clock>(me.clock)
   const [timezone, setTimezone] = useState(me.timezone)
@@ -248,9 +247,8 @@ export function More({
     return () => onScreen?.(null)
   }, [screen, onScreen])
 
-  // The name is edited on one screen and the two server-side preferences on
-  // another, but they are one record and one request either way.
-  const nameDirty = displayName !== (me.display_name ?? '')
+  // The display name is edited on Profile, which is where somebody looks for
+  // what other members see. This screen keeps the reading preferences.
   const displayDirty = units !== me.units || clock !== me.clock || timezone !== me.timezone
 
   const saveAccount = async (event: FormEvent) => {
@@ -261,7 +259,7 @@ export function More({
       onChange(
         await api<Me>('/account', {
           method: 'PATCH',
-          body: { display_name: displayName, units, clock, timezone },
+          body: { units, clock, timezone },
         })
       )
       markAccountSaved()
@@ -403,32 +401,11 @@ export function More({
           </p>
         </div>
 
-        <form className="t-card mb-3" onSubmit={saveAccount}>
-          <div className="t-row">
-            <label className="flex-1 text-sm" htmlFor="settings-display-name">
-              Display name
-            </label>
-            <input
-              id="settings-display-name"
-              className="t-input max-w-[55%]"
-              autoComplete="nickname"
-              placeholder={me.username}
-              value={displayName}
-              onChange={(event) => setDisplayName(event.target.value)}
-            />
-          </div>
-          {accountError && <p className="t-error mt-3">{accountError}</p>}
-          <div className="mt-3 flex items-center gap-3">
-            <button
-              className="t-btn t-btn-primary"
-              type="submit"
-              disabled={!nameDirty || savingAccount}
-            >
-              Save
-            </button>
-            <SaveMarks dirty={nameDirty} saved={accountSaved} />
-          </div>
-        </form>
+        <div className="t-card mb-3">
+          <p className="t-micro mb-2">Username</p>
+          <p className="text-base">{me.username}</p>
+          <p className="mt-2 text-xs text-muted">Your permanent sign-in name.</p>
+        </div>
 
         <form className="t-card mb-3" onSubmit={savePassword}>
           <p className="t-micro mb-2">Password</p>

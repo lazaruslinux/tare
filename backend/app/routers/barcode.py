@@ -21,7 +21,7 @@ from fastapi import APIRouter, Depends, HTTPException, status
 from sqlalchemy import select
 from sqlalchemy.orm import Session
 
-from app import foods_api, models
+from app import foods_api, models, throttle
 from app.db import get_db
 from app.deps import require_user
 from app.models import FOOD_NUTRIENTS, now_utc
@@ -146,6 +146,10 @@ def resolve_barcode(
     """
     if not BARCODE_PATTERN.match(code):
         raise HTTPException(status.HTTP_400_BAD_REQUEST, BAD_BARCODE)
+    # Administrators are not counted, the same as the day caps: the person
+    # working the queue scans the shelf they are checking.
+    if not user.is_admin and throttle.barcode_limiter.hit(str(user.id)):
+        raise HTTPException(status.HTTP_429_TOO_MANY_REQUESTS, throttle.TOO_MANY_SCANS)
 
     shared = db.execute(
         select(models.Food).where(models.Food.status == "approved", models.Food.barcode == code)

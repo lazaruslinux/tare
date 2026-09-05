@@ -16,11 +16,12 @@ import {
   UNIT_LABEL,
   UNIT_TO_BASE,
   WATER_HINT,
+  amountText,
   crossesFamily,
   pickToBase,
   portionText,
-  round1,
   scale,
+  servingsText,
   type Pick,
   type Unit,
 } from '../lib/units'
@@ -172,24 +173,34 @@ export function PortionSheet({
   // An entry whose food is gone scales what survived it, and nothing else.
   const factor = entry?.amount != null && valid ? typed / entry.amount : 1
 
+  const needsAmount = food !== null || entry?.amount != null
+
   const value = (key: Headline): number | null => {
+    // An empty field is not zero calories of anything. The tiles wait for a
+    // number rather than reading as a portion of nothing.
+    if (needsAmount && !valid) return null
     if (food !== null) return scale(food[key], baseAmount)
     const carried = entry ? entry[key] : null
     return carried === null ? null : carried * factor
   }
 
-  // Switching measurement carries the portion across rather than the number:
-  // two of something is not two grams of it, so what is on screen stays on
-  // screen, measured the new way.
+  // Switching measurement never rewrites the number as the same portion said
+  // another way: two of something is not two grams of it, and a field that
+  // rewrites itself is a field nobody trusts. A serving starts at one, and a
+  // weight starts empty, waiting for what the scale says.
   const choose = (next: string) => {
-    if (food !== null && next !== choice) {
-      const one = pickToBase(food, food.servings, 1, asPick(next))
-      setAmount(valid && one > 0 ? String(round1(baseAmount / one)) : startingAmount(food, next))
-    }
+    if (food !== null && next !== choice) setAmount(next.startsWith(SERVING) ? '1' : '')
     setChoice(next)
   }
 
-  const needsAmount = food !== null || entry?.amount != null
+  // What the portion comes to in the food's own unit, and in servings as well
+  // when that is what was chosen: the label prints servings and the scale
+  // reads grams, so both are said.
+  const baseLine = (row: Food): string => {
+    if (!valid) return `- ${row.base_unit}`
+    const weighed = `${amountText(baseAmount, row.base_unit)} ${row.base_unit}`
+    return pick?.kind === 'serving' ? `${servingsText(typed)} = ${weighed}` : weighed
+  }
 
   // Choosing a portion for something else rather than logging one.
   const picking = onPick !== undefined && food !== null && pick !== null
@@ -205,6 +216,10 @@ export function PortionSheet({
   }
 
   const save = async () => {
+    if (needsAmount && !valid) {
+      setError('Type what the scale says.')
+      return
+    }
     if (picking && food !== null && pick !== null && onPick) {
       keep(food, choice)
       onPick(food, typed, chosenUnit(food, pick))
@@ -294,6 +309,7 @@ export function PortionSheet({
             className="t-input t-nums w-24 text-right"
             inputMode="decimal"
             aria-label="Amount"
+            placeholder="0"
             value={amount}
             onChange={(event) => setAmount(event.target.value)}
           />
@@ -312,7 +328,7 @@ export function PortionSheet({
                 <optgroup label="Servings">
                   {food.servings.map((row, index) => (
                     <option key={row.id} value={`${SERVING}${index}`}>
-                      {row.name}, {row.amount} {UNIT_LABEL[row.unit]}
+                      {row.name}, {amountText(row.amount, row.unit)} {UNIT_LABEL[row.unit]}
                     </option>
                   ))}
                 </optgroup>
@@ -333,17 +349,9 @@ export function PortionSheet({
 
       {food !== null && (
         <div className="mb-3 flex flex-wrap gap-2">
-          {food.servings.map((row, index) => (
-            <button
-              key={row.id}
-              type="button"
-              aria-pressed={choice === `${SERVING}${index}`}
-              className="t-chip aria-pressed:border-accent aria-pressed:text-text"
-              onClick={() => choose(`${SERVING}${index}`)}
-            >
-              {row.name}
-            </button>
-          ))}
+          {/* The scale first, because weighing it is the answer this would
+              rather have. The label serving is offered as what it is, one
+              serving, whatever the label calls it. */}
           <button
             type="button"
             aria-pressed={choice === weighIn}
@@ -353,6 +361,17 @@ export function PortionSheet({
             <Scale className="h-3.5 w-3.5" strokeWidth={2.5} />
             Weigh it
           </button>
+          {food.servings.map((row, index) => (
+            <button
+              key={row.id}
+              type="button"
+              aria-pressed={choice === `${SERVING}${index}`}
+              className="t-chip aria-pressed:border-accent aria-pressed:text-text"
+              onClick={() => choose(`${SERVING}${index}`)}
+            >
+              {index === 0 ? '1 serving' : row.name}
+            </button>
+          ))}
         </div>
       )}
 
@@ -372,7 +391,7 @@ export function PortionSheet({
       {food !== null && (
         <p className="mt-2 text-xs text-muted">
           {assumesWater && '≈ '}
-          {round1(baseAmount)} {food.base_unit}
+          {baseLine(food)}
           {assumesWater && `. ${WATER_HINT}`}
         </p>
       )}

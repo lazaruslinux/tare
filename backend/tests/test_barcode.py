@@ -11,7 +11,7 @@ import datetime as dt
 import httpx
 import pytest
 
-from app import foods_api, models
+from app import foods_api, models, throttle
 from app.models import now_utc
 from app.routers.barcode import CACHE_DAYS
 from tests.conftest import PASSWORD
@@ -278,3 +278,17 @@ def test_a_cached_reading_is_not_a_food_anybody_can_reach(
 
 def test_a_scan_needs_a_session(client):
     assert client.get(f"/api/barcode/{CODE}").status_code == 401
+
+
+def test_a_member_may_only_scan_so_often(client, db_session, signed_in, network):
+    """The one route that may leave the machine, held to a scan a shopping trip."""
+    network(nothing_goes_out)
+    put_food(db_session, None, status="approved")
+    assert throttle.barcode_limiter.max_attempts == 30
+
+    for _ in range(throttle.barcode_limiter.max_attempts):
+        assert client.get(f"/api/barcode/{CODE}").status_code == 200
+
+    refused = client.get(f"/api/barcode/{CODE}")
+    assert refused.status_code == 429
+    assert refused.json()["detail"] == throttle.TOO_MANY_SCANS

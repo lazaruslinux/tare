@@ -27,7 +27,7 @@ from fastapi.responses import FileResponse
 from sqlalchemy import Select, or_, select, update
 from sqlalchemy.orm import Session
 
-from app import models, photos
+from app import caps, models, photos
 from app.db import get_db
 from app.deps import require_user
 from app.models import now_utc
@@ -222,6 +222,7 @@ def upload_photo(
     user: models.User = Depends(require_user),
 ) -> dict[str, int]:
     """Take one picture, and answer with the id a submission attaches it by."""
+    caps.check_photos(db, user)
     if file is None:
         raise HTTPException(status.HTTP_400_BAD_REQUEST, NO_FILE)
     if purpose not in models.PHOTO_PURPOSES:

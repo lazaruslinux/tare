@@ -482,6 +482,8 @@ export function AdminQueue({
         // own; anything about a shared food carries the shared one's.
         const description =
           item.kind === 'new' ? item.food?.description : item.current?.description
+        // What the submitter says is in it, read against the label photo.
+        const ingredients = item.food?.ingredients_text
         // Held in a const so the buttons below narrow it too: a closure does
         // not keep the narrowing a JSX guard gave.
         const proposal = item.food
@@ -493,6 +495,9 @@ export function AdminQueue({
                   {about?.name ?? 'A deleted food'}
                 </p>
                 {description && <p className="truncate text-sm text-muted">{description}</p>}
+                {ingredients && (
+                  <p className="line-clamp-4 text-xs text-muted">{ingredients}</p>
+                )}
                 <p className="truncate text-sm text-muted">{about?.brand || 'No brand'}</p>
                 {item.kind === 'new' && item.food && (
                   <p className="truncate text-sm text-muted">{sectionLabel(item.food.section)}</p>

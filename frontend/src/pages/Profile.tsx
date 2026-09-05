@@ -32,6 +32,13 @@ export function Profile({
 }) {
   const metric = me.units === 'metric'
   const [profile, setProfile] = useState<ProfileRow | null>(null)
+  // The one thing on this screen other members read, so it is the first thing
+  // on it. It lives on the account rather than the profile, and it is saved on
+  // its own: nothing else here is anybody else's business.
+  const [displayName, setDisplayName] = useState(me.display_name ?? '')
+  const [nameError, setNameError] = useState('')
+  const [nameSaved, markNameSaved] = useSavedChip()
+  const [savingName, setSavingName] = useState(false)
   const [sex, setSex] = useState<Sex | null>(null)
   const [feet, setFeet] = useState('')
   const [inches, setInches] = useState('')
@@ -72,6 +79,23 @@ export function Profile({
       alive = false
     }
   }, [])
+
+  const nameDirty = displayName !== (me.display_name ?? '')
+
+  const saveName = async (event: FormEvent) => {
+    event.preventDefault()
+    setSavingName(true)
+    setNameError('')
+    try {
+      onChange(
+        await api<Me>('/account', { method: 'PATCH', body: { display_name: displayName } })
+      )
+      markNameSaved()
+    } catch (failure) {
+      setNameError(errorText(failure))
+    }
+    setSavingName(false)
+  }
 
   const choose = (event: ChangeEvent<HTMLInputElement>) => {
     const file = event.target.files?.[0] ?? null
@@ -158,6 +182,29 @@ export function Profile({
 
   return (
     <>
+    <form className="t-card mb-3" onSubmit={saveName}>
+      <div className="t-row">
+        <label className="flex-1 text-sm" htmlFor="settings-display-name">
+          Display name
+        </label>
+        <input
+          id="settings-display-name"
+          className="t-input max-w-[55%]"
+          autoComplete="nickname"
+          placeholder={me.username}
+          value={displayName}
+          onChange={(event) => setDisplayName(event.target.value)}
+        />
+      </div>
+      {nameError && <p className="t-error mt-3">{nameError}</p>}
+      <div className="mt-3 flex items-center gap-3">
+        <button className="t-btn t-btn-primary" type="submit" disabled={!nameDirty || savingName}>
+          Save
+        </button>
+        <SaveMarks dirty={nameDirty} saved={nameSaved} />
+      </div>
+    </form>
+
     <div className="t-card mb-3">
       <p className="t-micro mb-3">Avatar</p>
       <div className="flex items-center gap-4">

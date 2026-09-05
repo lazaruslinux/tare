@@ -645,6 +645,19 @@ export function FoodForm({
               onChange={(event) => setDescription(event.target.value)}
             />
           </div>
+          <div className="mt-3">
+            <label className="t-label" htmlFor="food-ingredients">
+              Ingredients (optional)
+            </label>
+            <textarea
+              id="food-ingredients"
+              className="t-input"
+              rows={3}
+              value={ingredients}
+              onChange={(event) => setIngredients(event.target.value)}
+            />
+            <p className="mt-1 text-xs text-muted">As printed on the package.</p>
+          </div>
           {asksSection && (
             <div className="mt-3">
               <label className="t-label" htmlFor="food-section">

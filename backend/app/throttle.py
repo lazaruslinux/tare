@@ -27,6 +27,10 @@ TOO_MANY = "Too many attempts just now. Wait a few minutes and try again."
 # reads as a wait of a few minutes that never ends.
 TOO_MANY_UPLOADS = "Too many uploads. Try again in an hour."
 
+# And the scanner, which says what was being done: somebody standing at a shelf
+# reads "attempts" as if they had got something wrong.
+TOO_MANY_SCANS = "Too many scans just now. Wait a few minutes and try again."
+
 # Sweep only once the table is larger than any real audience, so an ordinary
 # instance never pays for the sweep at all.
 _SWEEP_THRESHOLD = 2048
@@ -128,6 +132,10 @@ ingest_limiter = RateLimiter(60, 60, "ingest")
 # it is what stops one signed-in member asking this server to parse a large
 # file over and over.
 upload_limiter = RateLimiter(5, 3600, "upload")
+# Resolving a scanned barcode. Counted per account, because this is the one
+# route that may go out to somebody else's server, and thirty in ten minutes is
+# a full shopping trip and nowhere near a scripted walk of the code space.
+barcode_limiter = RateLimiter(30, 600, "barcode")
 # Minting a sync key. Tight because each call replaces the standing key, and a
 # member who has just replaced theirs has no reason to do it again this minute.
 ingest_token_limiter = RateLimiter(5, 60, "ingest-token")

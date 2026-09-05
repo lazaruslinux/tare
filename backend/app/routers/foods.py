@@ -798,22 +798,35 @@ def search_foods(
 
     literal = like_literal(needle)
     name = func.lower(models.Food.name)
-    # Where the word sits in the name, which is the whole of the ranking: the
-    # food called "Chicken breast" is what somebody typing "chicken" meant,
-    # ahead of "Roast chicken", ahead of anything merely containing the
-    # letters. Ties go to the shorter name, which is the plainer food.
+    brand = func.lower(models.Food.brand)
+    # Where the word sits, which is the whole of the ranking: the food called
+    # "Chicken breast" is what somebody typing "chicken" meant, ahead of "Roast
+    # chicken", ahead of a brand of that name, ahead of anything merely
+    # containing the letters. Ties go to the shorter name, then the brand,
+    # which is what tells twenty rows called Butter apart.
     rank = case(
         (name.like(f"{literal}%", escape="\\"), 0),
         (name.like(f"% {literal}%", escape="\\"), 1),
-        else_=2,
+        (brand.like(f"{literal}%", escape="\\"), 2),
+        (brand.like(f"% {literal}%", escape="\\"), 3),
+        else_=4,
     )
+    # Every word has to be somewhere, in the name or in the brand, so
+    # "kerrygold butter" finds the one row that is both.
+    words = [
+        or_(
+            name.like(f"%{like_literal(word)}%", escape="\\"),
+            brand.like(f"%{like_literal(word)}%", escape="\\"),
+        )
+        for word in needle.split()
+    ]
     query = (
         visible(user)
         .where(
             models.Food.status.in_(("approved", "custom", "pending")),
-            name.like(f"%{literal}%", escape="\\"),
+            *words,
         )
-        .order_by(rank, func.length(models.Food.name), models.Food.id)
+        .order_by(rank, func.length(models.Food.name), models.Food.brand, models.Food.id)
         .limit(SEARCH_LIMIT)
     )
     return food_rows(db, user, list(db.execute(query).scalars()))

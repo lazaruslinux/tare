@@ -345,6 +345,31 @@ def test_search_breaks_a_tie_on_the_shorter_name(client, signed_in):
     assert [row["name"] for row in found][0] == "Milk"
 
 
+def test_search_matches_the_brand_as_well_as_the_name(client, signed_in):
+    create(client, name="Butter", brand="Kerrygold")
+    create(client, name="Butter", brand="Land O Lakes")
+    found = client.get("/api/foods/search", params={"q": "kerrygold"}).json()
+    assert [(row["name"], row["brand"]) for row in found] == [("Butter", "Kerrygold")]
+
+
+def test_search_wants_every_word_in_the_name_or_the_brand(client, signed_in):
+    create(client, name="Butter", brand="Kerrygold")
+    create(client, name="Butter", brand="Land O Lakes")
+    create(client, name="Cheese", brand="Kerrygold")
+    found = client.get("/api/foods/search", params={"q": "kerrygold butter"}).json()
+    assert [(row["name"], row["brand"]) for row in found] == [("Butter", "Kerrygold")]
+
+
+def test_every_butter_comes_back_with_the_names_first(client, signed_in):
+    # Twenty rows called Butter is the right answer; the brand is what tells
+    # them apart, and a name is still what somebody typed the word for.
+    create(client, name="Shortbread", brand="Butterfingers")
+    create(client, name="Peanut butter", brand="Jif")
+    create(client, name="Butter", brand="Kerrygold")
+    found = client.get("/api/foods/search", params={"q": "butter"}).json()
+    assert [row["name"] for row in found] == ["Butter", "Peanut butter", "Shortbread"]
+
+
 def test_search_wants_two_characters(client, signed_in):
     create(client, name="Chicken breast")
     assert client.get("/api/foods/search", params={"q": "c"}).json() == []

@@ -344,7 +344,19 @@ export function FoodDetail({
             </p>
           )}
 
-          <NutritionLabel food={food} />
+          <NutritionLabel food={food}>
+            {/* What is in it, as the package prints it. A food in the shared
+                database says so even when nobody has typed it yet; a private
+                one of your own does not ask you for it. */}
+            {(food.ingredients_text !== '' || shared) && (
+              <div className="mt-3">
+                <p className="t-micro mb-1">Ingredients</p>
+                <p className="text-sm whitespace-pre-line">
+                  {food.ingredients_text || 'No ingredients listed.'}
+                </p>
+              </div>
+            )}
+          </NutritionLabel>
 
           {/* One row across the whole card rather than the capped one every
               other screen uses: these belong to the panel above them. Two to a

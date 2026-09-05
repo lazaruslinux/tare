@@ -27,7 +27,7 @@ from fastapi import APIRouter, Depends, HTTPException, status
 from sqlalchemy import select, update
 from sqlalchemy.orm import Session, aliased
 
-from app import models, schemas
+from app import caps, models, schemas
 from app.db import get_db
 from app.deps import require_user
 from app.models import now_utc
@@ -220,6 +220,7 @@ def submit_new_food(
     user: models.User = Depends(require_user),
 ) -> dict[str, object]:
     """A food nobody has entered yet, offered from a scan or typed in whole."""
+    caps.check_submissions(db, user)
     code = (body.barcode or "").strip()
     if code and not BARCODE_PATTERN.match(code):
         raise HTTPException(status.HTTP_400_BAD_REQUEST, BAD_BARCODE)
@@ -289,6 +290,7 @@ def submit_own_food(
     food's own page, and it rides along when the food is offered. So either
     that or one sent with this counts.
     """
+    caps.check_submissions(db, user)
     food = readable_food(db, user, food_id)
     if food.owner_id != user.id or food.status != "custom":
         raise HTTPException(status.HTTP_403_FORBIDDEN, NOT_YOURS_TO_OFFER)
@@ -336,6 +338,7 @@ def suggest_edit(
     """
     if not user.is_admin:
         raise HTTPException(status.HTTP_403_FORBIDDEN, MEMBER_MAY_NOT_EDIT)
+    caps.check_submissions(db, user)
     target = shared_food(db, body.target_food_id)
     if open_request(db, user, target.id, "edit") is not None:
         raise HTTPException(status.HTTP_409_CONFLICT, ALREADY_EDITING)
@@ -376,6 +379,7 @@ def suggest_photo(
     user: models.User = Depends(require_user),
 ) -> dict[str, object]:
     """A picture of the label for a food that is shared without one."""
+    caps.check_submissions(db, user)
     target = shared_food(db, body.target_food_id)
     if open_request(db, user, target.id, "photo") is not None:
         raise HTTPException(status.HTTP_409_CONFLICT, ALREADY_PICTURING)
@@ -407,6 +411,7 @@ def report_food(
     a reviewer with a sentence attached, and what comes of it is theirs to
     decide: they fix the row, or they say why they have not.
     """
+    caps.check_submissions(db, user)
     target = shared_food(db, body.target_food_id)
     issue = body.note.strip()
     if not issue:

@@ -11,7 +11,7 @@ import os
 
 from PIL import Image
 
-from app import models, photos
+from app import caps, models, photos
 from app.models import now_utc
 from app.routers import photos as photos_router
 from tests.conftest import PASSWORD
@@ -350,3 +350,23 @@ def test_the_panel_a_shared_food_keeps_is_never_swept_up(client, db_session, sig
     upload(client)
 
     assert db_session.get(models.FoodPhoto, kept_id) is not None
+
+
+def test_a_member_may_only_upload_so_many_pictures_in_one_day(client, db_session, signed_in):
+    assert caps.DAILY_PHOTOS == 40
+    for _ in range(caps.DAILY_PHOTOS - 1):
+        db_session.add(
+            models.FoodPhoto(
+                uploaded_by_id=signed_in.id,
+                path="already.webp",
+                status="pending",
+                purpose="front",
+                created_at=now_utc(),
+            )
+        )
+    db_session.commit()
+    assert upload(client).status_code == 201
+
+    refused = upload(client)
+    assert refused.status_code == 429
+    assert refused.json()["detail"] == caps.TOO_MANY_PHOTOS

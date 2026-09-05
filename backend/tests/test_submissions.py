@@ -13,7 +13,8 @@ import os
 import httpx
 from PIL import Image
 
-from app import foods_api, models, photos
+from app import caps, foods_api, models, photos
+from app.models import now_utc
 from tests.conftest import PASSWORD
 
 CODE = "034000002405"
@@ -739,3 +740,33 @@ def test_a_food_kept_privately_names_nobody(client, signed_in):
     )
     assert made.status_code == 201
     assert client.get(f"/api/foods/{made.json()['id']}").json()["submitted_by"] is None
+
+
+def fill_day(db, user, count):
+    """A day's worth of requests already sent, without sending them.
+
+    The cap counts rows, so rows are what a case about the cap needs; offering
+    twenty-five foods through the front door would be a test about photographs.
+    """
+    for _ in range(count):
+        db.add(
+            models.FoodSubmission(
+                kind="report", status="pending", submitted_by_id=user.id, created_at=now_utc()
+            )
+        )
+    db.commit()
+
+
+def test_a_member_may_only_offer_so_much_in_one_day(client, db_session, signed_in):
+    assert caps.DAILY_SUBMISSIONS == 25
+    fill_day(db_session, signed_in, caps.DAILY_SUBMISSIONS - 1)
+    assert offer(client).status_code == 201
+
+    refused = offer(client, barcode="034000002412")
+    assert refused.status_code == 429
+    assert refused.json()["detail"] == caps.TOO_MANY_SUBMISSIONS
+
+
+def test_the_day_cap_does_not_count_an_administrator(db_session, admin, admin_client):
+    fill_day(db_session, admin, caps.DAILY_SUBMISSIONS)
+    assert offer(admin_client).status_code == 201

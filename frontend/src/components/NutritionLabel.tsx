@@ -1,8 +1,8 @@
 import { ChevronDown } from 'lucide-react'
-import { useState } from 'react'
+import { useState, type ReactNode } from 'react'
 
 import type { Food, Headline, Panel } from '../api'
-import { UNIT_LABEL, round1, scale } from '../lib/units'
+import { UNIT_LABEL, amountText, scale } from '../lib/units'
 
 // The panel, as it is stored and as it reads. The form fills in the same list,
 // so the two can only ever ask for and show the same eleven numbers in the
@@ -61,11 +61,11 @@ export const LABEL_ORDER: (Fact & { sub?: boolean })[] = [
 // cell reads as a number that failed to load.
 const NOTHING = '-'
 
-// A nutrient as it reads anywhere: a whole number for calories, because a tenth
-// of one is noise, and a tenth for everything else.
-export function nutrientText(key: Nutrient, value: number | null): string {
+// A nutrient as it reads anywhere: a whole number. A tenth of a gram is noise
+// on a plate, and a column of them is harder to read than the answer.
+export function nutrientText(_key: Nutrient, value: number | null): string {
   if (value === null) return NOTHING
-  return String(key === 'calories' ? Math.round(value) : round1(value))
+  return String(Math.round(value))
 }
 
 // The sugar tile says how much of it was put in, when that is known. A food
@@ -84,10 +84,16 @@ export function PanelFacts({
   // Where the screen above puts the note instead. The food page reads it on the
   // chips line once there is room, so its copy here is the narrow one.
   noteClass = '',
+  // What the fold is called, and anything that belongs between the figures and
+  // it. A food puts its ingredients there; a recipe and a meal have none.
+  moreLabel = 'More',
+  children,
 }: {
   values: Panel
   note: string
   noteClass?: string
+  moreLabel?: string
+  children?: ReactNode
 }) {
   const [more, setMore] = useState(false)
 
@@ -109,13 +115,15 @@ export function PanelFacts({
 
       <p className={`mt-2 text-xs text-muted ${noteClass}`}>{note}</p>
 
+      {children}
+
       <button
         type="button"
         className="t-micro mt-2 flex items-center gap-1"
         aria-expanded={more}
         onClick={() => setMore(!more)}
       >
-        More
+        {moreLabel}
         <ChevronDown className={`h-3.5 w-3.5 ${more ? 'rotate-180' : ''}`} strokeWidth={2.5} />
       </button>
 
@@ -144,7 +152,7 @@ function panelAt(food: Food, baseAmount: number): Panel {
   return values
 }
 
-export function NutritionLabel({ food }: { food: Food }) {
+export function NutritionLabel({ food, children }: { food: Food; children?: ReactNode }) {
   const serving = food.servings[0]
   // One reading, and it is the serving. A food kept without a serving of its
   // own is read per the 100 it is stored in, said in the same words: what the
@@ -153,7 +161,7 @@ export function NutritionLabel({ food }: { food: Food }) {
 
   // Beside the chip, so the two read as one line: Per serving, 100 g.
   const size = serving
-    ? `${serving.name}, ${serving.amount} ${UNIT_LABEL[serving.unit]}`
+    ? `${serving.name}, ${amountText(serving.amount, serving.unit)} ${UNIT_LABEL[serving.unit]}`
     : `100 ${food.base_unit}`
 
   return (
@@ -169,7 +177,10 @@ export function NutritionLabel({ food }: { food: Food }) {
         values={panelAt(food, baseAmount)}
         note={size}
         noteClass="min-[640px]:hidden"
-      />
+        moreLabel="Ingredients and nutrition label"
+      >
+        {children}
+      </PanelFacts>
     </div>
   )
 }

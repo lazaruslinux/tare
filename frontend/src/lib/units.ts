@@ -101,6 +101,42 @@ export const toPer100 = (value: number | null, baseAmount: number): number | nul
 
 export const round1 = (value: number): number => Math.round(value * 10) / 10
 
+// The fractions a kitchen says out loud, in the glyphs a label prints them as.
+const FRACTIONS: { value: number; glyph: string }[] = [
+  { value: 1 / 4, glyph: '¼' },
+  { value: 1 / 3, glyph: '⅓' },
+  { value: 1 / 2, glyph: '½' },
+  { value: 2 / 3, glyph: '⅔' },
+  { value: 3 / 4, glyph: '¾' },
+]
+
+// How near one of them an amount has to be to be called it. Tight, because a
+// third is only 0.03 away from 28.3 g, and a weighed 28.3 g is 28 g.
+const NEAR = 0.02
+
+// The units a scale or a jug reads in whole numbers: nobody says a third of a
+// gram, and 37.5 g on a scale is 38 g when said aloud.
+const WHOLE_UNITS = new Set(['g', 'kg', 'ml', 'l'])
+
+// How much of something reads anywhere in the food area: never a decimal. A
+// whole number is itself, something a person would call a half is a half, and
+// anything else is the whole number nearest it, which is what a scale would
+// have said anyway. Weights and volumes in metric never take a fraction.
+export function amountText(amount: number, unit?: string): string {
+  if (unit !== undefined && WHOLE_UNITS.has(unit)) return String(Math.max(1, Math.round(amount)))
+  const whole = Math.floor(amount)
+  const part = amount - whole
+  const nearest = FRACTIONS.reduce((best, row) =>
+    Math.abs(part - row.value) < Math.abs(part - best.value) ? row : best
+  )
+  // The second case is a portion smaller than half of anything: it rounds to
+  // zero, and none of it is not what somebody ate.
+  if (Math.abs(part - nearest.value) <= NEAR || (amount > 0 && Math.round(amount) === 0)) {
+    return `${whole === 0 ? '' : whole}${nearest.glyph}`
+  }
+  return String(Math.round(amount))
+}
+
 // How a logged portion reads back: the words somebody chose to measure with,
 // not the base amount it came to. A quick add has no portion at all.
 export function portionText(portion: {
@@ -110,14 +146,18 @@ export function portionText(portion: {
 }): string {
   const { amount, unit, serving_label: label } = portion
   if (amount === null || unit === null) return ''
-  if (label !== null) return amount === 1 ? label : `${round1(amount)} × ${label}`
-  return `${round1(amount)} ${UNIT_LABEL[unit as Unit] ?? unit}`
+  if (label !== null) return amount === 1 ? label : `${amountText(amount)} × ${label}`
+  return `${amountText(amount, unit)} ${UNIT_LABEL[unit as Unit] ?? unit}`
 }
 
 // How a recipe entry reads back. It is counted in servings of itself, which is
 // the one portion that is not measured in anything.
-export const servingsText = (amount: number): string =>
-  `${round1(amount)} ${amount === 1 ? 'serving' : 'servings'}`
+export function servingsText(amount: number): string {
+  // The word follows the number as it is printed, so a portion that reads as
+  // one never reads as "1 servings".
+  const said = amountText(amount)
+  return `${said} ${said === '1' ? 'serving' : 'servings'}`
+}
 
 // ---- The body's own measurements, which are not a food's.
 //
