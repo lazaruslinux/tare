@@ -28,18 +28,21 @@ function dayText(iso: string, todayIso: string): string {
 
 const JOURNAL_DONE = 'Journal complete'
 
-// Line one of a row is inline text, so a narrow column wraps it like a
-// sentence instead of clipping the distance and the time, which are the point
-// of the line. Each item is one unbreakable piece (the glyph with its first
-// words, a distance, a time), so a wrap only ever falls between items.
+// Every row has the same skeleton: the kind's icon at the left, then the
+// member's name, a colon and the fact as one line of inline text, then the
+// stamp. Inline, so a narrow column wraps the line like a sentence instead of
+// clipping the distance and the time; each item is one unbreakable piece (the
+// check with the activity, a distance, a time), so a wrap only ever falls
+// between items.
 
 // The member's name, which is the one thing on a row that opens something.
+// Weight and the accent colour make it the anchor every row starts from.
 function Name({ row, onOpenMember }: { row: FeedRow; onOpenMember: () => void }) {
   return (
     <span
       role="button"
       tabIndex={0}
-      className="underline decoration-line underline-offset-2"
+      className="font-medium text-accent"
       onClick={(event) => {
         event.stopPropagation()
         onOpenMember()
@@ -70,16 +73,15 @@ function JournalRow({
 }) {
   return (
     <div className="t-row">
-      <span className="min-w-0 flex-1">
-        <span className="block text-sm">
-          <Name row={row} onOpenMember={onOpenMember} />:{' '}
-          <span className="whitespace-nowrap">
-            <BookCheck className="inline h-4 w-4 align-[-3px] text-accent" strokeWidth={2} aria-hidden="true" />{' '}
-            {JOURNAL_DONE}
+      <span className="flex min-w-0 flex-1 items-center gap-2">
+        <BookCheck className="h-4 w-4 shrink-0 text-accent" strokeWidth={2} aria-hidden="true" />
+        <span className="min-w-0 flex-1">
+          <span className="block text-sm">
+            <Name row={row} onOpenMember={onOpenMember} />: {JOURNAL_DONE}
           </span>
-        </span>
-        <span className="block text-xs text-muted">
-          {dayText(row.date, todayIso)} {clockText(row.at, me.timezone)}
+          <span className="block text-xs text-muted">
+            {dayText(row.date, todayIso)} {clockText(row.at, me.timezone)}
+          </span>
         </span>
       </span>
       {row.hidden === true && <span className="t-chip shrink-0">Only you</span>}
@@ -102,18 +104,16 @@ function WeightRow({
 }) {
   return (
     <div className="t-row">
-      <span className="min-w-0 flex-1">
-        <span className="block text-sm">
-          <Name row={row} onOpenMember={onOpenMember} />:{' '}
-          <span className="whitespace-nowrap">
-            <ArrowDown className="inline h-4 w-4 align-[-3px] text-orange" strokeWidth={2} aria-hidden="true" />{' '}
-            {weightCompact(row.lost_kg, me.units)}
+      <span className="flex min-w-0 flex-1 items-center gap-2">
+        <ArrowDown className="h-4 w-4 shrink-0 text-orange" strokeWidth={2} aria-hidden="true" />
+        <span className="min-w-0 flex-1">
+          <span className="block text-sm">
+            <Name row={row} onOpenMember={onOpenMember} />: {weightCompact(row.lost_kg, me.units)}{' '}
+            <span className="whitespace-nowrap">since last weigh-in</span>
           </span>
-          {' '}
-          <span className="whitespace-nowrap">since last weigh-in</span>
-        </span>
-        <span className="block text-xs text-muted">
-          {dayText(row.date, todayIso)} {clockText(row.at, me.timezone)}
+          <span className="block text-xs text-muted">
+            {dayText(row.date, todayIso)} {clockText(row.at, me.timezone)}
+          </span>
         </span>
       </span>
       {row.hidden === true && <span className="t-chip shrink-0">Only you</span>}
