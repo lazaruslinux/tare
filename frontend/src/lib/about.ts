@@ -19,12 +19,15 @@ export const WHAT_TARE_DOES: [string, string][] = [
     'Daily calorie budget',
     'Built for you from your details, your activity level and your goal, or typed in yourself.',
   ],
-  ['Journal', 'Food, exercise and biometrics, one day at a time.'],
+  ['Journal', 'Log what you eat, what you did and what you weigh, then mark the day complete.'],
   ['Dashboard', 'This week at a glance, and trends over months.'],
   [
     'Fitness',
     'Sync your phone to get insights + steps and workout calories added to your journal.',
   ],
-  ['Community', 'Workouts, finished journals and weight lost, as members choose to share them.'],
+  [
+    'Community Feed',
+    'Workouts, finished journals and weight lost, as members choose to share them.',
+  ],
   ['Recipes & Meals', 'Combine multiple food items into recipes for faster journal entries.'],
 ]
