@@ -1,7 +1,5 @@
 import { AnimatePresence, motion, useReducedMotion } from 'framer-motion'
-import { useEffect } from 'react'
-
-import { Sheet } from './Sheet'
+import { useEffect, useState } from 'react'
 
 // The width the rail shows instead of the bar. A popover only makes sense
 // where there is a rail button to hang it off.
@@ -57,21 +55,51 @@ export function PlusSheet({
     { label: 'Manual exercise', onPick: onExercise },
   ]
   const popover = anchor !== null && window.matchMedia(WIDE).matches
+  // How tall the tab bar stands, read when the sheet opens: the sheet rises
+  // from behind it and stops at its top edge, so the bar stays in view.
+  const [barHeight, setBarHeight] = useState(0)
 
   useEffect(() => {
-    if (!open || !popover) return
+    if (!open) return
+    setBarHeight(document.querySelector('.t-tabbar')?.getBoundingClientRect().height ?? 0)
     const onKey = (event: KeyboardEvent) => {
       if (event.key === 'Escape') onClose()
     }
     window.addEventListener('keydown', onKey)
     return () => window.removeEventListener('keydown', onKey)
-  }, [open, popover, onClose])
+  }, [open, onClose])
 
   if (!popover) {
+    // Drawn here rather than with Sheet: this one sits under the bar (z below
+    // the bar's own), ends where the bar begins, and leaves room at the bottom
+    // for the raised centre button that overhangs the bar.
     return (
-      <Sheet open={open} label="Add" onClose={onClose}>
-        <Items rows={rows} />
-      </Sheet>
+      <AnimatePresence>
+        {open && (
+          <motion.div
+            className="fixed inset-x-0 top-0 z-20 flex items-end justify-center bg-black/50"
+            style={{ bottom: barHeight }}
+            initial={{ opacity: 0 }}
+            animate={{ opacity: 1 }}
+            exit={{ opacity: 0 }}
+            transition={{ duration: 0.18 }}
+            onClick={onClose}
+          >
+            <motion.div
+              role="dialog"
+              aria-label="Add"
+              className="w-full max-w-md overflow-y-auto rounded-t-2xl border-t border-line bg-surface px-4 pt-4 pb-8 max-h-[86svh]"
+              initial={{ y: reduced ? 0 : 24, opacity: 0 }}
+              animate={{ y: 0, opacity: 1 }}
+              exit={{ y: reduced ? 0 : 24, opacity: 0 }}
+              transition={{ duration: 0.18 }}
+              onClick={(event) => event.stopPropagation()}
+            >
+              <Items rows={rows} />
+            </motion.div>
+          </motion.div>
+        )}
+      </AnimatePresence>
     )
   }
 

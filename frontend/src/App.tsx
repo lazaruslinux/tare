@@ -175,9 +175,11 @@ export default function App() {
     select(target)
   }
 
+  // The bar's centre button stays in reach while its sheet is up, so a second
+  // tap closes what the first opened.
   const openAdd = (from: DOMRect | null) => {
     setAnchor(from)
-    setAdding(true)
+    setAdding((was) => !was)
   }
 
   const enterFirstRun = async () => {
@@ -351,7 +353,10 @@ export default function App() {
             <TabBar
               active={page}
               waiting={waiting}
-              onSelect={select}
+              onSelect={(tab) => {
+                setAdding(false)
+                select(tab)
+              }}
               onPlus={() => openAdd(null)}
             />
           </div>
