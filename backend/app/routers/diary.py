@@ -67,7 +67,7 @@ SERVING_PREFIX = "serving:"
 
 # How many days a run of them may ask for, and how many it asks for by default.
 DEFAULT_HISTORY = 7
-MAX_HISTORY = 90
+MAX_HISTORY = 180
 
 # What a quick add carries, and the only fields an unlinked entry may be given
 # by hand. The other six are never typed in.

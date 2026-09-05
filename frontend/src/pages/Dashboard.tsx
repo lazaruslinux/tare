@@ -7,6 +7,7 @@ import {
   type DayRow,
   type DiaryDay,
   type DiaryDays,
+  type FitnessHistory,
   type FitnessSummary,
   type Me,
   type Measurement,
@@ -15,7 +16,7 @@ import {
   type Targets,
   type TrendPoint,
 } from '../api'
-import { barsAverage, DayBars, type Bar } from '../components/DayBars'
+import { barsAverage, DayBars, weekly, type Bar } from '../components/DayBars'
 import { ExerciseSheet } from '../components/ExerciseSheet'
 import { FoodPicker } from '../components/FoodPicker'
 import { MeasurementsSheet } from '../components/MeasurementsSheet'
@@ -28,32 +29,40 @@ import { dayLabel, shiftDay, slotByTime, today, weekday } from '../lib/day'
 import { calText, dateText } from '../lib/targets'
 import { round1, weightIn, weightText, weightUnit } from '../lib/units'
 
-// How far back the weight line reaches, and how long a deleted reading can be
-// brought back.
-const SPARK_DAYS = 30
+// How far back the newest of each measured number is looked for, and how long
+// a deleted reading can be brought back.
 const HISTORY_DAYS = 90
 const UNDO = 6000
 
-// How many days of eating the card shows and the Progress screen shows. Both
-// come from the one request, because a month of days is a few hundred bytes.
+// The week, and how many days the Progress screen shows. Both come from the
+// one request, because a month of days is a few hundred bytes.
 const WEEK = 7
 const RUN_DAYS = 28
 
-// The windows the Progress screen offers for the weight line, and where the
-// chosen one is remembered.
-const WINDOWS = [
+// The four spans one switch reads every card over, what each is called, and
+// how a change of weight across it is said. The chosen one is remembered on
+// the device: somebody who reads their half year reads it again.
+const SPANS = [
+  { days: WEEK, label: 'Week', over: 'this week' },
   { days: 30, label: '30 days', over: 'over 30 days' },
-  { days: 90, label: '90 days', over: 'over 90 days' },
-  { days: 365, label: '1 year', over: 'over 1 year' },
+  { days: 90, label: '3 months', over: 'over 3 months' },
+  { days: 180, label: '6 months', over: 'over 6 months' },
 ]
-const WINDOW_KEY = 'tare.progress.window'
+const SPAN_KEY = 'tare.dashboard.span'
 
-function rememberedWindow(): number {
+// Past this many columns a run is drawn a bar a week rather than a bar a day:
+// thirty still land on a phone, three months of them do not.
+const DAILY_MAX = 30
+
+// How many weekly bars can carry their number over them on a wide card.
+const MAX_LABELS = 14
+
+function rememberedSpan(): number {
   try {
-    const kept = Number(window.localStorage.getItem(WINDOW_KEY))
-    return WINDOWS.some((row) => row.days === kept) ? kept : WINDOWS[0].days
+    const kept = Number(window.localStorage.getItem(SPAN_KEY))
+    return SPANS.some((row) => row.days === kept) ? kept : WEEK
   } catch {
-    return WINDOWS[0].days
+    return WEEK
   }
 }
 
@@ -466,10 +475,12 @@ export function Dashboard({
   // What a phone sent for today. Null until it answers, and the strip it draws
   // appears only once a device is connected.
   const [fitness, setFitness] = useState<FitnessSummary | null>(null)
-  // The weight line for whichever window the Progress screen is on, which is
-  // its own request: a trend over a year is not a trend over a month cut short.
-  const [span, setSpan] = useState(rememberedWindow)
+  // The span every card is read over, and the weight line for it, which is its
+  // own request: a trend over six months is not a trend over a month cut short.
+  const [span, setSpan] = useState(rememberedSpan)
   const [windowed, setWindowed] = useState<Measurements | null>(null)
+  // Steps over a longer span. The week's own come with the summary.
+  const [stepRun, setStepRun] = useState<FitnessHistory | null>(null)
   const [error, setError] = useState('')
   const [again, setAgain] = useState(0)
   const [screen, setScreen] = useState<DashScreen>(null)
@@ -521,9 +532,6 @@ export function Dashboard({
     api<Measurements>(`/health/measurements?days=${HISTORY_DAYS}`)
       .then((loaded) => alive && setHistory(loaded))
       .catch(() => undefined)
-    api<DiaryDays>(`/diary/days?days=${RUN_DAYS}`)
-      .then((loaded) => alive && setRun(loaded.days))
-      .catch(() => undefined)
     api<Targets>('/health/targets')
       .then((loaded) => alive && setTargets(loaded))
       .catch(() => undefined)
@@ -535,17 +543,32 @@ export function Dashboard({
     }
   }, [me.timezone, todayIso, refresh, again])
 
-  // Only while that screen is open, and again whenever the window changes.
+  // One request a span, for every card that reads a run of days. The Progress
+  // screen's own twenty-eight days are the tail of the same answer.
   useEffect(() => {
-    if (screen !== 'progress') return
     let alive = true
+    api<DiaryDays>(`/diary/days?days=${Math.max(RUN_DAYS, span)}`)
+      .then((loaded) => alive && setRun(loaded.days))
+      .catch(() => undefined)
     api<Measurements>(`/health/measurements?days=${span}`)
       .then((loaded) => alive && setWindowed(loaded))
       .catch(() => undefined)
     return () => {
       alive = false
     }
-  }, [screen, span, refresh, again])
+  }, [todayIso, span, refresh, again])
+
+  // Only past the week, which the summary already carries.
+  useEffect(() => {
+    if (span === WEEK) return
+    let alive = true
+    api<FitnessHistory>(`/fitness/daily?metric=steps&days=${span}`)
+      .then((loaded) => alive && setStepRun(loaded))
+      .catch(() => undefined)
+    return () => {
+      alive = false
+    }
+  }, [todayIso, span, refresh, again])
 
   const erase = (row: Measurement) => {
     pendingRef.current = null
@@ -570,13 +593,12 @@ export function Dashboard({
     []
   )
 
-  // Remembered per device: somebody who reads their year does it again.
-  const pickWindow = (days: number) => {
+  const pickSpan = (days: number) => {
     setSpan(days)
     try {
-      window.localStorage.setItem(WINDOW_KEY, String(days))
+      window.localStorage.setItem(SPAN_KEY, String(days))
     } catch {
-      // A browser that refuses storage still gets the window it picked.
+      // A browser that refuses storage still gets the span it picked.
     }
   }
 
@@ -624,8 +646,11 @@ export function Dashboard({
       stamps.bone_pct,
       stamps.visceral_fat,
     ].some((one) => one !== null)
-  const trend = (history?.trend ?? []).slice(-SPARK_DAYS)
-  const spots = rows.filter((row) => trend.some((point) => point.date === row.date))
+  // The weight over the chosen span, which this card and the Progress screen
+  // both draw, and how a move across it is said.
+  const chosen = SPANS.find((row) => row.days === span) ?? SPANS[0]
+  const line = windowed?.trend ?? []
+  const recorded = windowed?.measurements ?? []
 
   // The month the goal is reached at, said once and shown wherever the weight
   // is. Nothing at all without a goal weight.
@@ -635,40 +660,52 @@ export function Dashboard({
       : ` · Goal ${dateText(targets.projection.date)}`
   // The week somebody is standing in, Monday first, the way a week is read.
   // Sunday closes the week that began six days ago rather than opening one.
+  const isWeek = span === WEEK
   const elapsed = ((weekday(todayIso) + 6) % 7) + 1
   const mondayIso = shiftDay(todayIso, -(elapsed - 1))
-  // The whole frame, Monday to Sunday. The days still to come are drawn as
-  // gaps, so the letters read as the week and not as however far into it the
-  // member is.
-  const weekDates = Array.from({ length: WEEK }, (_, index) => shiftDay(mondayIso, index))
-  const week = run.filter((row) => row.date >= mondayIso)
-  // What today is read against, which is what a day nobody has reached yet is
-  // drawn against as well.
-  const weekBudget = run.length === 0 ? 0 : run[run.length - 1].budget
+  // The days the cards are read over. The week is the whole frame, Monday to
+  // Sunday, with the days still to come drawn as gaps, so the letters read as
+  // the week and not as however far into it the member is. A longer span is a
+  // run of days ending today.
+  const dates = isWeek
+    ? Array.from({ length: WEEK }, (_, index) => shiftDay(mondayIso, index))
+    : Array.from({ length: span }, (_, index) => shiftDay(todayIso, index - span + 1))
+  const inSpan = run.filter((row) => row.date >= dates[0])
+  // Whether the span is drawn a bar a week rather than a bar a day.
+  const weeks = dates.length > DAILY_MAX
+  // What today is read against, which is what a day nobody has reached yet and
+  // a whole week of them are drawn against as well.
+  const budget = run.length === 0 ? 0 : run[run.length - 1].budget
 
-  // The week as one picture: what was eaten against the day's number, and the
-  // line under it. The bars and the sentences above them read the same rows.
-  const intake: Bar[] = weekDates.map((date) => {
-    const row = week.find((one) => one.date === date)
+  // The span as one picture: what was eaten against the day's number, and the
+  // line under it. The bars and the sentences above them read the same rows,
+  // and the counts and the average stay in days however the bars are grouped.
+  const daily: Bar[] = dates.map((date) => {
+    const row = inSpan.find((one) => one.date === date)
     return row === undefined
-      ? { date, value: 0, target: weekBudget, has: false }
+      ? { date, value: 0, target: budget, has: false }
       : { date, value: row.calories, target: row.budget, has: row.logged }
   })
-  const loggedWeek = week.filter((row) => row.logged)
-  const underTarget = loggedWeek.filter((row) => row.calories <= row.budget).length
-  const completedWeek = week.filter((row) => row.completed).length
+  const intake = weeks ? weekly(daily) : daily
+  const logged = inSpan.filter((row) => row.logged)
+  const underTarget = logged.filter((row) => row.calories <= row.budget).length
+  const completedDays = inSpan.filter((row) => row.completed).length
   const intakeFooter =
-    loggedWeek.length === 0
+    logged.length === 0
       ? 'Log a few days to see them here.'
-      : `Average ${calText(barsAverage(intake))} cal a day · budget ${calText(weekBudget)}`
+      : `Average ${calText(barsAverage(daily))} cal a day · budget ${calText(budget)}`
+  // Over the bars on a wide card, where there are few enough of them to read.
+  const labelled = weeks ? intake.length <= MAX_LABELS : isWeek
 
-  // The same week in steps, when a phone is sending them. The goal is the one
+  // The same span in steps, when a phone is sending them. The goal is the one
   // set on Activity goals; the fitness answer carries the same figure and
   // stands in until targets arrive.
   const stepGoal = targets?.step_goal ?? fitness?.goals.steps ?? 0
-  const stepWeek = (fitness?.week ?? []).filter((row) => row.date >= mondayIso)
-  const stepBars: Bar[] = weekDates.map((date) => {
-    const row = stepWeek.find((one) => one.date === date)
+  const sent = isWeek
+    ? (fitness?.week ?? []).map((row) => ({ date: row.date, steps: row.steps }))
+    : (stepRun?.days ?? []).map((row) => ({ date: row.date, steps: row.value }))
+  const stepDaily: Bar[] = dates.map((date) => {
+    const row = sent.find((one) => one.date === date)
     return {
       date,
       value: row?.steps ?? 0,
@@ -676,15 +713,17 @@ export function Dashboard({
       has: row !== undefined && row.steps !== null,
     }
   })
-  const goalMet = stepBars.filter((row) => row.has && row.value >= stepGoal).length
+  const stepBars = weeks ? weekly(stepDaily) : stepDaily
+  const goalMet = stepDaily.filter((row) => row.has && row.value >= stepGoal).length
   const stepsFooter =
-    stepBars.every((row) => !row.has)
+    stepDaily.every((row) => !row.has)
       ? 'Sync a few days to see them here.'
-      : `Average ${calText(barsAverage(stepBars))} steps a day · goal ${calText(stepGoal)}`
+      : `Average ${calText(barsAverage(stepDaily))} steps a day · goal ${calText(stepGoal)}`
+  // The summary counts the week and only the week, so the line is the week's.
   const sessions = fitness?.week_workouts ?? 0
   const sessionsLine =
     sessions === 0 ? 'No workouts' : sessions === 1 ? '1 workout' : `${sessions} workouts`
-  const movedDays = week.filter((row) => row.exercise_kcal > 0).length
+  const movedDays = inSpan.filter((row) => row.exercise_kcal > 0).length
 
   // Today as rings: what was walked, what is left to eat, and what was worked,
   // then the three the day's food is made of. The row is always the same
@@ -792,25 +831,24 @@ export function Dashboard({
   }
 
   if (screen === 'progress') {
-    const line = windowed?.trend ?? []
-    const over = WINDOWS.find((row) => row.days === span)?.over ?? ''
-    // The rows this window holds, and the body fat inside them read oldest
-    // first, which is the order a line is drawn in.
-    const recorded = windowed?.measurements ?? []
+    // The body fat inside the span's rows read oldest first, which is the
+    // order a line is drawn in.
     const fatLine: TrendPoint[] = [...recorded]
       .reverse()
       .filter((row) => row.body_fat_pct !== null)
       .map((row) => ({ date: row.date, kg: row.body_fat_pct as number }))
     const newest = windowed?.latest.weight_kg ?? null
-    const completedRun = run.filter((row) => row.completed).length
-    const runBars: Bar[] = run.map((row) => ({
+    // This screen's own four weeks, whatever span the Dashboard is reading.
+    const recent = run.slice(-RUN_DAYS)
+    const completedRun = recent.filter((row) => row.completed).length
+    const runBars: Bar[] = recent.map((row) => ({
       date: row.date,
       value: row.calories,
       target: row.budget,
       has: row.logged,
     }))
-    const runLogged = run.filter((row) => row.logged)
-    const runBudget = run.length === 0 ? 0 : run[run.length - 1].budget
+    const runLogged = recent.filter((row) => row.logged)
+    const runBudget = recent.length === 0 ? 0 : recent[recent.length - 1].budget
     const runFooter =
       runLogged.length === 0
         ? 'Log a few days to see them here.'
@@ -819,19 +857,6 @@ export function Dashboard({
     return (
       <>
         <div className="t-card mb-3">
-          <div className="mb-2 flex flex-wrap gap-2">
-            {WINDOWS.map((row) => (
-              <button
-                key={row.days}
-                type="button"
-                aria-pressed={span === row.days}
-                className={`t-chip ${span === row.days ? 'border-accent text-accent' : ''}`}
-                onClick={() => pickWindow(row.days)}
-              >
-                {row.label}
-              </button>
-            ))}
-          </div>
           {line.length < 2 ? (
             <p className="text-sm text-muted">Weigh in a few more times to see a trend.</p>
           ) : (
@@ -843,7 +868,7 @@ export function Dashboard({
               </span>
               <span className="block text-xs text-muted">
                 {newest === null ? '' : `${dayLabel(newest.date, todayIso)} · `}
-                {changeText(line, me.units, over)}
+                {changeText(line, me.units, chosen.over)}
                 {goalMonth}
               </span>
               <Spark
@@ -960,27 +985,40 @@ export function Dashboard({
         <Rings rings={rings} />
       </div>
 
-      {/* One heading for the week, over every card that reads it, so the
-          cards themselves do not each say it again. */}
-      <div className="mb-2 mt-1 flex items-baseline justify-between px-1">
-        <span className="text-base font-semibold tracking-tight">This week</span>
-        <span className="t-nums text-xs text-muted">
-          {monthDay(mondayIso)} to {monthDay(weekDates[WEEK - 1])}
+      {/* One switch over every card that reads a run of days, standing where
+          the heading was: the control says what the cards are of, so none of
+          them says it again. The range wraps under it on a phone. */}
+      <div className="mb-2 mt-1 flex flex-wrap items-center gap-2 px-1">
+        {SPANS.map((row) => (
+          <button
+            key={row.days}
+            type="button"
+            aria-pressed={span === row.days}
+            className={`t-chip ${span === row.days ? 'border-accent text-accent' : ''}`}
+            onClick={() => pickSpan(row.days)}
+          >
+            {row.label}
+          </button>
+        ))}
+        <span className="t-nums w-full text-xs text-muted min-[900px]:ml-auto min-[900px]:w-auto">
+          {monthDay(dates[0])} to {monthDay(dates[dates.length - 1])}
         </span>
       </div>
 
       <div className="t-card mb-3">
         <CardHead label="Food" onOpen={onOpenJournal} onAdd={() => setPicking(true)} />
         {day !== null && <p className="t-nums mb-2 text-xs text-muted">{leftToday}</p>}
-        {loggedWeek.length === 0 ? (
-          <p className="text-base font-semibold tracking-tight">Log a day to see your week.</p>
+        {logged.length === 0 ? (
+          <p className="text-base font-semibold tracking-tight">
+            Log a day to see your {chosen.label.toLowerCase()}.
+          </p>
         ) : (
           <p className="text-base font-semibold tracking-tight">
-            Within calorie budget {underTarget} of {WEEK} days
+            Within calorie budget {underTarget} of {dates.length} days
           </p>
         )}
         <p className="mb-3 text-xs text-muted">
-          Completed {completedWeek} of {WEEK} days
+          Completed {completedDays} of {dates.length} days
         </p>
         <DayBars
           bars={intake}
@@ -988,7 +1026,9 @@ export function Dashboard({
           todayIso={todayIso}
           warnOver
           highlightToday
-          label={calText}
+          mondaysOnly={!isWeek && !weeks}
+          weeks={weeks}
+          label={labelled ? calText : undefined}
           titleUnit="cal"
         />
       </div>
@@ -1001,23 +1041,29 @@ export function Dashboard({
         />
         {fitness !== null && fitness.connected ? (
           <>
-            <p className="text-base font-semibold tracking-tight">
-              Step goal met {goalMet} of {WEEK} days
+            <p
+              className={`text-base font-semibold tracking-tight ${isWeek ? '' : 'mb-3'}`}
+            >
+              Step goal met {goalMet} of {dates.length} days
             </p>
-            <p className="mb-3 text-xs text-muted">{sessionsLine}</p>
+            {/* How many sessions the week holds. The summary counts no other
+                span, so no other span says it. */}
+            {isWeek && <p className="mb-3 text-xs text-muted">{sessionsLine}</p>}
             <DayBars
               bars={stepBars}
               footer={stepsFooter}
               todayIso={todayIso}
               highlightToday
-              label={stepsLabel}
+              mondaysOnly={!isWeek && !weeks}
+              weeks={weeks}
+              label={labelled ? stepsLabel : undefined}
               titleUnit="steps"
             />
           </>
         ) : (
           <>
             <p className="text-base font-semibold tracking-tight">
-              Exercise on {movedDays} of {WEEK} days
+              Exercise on {movedDays} of {dates.length} days
             </p>
             <p className="text-xs text-muted">Sync a device to see steps here.</p>
           </>
@@ -1043,18 +1089,18 @@ export function Dashboard({
             {/* The smoothed figure stays off the card: the change and the goal
                 date underneath are read from it, and one number is enough. */}
             <span className="block text-xs text-muted">{dayLabel(latest.date, todayIso)}</span>
-            {trend.length < 2 ? (
+            {line.length < 2 ? (
               <span className="block text-xs text-muted">
                 Weigh in a few more times to see a trend.
               </span>
             ) : (
               <>
                 <span className="block text-xs text-muted">
-                  {changeText(trend, me.units, WINDOWS[0].over)}
+                  {changeText(line, me.units, chosen.over)}
                   {goalMonth}
                 </span>
                 <Spark
-                  points={spots.map((row) => ({ date: row.date, value: row.weight_kg }))}
+                  points={recorded.map((row) => ({ date: row.date, value: row.weight_kg }))}
                   axis
                 />
               </>

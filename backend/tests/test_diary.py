@@ -502,8 +502,10 @@ def test_a_workout_is_credited_against_the_day_it_was_done_on(client, signed_in,
     assert rows[-1]["exercise_kcal"] == 0
 
 
-def test_a_run_of_days_stops_at_ninety(client, signed_in, frozen):
-    assert len(days(client, days=400)["days"]) == 90
+def test_a_run_of_days_stops_at_a_hundred_and_eighty(client, signed_in, frozen):
+    assert len(days(client, days=180)["days"]) == 180
+    assert len(days(client, days=181)["days"]) == 180
+    assert len(days(client, days=400)["days"]) == 180
     assert len(days(client, days=0)["days"]) == 1
     assert len(days(client, days=1)["days"]) == 1
 
