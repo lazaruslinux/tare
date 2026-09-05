@@ -1,6 +1,7 @@
 import { ChevronLeft, ChevronRight, CircleCheck, Plus } from 'lucide-react'
 
 import type { TopBarView } from '../hooks/useTopBar'
+import { RoleMark } from './RoleMark'
 import { TareWordmark } from './TareWordmark'
 
 // The bar every screen is read under. Each top-level tab wears its own: the
@@ -28,7 +29,7 @@ export function TopBar({
   // The wordmark is the way home: Dashboard, top of the page.
   onHome: () => void
 }) {
-  const { kind, title, backLabel, subtitle, atToday, action, mark } = view
+  const { kind, title, backLabel, subtitle, subtitleRole, atToday, action, mark } = view
   // The left slot matches the right one button for button, so the day in the
   // middle stays in the middle however many sit beside it.
   const buttons = (action === null ? 0 : 1) + (mark === null ? 0 : 1)
@@ -59,7 +60,12 @@ export function TopBar({
         {kind === 'title' && (
           <div className="min-w-0">
             <p className="t-topbar-title truncate">{title}</p>
-            {subtitle !== null && <p className="t-topbar-sub truncate">{subtitle}</p>}
+            {subtitle !== null && (
+              <p className="t-topbar-sub truncate">
+                {subtitle}
+                <RoleMark role={subtitleRole} />
+              </p>
+            )}
           </div>
         )}
         {/* Nothing on the left of the day chooser; this keeps the middle in

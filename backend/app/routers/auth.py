@@ -105,9 +105,11 @@ class ResetBody(BaseModel):
     password: str
 
 
-def me_payload(user: models.User) -> dict[str, object]:
+def me_payload(db: Session, user: models.User) -> dict[str, object]:
     """What the client is told about the account it is signed in as. Shared with
     the account router, so the answer cannot drift between the two."""
+    approved = profiles.approved_count(db, user)
+    role = profiles.role_of(user)
     return {
         "id": user.id,
         "username": user.username,
@@ -115,6 +117,16 @@ def me_payload(user: models.User) -> dict[str, object]:
         "email": user.email,
         "email_verified": user.email_verified,
         "is_admin": user.is_admin,
+        # What this account is, in the one word every screen that shows a name
+        # reads. Null for a member, which is most people.
+        "role": role,
+        # How many of their offers the queue has taken, and whether that is
+        # enough for them to ask to review. Both null of meaning for somebody
+        # who already has a role, and the flag says so.
+        "approved_count": approved,
+        "reviewer_eligible": role is None and approved >= profiles.REVIEWER_THRESHOLD,
+        # When they asked, or null. A row on the More list reads it.
+        "reviewer_requested": user.reviewer_requested_at is not None,
         "units": user.units,
         "timezone": user.timezone,
         "clock": user.clock,
@@ -325,7 +337,7 @@ def login(
     token = security.create_session(db, user.id)
     db.commit()
     security.set_session_cookie(response, token)
-    return me_payload(user)
+    return me_payload(db, user)
 
 
 @router.post("/logout", status_code=status.HTTP_204_NO_CONTENT)
@@ -344,8 +356,10 @@ def logout(request: Request, response: Response, db: Session = Depends(get_db)) 
 
 
 @router.get("/me")
-def read_me(user: models.User = Depends(require_user)) -> dict[str, object]:
-    return me_payload(user)
+def read_me(
+    db: Session = Depends(get_db), user: models.User = Depends(require_user)
+) -> dict[str, object]:
+    return me_payload(db, user)
 
 
 @router.post("/verify-email", status_code=status.HTTP_204_NO_CONTENT)
@@ -488,7 +502,7 @@ def reset_password(
     token = security.create_session(db, user.id)
     db.commit()
     security.set_session_cookie(response, token)
-    return me_payload(user)
+    return me_payload(db, user)
 
 
 @router.post("/password", status_code=status.HTTP_204_NO_CONTENT)

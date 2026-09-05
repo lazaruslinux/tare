@@ -27,8 +27,8 @@ from sqlalchemy.orm import Session
 
 from app import clock, health, models
 from app.db import get_db
-from app.deps import require_user
-from app.profiles import avatar_url, submission_counts
+from app.deps import require_user, reviews
+from app.profiles import avatar_url, role_of, submission_counts
 from app.routers.admin import waiting_items
 from app.routers.diary import fill_auto_logs, total
 from app.routers.fitness import day_exercise, kept_back, steps_on, workouts_on
@@ -314,6 +314,8 @@ def read_feed(
         owner = owners.get(each.user_id)
         mine = each.user_id == user.id
         name = "" if owner is None else (owner.display_name or owner.username)
+        # The shield beside the name, the same one every other screen draws.
+        role = None if owner is None else role_of(owner)
         said = "their" if owner is None else pronoun_for(owner, profiles.get(owner.id))
         if of == WEIGHT:
             # How much came off, and nothing either weight was. The reading
@@ -323,6 +325,7 @@ def read_feed(
                 "id": each.id,
                 "user_id": each.user_id,
                 "display_name": name,
+                "role": role,
                 "mine": mine,
                 "date": each.date_for.isoformat(),
                 "at": each.created_at.isoformat(),
@@ -342,6 +345,7 @@ def read_feed(
                 "id": f"{each.user_id}:{each.date.isoformat()}",
                 "user_id": each.user_id,
                 "display_name": name,
+                "role": role,
                 "mine": mine,
                 "date": each.date.isoformat(),
                 "at": each.completed_at.isoformat(),
@@ -358,6 +362,7 @@ def read_feed(
             "id": each.id,
             "user_id": each.user_id,
             "display_name": name,
+            "role": role,
             "mine": mine,
             "activity": each.activity,
             "date": each.date_for.isoformat(),
@@ -416,7 +421,7 @@ def read_today(
         "latest_weight_kg": None if latest is None else latest.weight_kg,
         "latest_weight_date": None if latest is None else latest.date_for.isoformat(),
     }
-    if user.is_admin:
+    if reviews(user):
         figures["waiting"] = len(waiting_items(db))
     return figures
 
@@ -456,6 +461,7 @@ def read_members(
             {
                 "id": member.id,
                 "display_name": member.display_name or member.username,
+                "role": role_of(member),
                 "avatar_url": avatar_url(member),
                 "member_since": member.created_at.strftime("%Y-%m"),
                 **counts[member.id],
@@ -480,6 +486,9 @@ def read_member(
 
     shown: dict[str, object] = {
         "display_name": member.display_name or member.username,
+        # What they do for the group, which is not a private fact: everybody
+        # can see who reviews.
+        "role": role_of(member),
         "member_since": member.created_at.strftime("%Y-%m"),
         "avatar_url": avatar_url(member),
         # What they have given the shared database, shown for everybody. It is

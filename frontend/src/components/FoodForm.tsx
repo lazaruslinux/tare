@@ -171,6 +171,7 @@ export function FoodForm({
   onCancel,
   onOpenFood,
   onConflict,
+  onReload,
 }: {
   food: Food | null
   // Why somebody was sent here, when something else sent them. Said at the top
@@ -213,6 +214,9 @@ export function FoodForm({
   // The barcode was claimed by the Tare database while this was open. The scan
   // is worth resolving again rather than arguing with.
   onConflict?: () => void
+  // Somebody else saved this food while it was open here. Given wherever the
+  // form is editing an existing row, so the refusal has a way out of itself.
+  onReload?: () => void
 }) {
   // The food being changed, or the lookup a scan came back with, or neither.
   const opening = food ?? prefill ?? null
@@ -441,6 +445,9 @@ export function FoodForm({
       ],
       ...stored,
     }
+    // The stamp this form loaded, so a save written against an older copy of
+    // the food is refused rather than applied over whoever saved in between.
+    if (food) body.as_of = food.updated_at
     // Only on a food being entered for the first time. The code is what this
     // row was scanned from, and an edit never moves it.
     if (creating && barcode.trim()) body.barcode = barcode.trim()
@@ -865,6 +872,12 @@ export function FoodForm({
         {conflicted && onConflict && (
           <button type="button" className="t-btn mb-3 w-full" onClick={onConflict}>
             Look it up again
+          </button>
+        )}
+
+        {conflicted && onReload && (
+          <button type="button" className="t-btn mb-3 w-full" onClick={onReload}>
+            Reload
           </button>
         )}
       </form>

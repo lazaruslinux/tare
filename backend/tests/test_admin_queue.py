@@ -103,7 +103,7 @@ def test_the_queue_is_not_for_ordinary_accounts(client, make_user, signed_in):
     ):
         response = call()
         assert response.status_code == 403
-        assert response.json() == {"detail": "This needs an administrator account."}
+        assert response.json() == {"detail": "This needs a reviewer account."}
 
 
 def test_the_queue_needs_a_session(client):
@@ -298,9 +298,16 @@ def test_a_decision_can_only_be_made_once(client, make_user):
     sign_in(client, "reviewer")
     assert client.post(f"/api/admin/queue/{made['submission_id']}/approve", json={}).status_code == 200
 
+    # Whoever taps second is told who got there first rather than left to
+    # wonder why nothing happened.
     again = client.post(f"/api/admin/queue/{made['submission_id']}/approve", json={})
-    assert again.status_code == 400
-    assert again.json() == {"detail": "That submission has already been decided."}
+    assert again.status_code == 409
+    assert again.json() == {"detail": "reviewer already decided this."}
+    # And the same for the other decision, on a request that is already gone.
+    refused = client.post(
+        f"/api/admin/queue/{made['submission_id']}/reject", json={"note": "too late"}
+    )
+    assert refused.status_code == 409
     assert client.get("/api/admin/queue").json() == []
 
 

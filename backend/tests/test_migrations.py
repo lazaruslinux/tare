@@ -117,6 +117,11 @@ def test_upgrade_head_builds_the_identity_schema(tmp_path):
     # And one figure per metric per day, whatever the metric turns out to be.
     assert "uq_fitness_daily_day_metric" in daily_unique
     assert "location" in user_columns
+    # The second role, and the application an administrator answers.
+    assert {"is_reviewer", "reviewer_requested_at"} <= user_columns
+    # What everybody with a role did, and the stamp an edit is written against.
+    assert "review_log" in tables
+    assert "updated_at" in food_columns
     # The facts a member may show other members, each off until it is on, and
     # the clock they read times on.
     assert {

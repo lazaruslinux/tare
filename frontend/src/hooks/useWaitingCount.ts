@@ -1,13 +1,14 @@
 import { useCallback, useEffect, useState } from 'react'
 
 import { api, type Me, type MySubmission, type QueueItem } from '../api'
+import { reviews } from '../lib/roles'
 
 // What the badge counts, read once for the three places that say so: the More
 // tab, the rail's More row, and the row that opens the queue. Everybody counts
-// the answers they have been given and not yet read; an administrator counts
-// the queue as well, because both are things waiting on them. Null is nobody
-// signed in, which the shell holds for the moment before the account has been
-// read.
+// the answers they have been given and not yet read; anybody with a role
+// counts the queue as well, because both are things waiting on them. Null is
+// nobody signed in, which the shell holds for the moment before the account
+// has been read.
 export function useWaitingCount(me: Me | null): {
   waiting: number
   queue: number
@@ -25,7 +26,7 @@ export function useWaitingCount(me: Me | null): {
     const mine = api<MySubmission[]>('/submissions/mine')
       .then((rows) => rows.filter((row) => row.status !== 'pending' && row.seen_at === null).length)
       .catch(() => 0)
-    const reviewing = me.is_admin
+    const reviewing = reviews(me)
       ? api<QueueItem[]>('/admin/queue')
           .then((rows) => rows.length)
           .catch(() => 0)

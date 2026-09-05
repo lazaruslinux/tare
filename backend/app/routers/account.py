@@ -14,6 +14,7 @@ from app.config import settings
 from app.db import get_db
 from app.deps import require_user
 from app.models import now_utc
+from app.review_log import log_review
 from app.routers import fitness
 from app.routers.auth import CLEARED_BIRTHDATE, checked_birthdate, me_payload
 from app.routers.ingest import has_uploads
@@ -136,7 +137,7 @@ def update_account(
             setattr(user, field, bool(getattr(body, field)))
 
     db.commit()
-    return me_payload(user)
+    return me_payload(db, user)
 
 
 # A picture of a person, not a shelf: smaller than a food photo, because the
@@ -190,6 +191,42 @@ def clear_avatar(
     db.commit()
     if was:
         photos.remove(was)
+
+
+# What somebody is told when they ask to review too early, and when they ask
+# having nothing to gain by it. Both plain: neither is a fault.
+NOT_ENOUGH_YET = "Not yet."
+ALREADY_REVIEWING = "You already review."
+
+
+@router.post("/account/apply-reviewer")
+def apply_reviewer(
+    db: Session = Depends(get_db), user: models.User = Depends(require_user)
+) -> dict[str, object]:
+    """Ask to be a reviewer, once enough of your foods have been taken.
+
+    An application and nothing more. Nobody is made a reviewer by asking, and
+    there is no path from here to an administrator at all: the one role this
+    can ever lead to is the second one, and an administrator still grants it.
+    Asking twice is the same as asking once.
+    """
+    if profiles.role_of(user) is not None:
+        raise HTTPException(status.HTTP_400_BAD_REQUEST, ALREADY_REVIEWING)
+    if profiles.approved_count(db, user) < profiles.REVIEWER_THRESHOLD:
+        raise HTTPException(status.HTTP_400_BAD_REQUEST, NOT_ENOUGH_YET)
+
+    if user.reviewer_requested_at is None:
+        user.reviewer_requested_at = now_utc()
+        log_review(
+            db,
+            user,
+            "applied",
+            "user",
+            user.id,
+            user.display_name or user.username,
+        )
+        db.commit()
+    return {"reviewer_requested": True}
 
 
 # Where a phone posts its export. Handed back with a freshly minted key so the

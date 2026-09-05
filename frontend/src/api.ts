@@ -12,6 +12,11 @@ export type Units = 'imperial' | 'metric'
 // are not, and nothing outside the label itself carries them.
 export type Headline = 'calories' | 'protein_g' | 'carbs_g' | 'fat_g'
 
+// What an account is, wherever its name is shown. Null is a member, which is
+// most people. Administrators and reviewers both wear the shield; which of the
+// two it is only ever changes the words beside it.
+export type Role = 'admin' | 'reviewer' | null
+
 export type Me = {
   id: number
   username: string
@@ -19,6 +24,13 @@ export type Me = {
   email: string | null
   email_verified: boolean
   is_admin: boolean
+  role: Role
+  // How many of this account's offers the Tare database took, and whether that
+  // is enough for them to apply to review.
+  approved_count: number
+  reviewer_eligible: boolean
+  // Whether they have applied and nobody has answered yet.
+  reviewer_requested: boolean
   units: Units
   timezone: string
   // Which clock this account reads times on.
@@ -328,6 +340,10 @@ export type Food = FoodRow & {
   submissions: FoodSubmissionRow[]
   // Who offered it to the shared database. Null for a private food.
   submitted_by: string | null
+  submitted_by_role: Role
+  // When the row last moved. Sent back with an edit, so one written against an
+  // older copy is refused rather than applied over somebody else's.
+  updated_at: string
   servings: FoodServing[]
   protein_g: number | null
   carbs_g: number | null
@@ -459,10 +475,31 @@ export type AdminUser = {
   username: string
   display_name: string | null
   is_admin: boolean
+  role: Role
+  // Whether they have applied to review and nobody has answered yet.
+  requested: boolean
   email_verified: boolean
   created_at: string
   submissions: { pending: number; approved: number; rejected: number }
 }
+
+// One line of the record: who did what, to what, and when. The names are
+// copies taken as it happened, so a renamed account or a deleted food still
+// reads the way it read then.
+export type ReviewLogRow = {
+  id: number
+  when: string
+  actor_name: string
+  action: string
+  target_kind: string
+  target_id: number | null
+  target_name: string
+  // Whatever the action is worth saying more about: the reason for a no, the
+  // parts of a panel a correction moved.
+  detail: string[] | string | null
+}
+
+export type ReviewLogPage = { items: ReviewLogRow[]; next_cursor: string | null }
 
 // One thing inside a recipe or a kept meal: which food it was, and how much of
 // it. food_id is null once that food is gone, and the name stays.
@@ -811,6 +848,7 @@ export type FeedWorkout = {
   id: number
   user_id: number
   display_name: string
+  role: Role
   mine: boolean
   // Only ever on your own rows: a workout you kept out of everybody's feed.
   hidden?: boolean
@@ -833,6 +871,7 @@ export type FeedJournal = {
   id: string
   user_id: number
   display_name: string
+  role: Role
   mine: boolean
   hidden?: boolean
   date: string
@@ -847,6 +886,7 @@ export type FeedWeight = {
   id: number
   user_id: number
   display_name: string
+  role: Role
   mine: boolean
   hidden?: boolean
   date: string
@@ -864,6 +904,7 @@ export type FeedPage = { items: FeedRow[]; next_cursor: string | null }
 // rather than null, so there is nothing here to read a withheld answer out of.
 export type MemberView = {
   display_name: string
+  role: Role
   member_since: string
   avatar_url: string | null
   // What they have offered the shared database, and how much of it was taken.
@@ -881,6 +922,7 @@ export type MemberView = {
 export type MemberRow = {
   id: number
   display_name: string
+  role: Role
   avatar_url: string | null
   member_since: string
   submitted: number

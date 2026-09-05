@@ -16,6 +16,28 @@ from sqlalchemy.orm import Session
 from app import models
 
 
+# How many of a member's offers have to have been taken before they may ask to
+# review. One place, because the badge on the row, the check on the way in and
+# the number the account is told all have to mean the same thing.
+REVIEWER_THRESHOLD = 100
+
+
+def role_of(user: models.User) -> str | None:
+    """What this account is, wherever its name is shown to another member.
+
+    None for most people, which is what a member is. An administrator reviews
+    by being one, so the two roles are read off in that order.
+    """
+    if user.is_admin:
+        return "admin"
+    return "reviewer" if user.is_reviewer else None
+
+
+def approved_count(db: Session, user: models.User) -> int:
+    """How many foods this account offered that the queue took."""
+    return submission_counts(db, [user.id])[user.id]["approved"]
+
+
 def avatar_url(user: models.User) -> str | None:
     """Where a member's picture is read from, or null when they have none.
 

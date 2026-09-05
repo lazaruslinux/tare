@@ -1128,7 +1128,10 @@ def test_the_member_list_counts_what_each_person_has_offered(
     assert rows["member"]["submissions"] == {"pending": 0, "approved": 1, "rejected": 1}
     assert rows["stranger"]["submissions"] == {"pending": 0, "approved": 0, "rejected": 0}
     assert rows["reviewer"]["is_admin"] is True
+    assert rows["reviewer"]["role"] == "admin"
     assert rows["member"]["is_admin"] is False
+    assert rows["member"]["role"] is None
+    assert rows["member"]["requested"] is False
     assert rows["member"]["email_verified"] is True
     assert rows["member"]["created_at"] is not None
 
@@ -1138,18 +1141,27 @@ def test_the_member_list_counts_what_each_person_has_offered(
 
 def test_every_administration_route_is_shut_to_an_ordinary_account(client, signed_in):
     calls = (
-        lambda: client.get("/api/admin/queue"),
-        lambda: client.post("/api/admin/queue/1/approve", json={}),
-        lambda: client.post("/api/admin/queue/1/reject", json={"note": "no"}),
         lambda: client.get("/api/admin/invites"),
         lambda: client.post("/api/admin/invites", json={}),
         lambda: client.delete("/api/admin/invites/anything"),
         lambda: client.get("/api/admin/users"),
+        lambda: client.patch("/api/admin/users/1", json={"is_reviewer": True}),
+        lambda: client.get("/api/admin/review-log"),
     )
     for call in calls:
         response = call()
         assert response.status_code == 403
         assert response.json() == {"detail": "This needs an administrator account."}
+
+    # The queue is the reviewer's, and says so in its own words.
+    for call in (
+        lambda: client.get("/api/admin/queue"),
+        lambda: client.post("/api/admin/queue/1/approve", json={}),
+        lambda: client.post("/api/admin/queue/1/reject", json={"note": "no"}),
+    ):
+        response = call()
+        assert response.status_code == 403
+        assert response.json() == {"detail": "This needs a reviewer account."}
 
 
 def test_every_administration_route_needs_a_session(client):

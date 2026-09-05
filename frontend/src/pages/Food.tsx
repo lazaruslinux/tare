@@ -39,6 +39,7 @@ import { PortionSheet } from '../components/PortionSheet'
 import { Sheet } from '../components/Sheet'
 import { useTopBar } from '../hooks/useTopBar'
 import { SLOT_LABEL, slotByTime, today } from '../lib/day'
+import { reviews } from '../lib/roles'
 import { portionText } from '../lib/units'
 import { Browse } from './Browse'
 import { FoodDetail } from './FoodDetail'
@@ -463,7 +464,7 @@ export function FoodTab({
     const editing = view.food
     // A shared food open in front of an administrator. Both its pictures are
     // theirs to replace or take off, which is the review queue's editor exactly.
-    const correcting = me.is_admin && editing !== null && editing.status === 'approved'
+    const correcting = reviews(me) && editing !== null && editing.status === 'approved'
     return (
       <FoodForm
         food={editing}
@@ -492,6 +493,17 @@ export function FoodTab({
               ? { at: 'list' }
               : { at: 'detail', id: editing.id, from: { at: 'list' } }
           )
+        }
+        // Somebody else saved this food while it was open. Read again, and the
+        // form reopens on what it says now.
+        onReload={
+          editing === null
+            ? undefined
+            : () => {
+                void api<FoodItem>(`/foods/${editing.id}`).then((fresh) =>
+                  setView({ at: 'form', food: fresh })
+                )
+              }
         }
       />
     )

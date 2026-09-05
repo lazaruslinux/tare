@@ -18,6 +18,7 @@ import { Verified } from '../components/FoodRows'
 import { Fold, NutritionLabel } from '../components/NutritionLabel'
 import { PortionSheet } from '../components/PortionSheet'
 import { Lightbox } from '../components/Lightbox'
+import { RoleMark } from '../components/RoleMark'
 import { Sheet } from '../components/Sheet'
 import { useTopBar } from '../hooks/useTopBar'
 import {
@@ -30,6 +31,7 @@ import {
   statusLabel,
 } from '../lib/community'
 import { dayLabel, dayOf, slotByTime, today } from '../lib/day'
+import { reviews } from '../lib/roles'
 
 // How long the line saying something was sent stays up.
 const NOTICE = 4000
@@ -341,6 +343,7 @@ export function FoodDetail({
             <p className="mb-3 flex items-center gap-1.5 text-xs text-muted">
               <UserRound className="h-4 w-4 text-muted" strokeWidth={2.25} aria-hidden="true" />
               Submitted by {food.submitted_by}
+              <RoleMark role={food.submitted_by_role} />
             </p>
           )}
 
@@ -407,7 +410,7 @@ export function FoodDetail({
                 {food.kept ? 'In my foods' : 'Add to my foods'}
               </button>
             )}
-            {((food.mine && !shared) || (me.is_admin && shared)) && (
+            {((food.mine && !shared) || (reviews(me) && shared)) && (
               <button
                 className="t-btn flex-1 basis-[calc(50%-0.375rem)] min-[640px]:flex-none min-[640px]:basis-auto"
                 type="button"
@@ -419,7 +422,7 @@ export function FoodDetail({
             )}
             {/* The label picture is served to admins alone; this is where they
                 open it without going through the editor. */}
-            {me.is_admin && food.label_photo_url && (
+            {reviews(me) && food.label_photo_url && (
               <button
                 className="t-btn flex-1 basis-[calc(50%-0.375rem)] min-[640px]:flex-none min-[640px]:basis-auto"
                 type="button"
@@ -431,7 +434,7 @@ export function FoodDetail({
             )}
           </div>
 
-          {shared && !me.is_admin && (
+          {shared && !reviews(me) && (
             <div className="t-card mb-3">
               <p className="t-micro mb-2">Help improve Tare</p>
               <div className="t-actions">

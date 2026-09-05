@@ -17,10 +17,11 @@ from fastapi import APIRouter, Depends, HTTPException, Response, status
 from sqlalchemy import Select, Subquery, and_, case, delete, func, or_, select, update
 from sqlalchemy.orm import InstrumentedAttribute, Session
 
-from app import models, schemas, units
+from app import models, profiles, schemas, units
 from app.db import get_db
-from app.deps import require_user
+from app.deps import require_user, reviews
 from app.models import DEFAULT_SECTION, FOOD_NUTRIENTS, FOOD_SECTIONS
+from app.review_log import log_review
 
 router = APIRouter(prefix="/foods", tags=["foods"])
 
@@ -30,6 +31,9 @@ router = APIRouter(prefix="/foods", tags=["foods"])
 MISSING_FOOD = "There is no such food."
 NOT_YOURS = "This food is not yours to change."
 MISSING_PHOTO_TO_ATTACH = "That photo is not there to attach."
+# Two reviewers can have one food open at the same time. Whoever saves second
+# is told rather than quietly writing over the first.
+STALE_EDIT = "Someone changed this while you were editing. Reload to see it."
 # What is said to somebody adding a food of their own to their own list.
 ALREADY_YOURS = "That food is already yours."
 BAD_PURPOSE = "A photo is of the front or of the label."
@@ -432,14 +436,15 @@ def submissions_for(
     ]
 
 
-def submitter_name(db: Session, food: models.Food) -> str | None:
-    """Who offered this food to the shared database, by the name they go by.
+def submitter_of(db: Session, food: models.Food) -> tuple[str | None, str | None]:
+    """Who offered this food to the shared database, and what they are.
 
-    The newest approved offer of it, and None where there is none or the
-    account has since gone: a submission keeps its row and drops the person.
+    The newest approved offer of it, and (None, None) where there is none or
+    the account has since gone: a submission keeps its row and drops the
+    person.
     """
     row = db.execute(
-        select(models.User.display_name, models.User.username)
+        select(models.User)
         .join(models.FoodSubmission, models.FoodSubmission.submitted_by_id == models.User.id)
         .where(
             models.FoodSubmission.food_id == food.id,
@@ -448,11 +453,10 @@ def submitter_name(db: Session, food: models.Food) -> str | None:
         )
         .order_by(models.FoodSubmission.decided_at.desc(), models.FoodSubmission.id.desc())
         .limit(1)
-    ).first()
+    ).scalars().first()
     if row is None:
-        return None
-    display_name, username = row
-    return display_name or username
+        return None, None
+    return row.display_name or row.username, profiles.role_of(row)
 
 
 def food_detail(db: Session, food: models.Food, user: models.User) -> dict[str, object]:
@@ -465,6 +469,9 @@ def food_detail(db: Session, food: models.Food, user: models.User) -> dict[str, 
     """
     state = community_states(db, user, [food])[food.id]
     label_serving = food.servings[0] if food.servings else None
+    submitted_by, submitted_by_role = (
+        submitter_of(db, food) if food.status == "approved" else (None, None)
+    )
     detail: dict[str, object] = {
         **food_row(
             food,
@@ -488,15 +495,21 @@ def food_detail(db: Session, food: models.Food, user: models.User) -> dict[str, 
         "submissions": submissions_for(db, user, food),
         # Who the shared database has this food from. Sent to the submitter as
         # well: which of the two lines to show is the client's call.
-        "submitted_by": submitter_name(db, food) if food.status == "approved" else None,
+        "submitted_by": submitted_by,
+        # And whether they wear a shield beside that name, the same as anywhere
+        # else a member is named.
+        "submitted_by_role": submitted_by_role,
         # The nutrition label on file, for a reviewer correcting a shared food
         # to check the numbers against. Nobody else is served it.
         "label_photo_url": (
             photo_url(food.label_photo_id)
-            if user.is_admin and food.label_photo_id is not None
+            if reviews(user) and food.label_photo_id is not None
             else None
         ),
         "density_g_per_ml": food.density_g_per_ml,
+        # When the row last moved. An edit sends it back, so one written
+        # against an older copy is refused rather than applied.
+        "updated_at": food.updated_at,
         # What it was scanned from, where it was. On the packaging either way,
         # and it is what decides whether offering this food needs a photograph
         # of the panel printed beside it.
@@ -552,7 +565,7 @@ def readable_food(db: Session, user: models.User, food_id: int) -> models.Food:
     # absent everywhere, an administrator included.
     if food.status == "cache":
         raise HTTPException(status.HTTP_404_NOT_FOUND, MISSING_FOOD)
-    if food.status == "approved" or food.owner_id == user.id or user.is_admin:
+    if food.status == "approved" or food.owner_id == user.id or reviews(user):
         return food
     raise HTTPException(status.HTTP_404_NOT_FOUND, MISSING_FOOD)
 
@@ -563,17 +576,23 @@ def changeable_food(
     food_id: int,
     owner_may: tuple[str, ...],
     admin_may: tuple[str, ...],
+    *,
+    reviewers: bool = False,
 ) -> models.Food:
     """A food this account may write to, or the refusal saying it may not.
 
     An administrator's reach is the shared database and what is queued to
     change it: the rows everyone eats out of are theirs to fix, and somebody's
     private food is not, however plainly they can see it.
+
+    A reviewer has the same reach on the routes that keep a food right, which
+    is what `reviewers` says. Deleting one is not among them, so the route that
+    deletes leaves this off and stays an administrator's.
     """
     food = readable_food(db, user, food_id)
     if food.owner_id == user.id and food.status in owner_may:
         return food
-    if user.is_admin and food.status in admin_may:
+    if food.status in admin_may and (user.is_admin or (reviewers and reviews(user))):
         return food
     raise HTTPException(status.HTTP_403_FORBIDDEN, NOT_YOURS)
 
@@ -663,7 +682,7 @@ def note_edit(
     owner does to their own food before anybody has looked at it is the food,
     not a change to what they asked for.
     """
-    if not user.is_admin or food.status not in ("pending", "shadow"):
+    if not reviews(user) or food.status not in ("pending", "shadow"):
         return
     submission = open_submission(db, food.id)
     if submission is None:
@@ -1090,10 +1109,12 @@ def attach_food_photo(
 
     if body.purpose not in models.PHOTO_PURPOSES:
         raise HTTPException(status.HTTP_400_BAD_REQUEST, BAD_PURPOSE)
-    # An administrator may also swap the picture on a shared food: the rows
+    # A reviewer may also swap the picture on a shared food: the rows
     # everybody eats out of are theirs to keep right, photograph included.
-    food = changeable_food(db, user, food_id, ("custom", "pending"), ("approved",))
-    if body.purpose == "label" and not (user.is_admin and food.status == "approved"):
+    food = changeable_food(
+        db, user, food_id, ("custom", "pending"), ("approved",), reviewers=True
+    )
+    if body.purpose == "label" and not (reviews(user) and food.status == "approved"):
         raise HTTPException(status.HTTP_403_FORBIDDEN, NOT_YOURS)
     photo = db.get(models.FoodPhoto, body.photo_id)
     if (
@@ -1106,6 +1127,7 @@ def attach_food_photo(
 
     if body.purpose == "label":
         set_label_photo(db, food, photo)
+        log_review(db, user, "photo_replaced", "food", food.id, food.name, [LABEL_LABEL])
         db.commit()
         return
 
@@ -1116,6 +1138,7 @@ def attach_food_photo(
 
         photo.food_id = food.id
         publish_front(db, food, photo)
+        log_review(db, user, "photo_replaced", "food", food.id, food.name, [FRONT_LABEL])
         db.commit()
         return
 
@@ -1145,7 +1168,7 @@ def remove_food_photo(
 
     if purpose not in models.PHOTO_PURPOSES:
         raise HTTPException(status.HTTP_400_BAD_REQUEST, BAD_PURPOSE)
-    food = changeable_food(db, user, food_id, (), ("approved",))
+    food = changeable_food(db, user, food_id, (), ("approved",), reviewers=True)
 
     if purpose == "label":
         set_label_photo(db, food, None)
@@ -1153,6 +1176,15 @@ def remove_food_photo(
         standing = published(db, food.id)
         if standing is not None:
             discard(db, standing)
+    log_review(
+        db,
+        user,
+        "photo_removed",
+        "food",
+        food.id,
+        food.name,
+        [LABEL_LABEL if purpose == "label" else FRONT_LABEL],
+    )
     db.commit()
 
 
@@ -1290,7 +1322,12 @@ def update_food(
     db: Session = Depends(get_db),
     user: models.User = Depends(require_user),
 ) -> dict[str, object]:
-    food = changeable_food(db, user, food_id, OWNER_MAY_EDIT, ADMIN_MAY_EDIT)
+    food = changeable_food(db, user, food_id, OWNER_MAY_EDIT, ADMIN_MAY_EDIT, reviewers=True)
+    # A form that loaded an older copy of this food is refused rather than
+    # applied over whoever saved in between. A body without the stamp is an
+    # older client or somebody's own food, and neither has a race to lose.
+    if body.as_of is not None and body.as_of != food.updated_at:
+        raise HTTPException(status.HTTP_409_CONFLICT, STALE_EDIT)
     # Read before the form lands on it, so a reviewer's corrections to a
     # waiting proposal can be told from what was offered.
     before = review_snapshot(food)
@@ -1299,6 +1336,12 @@ def update_food(
     apply_body(food, body)
     db.flush()
     note_edit(db, user, food, before)
+    # Correcting a shared food is a review action, and the record says which
+    # parts of it moved. Somebody editing their own food is not one.
+    if food.status == "approved":
+        after = review_snapshot(food)
+        changed = [key for key, was in before.items() if after[key] != was]
+        log_review(db, user, "food_edited", "food", food.id, food.name, changed)
     db.commit()
     return food_detail(db, food, user)
 

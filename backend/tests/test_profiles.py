@@ -125,6 +125,7 @@ def test_a_list_row_carries_the_counter_and_no_private_fact(client, db_session, 
     assert row == {
         "id": member.id,
         "display_name": "Test Member",
+        "role": None,
         "avatar_url": None,
         "member_since": member.created_at.strftime("%Y-%m"),
         "submitted": 2,

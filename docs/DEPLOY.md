@@ -74,6 +74,21 @@ On an instance that sends no mail, an address is marked verified by hand:
 docker compose exec api python manage.py verify-email --username someone
 ```
 
+## Reviewers
+
+There are two roles. An administrator runs the instance: invites, accounts,
+uploads, the feedback log, the review log, and deleting a food from the shared
+database. A reviewer does one job, the queue: they read what has been
+submitted, approve, turn down or correct it, change the pictures on it, and
+correct a food that is already shared. Nothing else about the instance is
+theirs, and there is no path in the app that makes anybody an administrator.
+
+Roles are handed out from More, Member accounts: a Reviewer switch on each
+member's row. A member whose submissions have mostly been taken can apply for
+the role from their own More list, which puts a note on their row; an
+administrator still decides. Every decision either role makes is written to the
+review log, which administrators read under More.
+
 ## Put a proxy in front
 
 Everything the browser asks for goes to the web container on

@@ -11,6 +11,7 @@ import {
   type Me,
 } from '../api'
 import { ActivityIcon } from './ActivityIcon'
+import { RoleMark } from './RoleMark'
 import { clockText, dateText, useClock } from '../lib/clock'
 import { dayLabel, today } from '../lib/day'
 import { distanceCompact, hmsText, weightCompact } from '../lib/units'
@@ -55,6 +56,7 @@ function Name({ row, onOpenMember }: { row: FeedRow; onOpenMember: () => void })
       }}
     >
       {row.display_name}
+      <RoleMark role={row.role} />
     </span>
   )
 }

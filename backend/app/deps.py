@@ -1,4 +1,4 @@
-"""Who may call what. Three dependencies, so a route says its requirement in
+"""Who may call what. Four dependencies, so a route says its requirement in
 its signature rather than checking a flag in its body."""
 
 from __future__ import annotations
@@ -27,6 +27,22 @@ def require_admin(user: models.User = Depends(require_user)) -> models.User:
     # in again for a session that is already valid.
     if not user.is_admin:
         raise HTTPException(status.HTTP_403_FORBIDDEN, "This needs an administrator account.")
+    return user
+
+
+def reviews(user: models.User) -> bool:
+    """Whether this account may judge what reaches the shared database.
+
+    An administrator does, by being one: the role is a second way in rather
+    than a different job, and every route reads the pair through here so the
+    two can never drift apart.
+    """
+    return user.is_admin or user.is_reviewer
+
+
+def require_reviewer(user: models.User = Depends(require_user)) -> models.User:
+    if not reviews(user):
+        raise HTTPException(status.HTTP_403_FORBIDDEN, "This needs a reviewer account.")
     return user
 
 

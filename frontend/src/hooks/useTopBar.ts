@@ -1,5 +1,7 @@
 import { createContext, useCallback, useContext, useEffect, useRef, useState } from 'react'
 
+import type { Role } from '../api'
+
 // What the bar says for the screen that is on.
 //
 // A back means the screen is a sub-view: the bar draws the control, and the
@@ -14,6 +16,8 @@ export type TopBarHeader = {
   left?: 'wordmark' | 'title'
   // A quiet line under a large title.
   subtitle?: string
+  // The shield beside that line, where it names a person with a role.
+  subtitleRole?: Role
   // The day chooser, which is the whole of the Journal's header. The title is
   // the day it names, and tapping it comes back to today.
   pager?: { atToday: boolean; onStep: (days: number) => void; onToday: () => void }
@@ -32,6 +36,7 @@ export type TopBarView = {
   title: string
   backLabel: string | null
   subtitle: string | null
+  subtitleRole: Role
   // Whether the next-day step has anywhere to go. True on anything but a pager.
   atToday: boolean
   // The right-hand button's name, or null for a bar without one.
@@ -70,6 +75,7 @@ function same(prev: TopBarView, next: TopBarView): boolean {
     prev.title === next.title &&
     prev.backLabel === next.backLabel &&
     prev.subtitle === next.subtitle &&
+    prev.subtitleRole === next.subtitleRole &&
     prev.atToday === next.atToday &&
     prev.action === next.action &&
     prev.mark?.done === next.mark?.done &&
@@ -92,6 +98,7 @@ export function useTopBarState() {
     title: 'Dashboard',
     backLabel: null,
     subtitle: null,
+    subtitleRole: null,
     atToday: true,
     action: null,
     mark: null,
@@ -140,6 +147,7 @@ export function useTopBarState() {
       title: header.title,
       backLabel: header.back?.label ?? null,
       subtitle: header.subtitle ?? null,
+      subtitleRole: header.subtitleRole ?? null,
       atToday: header.pager?.atToday ?? true,
       action: header.action?.label ?? null,
       mark:

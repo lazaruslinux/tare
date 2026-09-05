@@ -4,6 +4,7 @@ import {
   ClipboardList,
   Eye,
   HeartPulse,
+  History,
   IdCard,
   Inbox,
   Info,
@@ -11,6 +12,7 @@ import {
   MessageSquare,
   Monitor,
   ScrollText,
+  ShieldCheck,
   Smartphone,
   Target,
   Upload,
@@ -21,12 +23,14 @@ import { useEffect, useState, type FormEvent } from 'react'
 
 import { api, errorText, type Me, type SyncKey, type Units } from '../api'
 import { MeasurementsSheet } from '../components/MeasurementsSheet'
+import { Sheet } from '../components/Sheet'
 import { type Glyph } from '../components/TabBar'
 import { SaveMarks, useSavedChip } from '../components/SaveMarks'
 import { useTopBar, type TopBarHeader } from '../hooks/useTopBar'
 import { useRailLayout } from '../hooks/useWideLayout'
 import { type Clock } from '../lib/clock'
 import { today } from '../lib/day'
+import { reviews } from '../lib/roles'
 import { ZONES, offList } from '../lib/zones'
 import { applyTheme, rememberTheme, useTheme, type Theme } from '../theme'
 import { About } from './About'
@@ -38,6 +42,7 @@ import { Feedback, FeedbackLog } from './Feedback'
 import { Fitness } from './Fitness'
 import { Guide } from './Guide'
 import { Members } from './Members'
+import { ReviewLog } from './ReviewLog'
 import { MemberView } from '../components/MemberView'
 import { Profile } from './Profile'
 import { Sharing } from './Sharing'
@@ -63,6 +68,7 @@ export type Screen =
   | 'guide'
   | 'about'
   | 'queue'
+  | 'reviewlog'
   | 'invites'
   | 'users'
   | 'uploads'
@@ -88,6 +94,13 @@ function syncNote(row: SyncKey | null): string | undefined {
   if (row === null || !row.connected) return undefined
   return row.last_used_at === null ? 'Key created, nothing received yet' : 'Connected'
 }
+
+// What somebody is asked before they put their name forward, and what the row
+// reads once they have.
+const APPLY_TITLE = 'Review foods for Tare?'
+const APPLY_BODY =
+  'Reviewers check submitted foods against their labels, approve or fix them, and keep the Tare database honest. An administrator decides who reviews.'
+const APPLY_SENT = 'Application sent'
 
 const THEMES: { value: Theme; label: string }[] = [
   { value: 'light', label: 'Light' },
@@ -173,6 +186,12 @@ export function More({
   // nothing after that: it is a line on a row, not a live figure.
   const [sync, setSync] = useState<SyncKey | null>(null)
   const [measuring, setMeasuring] = useState(false)
+  // Whether the reviewer application sheet is open, and whether it has been
+  // sent. The account's own answer opens it, and this keeps it there for the
+  // rest of the session without a second read.
+  const [applying, setApplying] = useState(false)
+  const [applied, setApplied] = useState(me.reviewer_requested)
+  const [applyError, setApplyError] = useState('')
   // Which member's profile is open on the Members screen, if any.
   const [member, setMember] = useState<number | null>(null)
 
@@ -227,7 +246,12 @@ export function More({
   const named = screen === null ? null : NAMED[screen]
   const header: TopBarHeader | null =
     screen === null
-      ? { title: 'More', left: 'title', subtitle: me.display_name || me.username }
+      ? {
+          title: 'More',
+          left: 'title',
+          subtitle: me.display_name || me.username,
+          subtitleRole: me.role,
+        }
       : named === undefined || named === null
         ? null
         : { title: named, back }
@@ -300,6 +324,17 @@ export function More({
       // way. Nothing here should keep somebody on a screen they have left.
     }
     onSignedOut()
+  }
+
+  const apply = async () => {
+    setApplyError('')
+    try {
+      await api('/account/apply-reviewer', { method: 'POST' })
+      setApplied(true)
+      setApplying(false)
+    } catch (failure) {
+      setApplyError(errorText(failure))
+    }
   }
 
   const leaveAdmin = () => {
@@ -386,6 +421,7 @@ export function More({
   if (screen === 'queue') {
     return <AdminQueue refresh={refresh} onBack={leaveAdmin} onDecided={onReviewed} />
   }
+  if (screen === 'reviewlog') return <ReviewLog me={me} onBack={() => go(null)} />
   if (screen === 'invites') return <AdminInvites onBack={leaveAdmin} />
   if (screen === 'users') return <AdminUsers onBack={leaveAdmin} />
   if (screen === 'uploads') return <AdminUploads onBack={() => go(null)} />
@@ -578,11 +614,26 @@ export function More({
         <Row label="Guide" icon={BookOpen} onOpen={() => go('guide')} />
         <Row label="About" icon={Info} onOpen={() => go('about')} />
         <Row label="My submissions" icon={Inbox} onOpen={() => go('submissions')} />
+        {/* Enough of this account's foods have been taken for them to put
+            their name forward. Never automatic: an administrator decides. */}
+        {me.reviewer_eligible &&
+          (applied ? (
+            <div className="t-row">
+              <ShieldCheck className="h-4 w-4 shrink-0 text-muted" strokeWidth={2} />
+              <span className="min-w-0 flex-1 text-sm text-muted">{APPLY_SENT}</span>
+            </div>
+          ) : (
+            <Row
+              label="Apply to be a reviewer"
+              icon={ShieldCheck}
+              onOpen={() => setApplying(true)}
+            />
+          ))}
       </div>
 
-      {me.is_admin && (
+      {reviews(me) && (
         <>
-          <p className="t-micro mb-1">Administration</p>
+          <p className="t-micro mb-1">{me.is_admin ? 'Administration' : 'Reviewing'}</p>
           <div className="t-card mb-3">
             <Row
               label="Review queue"
@@ -590,10 +641,17 @@ export function More({
               count={waiting}
               onOpen={() => go('queue')}
             />
-            <Row label="Invites" icon={Mail} onOpen={() => go('invites')} />
-            <Row label="Member accounts" icon={Users} onOpen={() => go('users')} />
-            <Row label="Uploads" icon={Upload} onOpen={() => go('uploads')} />
-            <Row label="Feedback log" icon={ScrollText} onOpen={() => go('feedbacklog')} />
+            {/* The rest of it is the instance's own business, which a reviewer
+                has nothing to do with. */}
+            {me.is_admin && (
+              <>
+                <Row label="Review log" icon={History} onOpen={() => go('reviewlog')} />
+                <Row label="Invites" icon={Mail} onOpen={() => go('invites')} />
+                <Row label="Member accounts" icon={Users} onOpen={() => go('users')} />
+                <Row label="Uploads" icon={Upload} onOpen={() => go('uploads')} />
+                <Row label="Feedback log" icon={ScrollText} onOpen={() => go('feedbacklog')} />
+              </>
+            )}
           </div>
         </>
       )}
@@ -604,6 +662,23 @@ export function More({
         </button>
       </div>
 
+      <Sheet open={applying} label={APPLY_TITLE} center onClose={() => setApplying(false)}>
+        <p className="text-base font-semibold">{APPLY_TITLE}</p>
+        <p className="mt-2 text-sm text-muted">{APPLY_BODY}</p>
+        {applyError && <p className="t-error mt-3">{applyError}</p>}
+        <div className="mt-4 flex gap-3">
+          <button
+            type="button"
+            className="t-btn t-btn-primary flex-1"
+            onClick={() => void apply()}
+          >
+            Apply
+          </button>
+          <button type="button" className="t-btn" onClick={() => setApplying(false)}>
+            Not now
+          </button>
+        </div>
+      </Sheet>
     </>
   )
 }

@@ -24,10 +24,11 @@ from fastapi import APIRouter, Depends, HTTPException, status
 from sqlalchemy import delete, func, or_, select
 from sqlalchemy.orm import Session
 
-from app import models, schemas
+from app import models, profiles, schemas
 from app.db import get_db
-from app.deps import require_admin
+from app.deps import require_admin, require_reviewer
 from app.models import FOOD_NUTRIENTS, SUBMISSION_STATUSES, now_utc
+from app.review_log import log_review
 from app.routers import invites
 from app.routers.foods import (
     FRONT_LABEL,
@@ -63,6 +64,11 @@ PHOTO_KIND = "A picture is kept or turned down as it is."
 # for is done to the food itself, on the food's own page.
 REPORT_KIND = "A report is resolved or dismissed as it is."
 BAD_PURPOSE = "A photo is of the front or of the label."
+
+# Granting the role to somebody who already reviews by being an administrator
+# would read as a demotion waiting to happen, and there is no demotion here.
+ALREADY_REVIEWS = "An administrator already reviews."
+MISSING_MEMBER = "There is no such member."
 
 # How many links one administrator may have out at a time. An unclaimed link is
 # a way in, and a handful of them is a handful of doors left open.
@@ -106,10 +112,31 @@ def proposed(food: models.Food) -> dict[str, object]:
 
 
 def waiting(db: Session, submission_id: int) -> models.FoodSubmission:
-    submission = db.get(models.FoodSubmission, submission_id)
+    """The request, held for this transaction, or the refusal for one decided.
+
+    The row is taken before its status is read, so two reviewers tapping at the
+    same moment queue up behind each other rather than both deciding. The
+    second one is told who got there first, which is the only useful thing to
+    say about it. SQLite ignores the lock and the check behind it still holds.
+    """
+    submission = db.execute(
+        select(models.FoodSubmission)
+        .where(models.FoodSubmission.id == submission_id)
+        .with_for_update()
+    ).scalar_one_or_none()
     if submission is None:
         raise HTTPException(status.HTTP_404_NOT_FOUND, MISSING_SUBMISSION)
     if submission.status != "pending":
+        decider = (
+            db.get(models.User, submission.decided_by_id)
+            if submission.decided_by_id is not None
+            else None
+        )
+        if decider is not None:
+            raise HTTPException(
+                status.HTTP_409_CONFLICT,
+                f"{decider.display_name or decider.username} already decided this.",
+            )
         raise HTTPException(status.HTTP_400_BAD_REQUEST, NOT_WAITING)
     return submission
 
@@ -131,15 +158,26 @@ def shared_target(db: Session, submission: models.FoodSubmission) -> models.Food
     return food
 
 
-def stamp(submission: models.FoodSubmission, admin: models.User, outcome: str, note: str) -> None:
+def stamp(
+    submission: models.FoodSubmission, reviewer: models.User, outcome: str, note: str
+) -> None:
     submission.status = outcome
-    submission.decided_by_id = admin.id
+    submission.decided_by_id = reviewer.id
     submission.decided_at = now_utc()
     submission.decision_note = note
-    # Deciding your own request is reading the answer to it. Left unstamped, an
-    # administrator approving their own food keeps the badge lit over nothing.
-    if submission.submitted_by_id == admin.id:
+    # Deciding your own request is reading the answer to it. Left unstamped, a
+    # reviewer approving their own food keeps the badge lit over nothing.
+    if submission.submitted_by_id == reviewer.id:
         submission.seen_at = now_utc()
+
+
+def about(db: Session, submission: models.FoodSubmission) -> str:
+    """What to call this request in the log: the food it is about, by name."""
+    for food_id in (submission.food_id, submission.target_food_id):
+        food = db.get(models.Food, food_id) if food_id else None
+        if food is not None:
+            return food.name
+    return ""
 
 
 def named(food: models.Food) -> dict[str, object]:
@@ -226,13 +264,13 @@ def waiting_items(db: Session) -> list[dict[str, object]]:
 
 @router.get("/queue")
 def read_queue(
-    db: Session = Depends(get_db), admin: models.User = Depends(require_admin)
+    db: Session = Depends(get_db), reviewer: models.User = Depends(require_reviewer)
 ) -> list[dict[str, object]]:
     return waiting_items(db)
 
 
 def approve_edit(
-    db: Session, submission: models.FoodSubmission, admin: models.User
+    db: Session, submission: models.FoodSubmission, reviewer: models.User
 ) -> dict[str, object]:
     """Copy a correction onto the shared food, and throw the copy away.
 
@@ -282,7 +320,10 @@ def approve_edit(
         target.label_photo_id = submission.label_photo_id
 
     drop_shadow(db, submission)
-    stamp(submission, admin, "approved", "")
+    stamp(submission, reviewer, "approved", "")
+    log_review(
+        db, reviewer, "approved", "submission", submission.id, target.name, submission.changes
+    )
     db.commit()
     return {"food": proposed(target)}
 
@@ -300,7 +341,7 @@ def publish_front(db: Session, target: models.Food, photo: models.FoodPhoto) -> 
 
 
 def approve_photo(
-    db: Session, submission: models.FoodSubmission, admin: models.User
+    db: Session, submission: models.FoodSubmission, reviewer: models.User
 ) -> dict[str, object]:
     """Give a shared food its picture, in place of whatever it was showing."""
     target = shared_target(db, submission)
@@ -309,13 +350,14 @@ def approve_photo(
         raise HTTPException(status.HTTP_400_BAD_REQUEST, NO_PHOTO)
 
     publish_front(db, target, photo)
-    stamp(submission, admin, "approved", "")
+    stamp(submission, reviewer, "approved", "")
+    log_review(db, reviewer, "approved", "submission", submission.id, target.name, [FRONT_LABEL])
     db.commit()
     return {"food": proposed(target)}
 
 
 def resolve_report(
-    db: Session, submission: models.FoodSubmission, admin: models.User, note: str
+    db: Session, submission: models.FoodSubmission, reviewer: models.User, note: str
 ) -> dict[str, object]:
     """Say the report has been dealt with. It changes nothing on the food.
 
@@ -323,7 +365,8 @@ def resolve_report(
     came back here, and a note is how they say so if it is worth saying.
     """
     target = shared_target(db, submission)
-    stamp(submission, admin, "approved", note)
+    stamp(submission, reviewer, "approved", note)
+    log_review(db, reviewer, "resolved", "submission", submission.id, target.name, note or None)
     db.commit()
     return {"food": proposed(target)}
 
@@ -333,16 +376,16 @@ def approve(
     submission_id: int,
     body: schemas.ApproveIn,
     db: Session = Depends(get_db),
-    admin: models.User = Depends(require_admin),
+    reviewer: models.User = Depends(require_reviewer),
 ) -> dict[str, object]:
     """Say yes. What that means depends on what was asked for."""
     submission = waiting(db, submission_id)
     if submission.kind == "edit":
-        return approve_edit(db, submission, admin)
+        return approve_edit(db, submission, reviewer)
     if submission.kind == "photo":
-        return approve_photo(db, submission, admin)
+        return approve_photo(db, submission, reviewer)
     if submission.kind == "report":
-        return resolve_report(db, submission, admin, body.note.strip())
+        return resolve_report(db, submission, reviewer, body.note.strip())
 
     # A new food, published. From here it is everybody's and nobody's.
     food = offered_food(db, submission)
@@ -405,7 +448,10 @@ def approve(
     if submission.label_photo_id is not None:
         food.label_photo_id = submission.label_photo_id
 
-    stamp(submission, admin, "approved", "")
+    stamp(submission, reviewer, "approved", "")
+    log_review(
+        db, reviewer, "approved", "submission", submission.id, food.name, submission.changes
+    )
     db.commit()
     return {"food": proposed(food)}
 
@@ -425,7 +471,7 @@ def replace_queue_photo(
     submission_id: int,
     body: schemas.QueuePhotoIn,
     db: Session = Depends(get_db),
-    admin: models.User = Depends(require_admin),
+    reviewer: models.User = Depends(require_reviewer),
 ) -> None:
     """Put a reviewer's own picture on a waiting request, in place of its own.
 
@@ -438,13 +484,13 @@ def replace_queue_photo(
     submission = adjustable(db, submission_id)
 
     if body.purpose == "front":
-        about = submission.food_id if submission.kind == "new" else submission.target_food_id
-        if about is None:
+        on = submission.food_id if submission.kind == "new" else submission.target_food_id
+        if on is None:
             raise HTTPException(status.HTTP_400_BAD_REQUEST, NO_FOOD)
         standing = (
             db.get(models.FoodPhoto, submission.photo_id) if submission.photo_id else None
         )
-        submission.photo_id = attach(db, admin, body.photo_id, about)
+        submission.photo_id = attach(db, reviewer, body.photo_id, on)
         label = FRONT_LABEL
     else:
         standing = (
@@ -452,7 +498,7 @@ def replace_queue_photo(
             if submission.label_photo_id
             else None
         )
-        submission.label_photo_id = attach_label(db, admin, body.photo_id)
+        submission.label_photo_id = attach_label(db, reviewer, body.photo_id)
         label = LABEL_LABEL
 
     # The new one is written down first, so taking the old one away cannot
@@ -461,6 +507,9 @@ def replace_queue_photo(
     if standing is not None and standing.status == "pending":
         discard(db, standing)
     record_changes(submission, [label])
+    log_review(
+        db, reviewer, "photo_replaced", "submission", submission.id, about(db, submission), [label]
+    )
     db.commit()
 
 
@@ -469,7 +518,7 @@ def remove_queue_photo(
     submission_id: int,
     purpose: str,
     db: Session = Depends(get_db),
-    admin: models.User = Depends(require_admin),
+    reviewer: models.User = Depends(require_reviewer),
 ) -> None:
     """Take a picture off a waiting request, row and file both."""
     if purpose not in models.PHOTO_PURPOSES:
@@ -490,7 +539,11 @@ def remove_queue_photo(
         submission.photo_id = None
     else:
         submission.label_photo_id = None
-    record_changes(submission, [FRONT_LABEL if purpose == "front" else LABEL_LABEL])
+    label = FRONT_LABEL if purpose == "front" else LABEL_LABEL
+    record_changes(submission, [label])
+    log_review(
+        db, reviewer, "photo_removed", "submission", submission.id, about(db, submission), [label]
+    )
     db.commit()
 
 
@@ -499,7 +552,7 @@ def reject(
     submission_id: int,
     body: schemas.RejectIn,
     db: Session = Depends(get_db),
-    admin: models.User = Depends(require_admin),
+    reviewer: models.User = Depends(require_reviewer),
 ) -> dict[str, object]:
     """Say no, with a reason, which is not optional. Nothing shared changes.
 
@@ -510,6 +563,9 @@ def reject(
     """
     submission = waiting(db, submission_id)
     reason = body.note.strip()
+    # Read while the food this was about is still reachable: rejecting a
+    # correction throws its working copy away.
+    name = about(db, submission)
     # Turning something down without saying why is the one decision that leaves
     # somebody with nothing to do about it.
     if not reason:
@@ -525,7 +581,8 @@ def reject(
     if photo is not None and photo.status == "pending":
         discard(db, photo)
 
-    stamp(submission, admin, "rejected", reason)
+    stamp(submission, reviewer, "rejected", reason)
+    log_review(db, reviewer, "rejected", "submission", submission.id, name, reason)
     db.commit()
     return {"id": submission.id, "status": submission.status}
 
@@ -684,6 +741,9 @@ def read_users(
             "username": person.username,
             "display_name": person.display_name,
             "is_admin": person.is_admin,
+            "role": profiles.role_of(person),
+            # Whether they have asked to review and nobody has answered yet.
+            "requested": person.reviewer_requested_at is not None,
             "email_verified": person.email_verified,
             "created_at": person.created_at,
             "submissions": {
@@ -693,3 +753,84 @@ def read_users(
         }
         for person in people
     ]
+
+
+@router.patch("/users/{user_id}")
+def set_role(
+    user_id: int,
+    body: schemas.RoleIn,
+    db: Session = Depends(get_db),
+    admin: models.User = Depends(require_admin),
+) -> dict[str, object]:
+    """Give one member the reviewer role, or take it back.
+
+    Administrators only, and never about an administrator: this screen hands
+    out the second role and nothing else. There is no path here to the first
+    one, in either direction.
+    """
+    member = db.get(models.User, user_id)
+    if member is None:
+        raise HTTPException(status.HTTP_404_NOT_FOUND, MISSING_MEMBER)
+    if member.is_admin:
+        raise HTTPException(status.HTTP_400_BAD_REQUEST, ALREADY_REVIEWS)
+
+    member.is_reviewer = body.is_reviewer
+    if body.is_reviewer:
+        # Answered, so the request is no longer waiting on anybody.
+        member.reviewer_requested_at = None
+    log_review(
+        db,
+        admin,
+        "role_granted" if body.is_reviewer else "role_revoked",
+        "user",
+        member.id,
+        member.display_name or member.username,
+    )
+    db.commit()
+    return {"id": member.id, "role": profiles.role_of(member), "requested": False}
+
+
+# ---- What everybody with a role has done ----
+
+# One page of the record. Long enough to read a morning's reviewing in one go,
+# short enough that the screen is one request.
+LOG_PAGE = 50
+BAD_CURSOR = "That page marker is not one of ours."
+
+
+@router.get("/review-log")
+def read_review_log(
+    cursor: str | None = None,
+    db: Session = Depends(get_db),
+    admin: models.User = Depends(require_admin),
+) -> dict[str, object]:
+    """Every review action, newest first. An administrator's screen alone.
+
+    The marker is the id of the last row handed over. Ids only ever climb here,
+    so one number is the whole of a page marker.
+    """
+    query = select(models.ReviewLog).order_by(models.ReviewLog.id.desc()).limit(LOG_PAGE + 1)
+    if cursor is not None:
+        if not cursor.isdigit():
+            raise HTTPException(status.HTTP_400_BAD_REQUEST, BAD_CURSOR)
+        query = query.where(models.ReviewLog.id < int(cursor))
+
+    rows = list(db.execute(query).scalars())
+    more = len(rows) > LOG_PAGE
+    page = rows[:LOG_PAGE]
+    return {
+        "items": [
+            {
+                "id": row.id,
+                "when": row.created_at,
+                "actor_name": row.actor_name,
+                "action": row.action,
+                "target_kind": row.target_kind,
+                "target_id": row.target_id,
+                "target_name": row.target_name,
+                "detail": row.detail,
+            }
+            for row in page
+        ],
+        "next_cursor": str(page[-1].id) if more and page else None,
+    }

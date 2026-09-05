@@ -3,6 +3,7 @@ import { useEffect, useState } from 'react'
 
 import { api, errorText, type MemberRow } from '../api'
 import { Avatar } from '../components/Avatar'
+import { RoleMark } from '../components/RoleMark'
 import { useTopBar } from '../hooks/useTopBar'
 
 // Everybody in this Tare. One row each, and each row opens the profile that
@@ -48,7 +49,10 @@ export function Members({
         >
           <Avatar url={row.avatar_url} name={row.display_name} />
           <span className="min-w-0 flex-1">
-            <span className="block truncate text-sm">{row.display_name}</span>
+            <span className="block truncate text-sm">
+              {row.display_name}
+              <RoleMark role={row.role} />
+            </span>
             <span className="block text-xs text-muted">
               {row.submitted} submitted &middot; {row.approved} approved
             </span>

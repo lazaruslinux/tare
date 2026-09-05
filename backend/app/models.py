@@ -85,6 +85,12 @@ class User(Base):
     # like every other stored picture.
     avatar_path: Mapped[str | None] = mapped_column(String(128), nullable=True)
     is_admin: Mapped[bool] = mapped_column(Boolean, nullable=False, default=False)
+    # The second role: the queue and the shared foods, and nothing else about
+    # the instance. An administrator reviews without carrying this flag.
+    is_reviewer: Mapped[bool] = mapped_column(Boolean, nullable=False, default=False)
+    # When this member asked to review. A request rather than a grant: an
+    # administrator still decides, and granting clears it.
+    reviewer_requested_at: Mapped[dt.datetime | None] = mapped_column(UtcDateTime, nullable=True)
     units: Mapped[str] = mapped_column(String(16), nullable=False, default="imperial")
     timezone: Mapped[str] = mapped_column(String(64), nullable=False, default="UTC")
     # Which clock this account reads times on, "12h" or "24h". A preference
@@ -298,6 +304,11 @@ class Food(Base):
     )
     fetched_at: Mapped[dt.datetime | None] = mapped_column(UtcDateTime, nullable=True)
     created_at: Mapped[dt.datetime] = mapped_column(UtcDateTime, nullable=False, default=now_utc)
+    # When the row last moved. Two reviewers can have the same food open, so an
+    # edit sends the stamp it was written against and is refused if it moved.
+    updated_at: Mapped[dt.datetime] = mapped_column(
+        UtcDateTime, nullable=False, default=now_utc, onupdate=now_utc
+    )
 
     # delete-orphan as well as the database's ON DELETE CASCADE: the constraint
     # is what holds when rows go in SQL, and this is what holds when they go
@@ -489,6 +500,43 @@ class FoodSubmission(Base):
     # When the submitter last read the answer. Null while a decision is still
     # news to them, which is what the badge counts.
     seen_at: Mapped[dt.datetime | None] = mapped_column(UtcDateTime, nullable=True)
+    created_at: Mapped[dt.datetime] = mapped_column(UtcDateTime, nullable=False, default=now_utc)
+
+
+# What a logged review action can be about: a request in the queue, a food in
+# the shared database, or somebody's account.
+REVIEW_TARGETS = ("submission", "food", "user")
+
+
+class ReviewLog(Base):
+    """Every decision a reviewer or an administrator made, kept as history.
+
+    The actor's name and the target's name are copied in rather than joined to.
+    A log that reads differently after an account is renamed or a food is
+    deleted is not a record of what happened, and this one has to survive both.
+    """
+
+    __tablename__ = "review_log"
+    __table_args__ = (
+        Index("ix_review_log_created_at", text("created_at DESC")),
+        Index("ix_review_log_actor_id", "actor_id"),
+    )
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True)
+    # SET NULL, because the record outlives the account that made it.
+    actor_id: Mapped[int | None] = mapped_column(
+        ForeignKey("users.id", ondelete="SET NULL"), nullable=True
+    )
+    actor_name: Mapped[str] = mapped_column(String(80), nullable=False, default="")
+    action: Mapped[str] = mapped_column(String(30), nullable=False)
+    target_kind: Mapped[str] = mapped_column(String(20), nullable=False)
+    # Not a foreign key: the row it points at may be gone, and the name beside
+    # it is what the log is read by anyway.
+    target_id: Mapped[int | None] = mapped_column(Integer, nullable=True)
+    target_name: Mapped[str] = mapped_column(String(120), nullable=False, default="")
+    # Whatever the action is worth saying more about: the reason for a no, the
+    # fields a correction changed. Null where there is nothing to add.
+    detail: Mapped[Any | None] = mapped_column(JSON, nullable=True)
     created_at: Mapped[dt.datetime] = mapped_column(UtcDateTime, nullable=False, default=now_utc)
 
 

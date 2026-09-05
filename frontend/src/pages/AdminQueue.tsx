@@ -34,6 +34,9 @@ import { scale } from '../lib/units'
 // conflict needs the next move rather than the reason.
 const DUPLICATE =
   'Another approved food already has this barcode. Reject this one as a duplicate.'
+// How the server opens the sentence for a request somebody else has answered.
+// Read off the start of it, because the name that follows is the useful part.
+const DECIDED_ALREADY = 'Already decided by'
 
 function nutrientText(key: string, value: number | null): string {
   if (value === null) return '-'
@@ -361,8 +364,15 @@ export function AdminQueue({
       await load()
       onDecided()
     } catch (failure) {
+      // Somebody else decided this one first. The queue is read again, so the
+      // row that is no longer waiting leaves the screen with the message.
+      const decided =
+        failure instanceof ApiError &&
+        failure.status === 409 &&
+        failure.detail.startsWith(DECIDED_ALREADY)
       const clash = path === 'approve' && failure instanceof ApiError && failure.status === 409
-      setError(clash ? DUPLICATE : errorText(failure))
+      setError(decided || !clash ? errorText(failure) : DUPLICATE)
+      if (decided) await load()
     }
     setBusy(false)
   }
@@ -407,7 +417,8 @@ export function AdminQueue({
 
   // A proposal opened in the form. The request comes with it on the kinds whose
   // pictures a reviewer may change, so the editor can show and replace both.
-  const adjust = async (item: QueueItem, foodId: number, reviewing: boolean) => {
+  // Called again by the editor's Reload, when somebody else saved first.
+  const adjust = async (item: QueueItem | null, foodId: number, reviewing: boolean) => {
     setBusy(true)
     setError('')
     try {
@@ -453,6 +464,9 @@ export function AdminQueue({
           onDecided()
         }}
         onCancel={() => setAdjusting(null)}
+        onReload={() =>
+          void adjust(adjusting.item, adjusting.food.id, adjusting.item !== null)
+        }
       />
     )
   }

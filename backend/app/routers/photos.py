@@ -29,7 +29,7 @@ from sqlalchemy.orm import Session
 
 from app import caps, models, photos
 from app.db import get_db
-from app.deps import require_user
+from app.deps import require_user, reviews
 from app.models import now_utc
 
 router = APIRouter(prefix="/photos", tags=["photos"])
@@ -59,14 +59,15 @@ def readable_photo(db: Session, user: models.User, photo_id: int) -> models.Food
     """The picture, or the answer a wrong id gets.
 
     A label photo is the narrow case and it is checked first: whatever its
-    status, only the person who took it and an administrator are ever served
-    one. Nothing publishes a label photo, so this is a second lock on a door
-    that should already be shut.
+    status, only the person who took it and somebody who reviews are ever
+    served one. Nothing publishes a label photo, so this is a second lock on a
+    door that should already be shut. A reviewer is served it because reading
+    the panel against the numbers is the whole of what reviewing is.
     """
     photo = db.get(models.FoodPhoto, photo_id)
     if photo is None:
         raise HTTPException(status.HTTP_404_NOT_FOUND, MISSING_PHOTO)
-    if photo.uploaded_by_id == user.id or user.is_admin:
+    if photo.uploaded_by_id == user.id or reviews(user):
         return photo
     if photo.purpose == "front" and photo.status == "approved":
         return photo

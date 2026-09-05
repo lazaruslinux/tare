@@ -2,6 +2,7 @@ import { useEffect, useState } from 'react'
 
 import { api, type Me, type TodayStrip } from '../api'
 import { dayLabel, today } from '../lib/day'
+import { reviews } from '../lib/roles'
 import { weightText } from '../lib/units'
 import { Feed } from './Feed'
 
@@ -88,7 +89,7 @@ export function Aside({
                 : dayLabel(strip.latest_weight_date, todayIso)
             }
           />
-          {me.is_admin && (
+          {reviews(me) && (
             <Figure label="Waiting for review" value={waiting.toLocaleString()} />
           )}
         </div>

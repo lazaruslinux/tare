@@ -3,6 +3,8 @@ import { useEffect, useState } from 'react'
 import { api, errorText, type MemberView as Member } from '../api'
 import { useTopBar } from '../hooks/useTopBar'
 import { Avatar } from './Avatar'
+import { RoleMark } from './RoleMark'
+import { roleLabel } from '../lib/roles'
 
 // One member, as other members see them. Whatever is not here is not being
 // withheld politely: it never left their account.
@@ -62,7 +64,14 @@ export function MemberView({
       <div className="mb-3 flex items-center gap-3">
         <Avatar url={member.avatar_url} name={member.display_name} size="page" />
         <div className="min-w-0">
-          <p className="truncate text-base font-semibold">{member.display_name}</p>
+          <p className="truncate text-base font-semibold">
+            {member.display_name}
+            <RoleMark role={member.role} />
+          </p>
+          {/* The shield says there is a role; this says which one. */}
+          {roleLabel(member.role) !== null && (
+            <p className="text-xs text-muted">{roleLabel(member.role)}</p>
+          )}
           <p className="t-micro mt-1">Member since {monthText(member.member_since)}</p>
         </div>
       </div>

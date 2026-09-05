@@ -75,6 +75,11 @@ class FoodIn(BaseModel):
     # None means the list was left out, which on an edit leaves the servings
     # alone. An empty list is a value: it means this food has none.
     servings: list[ServingIn] | None = Field(default=None, max_length=MAX_SERVINGS)
+    # The food's stamp as the form loaded it. Sent back on an edit so one
+    # written against an older copy is refused rather than applied over
+    # somebody else's. Left out is accepted: creating a food has nothing to
+    # compare against, and neither does an owner editing their own.
+    as_of: dt.datetime | None = None
 
 
 # Enough for a paragraph either way, and no more. A reviewer reads these in a
@@ -175,6 +180,12 @@ class RejectIn(BaseModel):
     """Turning one down, and what the submitter is told about why."""
 
     note: str = Field(default="", max_length=MAX_NOTE)
+
+
+class RoleIn(BaseModel):
+    """The one thing an administrator may change about somebody's account."""
+
+    is_reviewer: bool
 
 
 # Long enough for "serving:" and an id, and short enough that nothing else
