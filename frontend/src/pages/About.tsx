@@ -3,7 +3,7 @@ import { useEffect, useState } from 'react'
 
 import { api } from '../api'
 import { TareWordmark } from '../components/TareWordmark'
-import { WHAT_TARE_IS } from '../lib/about'
+import { WHAT_TARE_DOES, WHAT_TARE_IS } from '../lib/about'
 import { DISCLAIMER } from '../lib/targets'
 
 type Version = { version: string; mail: boolean }
@@ -38,6 +38,16 @@ export function About({ onOpenGuide }: { onOpenGuide: () => void }) {
       <div className="t-card mb-3">
         <p className="t-micro mb-2">What is Tare?</p>
         <p className="text-sm">{WHAT_TARE_IS}</p>
+      </div>
+
+      <div className="t-card mb-3">
+        <p className="t-micro mb-2">What Tare does</p>
+        {WHAT_TARE_DOES.map(([name, what]) => (
+          <div key={name} className="t-row min-h-9 items-start gap-2 py-2 text-sm">
+            <span className="w-28 shrink-0 font-semibold">{name}</span>
+            <span className="min-w-0 flex-1 text-muted">{what}</span>
+          </div>
+        ))}
       </div>
 
       <div className="t-card mb-3">
