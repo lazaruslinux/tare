@@ -93,8 +93,6 @@ export function MealDetail({
       {meal && (
         <>
           {/* The bar above already says which meal this is. */}
-          <p className="mb-3 text-sm text-muted">Logs as one line item.</p>
-
           <div className="t-card mb-3">
             <PanelFacts values={meal.totals} note="Everything in it" />
           </div>
