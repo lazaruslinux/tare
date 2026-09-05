@@ -637,11 +637,11 @@ export function Fitness({
       >
         <span className="t-section">
           <StretchHorizontal className="h-4 w-4 shrink-0 text-muted" strokeWidth={2} />
-          <span className="min-w-0 flex-1">Stretches and moves</span>
+          <span className="min-w-0 flex-1">Stretches & Bodyweight Exercises</span>
           <ChevronRight className="h-4 w-4 shrink-0 text-muted" strokeWidth={2} />
         </span>
         <span className="mt-1 block text-sm text-muted">
-          Gentle stretches and bodyweight moves, with the steps for each.
+          An index full of gentle stretches and bodyweight activities with detailed instructions.
         </span>
       </button>
 

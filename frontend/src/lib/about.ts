@@ -9,11 +9,16 @@ export const WHAT_TARE_IS =
 
 // What is inside, one line each, for the About screen alone.
 export const WHAT_TARE_DOES: [string, string][] = [
+  ['Goal weight', 'Pick the weight you are aiming for and how fast you want to get there.'],
+  ['Goal forecast', 'The date you would reach it at your pace, updated as you weigh in.'],
+  [
+    'Daily calorie budget',
+    'Built for you from your details, your activity level and your goal, or typed in yourself.',
+  ],
   ['Journal', 'Food, exercise and biometrics, one day at a time.'],
   ['Dashboard', 'This week at a glance, and trends over months.'],
   ['Fitness', 'Steps by the hour, sessions and trends from your phone.'],
   ['Community', 'Workouts, finished journals and weight lost, as members choose to share them.'],
   ['Recipes & meals', 'Your own dishes and combinations, logged as one line.'],
   ['Quick add & auto-log', 'The foods you eat every day, on the page or logged for you.'],
-  ['Stretches & moves', 'Gentle stretches and bodyweight moves, with the steps for each.'],
 ]

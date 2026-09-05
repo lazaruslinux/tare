@@ -33,7 +33,7 @@ const GROUPS: { key: MoveItem['group']; label: string }[] = [
 ]
 
 function MoveDetail({ item, onBack }: { item: MoveItem; onBack: () => void }) {
-  useTopBar({ title: item.name, back: { label: 'Stretches and moves', onBack } })
+  useTopBar({ title: item.name, back: { label: 'Stretches & Bodyweight Exercises', onBack } })
 
   return (
     <div className="t-card mb-3">
@@ -73,7 +73,7 @@ export function Moves({ onBack }: { onBack: () => void }) {
   const [chip, setChip] = useState<Chip>(rememberedPlace)
   const [open, setOpen] = useState<MoveItem | null>(null)
 
-  useTopBar(open === null ? { title: 'Stretches and moves', back: { label: 'Fitness', onBack } } : null)
+  useTopBar(open === null ? { title: 'Stretches & Bodyweight Exercises', back: { label: 'Fitness', onBack } } : null)
 
   if (open !== null) return <MoveDetail item={open} onBack={() => setOpen(null)} />
 
