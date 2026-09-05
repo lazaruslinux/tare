@@ -120,6 +120,71 @@ Either way, that is one proxy of your own in front of the web container, so
 what rate limiting reads a caller's address through: too high and everybody
 shares one bucket under your proxy's address.
 
+## Optional: map tiles
+
+A workout's route is drawn as a line, and that is all it is: no tile server, no
+library, no request to anybody outside this instance. If you want that line
+over an actual map, you can give the instance one, and the Route card shows the
+map instead, with a full-screen view when it is tapped. The map is still served
+by this instance alone.
+
+Leaving this out costs nothing. With the folder empty the app asks the server
+for a single byte of the archive, is told there is none, and draws the line;
+the renderer is a chunk of its own and is never fetched at all.
+
+Make the folder next to `docker-compose.yml`, before the first
+`docker compose up`, so Docker does not create it owned by root:
+
+```
+mkdir tiles
+```
+
+Cut the area you want out of a Protomaps daily build with their `pmtiles`
+tool. The whole planet is around a hundred gigabytes; one city and the country
+around it is a few hundred megabytes.
+
+```
+pmtiles extract https://build.protomaps.com/<date>.pmtiles tiles/basemap.pmtiles --bbox=W,S,E,N
+```
+
+The lettering and the symbols are separate, and come from the releases of the
+`protomaps/basemaps-assets` repository: the font glyphs, and the two sprite
+sheets named `dark` and `light`. Unpack them so the folder reads:
+
+```
+tiles/
+  basemap.pmtiles
+  basemap/
+    fonts/Noto Sans Regular/0-255.pbf
+    fonts/Noto Sans Medium/0-255.pbf
+    fonts/Noto Sans Italic/0-255.pbf
+    ...
+    sprites/dark.json
+    sprites/dark.png
+    sprites/dark@2x.json
+    sprites/dark@2x.png
+    sprites/light.json
+    sprites/light.png
+    sprites/light@2x.json
+    sprites/light@2x.png
+```
+
+Then pick it up:
+
+```
+docker compose up -d web
+```
+
+No rebuild. The folder is mounted into the web container read-only, so
+recutting the archive and restarting that one container is the whole of it.
+
+Coverage is whatever you cut. A workout recorded outside the box you asked for
+draws its route over empty ground, so cut the area your members are actually
+in, and cut it again if that changes.
+
+The tiles are OpenStreetMap data. The credit for it sits folded into the corner
+of the map and stays there.
+
 ## Update
 
 ```

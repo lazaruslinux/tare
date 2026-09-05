@@ -42,6 +42,10 @@ services:
       - api
     ports:
       - '127.0.0.1:8210:80'
+    # The optional basemap, read-only. An empty or missing folder is fine: with
+    # nothing in it the app draws the route as a line and asks for no tiles.
+    volumes:
+      - ./tiles:/usr/share/nginx/tiles:ro
 
 volumes:
   db-data:

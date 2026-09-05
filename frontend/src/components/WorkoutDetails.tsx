@@ -1,7 +1,8 @@
-import { useEffect, useRef, useState } from 'react'
+import { lazy, Suspense, useEffect, useRef, useState } from 'react'
 
 import { api, errorText, type Me, type WorkoutDetail } from '../api'
 import { useTopBar } from '../hooks/useTopBar'
+import { basemapInstalled } from '../lib/basemap'
 import { dayLabel, today } from '../lib/day'
 import { placesOf, spansOf } from '../lib/route'
 import {
@@ -16,6 +17,10 @@ import { ActivityIcon } from './ActivityIcon'
 import { LaneGraph } from './LaneGraph'
 import { RouteLine, type RouteMarker } from './RouteLine'
 import { Switch } from './Switch'
+
+// The map and everything under it, fetched only where the instance has the
+// basemap installed. An instance without it never asks for this chunk.
+const RouteMap = lazy(() => import('./RouteMap'))
 
 // What another member's sharing left out is absent from the answer, so
 // everything drawn from one is asked whether it is there at all.
@@ -167,6 +172,10 @@ export function WorkoutDetails({
   // none, which is where every workout starts and where a second tap on the
   // same row puts it back.
   const [chosen, setChosen] = useState<number | null>(null)
+  // Whether this instance was given the basemap. Asked once a session with a
+  // request for a single byte, and false until it answers, so the drawn line
+  // is what a slow answer leaves on the screen.
+  const [mapped, setMapped] = useState(false)
   // The way to move the dot along the route line, filled in by the drawing and
   // driven by the graph's cursor.
   const marker = useRef<RouteMarker | null>(null)
@@ -181,6 +190,14 @@ export function WorkoutDetails({
       alive = false
     }
   }, [workoutId])
+
+  useEffect(() => {
+    let alive = true
+    void basemapInstalled().then((yes) => alive && setMapped(yes))
+    return () => {
+      alive = false
+    }
+  }, [])
 
   useTopBar({
     title: detail?.activity ?? 'Workout',
@@ -277,11 +294,28 @@ export function WorkoutDetails({
       {route !== null && route.length > 1 && (
         <div className="t-card mb-3">
           <p className="t-micro mb-2">Route</p>
-          <RouteLine
-            points={route}
-            highlight={chosen === null ? null : (spans[chosen] ?? null)}
-            marker={marker}
-          />
+          {mapped ? (
+            <Suspense
+              fallback={
+                <RouteLine
+                  points={route}
+                  highlight={chosen === null ? null : (spans[chosen] ?? null)}
+                />
+              }
+            >
+              <RouteMap
+                points={route}
+                highlight={chosen === null ? null : (spans[chosen] ?? null)}
+                marker={marker}
+              />
+            </Suspense>
+          ) : (
+            <RouteLine
+              points={route}
+              highlight={chosen === null ? null : (spans[chosen] ?? null)}
+              marker={marker}
+            />
+          )}
           <p className="mt-1 text-xs text-muted">
             Start and end areas hidden
           </p>
