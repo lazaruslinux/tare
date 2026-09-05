@@ -9,6 +9,10 @@ export const WHAT_TARE_IS =
 
 // What is inside, one line each, for the About screen alone.
 export const WHAT_TARE_DOES: [string, string][] = [
+  [
+    'Community Food Database',
+    'A growing index of scanned food items, their nutrition values, and ingredients.',
+  ],
   ['Goal weight', 'Pick the weight you are aiming for and how fast you want to get there.'],
   ['Goal forecast', 'The date you would reach it at your pace, updated as you weigh in.'],
   [
@@ -17,7 +21,10 @@ export const WHAT_TARE_DOES: [string, string][] = [
   ],
   ['Journal', 'Food, exercise and biometrics, one day at a time.'],
   ['Dashboard', 'This week at a glance, and trends over months.'],
-  ['Fitness', 'Steps by the hour, sessions and trends from your phone.'],
+  [
+    'Fitness',
+    'Sync your phone to get insights + steps and workout calories added to your journal.',
+  ],
   ['Community', 'Workouts, finished journals and weight lost, as members choose to share them.'],
   ['Recipes & Meals', 'Combine multiple food items into recipes for faster journal entries.'],
 ]
