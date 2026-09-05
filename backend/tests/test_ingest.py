@@ -251,6 +251,47 @@ def test_a_day_with_no_weigh_in_takes_the_scales_reading(client, db_session, mak
     assert row.body_fat_pct == 28.1
 
 
+def test_a_body_fat_with_no_weigh_in_makes_the_day(client, db_session, make_user):
+    """The reading is the day's own, and a weight it was not taken beside is
+    not a reason to throw it away."""
+    user = make_user("fatonly")
+    token = token_for(db_session, user)
+    day = yesterday()
+    post(
+        client,
+        token,
+        {
+            "data": {
+                "metrics": [metric("body_fat_percentage", "%", [point(day, 7, 0.281)])],
+                "workouts": [],
+            }
+        },
+    )
+
+    row = db_session.scalar(select(models.WeightEntry))
+    assert row.date_for == day
+    assert row.weight_kg is None
+    assert row.body_fat_pct == 28.1
+    assert row.source == "ingest"
+
+
+def test_a_weigh_in_fills_a_day_that_held_only_a_body_fat(client, db_session, make_user):
+    user = make_user("blank")
+    token = token_for(db_session, user)
+    day = yesterday()
+    db_session.add(
+        models.WeightEntry(user_id=user.id, date_for=day, body_fat_pct=22.0, source="manual")
+    )
+    db_session.commit()
+
+    post(client, token, export(day))
+
+    row = db_session.scalar(select(models.WeightEntry))
+    assert round(row.weight_kg, 1) == 99.5
+    # The body fat that was already there is still the one that stands.
+    assert row.body_fat_pct == 22.0
+
+
 def test_a_body_fat_reading_never_overwrites_one_already_there(client, db_session, make_user):
     user = make_user("measured")
     token = token_for(db_session, user)

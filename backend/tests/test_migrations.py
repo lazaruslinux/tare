@@ -74,7 +74,9 @@ def test_upgrade_head_builds_the_identity_schema(tmp_path):
         intraday_columns = {
             column["name"] for column in inspector.get_columns("fitness_intraday")
         }
-        weight_columns = {column["name"] for column in inspector.get_columns("weight_entries")}
+        weight_columns = {
+            column["name"]: column for column in inspector.get_columns("weight_entries")
+        }
         daily_unique = {
             constraint["name"]
             for constraint in inspector.get_unique_constraints("fitness_daily")
@@ -96,6 +98,22 @@ def test_upgrade_head_builds_the_identity_schema(tmp_path):
     assert "source" in daily_columns
     assert "source" in intraday_columns
     assert "via" in weight_columns
+    # A day is the readings on it: a weight that may be absent, the shares a
+    # scale prints beside it, and no visceral rating any more.
+    assert set(weight_columns) == {
+        "id",
+        "user_id",
+        "date_for",
+        "weight_kg",
+        "body_fat_pct",
+        "body_water_pct",
+        "muscle_pct",
+        "bone_pct",
+        "source",
+        "via",
+        "created_at",
+    }
+    assert weight_columns["weight_kg"]["nullable"] is True
     # And one figure per metric per day, whatever the metric turns out to be.
     assert "uq_fitness_daily_day_metric" in daily_unique
     assert "location" in user_columns

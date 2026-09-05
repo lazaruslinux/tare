@@ -42,6 +42,7 @@ BAD_PRESET = "That is not a starting point Tare offers."
 BAD_RATE = "That is not a goal rate Tare offers."
 BAD_MODE = "That is not a way to set targets."
 FUTURE_MEASUREMENT = "That day is in the future."
+NOTHING_RECORDED = "Nothing to record."
 
 # How far back a measurement list reaches by default, and the furthest it will.
 DEFAULT_DAYS = 90
@@ -59,13 +60,16 @@ LIMITS = {
     "weight_kg": (20.0, 500.0),
     "body_fat_pct": (2.0, 70.0),
     "body_water_pct": (20.0, 80.0),
-    "visceral_fat": (1.0, 59.0),
     "muscle_pct": (5.0, 90.0),
     "bone_pct": (0.5, 20.0),
 }
 
 # The fields a scale can add to a weight, in the order they are shown.
-EXTRA_FIELDS = ("body_fat_pct", "body_water_pct", "muscle_pct", "bone_pct", "visceral_fat")
+EXTRA_FIELDS = ("body_fat_pct", "body_water_pct", "muscle_pct", "bone_pct")
+
+# Everything one day can hold, weight first, which is the order the form
+# asks for them and the order they are checked in.
+MEASURED = ("weight_kg", *EXTRA_FIELDS)
 
 MIN_HEIGHT_CM = 90.0
 MAX_HEIGHT_CM = 250.0
@@ -151,14 +155,19 @@ class TargetsIn(BaseModel):
 
 
 class MeasurementIn(BaseModel):
-    """One day's reading. The weight is the only one that has to be there."""
+    """One day's reading, merged into whatever the day already holds.
 
-    weight_kg: float
+    Every field is optional, and a field left out is left alone. Null is a
+    value here rather than an absence: it is how a reading is cleared, which is
+    why what was sent is read from model_fields_set rather than from what is
+    None.
+    """
+
+    weight_kg: float | None = None
     body_fat_pct: float | None = None
     body_water_pct: float | None = None
     muscle_pct: float | None = None
     bone_pct: float | None = None
-    visceral_fat: int | None = None
 
 
 class ExerciseIn(BaseModel):
@@ -213,19 +222,29 @@ def readings(
     return list(db.execute(query.order_by(models.WeightEntry.date_for)).scalars())
 
 
+def weighed_days(rows: list[models.WeightEntry]) -> list[tuple[dt.date, float]]:
+    """The days a weight was actually read on, which is what a weight trend is
+    drawn from. A day holding a body fat alone is not one of them."""
+    return [(row.date_for, row.weight_kg) for row in rows if row.weight_kg is not None]
+
+
 def latest_weight_kg(db: Session, user: models.User) -> float | None:
     """The newest weigh-in there is, which is the weight a direction is read
     against. None until somebody has stood on a scale."""
-    rows = readings(db, user)
-    return rows[-1].weight_kg if rows else None
+    weighed = [row.weight_kg for row in readings(db, user) if row.weight_kg is not None]
+    return weighed[-1] if weighed else None
 
 
-def weight_on(db: Session, user: models.User, day: dt.date) -> models.WeightEntry | None:
+def weight_on(db: Session, user: models.User, day: dt.date) -> float | None:
     """The newest weigh-in on or before a day, which is the weight that day is
-    worked out at."""
+    worked out at. A day that holds a body fat and nothing else is not one."""
     return db.execute(
-        select(models.WeightEntry)
-        .where(models.WeightEntry.user_id == user.id, models.WeightEntry.date_for <= day)
+        select(models.WeightEntry.weight_kg)
+        .where(
+            models.WeightEntry.user_id == user.id,
+            models.WeightEntry.date_for <= day,
+            models.WeightEntry.weight_kg.is_not(None),
+        )
         .order_by(models.WeightEntry.date_for.desc())
         .limit(1)
     ).scalars().first()
@@ -233,15 +252,16 @@ def weight_on(db: Session, user: models.User, day: dt.date) -> models.WeightEntr
 
 def lean_kg(row: models.WeightEntry) -> float | None:
     """What is left of the weight once the fat is taken off it. Null when no
-    body fat was recorded, which is not none of it."""
-    if row.body_fat_pct is None:
+    body fat was recorded, which is not none of it, and null on a day that
+    holds a body fat without a weight to take it off."""
+    if row.body_fat_pct is None or row.weight_kg is None:
         return None
     return health.round_for_display(row.weight_kg * (1.0 - row.body_fat_pct / 100.0), "kg")
 
 
 def share_kg(row: models.WeightEntry, pct: float | None) -> float | None:
     """A share of the day's weight as a mass, for showing beside the percent."""
-    if pct is None:
+    if pct is None or row.weight_kg is None:
         return None
     return health.round_for_display(row.weight_kg * pct / 100.0, "kg")
 
@@ -249,14 +269,15 @@ def share_kg(row: models.WeightEntry, pct: float | None) -> float | None:
 def measurement_row(row: models.WeightEntry) -> dict[str, object]:
     return {
         "date": row.date_for.isoformat(),
-        "weight_kg": health.round_for_display(row.weight_kg, "kg"),
+        "weight_kg": (
+            None if row.weight_kg is None else health.round_for_display(row.weight_kg, "kg")
+        ),
         "body_fat_pct": row.body_fat_pct,
         "body_water_pct": row.body_water_pct,
         "muscle_pct": row.muscle_pct,
         "bone_pct": row.bone_pct,
         "muscle_kg": share_kg(row, row.muscle_pct),
         "bone_kg": share_kg(row, row.bone_pct),
-        "visceral_fat": row.visceral_fat,
         "lean_kg": lean_kg(row),
         "source": row.source,
     }
@@ -269,7 +290,7 @@ def latest_by_field(rows: list[models.WeightEntry]) -> dict[str, object]:
     for field in EXTRA_FIELDS:
         out[field] = None
     for row in reversed(rows):
-        if out["weight_kg"] is None:
+        if out["weight_kg"] is None and row.weight_kg is not None:
             out["weight_kg"] = {
                 "value": health.round_for_display(row.weight_kg, "kg"),
                 "date": row.date_for.isoformat(),
@@ -331,7 +352,11 @@ class Reckoning:
         self.today = clock.user_today(user)
         self.profile = profile_of(db, user)
         self.rows = readings(db, user)
-        self.latest = self.rows[-1] if self.rows else None
+        # A day can hold a body fat and no weight, so the weight everything is
+        # worked out from is the newest day that has one.
+        self.latest = next(
+            (row for row in reversed(self.rows) if row.weight_kg is not None), None
+        )
         self.age = (
             None if user.birthdate is None else health.age_on(user.birthdate, self.today)
         )
@@ -355,9 +380,7 @@ class Reckoning:
         )
         # A value a calendar day at a time, so a fortnight off the scale reads
         # as a fortnight rather than closing up (decision 19).
-        self.trend_days = health.trend_by_day(
-            [(row.date_for, row.weight_kg) for row in self.rows]
-        )
+        self.trend_days = health.trend_by_day(weighed_days(self.rows))
         self.trend_kg = self.trend_days[-1][1] if self.trend_days else None
 
     def missing(self) -> list[str]:
@@ -911,7 +934,10 @@ def read_measurements(
     window = max(1, min(days, MAX_DAYS))
     today = clock.user_today(user)
     rows = readings(db, user, today - dt.timedelta(days=window - 1))
-    line = health.trend_by_day([(row.date_for, row.weight_kg) for row in rows])
+    line = health.trend_by_day(weighed_days(rows))
+    fat = health.trend_by_day(
+        [(row.date_for, row.body_fat_pct) for row in rows if row.body_fat_pct is not None]
+    )
     db.commit()
     return {
         "days": window,
@@ -920,6 +946,9 @@ def read_measurements(
         "trend": [
             {"date": day.isoformat(), "kg": health.round_for_display(value, "kg")}
             for day, value in line
+        ],
+        "fat_trend": [
+            {"date": day.isoformat(), "pct": round(value, 1)} for day, value in fat
         ],
     }
 
@@ -931,13 +960,18 @@ def write_measurement(
     db: Session = Depends(get_db),
     user: models.User = Depends(require_user),
 ) -> dict[str, object]:
-    """One day's reading, typed in. A day already recorded is replaced."""
+    """One day's reading, typed in, merged into whatever the day holds.
+
+    A field left out is left alone, so logging a weight keeps the body fat that
+    was read that morning and logging a body fat keeps the weight.
+    """
     day = asked_day(date, user)
     if day > clock.user_today(user):
         raise HTTPException(status.HTTP_400_BAD_REQUEST, FUTURE_MEASUREMENT)
     refuse_if_complete(db, user, day)
 
-    for field in ("weight_kg", *EXTRA_FIELDS):
+    sent = body.model_fields_set
+    for field in MEASURED:
         value = getattr(body, field)
         low, high = LIMITS[field]
         if value is not None and not (low <= value <= high):
@@ -948,15 +982,20 @@ def write_measurement(
             models.WeightEntry.user_id == user.id, models.WeightEntry.date_for == day
         )
     ).scalar_one_or_none()
+    kept = {field: None if row is None else getattr(row, field) for field in MEASURED}
+    merged = {
+        field: getattr(body, field) if field in sent else kept[field] for field in MEASURED
+    }
+    # A day is the readings on it. One that would be left holding none of them
+    # is refused rather than kept as an empty row, and a day is taken back off
+    # by deleting it.
+    if all(value is None for value in merged.values()):
+        raise HTTPException(status.HTTP_400_BAD_REQUEST, NOTHING_RECORDED)
     if row is None:
         row = models.WeightEntry(user_id=user.id, date_for=day)
         db.add(row)
-    row.weight_kg = body.weight_kg
-    row.body_fat_pct = body.body_fat_pct
-    row.body_water_pct = body.body_water_pct
-    row.muscle_pct = body.muscle_pct
-    row.bone_pct = body.bone_pct
-    row.visceral_fat = body.visceral_fat
+    for field, value in merged.items():
+        setattr(row, field, value)
     # Typed in always wins the day. An import that arrives later leaves this
     # standing rather than overwriting somebody's own reading.
     row.source = "manual"
@@ -970,7 +1009,6 @@ def _name(field: str) -> str:
         "weight_kg": "weight Tare can use",
         "body_fat_pct": "body fat percentage Tare can use",
         "body_water_pct": "body water percentage Tare can use",
-        "visceral_fat": "visceral fat rating Tare can use",
         "muscle_pct": "muscle percentage Tare can use",
         "bone_pct": "bone percentage Tare can use",
     }[field]
@@ -1029,7 +1067,7 @@ def add_exercise(
     weighed = weight_on(db, user, day)
     # Decision 7: without a weigh-in the credit is worked out at an assumed
     # weight, and the screen says so rather than pretending.
-    kg = weighed.weight_kg if weighed is not None else health.ASSUMED_WEIGHT_KG
+    kg = weighed if weighed is not None else health.ASSUMED_WEIGHT_KG
     row = models.ExerciseEntry(
         user_id=user.id,
         date_for=day,

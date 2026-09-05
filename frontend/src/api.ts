@@ -166,10 +166,11 @@ export type Targets = {
   disclaimer_seen: boolean
 }
 
-// One day's reading. Null is a thing that was not measured, not none of it.
+// One day's reading. Null is a thing that was not measured, not none of it,
+// and the weight is one of those: a day can hold a body fat without one.
 export type Measurement = {
   date: string
-  weight_kg: number
+  weight_kg: number | null
   body_fat_pct: number | null
   body_water_pct: number | null
   // Muscle and bone are shares of the weight; the masses beside them are
@@ -178,7 +179,6 @@ export type Measurement = {
   bone_pct: number | null
   muscle_kg: number | null
   bone_kg: number | null
-  visceral_fat: number | null
   lean_kg: number | null
   source: string
 }
@@ -192,16 +192,18 @@ export type Latest = {
   body_water_pct: Stamp | null
   muscle_pct: Stamp | null
   bone_pct: Stamp | null
-  visceral_fat: Stamp | null
 }
 
 export type TrendPoint = { date: string; kg: number }
+export type FatPoint = { date: string; pct: number }
 
 export type Measurements = {
   days: number
   latest: Latest
   measurements: Measurement[]
   trend: TrendPoint[]
+  // The body fat laid out the same way, so both lines carry their gaps.
+  fat_trend: FatPoint[]
 }
 
 // One workout somebody typed in. estimated is set only on the answer to

@@ -436,6 +436,10 @@ def _write_weights(
             )
         )
         if existing is not None:
+            # A day that holds a body fat and no weight takes the reading into
+            # the blank; a weight already there is left standing.
+            if existing.weight_kg is None:
+                existing.weight_kg = round(kg, 2)
             continue
         db.add(
             models.WeightEntry(
@@ -453,7 +457,11 @@ def _write_weights(
 def _write_body_fat(
     db: Session, user: models.User, readings: list[tuple[dt.date, dt.datetime, float]]
 ) -> None:
-    """Body fat onto the day's weigh-in, and only into a blank."""
+    """Body fat onto the day's row, and only into a blank.
+
+    A day nobody weighed on still gets a row: the reading is the day's, and a
+    weight it was not taken beside is not a reason to throw it away.
+    """
     newest: dict[dt.date, tuple[dt.datetime, float]] = {}
     for day, at, pct in readings:
         if day not in newest or at > newest[day][0]:
@@ -469,7 +477,10 @@ def _write_body_fat(
                 models.WeightEntry.user_id == user.id, models.WeightEntry.date_for == day
             )
         )
-        if entry is None or entry.body_fat_pct is not None:
+        if entry is None:
+            entry = models.WeightEntry(user_id=user.id, date_for=day, source="ingest")
+            db.add(entry)
+        elif entry.body_fat_pct is not None:
             continue
         entry.body_fat_pct = round(pct, 1)
 

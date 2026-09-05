@@ -882,7 +882,7 @@ class HealthProfile(Base):
 
 
 class WeightEntry(Base):
-    """One day's weight, and whatever else was measured with it.
+    """One day's reading: a weight, a body fat, or both.
 
     One row per day per account. A day holds a single reading because the day
     is what the trend is built from, and two readings for one day would make
@@ -899,7 +899,9 @@ class WeightEntry(Base):
         ForeignKey("users.id", ondelete="CASCADE"), nullable=False, index=True
     )
     date_for: Mapped[dt.date] = mapped_column(Date, nullable=False, index=True)
-    weight_kg: Mapped[float] = mapped_column(Float, nullable=False)
+    # Null on a day somebody read a body fat off the scale without weighing:
+    # the row is the day, and every number on it is one that may be absent.
+    weight_kg: Mapped[float | None] = mapped_column(Float, nullable=True)
     # What a scale reports beyond the weight. Null is a thing that was not
     # measured rather than none of it.
     body_fat_pct: Mapped[float | None] = mapped_column(Float, nullable=True)
@@ -908,7 +910,6 @@ class WeightEntry(Base):
     # report them. A mass typed in is turned into a share before it is stored.
     muscle_pct: Mapped[float | None] = mapped_column(Float, nullable=True)
     bone_pct: Mapped[float | None] = mapped_column(Float, nullable=True)
-    visceral_fat: Mapped[int | None] = mapped_column(Integer, nullable=True)
     source: Mapped[str] = mapped_column(
         Enum(*MEASUREMENT_SOURCES, name="measurement_source", native_enum=False),
         nullable=False,

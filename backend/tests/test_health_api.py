@@ -52,6 +52,13 @@ def weigh(client, kg, day=None, **extra):
     )
 
 
+def log_fat(client, pct, day=None):
+    """A body fat on its own, which is a day with no weight on it."""
+    return client.put(
+        f"/api/health/measurements/{(day or TODAY).isoformat()}", json={"body_fat_pct": pct}
+    )
+
+
 def profile(client, **fields):
     return client.put("/api/health/profile", json=fields)
 
@@ -314,12 +321,82 @@ def test_a_measurement_is_one_row_a_day_and_carries_its_lean_figure(client, memb
     assert first.status_code == 200
     assert first.json()["lean_kg"] == 64.0
 
-    # The same day again replaces it rather than adding a second reading.
+    # The same day again corrects the weight rather than adding a second
+    # reading, and the body fat read that morning is left where it is.
     assert weigh(client, 81).status_code == 200
     listed = client.get("/api/health/measurements").json()
     assert len(listed["measurements"]) == 1
     assert listed["measurements"][0]["weight_kg"] == 81.0
-    assert listed["measurements"][0]["lean_kg"] is None
+    assert listed["measurements"][0]["body_fat_pct"] == 20.0
+
+
+def test_a_day_takes_a_body_fat_without_a_weight(client, member):
+    made = log_fat(client, 24)
+    assert made.status_code == 200
+    assert made.json()["weight_kg"] is None
+    assert made.json()["lean_kg"] is None
+
+    # And the weight can be added to it later without disturbing the reading.
+    assert weigh(client, 80).status_code == 200
+    row = client.get("/api/health/measurements").json()["measurements"][0]
+    assert (row["weight_kg"], row["body_fat_pct"]) == (80.0, 24.0)
+
+
+def test_a_field_sent_as_null_is_cleared_and_an_empty_day_is_refused(client, member):
+    assert weigh(client, 80, body_fat_pct=24).status_code == 200
+    cleared = client.put(
+        f"/api/health/measurements/{TODAY.isoformat()}", json={"body_fat_pct": None}
+    )
+    assert cleared.status_code == 200
+    assert cleared.json()["body_fat_pct"] is None
+
+    emptied = client.put(
+        f"/api/health/measurements/{TODAY.isoformat()}", json={"weight_kg": None}
+    )
+    assert emptied.json() == {"detail": "Nothing to record."}
+    assert emptied.status_code == 400
+    # And a day nothing was ever recorded on is not made by an empty body.
+    fresh = (TODAY - dt.timedelta(days=1)).isoformat()
+    assert client.put(f"/api/health/measurements/{fresh}", json={}).status_code == 400
+    # The day it refused to empty is still standing.
+    assert client.get("/api/health/measurements").json()["measurements"][0]["weight_kg"] == 80.0
+
+
+def test_the_visceral_rating_is_gone(client, member):
+    saved = client.put(
+        f"/api/health/measurements/{TODAY.isoformat()}",
+        json={"weight_kg": 80, "visceral_fat": 12},
+    )
+    # Nothing reads it any more, so it is ignored rather than refused.
+    assert saved.status_code == 200
+    assert "visceral_fat" not in saved.json()
+    listed = client.get("/api/health/measurements").json()
+    assert "visceral_fat" not in listed["latest"]
+
+
+def test_the_body_fat_line_carries_its_gaps_like_the_weight(client, member):
+    assert log_fat(client, 25, TODAY - dt.timedelta(days=2)).status_code == 200
+    assert log_fat(client, 24).status_code == 200
+
+    line = client.get("/api/health/measurements").json()["fat_trend"]
+    # Three days for two readings: the day nobody measured keeps the one before.
+    assert [row["date"] for row in line] == [
+        (TODAY - dt.timedelta(days=2)).isoformat(),
+        (TODAY - dt.timedelta(days=1)).isoformat(),
+        TODAY.isoformat(),
+    ]
+    assert [row["pct"] for row in line] == [25.0, 25.0, 24.9]
+
+
+def test_a_day_without_a_weight_is_not_the_latest_weight(client, member):
+    earlier = TODAY - dt.timedelta(days=2)
+    assert weigh(client, 80, earlier).status_code == 200
+    assert log_fat(client, 24).status_code == 200
+
+    latest = client.get("/api/health/measurements").json()["latest"]
+    assert latest["weight_kg"] == {"value": 80.0, "date": earlier.isoformat()}
+    assert latest["body_fat_pct"] == {"value": 24.0, "date": TODAY.isoformat()}
+    assert client.get("/api/health/profile").json()["latest_weight_kg"] == 80.0
 
 
 def test_the_measurement_list_is_newest_first_with_a_trend_under_it(client, member):
@@ -344,8 +421,6 @@ def test_the_measurement_list_is_newest_first_with_a_trend_under_it(client, memb
         ("body_fat_pct", 1),
         ("body_fat_pct", 95),
         ("body_water_pct", 5),
-        ("visceral_fat", 0),
-        ("visceral_fat", 60),
     ],
 )
 def test_a_measurement_outside_the_bounds_is_refused(client, member, field, value):

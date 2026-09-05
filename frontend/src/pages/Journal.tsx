@@ -498,10 +498,12 @@ export function Journal({
             <p className="text-sm text-muted">Nothing measured yet.</p>
           ) : (
             <>
-              <div className="t-row min-h-9 text-sm">
-                <span className="flex-1 text-muted">Weight</span>
-                <span className="t-nums">{weightText(weighed.weight_kg, me.units)}</span>
-              </div>
+              {weighed.weight_kg !== null && (
+                <div className="t-row min-h-9 text-sm">
+                  <span className="flex-1 text-muted">Weight</span>
+                  <span className="t-nums">{weightText(weighed.weight_kg, me.units)}</span>
+                </div>
+              )}
               {weighed.body_fat_pct !== null && (
                 <div className="t-row min-h-9 text-sm">
                   <span className="flex-1 text-muted">Body fat</span>
@@ -526,12 +528,6 @@ export function Journal({
                   <span className="t-nums">{weightText(weighed.bone_kg, me.units)}</span>
                 </div>
               )}
-              {weighed.visceral_fat !== null && (
-                <div className="t-row min-h-9 text-sm">
-                  <span className="flex-1 text-muted">Visceral rating</span>
-                  <span className="t-nums">{weighed.visceral_fat}</span>
-                </div>
-              )}
             </>
           )}
           {!locked && (
@@ -540,7 +536,7 @@ export function Journal({
               className="t-row w-full text-left text-sm text-muted"
               onClick={() => setMeasuring(true)}
             >
-              {weighed === null ? '+ Log weigh-in' : '+ Update'}
+              {weighed === null ? '+ Log biometrics' : '+ Update'}
             </button>
           )}
         </div>

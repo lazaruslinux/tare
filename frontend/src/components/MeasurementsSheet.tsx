@@ -16,16 +16,19 @@ import { dayLabel, today } from '../lib/day'
 // is the same window the history list reads.
 const WINDOW = 90
 
-// The optional numbers, in the order a scale prints them. Weight is not here:
-// it is required and it comes first, above all of these.
+// Which form the sheet is showing. A day with nothing on it starts at the
+// chooser; a day already recorded opens on what it holds.
+type Mode = 'pick' | 'weight' | 'other' | 'edit'
+
+// The numbers beyond the weight, in the order a scale prints them. Body fat
+// leads: it is the one the Other form asks for on its own.
 type Extra = {
-  key: 'body_fat_pct' | 'body_water_pct' | 'muscle_pct' | 'bone_pct' | 'visceral_fat'
+  key: 'body_fat_pct' | 'body_water_pct' | 'muscle_pct' | 'bone_pct'
   label: string
   // Stored as a share of the weight, but some scales print it as a mass, so
-  // the field can be typed either way.
+  // the field can be typed either way when the day has a weight.
   mass?: boolean
   unit?: string
-  hint?: string
 }
 
 const EXTRAS: Extra[] = [
@@ -33,26 +36,27 @@ const EXTRAS: Extra[] = [
   { key: 'body_water_pct', label: 'Body water', unit: '%' },
   { key: 'muscle_pct', label: 'Muscle', unit: '%', mass: true },
   { key: 'bone_pct', label: 'Bone', unit: '%', mass: true },
-  { key: 'visceral_fat', label: 'Visceral rating', hint: 'A whole number from your scale' },
 ]
 
 // Which way each mass-or-share field is typed, kept on the device: a scale
 // prints the same way every morning.
-type Mode = 'pct' | 'mass'
+type FieldMode = 'pct' | 'mass'
 const MODES_KEY = 'tare.measure.modes'
 
-function readModes(): Record<string, Mode> {
+function readModes(): Record<string, FieldMode> {
   try {
     const raw = localStorage.getItem(MODES_KEY)
-    return raw === null ? {} : (JSON.parse(raw) as Record<string, Mode>)
+    return raw === null ? {} : (JSON.parse(raw) as Record<string, FieldMode>)
   } catch {
     return {}
   }
 }
 
-// Whether a recorded day carries anything beyond the weight.
-const hasExtras = (row: Measurement | undefined): boolean =>
-  row !== undefined && EXTRAS.some((extra) => row[extra.key] !== null)
+// Whether a recorded day carries any of the three behind the button. Body fat
+// is asked for above them and is never one of them.
+const hasDetails = (row: Measurement | undefined): boolean =>
+  row !== undefined &&
+  EXTRAS.some((extra) => extra.key !== 'body_fat_pct' && row[extra.key] !== null)
 
 // A typed field as a number, or null for one left empty. A field somebody has
 // not filled in is not a zero.
@@ -62,6 +66,14 @@ const asNumber = (raw: string): number | null => {
 }
 
 type Fields = Record<string, string>
+
+// What the sheet is called at the top of each form.
+const LABEL: Record<Mode, string> = {
+  pick: 'Biometrics',
+  weight: 'Log weigh-in',
+  other: 'Log body fat',
+  edit: 'Biometrics',
+}
 
 export function MeasurementsSheet({
   me,
@@ -82,12 +94,14 @@ export function MeasurementsSheet({
 }) {
   const units = me.units
   const day = date
-  const [existing, setExisting] = useState(false)
+  // The chooser until the day comes back. A day already recorded opens on
+  // what it holds instead, unless the reader has already picked a form.
+  const [mode, setMode] = useState<Mode>('pick')
   const [weight, setWeight] = useState('')
   const [fields, setFields] = useState<Fields>({})
-  const [modes, setModes] = useState<Record<string, Mode>>(readModes)
-  // The scale's extra numbers stay folded away until asked for, and unfold
-  // by themselves for somebody who has recorded them before.
+  const [modes, setModes] = useState<Record<string, FieldMode>>(readModes)
+  // The three details stay folded away until asked for, and unfold by
+  // themselves for a day that already carries one.
   const [more, setMore] = useState(false)
   const [error, setError] = useState('')
   const [saving, setSaving] = useState(false)
@@ -100,10 +114,14 @@ export function MeasurementsSheet({
       .then((history) => {
         if (!alive) return
         const found = history.measurements.find((row) => row.date === day)
-        setExisting(found !== undefined)
-        setWeight(found === undefined ? '' : String(weightIn(found.weight_kg, units)))
+        if (found !== undefined) setMode((current) => (current === 'pick' ? 'edit' : current))
+        setWeight(
+          found === undefined || found.weight_kg === null
+            ? ''
+            : String(weightIn(found.weight_kg, units)),
+        )
         setFields(found === undefined ? {} : filled(found, units, modes))
-        if (hasExtras(found) || hasExtras(history.measurements[0])) setMore(true)
+        if (hasDetails(found)) setMore(true)
       })
       .catch(() => {
         // Nothing prefilled is the same screen as nothing recorded, and the
@@ -114,25 +132,43 @@ export function MeasurementsSheet({
     }
   }, [day, units])
 
-  const weightKg = asNumber(weight)
+  const typed = asNumber(weight)
+  const kg = typed === null ? null : weightFrom(typed, units)
+  // A mass is a share of something. Without a weight on the day there is
+  // nothing to work the share out against, so those fields are percentages.
+  const byMass = (extra: Extra): boolean =>
+    extra.mass === true && kg !== null && modes[extra.key] === 'mass'
+  // The weight form asks for the weight alone, so the day's body fat is left
+  // where it is. The others show body fat, and the rest once asked for.
+  const shown = mode === 'weight' ? [] : more ? EXTRAS : EXTRAS.slice(0, 1)
 
   const submit = async (event: FormEvent) => {
     event.preventDefault()
-    if (weightKg === null) {
-      setError('Start with your weight.')
+    if (mode === 'pick') return
+    if (mode === 'weight' && kg === null) {
+      setError('Enter a weight.')
+      return
+    }
+    const body: Record<string, number | null> = {}
+    if (mode !== 'other') body.weight_kg = kg
+    for (const extra of shown) {
+      const value = asNumber(fields[extra.key] ?? '')
+      // A mass typed in is stored as the share of the weight it is.
+      body[extra.key] =
+        value === null || kg === null || !byMass(extra)
+          ? value
+          : (weightFrom(value, units) / kg) * 100
+    }
+    if (mode === 'other' && body.body_fat_pct === null) {
+      setError('Enter a body fat percentage.')
+      return
+    }
+    if (Object.values(body).every((value) => value === null)) {
+      setError('Nothing to record.')
       return
     }
     setSaving(true)
     setError('')
-    const kg = weightFrom(weightKg, units)
-    const body: Record<string, number | null> = { weight_kg: kg }
-    for (const extra of EXTRAS) {
-      const value = asNumber(fields[extra.key] ?? '')
-      // A mass typed in is stored as the share of the weight it is.
-      const asMass = extra.mass && modes[extra.key] === 'mass'
-      body[extra.key] =
-        value === null ? null : asMass ? (weightFrom(value, units) / kg) * 100 : value
-    }
     try {
       await api<Measurement>(`/health/measurements/${day}`, { method: 'PUT', body })
       onSaved()
@@ -142,97 +178,104 @@ export function MeasurementsSheet({
     }
   }
 
+  if (mode === 'pick') {
+    return (
+      <Sheet open label="Biometrics" onClose={onClose}>
+        <p className="t-micro mb-1">Biometrics</p>
+        <button type="button" className="t-row w-full text-left" onClick={() => setMode('weight')}>
+          Weight
+        </button>
+        <button type="button" className="t-row w-full text-left" onClick={() => setMode('other')}>
+          Other
+        </button>
+      </Sheet>
+    )
+  }
+
   return (
-    <Sheet open label="Log weigh-in" tall onClose={onClose}>
+    <Sheet open label={LABEL[mode]} tall onClose={onClose}>
       <form onSubmit={submit}>
-        <p className="text-base font-semibold">Log weigh-in</p>
+        <p className="text-base font-semibold">{LABEL[mode]}</p>
         <p className="mb-3 text-xs text-muted">{dayLabel(day, today(me.timezone))}</p>
 
-        <div className="mb-3">
-          <label className="t-label" htmlFor="measure-weight">
-            Weight ({weightUnit(units)})
-          </label>
-          <input
-            id="measure-weight"
-            className="t-input"
-            type="number"
-            inputMode="decimal"
-            step="0.1"
-            value={weight}
-            onChange={(event) => setWeight(event.target.value)}
-          />
-        </div>
+        {mode !== 'other' && (
+          <div className="mb-3">
+            <label className="t-label" htmlFor="measure-weight">
+              Weight ({weightUnit(units)})
+            </label>
+            <input
+              id="measure-weight"
+              className="t-input"
+              type="number"
+              inputMode="decimal"
+              step="0.1"
+              value={weight}
+              onChange={(event) => setWeight(event.target.value)}
+            />
+          </div>
+        )}
 
-        {!more ? (
+        {shown.map((extra) => (
+          <div key={extra.key} className="t-row">
+            <label className="min-w-0 flex-1 text-sm" htmlFor={`measure-${extra.key}`}>
+              {extra.label}
+            </label>
+            <input
+              id={`measure-${extra.key}`}
+              className="t-input max-w-[30%]"
+              type="number"
+              inputMode="decimal"
+              step="0.1"
+              placeholder={byMass(extra) ? weightUnit(units) : (extra.unit ?? '')}
+              value={fields[extra.key] ?? ''}
+              onChange={(event) => setFields({ ...fields, [extra.key]: event.target.value })}
+            />
+            {extra.mass === true && kg !== null && (
+              <span className="flex shrink-0 gap-1">
+                {(['pct', 'mass'] as FieldMode[]).map((choice) => (
+                  <button
+                    key={choice}
+                    type="button"
+                    className="t-choice px-2 py-1 text-xs"
+                    aria-pressed={byMass(extra) === (choice === 'mass')}
+                    onClick={() => {
+                      const next = { ...modes, [extra.key]: choice }
+                      setModes(next)
+                      setFields({ ...fields, [extra.key]: '' })
+                      try {
+                        localStorage.setItem(MODES_KEY, JSON.stringify(next))
+                      } catch {
+                        // Kept for this visit only; the chip still works.
+                      }
+                    }}
+                  >
+                    {choice === 'pct' ? '%' : weightUnit(units)}
+                  </button>
+                ))}
+              </span>
+            )}
+          </div>
+        ))}
+
+        {mode !== 'weight' && !more && (
           <button type="button" className="t-btn mt-1" onClick={() => setMore(true)}>
             <Plus className="h-4 w-4" strokeWidth={2.5} />
-            Add more from your scale
+            Add more details
           </button>
-        ) : (
-          <>
-            <p className="t-micro mb-1">From your scale</p>
-            {EXTRAS.map((extra) => {
-              const mode: Mode = extra.mass && modes[extra.key] === 'mass' ? 'mass' : 'pct'
-              return (
-                <div key={extra.key} className="t-row">
-                  <label className="min-w-0 flex-1" htmlFor={`measure-${extra.key}`}>
-                    <span className="block text-sm">{extra.label}</span>
-                    {extra.hint && <span className="block text-xs text-muted">{extra.hint}</span>}
-                  </label>
-                  <input
-                    id={`measure-${extra.key}`}
-                    className="t-input max-w-[30%]"
-                    type="number"
-                    inputMode="decimal"
-                    step={extra.key === 'visceral_fat' ? '1' : '0.1'}
-                    placeholder={mode === 'mass' ? weightUnit(units) : (extra.unit ?? '')}
-                    value={fields[extra.key] ?? ''}
-                    onChange={(event) =>
-                      setFields({ ...fields, [extra.key]: event.target.value })
-                    }
-                  />
-                  {extra.mass && (
-                    <span className="flex shrink-0 gap-1">
-                      {(['pct', 'mass'] as Mode[]).map((choice) => (
-                        <button
-                          key={choice}
-                          type="button"
-                          className="t-choice px-2 py-1 text-xs"
-                          aria-pressed={mode === choice}
-                          onClick={() => {
-                            const next = { ...modes, [extra.key]: choice }
-                            setModes(next)
-                            setFields({ ...fields, [extra.key]: '' })
-                            try {
-                              localStorage.setItem(MODES_KEY, JSON.stringify(next))
-                            } catch {
-                              // Kept for this visit only; the chip still works.
-                            }
-                          }}
-                        >
-                          {choice === 'pct' ? '%' : weightUnit(units)}
-                        </button>
-                      ))}
-                    </span>
-                  )}
-                </div>
-              )
-            })}
-          </>
         )}
 
         {error && <p className="t-error mt-3">{error}</p>}
 
         <button className="t-btn t-btn-primary mt-4 w-full" type="submit" disabled={saving}>
-          {existing ? 'Replace weigh-in' : 'Log weigh-in'}
+          {mode === 'weight' ? 'Log weigh-in' : 'Save'}
         </button>
-        {existing && onDelete !== undefined && (
+        {mode === 'edit' && onDelete !== undefined && (
           <button
             type="button"
             className="mt-2 flex min-h-11 w-full items-center justify-center text-sm text-danger"
             onClick={onDelete}
           >
-            Delete this weigh-in
+            Delete these measurements
           </button>
         )}
       </form>
@@ -242,12 +285,12 @@ export function MeasurementsSheet({
 
 // A recorded day back in the words the form is typed in: the share, or the
 // mass it works out to when that is how this member types it.
-function filled(row: Measurement, units: Me['units'], modes: Record<string, Mode>): Fields {
+function filled(row: Measurement, units: Me['units'], modes: Record<string, FieldMode>): Fields {
   const out: Fields = {}
   for (const extra of EXTRAS) {
     const value = row[extra.key]
     if (value === null) continue
-    if (extra.mass && modes[extra.key] === 'mass') {
+    if (extra.mass && modes[extra.key] === 'mass' && row.weight_kg !== null) {
       const mass = extra.key === 'muscle_pct' ? row.muscle_kg : row.bone_kg
       out[extra.key] = mass === null ? '' : String(weightIn(mass, units))
     } else {

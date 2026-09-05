@@ -503,6 +503,32 @@ def test_a_loss_reaches_the_others_only_once_it_is_shared(client, db_session, ma
     }
 
 
+def test_a_day_with_no_weight_is_not_a_reading_the_window_reads(client, db_session, make_user):
+    """A body fat logged between two weigh-ins is neither a row of its own nor
+    the reading the weigh-in after it is compared against."""
+    member = make_user("halved", timezone="UTC")
+    member.share_weight_loss = True
+    db_session.commit()
+    put_weigh_in(db_session, member, 82.0, dt.date(2026, 1, 10), minutes_ago=10)
+    db_session.add(
+        models.WeightEntry(
+            user_id=member.id,
+            date_for=dt.date(2026, 1, 11),
+            body_fat_pct=24.0,
+            source="manual",
+            created_at=now_utc() - dt.timedelta(minutes=7),
+        )
+    )
+    db_session.commit()
+    put_weigh_in(db_session, member, 81.0, dt.date(2026, 1, 12), minutes_ago=5)
+
+    make_user("member")
+    sign_in(client, "member")
+    rows = client.get("/api/feed").json()["items"]
+    assert [row["kind"] for row in rows] == ["weight"]
+    assert rows[0]["lost_kg"] == 1.0
+
+
 def test_a_gain_is_never_a_row(client, db_session, make_user):
     gainer = make_user("gainer", timezone="UTC")
     gainer.share_weight_loss = True

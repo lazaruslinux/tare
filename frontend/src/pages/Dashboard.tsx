@@ -11,6 +11,7 @@ import {
   type FitnessSummary,
   type Me,
   type Measurement,
+  type FatPoint,
   type Measurements,
   type Stamp,
   type Targets,
@@ -53,6 +54,27 @@ const SPANS = [
   { days: 180, label: '6 months', over: 'over 6 months' },
 ]
 const SPAN_KEY = 'tare.dashboard.span'
+
+// Which lines the weight chart draws, remembered on the device. The body fat
+// is drawn in the pending amber: it is the one token that stays apart from the
+// accent green in both themes.
+type Lines = { weight: boolean; fat: boolean }
+const LINES_KEY = 'tare.progress.lines'
+const BOTH: Lines = { weight: true, fat: true }
+const FAT_COLOUR = 'var(--pending)'
+
+function readLines(): Lines {
+  try {
+    const raw = localStorage.getItem(LINES_KEY)
+    if (raw === null) return BOTH
+    const on = raw.split(',')
+    const kept = { weight: on.includes('weight'), fat: on.includes('fat') }
+    // Nothing on is not a chart, so a key that says so is not believed.
+    return kept.weight || kept.fat ? kept : BOTH
+  } catch {
+    return BOTH
+  }
+}
 
 // Past this many columns a run is drawn a bar a week rather than a bar a day:
 // thirty still land on a phone, three months of them do not.
@@ -206,58 +228,84 @@ const tickText = (iso: string): string =>
     day: 'numeric',
   })
 
+// One line on the chart: what it is, the readings it joins, and the colour it
+// is drawn in.
+type Line = { key: string; points: { date: string; value: number }[]; colour: string }
+
 // The readings, joined by straight lines, each one a round dot. Percent
 // coordinates keep the dots round whatever width the card is, because
 // nothing here is scaled: the browser lays the box out and the marks sit
 // where they are told.
 //
-// With an axis the line gets a ground to stand on and its dots get dates, so
+// Two lines share the box and the dates under it, and each is scaled to its
+// own low and high: a weight and a percentage have nothing in common but the
+// days they were read on, and one scale would flatten whichever moves less.
+//
+// With an axis the lines get a ground to stand on and their dots get dates, so
 // that a weight line is not read as whatever number happens to sit beside it.
-function Spark({ points, tall, axis }: {
-  points: { date: string; value: number }[]
+function Spark({ series, tall, axis }: {
+  series: Line[]
   tall?: boolean
   axis?: boolean
 }) {
-  const sorted = [...points].sort((a, b) => (a.date < b.date ? -1 : 1))
-  if (sorted.length < 2) return null
-  const days = sorted.map((row) => Date.parse(`${row.date}T00:00:00Z`))
-  const first = days[0]
-  const span = Math.max(days[days.length - 1] - first, 1)
-  const values = sorted.map((row) => row.value)
-  const low = Math.min(...values)
-  const high = Math.max(...values)
-  // A flat run must not divide by nothing, and it should sit in the middle.
-  const range = high - low || 1
   const inset = 6
-  const at = (index: number) => ({
-    x: inset + ((days[index] - first) / span) * (100 - inset * 2),
-    y: 100 - inset - ((values[index] - low) / range) * (100 - inset * 2),
+  // A single reading is a dot, not a line, so it is left out of both the
+  // drawing and the dates under it.
+  const drawn = series
+    .map((one) => ({
+      ...one,
+      points: [...one.points].sort((a, b) => (a.date < b.date ? -1 : 1)),
+    }))
+    .filter((one) => one.points.length > 1)
+  if (drawn.length === 0) return null
+  const dates = [...new Set(drawn.flatMap((one) => one.points.map((row) => row.date)))].sort()
+  const first = Date.parse(`${dates[0]}T00:00:00Z`)
+  const span = Math.max(Date.parse(`${dates[dates.length - 1]}T00:00:00Z`) - first, 1)
+  const across = (date: string) =>
+    inset + ((Date.parse(`${date}T00:00:00Z`) - first) / span) * (100 - inset * 2)
+  const placed = drawn.map((one) => {
+    const values = one.points.map((row) => row.value)
+    const low = Math.min(...values)
+    // A flat run must not divide by nothing, and it should sit in the middle.
+    const range = Math.max(...values) - low || 1
+    return {
+      key: one.key,
+      colour: one.colour,
+      spots: one.points.map((row) => ({
+        date: row.date,
+        x: across(row.date),
+        y: 100 - inset - ((row.value - low) / range) * (100 - inset * 2),
+      })),
+    }
   })
-  const spots = sorted.map((_, index) => at(index))
-  const dated = axis === true ? ticked(sorted.length) : []
+  const dated = axis === true ? ticked(dates.length) : []
 
   const line = (
     <svg className={`w-full ${tall ? 'h-22' : 'h-11'}`} aria-hidden="true">
-      {spots.slice(1).map((spot, index) => (
-        <line
-          key={sorted[index + 1].date}
-          x1={`${spots[index].x}%`}
-          y1={`${spots[index].y}%`}
-          x2={`${spot.x}%`}
-          y2={`${spot.y}%`}
-          stroke="var(--accent)"
-          strokeWidth="2"
-          strokeLinecap="round"
-        />
-      ))}
-      {spots.map((spot, index) => (
-        <circle
-          key={sorted[index].date}
-          cx={`${spot.x}%`}
-          cy={`${spot.y}%`}
-          r="3.5"
-          fill="var(--accent)"
-        />
+      {placed.map((one) => (
+        <g key={one.key}>
+          {one.spots.slice(1).map((spot, index) => (
+            <line
+              key={spot.date}
+              x1={`${one.spots[index].x}%`}
+              y1={`${one.spots[index].y}%`}
+              x2={`${spot.x}%`}
+              y2={`${spot.y}%`}
+              stroke={one.colour}
+              strokeWidth="2"
+              strokeLinecap="round"
+            />
+          ))}
+          {one.spots.map((spot) => (
+            <circle
+              key={spot.date}
+              cx={`${spot.x}%`}
+              cy={`${spot.y}%`}
+              r="3.5"
+              fill={one.colour}
+            />
+          ))}
+        </g>
       ))}
     </svg>
   )
@@ -270,11 +318,11 @@ function Spark({ points, tall, axis }: {
       {/* The ground is a border rather than a stroke, so it lands on a whole
           pixel in both themes and the ticks hang off it. */}
       <div className="relative border-t border-line">
-        {spots.map((spot, index) => (
+        {dates.map((date) => (
           <span
-            key={sorted[index].date}
+            key={date}
             className="absolute top-0 h-1 w-px bg-line-strong"
-            style={{ left: `${spot.x}%` }}
+            style={{ left: `${across(date)}%` }}
           />
         ))}
         {/* The row keeps its height whether or not a date sits in it, so the
@@ -282,21 +330,48 @@ function Spark({ points, tall, axis }: {
         <div className="relative h-4">
           {dated.map((index) => (
             <span
-              key={sorted[index].date}
+              key={dates[index]}
               className="absolute top-0.5 text-[10px] leading-none text-muted"
               style={
                 index === dated[0]
                   ? { left: 0 }
                   : index === dated[dated.length - 1]
                     ? { right: 0 }
-                    : { left: `${spots[index].x}%`, transform: 'translateX(-50%)' }
+                    : { left: `${across(dates[index])}%`, transform: 'translateX(-50%)' }
               }
             >
-              {tickText(sorted[index].date)}
+              {tickText(dates[index])}
             </span>
           ))}
         </div>
       </div>
+    </div>
+  )
+}
+
+// The two lines the chart can draw, each chip in its own line's colour.
+// Turning off the last one is ignored: an empty chart says nothing.
+function LineChips({ lines, onPick }: { lines: Lines; onPick: (next: Lines) => void }) {
+  const rows: { key: keyof Lines; label: string; on: string }[] = [
+    { key: 'weight', label: 'Weight', on: 'border-accent text-accent' },
+    { key: 'fat', label: 'Body fat', on: 'border-pending text-pending' },
+  ]
+  return (
+    <div className="mt-2 flex flex-wrap gap-2">
+      {rows.map((row) => (
+        <button
+          key={row.key}
+          type="button"
+          aria-pressed={lines[row.key]}
+          className={`t-chip ${lines[row.key] ? row.on : ''}`}
+          onClick={() => {
+            const next = { ...lines, [row.key]: !lines[row.key] }
+            if (next.weight || next.fat) onPick(next)
+          }}
+        >
+          {row.label}
+        </button>
+      ))}
     </div>
   )
 }
@@ -338,14 +413,30 @@ function CardHead({ label, onOpen, onAdd }: {
   )
 }
 
-// How far the weight has moved across a window, in the member's own units.
-// Under a tenth of a unit is not a change anybody can act on.
-function changeText(line: TrendPoint[], units: Me['units'], over: string): string {
-  const moved =
-    weightIn(line[line.length - 1].kg, units) - weightIn(line[0].kg, units)
+// How far one line has moved across a window. Under a tenth is not a change
+// anybody can act on, and a line with one reading has not moved at all.
+function moveText(points: number[], unit: string): string {
+  if (points.length < 2) return ''
+  const moved = points[points.length - 1] - points[0]
   const size = round1(Math.abs(moved))
-  if (size < 0.1) return `No change ${over}`
-  return `${moved < 0 ? '−' : '+'}${size} ${weightUnit(units)} ${over}`
+  return size < 0.1 ? '' : `${moved < 0 ? '−' : '+'}${size}${unit}`
+}
+
+// What the lines on the chart have done, weight first, and the window said
+// once at the end. A line that is off, flat or too short says nothing, and a
+// sentence with nothing in it is the one that says so.
+function changeText(
+  weight: TrendPoint[],
+  fat: FatPoint[],
+  units: Me['units'],
+  over: string,
+  lines: Lines,
+): string {
+  const parts = [
+    lines.weight ? moveText(weight.map((row) => weightIn(row.kg, units)), ` ${weightUnit(units)}`) : '',
+    lines.fat ? moveText(fat.map((row) => row.pct), '%') : '',
+  ].filter((part) => part !== '')
+  return parts.length === 0 ? `No change ${over}` : `${parts.join(' · ')} ${over}`
 }
 
 // One measured number with the day it was last taken under it.
@@ -396,10 +487,12 @@ function WeighIn({
     <div>
       <p className="t-micro mb-1">{dayLabel(row.date, todayIso)}</p>
       <button type="button" className="w-full text-left" onClick={onOpen}>
-        <div className="t-row min-h-9 text-sm">
-          <span className="flex-1 text-muted">Weight</span>
-          <span className="t-nums">{weightText(row.weight_kg, units)}</span>
-        </div>
+        {row.weight_kg !== null && (
+          <div className="t-row min-h-9 text-sm">
+            <span className="flex-1 text-muted">Weight</span>
+            <span className="t-nums">{weightText(row.weight_kg, units)}</span>
+          </div>
+        )}
         {row.body_fat_pct !== null && (
           <div className="t-row min-h-9 text-sm">
             <span className="flex-1 text-muted">Body fat</span>
@@ -426,12 +519,6 @@ function WeighIn({
             <span className="t-nums">
               {round1(row.bone_pct)}% · {weightText(row.bone_kg, units)}
             </span>
-          </div>
-        )}
-        {row.visceral_fat !== null && (
-          <div className="t-row min-h-9 text-sm">
-            <span className="flex-1 text-muted">Visceral rating</span>
-            <span className="t-nums">{row.visceral_fat}</span>
           </div>
         )}
       </button>
@@ -482,6 +569,7 @@ export function Dashboard({
   // The span every card is read over, and the weight line for it, which is its
   // own request: a trend over six months is not a trend over a month cut short.
   const [span, setSpan] = useState(rememberedSpan)
+  const [lines, setLines] = useState<Lines>(readLines)
   const [windowed, setWindowed] = useState<Measurements | null>(null)
   // Steps over a longer span. The week's own come with the summary.
   const [stepRun, setStepRun] = useState<FitnessHistory | null>(null)
@@ -606,6 +694,16 @@ export function Dashboard({
     }
   }
 
+  const pickLines = (next: Lines) => {
+    setLines(next)
+    const on = [next.weight ? 'weight' : '', next.fat ? 'fat' : ''].filter((one) => one !== '')
+    try {
+      window.localStorage.setItem(LINES_KEY, on.join(','))
+    } catch {
+      // A browser that refuses storage still gets the lines it picked.
+    }
+  }
+
   const reload = () => {
     setPicking(false)
     setMeasuring(null)
@@ -639,6 +737,8 @@ export function Dashboard({
   const latest = rows[0] ?? null
   // Each number's own newest reading, so the card can say how old it is.
   const stamps = history?.latest ?? null
+  // The newest weight on record, which the card leads with.
+  const weighed = stamps?.weight_kg ?? null
   // Whether the card has any of them to show, which is what the rule above
   // them is for.
   const scaleRows =
@@ -648,13 +748,36 @@ export function Dashboard({
       stamps.body_water_pct,
       stamps.muscle_pct,
       stamps.bone_pct,
-      stamps.visceral_fat,
     ].some((one) => one !== null)
   // The weight over the chosen span, which this card and the Progress screen
   // both draw, and how a move across it is said.
   const chosen = SPANS.find((row) => row.days === span) ?? SPANS[0]
   const line = windowed?.trend ?? []
+  const fatLine = windowed?.fat_trend ?? []
   const recorded = windowed?.measurements ?? []
+  // The chart draws the readings themselves and the sentence reads the trend
+  // under them, which is how the weight line has always worked.
+  const chart: Line[] = []
+  if (lines.weight) {
+    chart.push({
+      key: 'weight',
+      colour: 'var(--accent)',
+      points: recorded.flatMap((row) =>
+        row.weight_kg === null ? [] : [{ date: row.date, value: row.weight_kg }],
+      ),
+    })
+  }
+  if (lines.fat) {
+    chart.push({
+      key: 'fat',
+      colour: FAT_COLOUR,
+      points: recorded.flatMap((row) =>
+        row.body_fat_pct === null ? [] : [{ date: row.date, value: row.body_fat_pct }],
+      ),
+    })
+  }
+  // Either line is enough to be worth drawing.
+  const trending = line.length > 1 || fatLine.length > 1
 
   // The month the goal is reached at, said once and shown wherever the weight
   // is. Nothing at all without a goal weight.
@@ -835,12 +958,6 @@ export function Dashboard({
   }
 
   if (screen === 'progress') {
-    // The body fat inside the span's rows read oldest first, which is the
-    // order a line is drawn in.
-    const fatLine: TrendPoint[] = [...recorded]
-      .reverse()
-      .filter((row) => row.body_fat_pct !== null)
-      .map((row) => ({ date: row.date, kg: row.body_fat_pct as number }))
     const newest = windowed?.latest.weight_kg ?? null
     // This screen's own four weeks, whatever span the Dashboard is reading.
     const recent = run.slice(-RUN_DAYS)
@@ -861,25 +978,22 @@ export function Dashboard({
     return (
       <>
         <div className="t-card mb-3">
-          {line.length < 2 ? (
+          {!trending ? (
             <p className="text-sm text-muted">Weigh in a few more times to see a trend.</p>
           ) : (
             <>
-              <span className="t-nums block text-3xl font-semibold leading-tight">
-                {newest === null
-                  ? weightText(line[line.length - 1].kg, me.units)
-                  : weightText(newest.value, me.units)}
-              </span>
+              {newest !== null && (
+                <span className="t-nums block text-3xl font-semibold leading-tight">
+                  {weightText(newest.value, me.units)}
+                </span>
+              )}
               <span className="block text-xs text-muted">
                 {newest === null ? '' : `${dayLabel(newest.date, todayIso)} · `}
-                {changeText(line, me.units, chosen.over)}
+                {changeText(line, fatLine, me.units, chosen.over, lines)}
                 {goalMonth}
               </span>
-              <Spark
-                points={recorded.map((row) => ({ date: row.date, value: row.weight_kg }))}
-                tall
-                axis
-              />
+              <LineChips lines={lines} onPick={pickLines} />
+              <Spark series={chart} tall axis />
             </>
           )}
           <div className="mt-2">
@@ -917,12 +1031,6 @@ export function Dashboard({
 
         <div className="t-card mb-3">
           <p className="t-micro mb-2">History</p>
-          {fatLine.length > 1 && (
-            <div className="mb-3">
-              <p className="t-micro">Body fat</p>
-              <Spark points={fatLine.map((row) => ({ date: row.date, value: row.kg }))} />
-            </div>
-          )}
           {recorded.length === 0 ? (
             <>
               <p className="text-sm text-muted">Nothing measured in this window.</p>
@@ -931,7 +1039,7 @@ export function Dashboard({
                 className="t-btn t-btn-primary mt-3"
                 onClick={() => setMeasuring(todayIso)}
               >
-                Log weigh-in
+                Log biometrics
               </button>
             </>
           ) : (
@@ -1087,26 +1195,33 @@ export function Dashboard({
           <p className="text-sm text-muted">Nothing measured yet.</p>
         ) : (
           <>
-            <span className="t-nums block text-3xl font-semibold leading-tight">
-              {weightText(latest.weight_kg, me.units)}
-            </span>
-            {/* The smoothed figure stays off the card: the change and the goal
-                date underneath are read from it, and one number is enough. */}
-            <span className="block text-xs text-muted">{dayLabel(latest.date, todayIso)}</span>
-            {line.length < 2 ? (
+            {/* The newest weight there is, which is not always the newest day:
+                a day can hold a body fat and no weight. */}
+            {weighed !== null && (
+              <>
+                <span className="t-nums block text-3xl font-semibold leading-tight">
+                  {weightText(weighed.value, me.units)}
+                </span>
+                {/* The smoothed figure stays off the card: the change and the
+                    goal date underneath are read from it, and one number is
+                    enough. */}
+                <span className="block text-xs text-muted">
+                  {dayLabel(weighed.date, todayIso)}
+                </span>
+              </>
+            )}
+            {!trending ? (
               <span className="block text-xs text-muted">
                 Weigh in a few more times to see a trend.
               </span>
             ) : (
               <>
                 <span className="block text-xs text-muted">
-                  {changeText(line, me.units, chosen.over)}
+                  {changeText(line, fatLine, me.units, chosen.over, lines)}
                   {goalMonth}
                 </span>
-                <Spark
-                  points={recorded.map((row) => ({ date: row.date, value: row.weight_kg }))}
-                  axis
-                />
+                <LineChips lines={lines} onPick={pickLines} />
+                <Spark series={chart} axis />
               </>
             )}
             {/* The dated readings are their own block: without the rule the
@@ -1142,14 +1257,6 @@ export function Dashboard({
                     label="Bone"
                     value={shareText(stamps.bone_pct, me.units)}
                     date={stamps.bone_pct.date}
-                    todayIso={todayIso}
-                  />
-                )}
-                {stamps?.visceral_fat && (
-                  <Dated
-                    label="Visceral rating"
-                    value={String(stamps.visceral_fat.value)}
-                    date={stamps.visceral_fat.date}
                     todayIso={todayIso}
                   />
                 )}

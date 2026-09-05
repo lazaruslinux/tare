@@ -200,6 +200,10 @@ def read_feed(
             order_by=models.WeightEntry.date_for,
         )
         .label("prev_kg"),
+    ).where(
+        # A day holding a body fat and no weight is neither a row here nor the
+        # reading the next one is read against.
+        models.WeightEntry.weight_kg.is_not(None)
     ).subquery()
     weights = (
         select(readings)
