@@ -141,6 +141,10 @@ export function ActivityLevels({
     { key: 'exercise', label: 'Exercise (Workouts)', value: exercise, opacity: 0.3 },
   ]
   const total = slices.reduce((sum, slice) => sum + Math.max(slice.value, 0), 0)
+  // What the day is budgeted at is the use above with the weight goal taken
+  // off or added on. Zero when the budget was typed in by hand.
+  const adjustment = targets.breakdown?.adjustment ?? 0
+  const budget = Math.round((total + adjustment) / 10) * 10
 
   return (
     <>
@@ -223,7 +227,7 @@ export function ActivityLevels({
               <Ring slices={slices} total={total} />
               <div className="absolute inset-0 flex flex-col items-center justify-center">
                 <span className="t-nums text-2xl font-semibold leading-none">
-                  {calText(Math.round(total / 10) * 10)}
+                  {calText(budget)}
                 </span>
                 <span className="text-xs text-muted">cal</span>
               </div>
@@ -245,6 +249,16 @@ export function ActivityLevels({
                   </span>
                 </div>
               ))}
+              {adjustment !== 0 && (
+                <div className="t-row min-h-9 text-sm">
+                  <span className="h-2.5 w-2.5 shrink-0 rounded-full border border-accent" />
+                  <span className="min-w-0 flex-1 truncate text-muted">Weight goal</span>
+                  <span className="t-nums">
+                    {adjustment > 0 ? '+' : '\u2212'}
+                    {calText(Math.abs(adjustment))}
+                  </span>
+                </div>
+              )}
             </div>
           </div>
         )}
