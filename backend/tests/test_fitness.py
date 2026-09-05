@@ -184,6 +184,157 @@ def test_the_fitness_screen_needs_an_account(client):
     assert client.get("/api/fitness/summary").status_code == 401
 
 
+# Trends
+# ------
+
+# One fixed day to measure the two windows from, so a test never depends on
+# what today happens to be. The week just gone is the 9th to the 15th, and the
+# four weeks before it are the 9th of February to the 8th of March.
+ANCHOR = dt.date(2026, 3, 15)
+
+
+def write_day(db_session, user, day, metric, value):
+    db_session.add(
+        models.FitnessDaily(
+            user_id=user.id, date_for=day, metric=metric, value=value, unit=""
+        )
+    )
+    db_session.commit()
+
+
+def write_hour(db_session, user, day, hour, metres):
+    db_session.add(
+        models.FitnessIntraday(
+            user_id=user.id,
+            date_for=day,
+            metric="distance",
+            hour=hour,
+            value=metres,
+            unit="m",
+        )
+    )
+    db_session.commit()
+
+
+def trends(client):
+    body = client.get(f"/api/fitness/trends?date={ANCHOR}").json()
+    return {row["key"]: row for row in body["rows"]}
+
+
+def test_trends_answer_four_rows_averaged_over_the_days_that_have_data(
+    client, db_session, signed_in
+):
+    write_day(db_session, signed_in, ANCHOR, "step_count", 10000)
+    write_day(db_session, signed_in, ANCHOR - dt.timedelta(days=3), "step_count", 8000)
+    write_day(db_session, signed_in, ANCHOR - dt.timedelta(days=20), "step_count", 6000)
+
+    body = client.get(f"/api/fitness/trends?date={ANCHOR}").json()
+
+    assert [row["key"] for row in body["rows"]] == [
+        "steps",
+        "exercise_minutes",
+        "distance",
+        "workouts",
+    ]
+    assert [row["unit"] for row in body["rows"]] == [
+        "steps/day",
+        "min/day",
+        "m/day",
+        "workouts/week",
+    ]
+    steps = body["rows"][0]
+    # The five days nothing arrived for are not five days of standing still.
+    assert steps["recent"] == 9000
+    assert steps["prior"] == 6000
+    assert steps["direction"] == "up"
+
+
+def test_a_trend_needs_both_windows_before_it_says_a_direction(
+    client, db_session, signed_in
+):
+    empty = trends(client)
+    assert empty["steps"] == {
+        "key": "steps",
+        "recent": None,
+        "prior": None,
+        "unit": "steps/day",
+        "direction": None,
+    }
+
+    write_day(db_session, signed_in, ANCHOR, "step_count", 9000)
+
+    only_recent = trends(client)["steps"]
+    assert only_recent["recent"] == 9000
+    assert only_recent["prior"] is None
+    assert only_recent["direction"] is None
+
+
+def test_a_trend_is_flat_until_it_leaves_the_band(client, db_session, signed_in):
+    write_day(db_session, signed_in, ANCHOR - dt.timedelta(days=20), "step_count", 100)
+    write_day(db_session, signed_in, ANCHOR, "step_count", 105)
+
+    # Exactly at the edge is still the same week said again.
+    assert trends(client)["steps"]["direction"] == "flat"
+
+    recent = db_session.scalar(
+        select(models.FitnessDaily).where(models.FitnessDaily.date_for == ANCHOR)
+    )
+    recent.value = 106
+    db_session.commit()
+    assert trends(client)["steps"]["direction"] == "up"
+
+    recent.value = 95
+    db_session.commit()
+    assert trends(client)["steps"]["direction"] == "flat"
+
+    recent.value = 94
+    db_session.commit()
+    assert trends(client)["steps"]["direction"] == "down"
+
+
+def test_distance_a_day_is_added_up_from_the_hour_rows(client, db_session, signed_in):
+    write_hour(db_session, signed_in, ANCHOR, 8, 1000)
+    write_hour(db_session, signed_in, ANCHOR, 18, 1500)
+    write_hour(db_session, signed_in, ANCHOR - dt.timedelta(days=2), 9, 500)
+
+    distance = trends(client)["distance"]
+
+    # Two days carry a reading: 2,500 m and 500 m.
+    assert distance["recent"] == 1500
+    assert distance["prior"] is None
+    assert distance["direction"] is None
+
+    history = client.get(
+        f"/api/fitness/daily?metric=distance&days=3&date={ANCHOR}"
+    ).json()
+    assert history["unit"] == "m"
+    assert [row["value"] for row in history["days"]] == [500, None, 2500]
+
+
+def test_workouts_are_counted_per_week_over_the_whole_window(
+    client, db_session, signed_in
+):
+    for day in (ANCHOR, ANCHOR - dt.timedelta(days=4)):
+        db_session.add(
+            models.Workout(
+                user_id=signed_in.id,
+                activity="Outdoor Run",
+                started_at=now_utc(),
+                date_for=day,
+                duration_s=1800,
+                source="apple",
+                flags={},
+            )
+        )
+    db_session.commit()
+
+    workouts = trends(client)["workouts"]
+
+    assert workouts["recent"] == 2
+    assert workouts["prior"] == 0
+    assert workouts["direction"] == "up"
+
+
 # The sync key
 # ------------
 

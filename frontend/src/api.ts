@@ -910,11 +910,28 @@ export type FitnessSummary = {
   week_workouts: number
 }
 
+// What a history can be asked for: the four a day's summary carries, and the
+// distance walked, which is added up from the hour rows.
+export type DailyMetric = FitnessMetric | 'distance'
+
 export type FitnessHistory = {
-  metric: FitnessMetric
+  metric: DailyMetric
   unit: string
   days: { date: string; value: number | null }[]
 }
+
+// One line of the Trends card: the week just gone against the four weeks
+// before it. Nothing in a window reads as null rather than as zero, and a
+// direction is only said when both windows have an answer.
+export type TrendRow = {
+  key: 'steps' | 'exercise_minutes' | 'distance' | 'workouts'
+  recent: number | null
+  prior: number | null
+  unit: string
+  direction: 'up' | 'down' | 'flat' | null
+}
+
+export type FitnessTrends = { rows: TrendRow[] }
 
 export type FitnessHours = { date: string; metric: HourMetric; hours: (number | null)[] }
 

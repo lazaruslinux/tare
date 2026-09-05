@@ -46,6 +46,19 @@ PAGE = 30
 # The four the hour bars are drawn from.
 INTRADAY_METRICS = ("steps", "active_kcal", "distance", "hr")
 
+# What a history may be asked for: the four tiles, and the distance walked,
+# which is added up from the hour rows rather than stored a day at a time.
+DAILY_METRICS = fitness_catalog.TILE_KEYS + ("distance",)
+
+# The two windows a trend compares: the week just gone against the four weeks
+# before it.
+RECENT_DAYS = 7
+PRIOR_DAYS = 28
+
+# How far either way a figure has to move before it is a direction rather than
+# the same week said again.
+TREND_BAND = 0.05
+
 
 def asked_day(raw: str, user: models.User) -> dt.date:
     if not raw:
@@ -235,6 +248,140 @@ def read_summary(
     }
 
 
+def _distance_by_day(
+    db: Session, user: models.User, first: dt.date, last: dt.date
+) -> dict[dt.date, float]:
+    """How far the member walked or ran on each day of a run, in metres.
+
+    Added up from the hour rows rather than read off a daily one. The catalogue
+    maps no daily distance tile, and the row the exporter writes for a day
+    keeps whatever unit the phone declared, so the hour rows are the only
+    distance already normalised to metres.
+    """
+    rows = db.execute(
+        select(models.FitnessIntraday.date_for, func.sum(models.FitnessIntraday.value))
+        .where(
+            models.FitnessIntraday.user_id == user.id,
+            models.FitnessIntraday.metric == "distance",
+            models.FitnessIntraday.date_for >= first,
+            models.FitnessIntraday.date_for <= last,
+        )
+        .group_by(models.FitnessIntraday.date_for)
+    )
+    return {day: float(total) for day, total in rows if total is not None}
+
+
+def _daily_average(
+    db: Session, user: models.User, name: str, first: dt.date, last: dt.date
+) -> float | None:
+    """A stored metric's average day across a window.
+
+    Days nothing arrived for are not part of the average: a week the phone was
+    off for four days averages the three it saw, rather than reading as though
+    the member sat still. Nothing at all in the window is nothing, not zero.
+    """
+    values = [
+        row.value
+        for row in db.execute(
+            select(models.FitnessDaily.value).where(
+                models.FitnessDaily.user_id == user.id,
+                models.FitnessDaily.metric == name,
+                models.FitnessDaily.date_for >= first,
+                models.FitnessDaily.date_for <= last,
+            )
+        )
+        if row.value is not None
+    ]
+    return sum(values) / len(values) if values else None
+
+
+def _mean(values: list[float]) -> float | None:
+    return sum(values) / len(values) if values else None
+
+
+def _workouts_a_week(
+    db: Session, user: models.User, first: dt.date, last: dt.date
+) -> float:
+    """Sessions in a window, said per week.
+
+    Counted over the whole window rather than over the days that carry one: a
+    week with no session did have none, which is the fact being compared.
+    """
+    count = (
+        db.execute(
+            select(func.count(models.Workout.id)).where(
+                models.Workout.user_id == user.id,
+                models.Workout.date_for >= first,
+                models.Workout.date_for <= last,
+            )
+        ).scalar_one()
+        or 0
+    )
+    return count / ((last - first).days + 1) * 7
+
+
+def _direction(recent: float | None, prior: float | None) -> str | None:
+    """Which way a figure moved, or nothing when there is not enough to say."""
+    if recent is None or prior is None:
+        return None
+    if recent > prior * (1 + TREND_BAND):
+        return "up"
+    if recent < prior * (1 - TREND_BAND):
+        return "down"
+    return "flat"
+
+
+@router.get("/trends")
+def read_trends(
+    date: str = "",
+    db: Session = Depends(get_db),
+    user: models.User = Depends(require_user),
+) -> dict[str, object]:
+    """The last seven days against the twenty-eight before them, four ways."""
+    day = asked_day(date, user)
+    recent_first = day - dt.timedelta(days=RECENT_DAYS - 1)
+    prior_last = recent_first - dt.timedelta(days=1)
+    prior_first = prior_last - dt.timedelta(days=PRIOR_DAYS - 1)
+
+    def stored(key: str) -> tuple[float | None, float | None]:
+        name = fitness_catalog.METRIC_FOR_TILE[key]
+        return (
+            _daily_average(db, user, name, recent_first, day),
+            _daily_average(db, user, name, prior_first, prior_last),
+        )
+
+    steps_recent, steps_prior = stored("steps")
+    minutes_recent, minutes_prior = stored("exercise_minutes")
+    pairs: list[tuple[str, str, float | None, float | None]] = [
+        ("steps", "steps/day", steps_recent, steps_prior),
+        ("exercise_minutes", "min/day", minutes_recent, minutes_prior),
+        (
+            "distance",
+            "m/day",
+            _mean(list(_distance_by_day(db, user, recent_first, day).values())),
+            _mean(list(_distance_by_day(db, user, prior_first, prior_last).values())),
+        ),
+        (
+            "workouts",
+            "workouts/week",
+            _workouts_a_week(db, user, recent_first, day),
+            _workouts_a_week(db, user, prior_first, prior_last),
+        ),
+    ]
+    return {
+        "rows": [
+            {
+                "key": key,
+                "recent": recent,
+                "prior": prior,
+                "unit": unit,
+                "direction": _direction(recent, prior),
+            }
+            for key, unit, recent, prior in pairs
+        ]
+    }
+
+
 @router.get("/daily")
 def read_daily(
     metric: str = "steps",
@@ -245,26 +392,32 @@ def read_daily(
 ) -> dict[str, object]:
     """One tile's history, a row per calendar day rather than per day that has
     a reading: a gap is part of the picture."""
-    if metric not in fitness_catalog.TILE_KEYS:
+    if metric not in DAILY_METRICS:
         raise HTTPException(status.HTTP_400_BAD_REQUEST, BAD_METRIC)
     last = asked_day(date, user)
     span = max(1, min(days, MAX_DAYS))
     first = last - dt.timedelta(days=span - 1)
-    name = fitness_catalog.METRIC_FOR_TILE[metric]
-    found = {
-        row.date_for: row.value
-        for row in db.execute(
-            select(models.FitnessDaily.date_for, models.FitnessDaily.value).where(
-                models.FitnessDaily.user_id == user.id,
-                models.FitnessDaily.metric == name,
-                models.FitnessDaily.date_for >= first,
-                models.FitnessDaily.date_for <= last,
+    found: dict[dt.date, float | None]
+    if metric == "distance":
+        found = dict(_distance_by_day(db, user, first, last))
+        unit = "m"
+    else:
+        name = fitness_catalog.METRIC_FOR_TILE[metric]
+        found = {
+            row.date_for: row.value
+            for row in db.execute(
+                select(models.FitnessDaily.date_for, models.FitnessDaily.value).where(
+                    models.FitnessDaily.user_id == user.id,
+                    models.FitnessDaily.metric == name,
+                    models.FitnessDaily.date_for >= first,
+                    models.FitnessDaily.date_for <= last,
+                )
             )
-        )
-    }
+        }
+        unit = fitness_catalog.UNIT_FOR_TILE[metric]
     return {
         "metric": metric,
-        "unit": fitness_catalog.UNIT_FOR_TILE[metric],
+        "unit": unit,
         "days": [
             {"date": each.isoformat(), "value": found.get(each)} for each in _run(first, last)
         ],

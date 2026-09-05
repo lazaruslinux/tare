@@ -168,6 +168,10 @@ export function DayBars({
         }
         aria-hidden="true"
       >
+        {/* The ground the bars stand on: a hairline across the whole row, so a
+            week with little in it reads as a quiet week rather than as a box
+            of empty slabs. */}
+        <div className="pointer-events-none absolute inset-x-0 bottom-0 border-t border-line" />
         <div className={`flex h-full items-end ${gap}`}>
           {bars.map((row) => (
             <div
@@ -185,7 +189,7 @@ export function DayBars({
             >
               {row.has ? (
                 <div
-                  className="t-bar absolute inset-x-0 bottom-0 rounded-sm min-[900px]:mx-auto min-[900px]:max-w-9"
+                  className="t-bar absolute inset-x-0 bottom-0 mx-auto max-w-5 rounded-sm"
                   style={{
                     height: `${share(row.value, ceiling)}%`,
                     background:
@@ -195,10 +199,9 @@ export function DayBars({
                   }}
                 />
               ) : (
-                <>
-                  <div className="absolute inset-0 rounded-sm bg-surface-2 min-[900px]:mx-auto min-[900px]:max-w-9" />
-                  <span className="absolute bottom-0 left-1/2 h-[3px] w-[3px] -translate-x-1/2 rounded-full bg-muted" />
-                </>
+                // A day with no answer is a dot on the line and nothing else.
+                // A filled slab in its place reads as a tall bar of something.
+                <span className="absolute bottom-0 left-1/2 h-[3px] w-[3px] -translate-x-1/2 rounded-full bg-muted" />
               )}
               {label !== undefined && row.has && (
                 <span
