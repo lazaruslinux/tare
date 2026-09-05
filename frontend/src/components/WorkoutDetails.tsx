@@ -1,12 +1,20 @@
-import { useEffect, useState } from 'react'
+import { useEffect, useRef, useState } from 'react'
 
 import { api, errorText, type Me, type WorkoutDetail } from '../api'
 import { useTopBar } from '../hooks/useTopBar'
 import { dayLabel, today } from '../lib/day'
-import { splitsOf } from '../lib/splits'
-import { distanceText, distanceUnit, durationText, paceText, round1 } from '../lib/units'
+import { placesOf, spansOf } from '../lib/route'
+import {
+  fastestSplit,
+  secondsPerUnit,
+  splitShare,
+  splitsOf,
+  type Split,
+} from '../lib/splits'
+import { distanceIn, distanceText, distanceUnit, durationText, paceText } from '../lib/units'
 import { ActivityIcon } from './ActivityIcon'
-import { RouteLine } from './RouteLine'
+import { LaneGraph } from './LaneGraph'
+import { RouteLine, type RouteMarker } from './RouteLine'
 import { Switch } from './Switch'
 
 // What another member's sharing left out is absent from the answer, so
@@ -30,73 +38,105 @@ function Stat({ label, value }: { label: string; value: string }) {
   )
 }
 
-function HeartLine({ detail }: { detail: WorkoutDetail }) {
-  const beats = detail.samples
-    .map((row) => ({ minute: row.minute, hr: row.hr_avg ?? row.hr_max ?? row.hr_min }))
-    .filter((row): row is { minute: number; hr: number } => present(row.hr))
-  if (beats.length < 2) return null
-
-  const width = 320
-  const height = 96
-  const low = Math.min(...beats.map((row) => row.hr))
-  const high = Math.max(...beats.map((row) => row.hr))
-  const span = Math.max(high - low, 1)
-  const last = Math.max(...beats.map((row) => row.minute), 1)
-  const path = beats
-    .map((row, index) => {
-      const x = (row.minute / last) * width
-      const y = height - ((row.hr - low) / span) * (height - 8) - 4
-      return `${index === 0 ? 'M' : 'L'}${x.toFixed(1)} ${y.toFixed(1)}`
-    })
-    .join(' ')
-
-  return (
-    <div className="t-card mb-3">
-      <p className="t-micro mb-2">Heart rate</p>
-      <svg
-        viewBox={`0 0 ${width} ${height}`}
-        className="w-full"
-        role="img"
-        aria-label={`Heart rate from ${low} to ${high} beats a minute`}
-      >
-        <path
-          d={path}
-          fill="none"
-          stroke="currentColor"
-          strokeWidth={2}
-          strokeLinecap="round"
-          strokeLinejoin="round"
-          className="text-accent"
-        />
-      </svg>
-      <div className="mt-1 flex justify-between text-xs text-muted">
-        <span className="t-nums">{low}</span>
-        <span className="t-nums">{high}</span>
-      </div>
-    </div>
-  )
+// The fastest split said in words, under the list that marks it in colour.
+function fastestLine(split: Split, units: 'imperial' | 'metric'): string {
+  const said = (paceText(split.distance, split.seconds, units) ?? '').split(' ')[0]
+  const word = units === 'metric' ? 'kilometer' : 'mile'
+  return `Fastest ${word}: ${said} (${word} ${split.index})`
 }
 
-function Splits({ detail, me }: { detail: WorkoutDetail; me: Me }) {
-  const rows = splitsOf(detail.samples, me.units)
-  if (rows.length === 0) return null
-  const unit = distanceUnit(me.units)
+function Splits({
+  splits,
+  units,
+  chosen,
+  lined,
+  onChoose,
+}: {
+  splits: Split[]
+  units: 'imperial' | 'metric'
+  // Which split is picked out on the route, by its place in the list.
+  chosen: number | null
+  // Whether there is a line to pick anything out on. Without one the rows are
+  // rows: a control that would do nothing is not offered.
+  lined: boolean
+  onChoose: (next: number | null) => void
+}) {
+  if (splits.length === 0) return null
+  const unit = distanceUnit(units)
+  // The range the bars are spread across: this session's own quickest and
+  // slowest split, rather than the quickest one alone.
+  const paces = splits.map((split) => secondsPerUnit(split, units)).filter((pace) => pace > 0)
+  const fastest = paces.length === 0 ? 0 : Math.min(...paces)
+  const slowest = paces.length === 0 ? 0 : Math.max(...paces)
+  // The quickest whole split, which the bars alone do not name. The tail is in
+  // the range above and is never the one marked.
+  const quickest = fastestSplit(splits, units)
+
   return (
     <div className="t-card mb-3">
       <p className="t-micro mb-2">Splits</p>
-      {rows.map((split) => (
-        <div key={split.index} className="t-row min-h-9 text-sm">
-          <span className="flex-1">
-            {split.whole
-              ? `${split.index} ${unit}`
-              : `${round1(split.index - 1 + split.distance / (me.units === 'metric' ? 1000 : 1609.344))} ${unit}`}
-          </span>
-          <span className="t-nums text-muted">
-            {durationText(split.seconds)}
-            {split.hr === null ? '' : ` · ${split.hr} bpm`}
-          </span>
-        </div>
-      ))}
+      {splits.map((split, index) => {
+        const marked = chosen === index
+        const figures = (
+          <>
+            {/* A last split that ended part way through says how far it
+                actually went, in the place the whole ones say which one they
+                are: a row reading quicker than the one above it is then
+                accounted for rather than confusing. */}
+            <span className="w-16 shrink-0">
+              {split.whole
+                ? `${split.index} ${unit}`
+                : `${distanceIn(split.distance, units).toFixed(2)} ${unit}`}
+            </span>
+            {/* The quickest whole split is marked on its own pace, which is the
+                figure the mark is about. Colour and nothing else, because the
+                line under the list names it in words. */}
+            <span
+              className={`t-nums w-20 shrink-0 ${
+                quickest !== null && quickest.index === split.index ? 'text-blue' : ''
+              }`}
+            >
+              {paceText(split.distance, split.seconds, units) ?? ''}
+            </span>
+            <span
+              className="h-1.5 min-w-6 flex-1 rounded-full"
+              style={{ background: 'var(--line)' }}
+            >
+              <span
+                className="block h-full rounded-full"
+                style={{
+                  width: `${splitShare(secondsPerUnit(split, units), fastest, slowest).toFixed(1)}%`,
+                  background: 'var(--blue)',
+                }}
+              />
+            </span>
+            <span className="t-nums w-16 shrink-0 text-right text-muted">
+              {split.hr === null ? '' : `${split.hr} bpm`}
+            </span>
+          </>
+        )
+        return lined ? (
+          <button
+            key={split.index}
+            type="button"
+            className={`t-row -mx-2 min-h-9 w-[calc(100%+1rem)] rounded-lg px-2 text-sm ${
+              marked ? 'bg-surface-2' : ''
+            }`}
+            aria-pressed={marked}
+            onClick={() => onChoose(marked ? null : index)}
+          >
+            {figures}
+          </button>
+        ) : (
+          <div key={split.index} className="t-row min-h-9 text-sm">
+            {figures}
+          </div>
+        )
+      })}
+      {quickest !== null && (
+        <p className="mt-2 text-xs text-muted">{fastestLine(quickest, units)}</p>
+      )}
+      {lined && <p className="mt-1 text-xs text-muted">Tap a split to see it on the route</p>}
     </div>
   )
 }
@@ -123,9 +163,17 @@ export function WorkoutDetails({
   const [failed, setFailed] = useState('')
   // What went wrong with the last hide, said under the switch it belongs to.
   const [hideError, setHideError] = useState('')
+  // Which split is picked out on the route, by its place in the list. Null is
+  // none, which is where every workout starts and where a second tap on the
+  // same row puts it back.
+  const [chosen, setChosen] = useState<number | null>(null)
+  // The way to move the dot along the route line, filled in by the drawing and
+  // driven by the graph's cursor.
+  const marker = useRef<RouteMarker | null>(null)
 
   useEffect(() => {
     let alive = true
+    setChosen(null)
     api<WorkoutDetail>(`/workouts/${workoutId}`)
       .then((row) => alive && setDetail(row))
       .catch((failure) => alive && setFailed(errorText(failure)))
@@ -145,6 +193,14 @@ export function WorkoutDetails({
   const pace =
     detail.distance_m === null ? null : paceText(detail.distance_m, detail.duration_s, me.units)
   const route = detail.route ?? null
+  // Whether there is a line to find anything on. A workout whose route is
+  // hidden, missing, or too short to draw has none.
+  const lined = route !== null && route.length > 1
+  const splits = splitsOf(detail.samples, me.units)
+  // Where each split and each minute fall along the session, which is how each
+  // of them is found on the line. Worked out only where there is one.
+  const spans = lined ? spansOf(splits) : []
+  const places = lined ? placesOf(detail.samples) : new Map<number, number>()
 
   // The switch moves at once and moves back if the server says no: a member
   // deciding who sees a morning should not wait on a round trip.
@@ -221,15 +277,31 @@ export function WorkoutDetails({
       {route !== null && route.length > 1 && (
         <div className="t-card mb-3">
           <p className="t-micro mb-2">Route</p>
-          <RouteLine points={route} />
+          <RouteLine
+            points={route}
+            highlight={chosen === null ? null : (spans[chosen] ?? null)}
+            marker={marker}
+          />
           <p className="mt-1 text-xs text-muted">
             Start and end areas hidden
           </p>
         </div>
       )}
 
-      <HeartLine detail={detail} />
-      <Splits detail={detail} me={me} />
+      <LaneGraph
+        samples={detail.samples}
+        units={me.units}
+        places={places}
+        marker={marker}
+        route={lined ? route : null}
+      />
+      <Splits
+        splits={splits}
+        units={me.units}
+        chosen={chosen}
+        lined={lined}
+        onChoose={setChosen}
+      />
 
       {detail.mine && (
         <div className="t-card mb-3">

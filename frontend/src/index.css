@@ -237,6 +237,14 @@
     font-variant-numeric: tabular-nums;
   }
 
+  /* A stroke inside a drawing that is stretched to fit its column. The width is
+     read in screen pixels rather than in the box's own units, so a route line
+     keeps its weight in a small strip and a lane keeps its weight at every
+     width the page is read at. */
+  .t-stroke {
+    vector-effect: non-scaling-stroke;
+  }
+
   /* ---- Forms. Every control is 44px tall, which is the smallest thing a
      thumb should have to find. ---- */
 

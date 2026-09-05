@@ -135,6 +135,7 @@ const ICONS: [RegExp, Drawing][] = [
   [/row|elliptical|stair|hiit|interval|cardio|danc|other/i, Activity],
 ]
 
+
 export function ActivityIcon({ name, className }: { name: string; className?: string }) {
   const found = ICONS.find(([word]) => word.test(name))
   const Drawn = found === undefined ? Activity : found[1]
