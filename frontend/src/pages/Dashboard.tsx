@@ -42,8 +42,12 @@ const RUN_DAYS = 28
 // The four spans one switch reads every card over, what each is called, and
 // how a change of weight across it is said. The chosen one is remembered on
 // the device: somebody who reads their half year reads it again.
+// The weight line never reads less than a month: a week holds one weigh-in
+// for most people, and one point is not a trend. Food and steps keep the week.
+const WEIGHT_FLOOR = 30
+
 const SPANS = [
-  { days: WEEK, label: 'Week', over: 'this week' },
+  { days: WEEK, label: 'Week', over: 'over 30 days' },
   { days: 30, label: '30 days', over: 'over 30 days' },
   { days: 90, label: '3 months', over: 'over 3 months' },
   { days: 180, label: '6 months', over: 'over 6 months' },
@@ -550,7 +554,7 @@ export function Dashboard({
     api<DiaryDays>(`/diary/days?days=${Math.max(RUN_DAYS, span)}`)
       .then((loaded) => alive && setRun(loaded.days))
       .catch(() => undefined)
-    api<Measurements>(`/health/measurements?days=${span}`)
+    api<Measurements>(`/health/measurements?days=${Math.max(span, WEIGHT_FLOOR)}`)
       .then((loaded) => alive && setWindowed(loaded))
       .catch(() => undefined)
     return () => {
