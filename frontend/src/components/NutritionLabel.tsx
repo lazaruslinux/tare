@@ -75,8 +75,35 @@ function tileLabel(fact: Fact, values: Panel): string {
   return `Sugar (${nutrientText('added_sugars_g', values.added_sugars_g)}g added)`
 }
 
+// A heading that opens and closes what sits under it.
+export function Fold({
+  label,
+  open = false,
+  children,
+}: {
+  label: string
+  open?: boolean
+  children: ReactNode
+}) {
+  const [shown, setShown] = useState(open)
+  return (
+    <>
+      <button
+        type="button"
+        className="t-micro mt-2 flex items-center gap-1"
+        aria-expanded={shown}
+        onClick={() => setShown(!shown)}
+      >
+        {label}
+        <ChevronDown className={`h-3.5 w-3.5 ${shown ? 'rotate-180' : ''}`} strokeWidth={2.5} />
+      </button>
+      {shown && <div className="mt-1">{children}</div>}
+    </>
+  )
+}
+
 // The figures themselves: the five anybody reads, the line saying what they
-// are for, and the whole label behind "More". Everything that shows a panel
+// are for, and the whole label behind a fold. Everything that shows a panel
 // goes through this, so a food and a recipe are read the same way.
 export function PanelFacts({
   values,
@@ -84,18 +111,19 @@ export function PanelFacts({
   // Where the screen above puts the note instead. The food page reads it on the
   // chips line once there is room, so its copy here is the narrow one.
   noteClass = '',
-  // What the fold is called, and anything that belongs between the figures and
-  // it. A food puts its ingredients there; a recipe and a meal have none.
+  // What the fold is called, whether it starts open, and anything that belongs
+  // under it. A food puts its ingredients there; a recipe and a meal have none.
   moreLabel = 'More',
+  open = false,
   children,
 }: {
   values: Panel
   note: string
   noteClass?: string
   moreLabel?: string
+  open?: boolean
   children?: ReactNode
 }) {
-  const [more, setMore] = useState(false)
 
   return (
     <>
@@ -115,30 +143,18 @@ export function PanelFacts({
 
       <p className={`mt-2 text-xs text-muted ${noteClass}`}>{note}</p>
 
+      <Fold label={moreLabel} open={open}>
+        {LABEL_ORDER.map((fact) => (
+          <div key={fact.key} className="t-row min-h-9 text-sm">
+            <span className={`flex-1 text-muted ${fact.sub ? 'pl-4' : ''}`}>{fact.label}</span>
+            <span className="t-nums">
+              {nutrientText(fact.key, values[fact.key])} {fact.unit}
+            </span>
+          </div>
+        ))}
+      </Fold>
+
       {children}
-
-      <button
-        type="button"
-        className="t-micro mt-2 flex items-center gap-1"
-        aria-expanded={more}
-        onClick={() => setMore(!more)}
-      >
-        {moreLabel}
-        <ChevronDown className={`h-3.5 w-3.5 ${more ? 'rotate-180' : ''}`} strokeWidth={2.5} />
-      </button>
-
-      {more && (
-        <div className="mt-1">
-          {LABEL_ORDER.map((fact) => (
-            <div key={fact.key} className="t-row min-h-9 text-sm">
-              <span className={`flex-1 text-muted ${fact.sub ? 'pl-4' : ''}`}>{fact.label}</span>
-              <span className="t-nums">
-                {nutrientText(fact.key, values[fact.key])} {fact.unit}
-              </span>
-            </div>
-          ))}
-        </div>
-      )}
     </>
   )
 }
@@ -177,7 +193,8 @@ export function NutritionLabel({ food, children }: { food: Food; children?: Reac
         values={panelAt(food, baseAmount)}
         note={size}
         noteClass="min-[640px]:hidden"
-        moreLabel="Ingredients and nutrition label"
+        moreLabel="Nutrition label"
+        open
       >
         {children}
       </PanelFacts>

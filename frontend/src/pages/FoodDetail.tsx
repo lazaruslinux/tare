@@ -15,7 +15,7 @@ import { useEffect, useState, type ChangeEvent } from 'react'
 
 import { api, errorText, upload, type AutoLog, type Food, type Me } from '../api'
 import { Verified } from '../components/FoodRows'
-import { NutritionLabel } from '../components/NutritionLabel'
+import { Fold, NutritionLabel } from '../components/NutritionLabel'
 import { PortionSheet } from '../components/PortionSheet'
 import { Lightbox } from '../components/Lightbox'
 import { Sheet } from '../components/Sheet'
@@ -349,12 +349,11 @@ export function FoodDetail({
                 database says so even when nobody has typed it yet; a private
                 one of your own does not ask you for it. */}
             {(food.ingredients_text !== '' || shared) && (
-              <div className="mt-3">
-                <p className="t-micro mb-1">Ingredients</p>
+              <Fold label="Ingredients">
                 <p className="text-sm whitespace-pre-line">
                   {food.ingredients_text || 'No ingredients listed.'}
                 </p>
-              </div>
+              </Fold>
             )}
           </NutritionLabel>
 
