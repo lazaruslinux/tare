@@ -38,6 +38,7 @@
   --coral: #ef8a7c;
   --orange: #efa25a;
   --violet: #b79bdd;
+  --gold: #e3c15a;
 }
 
 [data-theme='light'] {
@@ -66,6 +67,7 @@
   /* Orange darkened so chip text clears 4.5:1. */
   --orange: #9c5512;
   --violet: #6b4aa0;
+  --gold: #8a5a00;
 }
 
 /* Bridged rather than redeclared, so bg-surface and text-muted resolve to the
@@ -90,6 +92,7 @@
   --color-coral: var(--coral);
   --color-orange: var(--orange);
   --color-violet: var(--violet);
+  --color-gold: var(--gold);
   --font-sans: 'Inter Variable', ui-sans-serif, system-ui, sans-serif;
 }
 
