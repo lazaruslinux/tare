@@ -1,7 +1,7 @@
 """The outbound lookups, with a transport under them instead of a network.
 
 Nothing here opens a socket. Every response is one this file wrote, shaped like
-the ones the two sources really send, so a case that fails is about the parsing
+the ones Open Food Facts really sends, so a case that fails is about the parsing
 and never about somebody else's server being slow.
 """
 
@@ -38,27 +38,6 @@ OFF_PRODUCT = {
         },
     },
 }
-
-USDA_HIT = {
-    "fdcId": 1234567,
-    "description": "MILK CHOCOLATE",
-    "brandName": "HERSHEY'S",
-    "gtinUpc": "00034000002405",
-    "publishedDate": "2024-04-01",
-    "servingSize": 43,
-    "servingSizeUnit": "g",
-    "householdServingFullText": "1 bar",
-    "ingredients": "SUGAR, MILK, CHOCOLATE.",
-    "foodNutrients": [
-        {"nutrientNumber": "208", "value": 535},
-        {"nutrientNumber": "203", "value": 7},
-        {"nutrientNumber": "205", "value": 58.1},
-        {"nutrientNumber": "204", "value": 32.6},
-        {"nutrientNumber": "307", "value": 81},
-        {"nutrientNumber": "269", "value": 51.2},
-    ],
-}
-
 
 def transport(handler):
     """A client whose every request is answered by the function given."""
@@ -138,83 +117,6 @@ def test_a_source_that_will_not_answer_raises_the_one_error():
 def test_a_source_answering_with_a_fault_raises_the_one_error():
     with transport(answering({}, status_code=503)) as client, pytest.raises(FoodApiError):
         foods_api.lookup_off("034000002405", client)
-
-
-# ---- USDA ----
-
-
-def test_the_branded_set_is_asked_with_the_padded_code_first():
-    asked = []
-
-    def handler(request):
-        asked.append(request.url.params["query"])
-        return httpx.Response(200, json={"foods": [USDA_HIT]})
-
-    with transport(handler) as client:
-        found = foods_api.lookup_usda("034000002405", "a-key", client)
-
-    assert found is not None
-    assert found.name == "Milk Chocolate"
-    assert found.brand == "Hershey's"
-    # The barcode, not the catalogue's own id: this row is found again by the
-    # code somebody scanned.
-    assert found.source_id == "034000002405"
-    assert found.sodium_mg == 81
-    assert (found.serving, found.serving_amount) == ("1 bar", 43)
-    # The padded form matched, so the bare one was never asked for.
-    assert asked == ["00034000002405"]
-
-
-def test_the_bare_code_is_asked_only_when_the_padded_one_missed():
-    asked = []
-
-    def handler(request):
-        query = request.url.params["query"]
-        asked.append(query)
-        return httpx.Response(200, json={"foods": [USDA_HIT] if query == "034000002405" else []})
-
-    with transport(handler) as client:
-        found = foods_api.lookup_usda("034000002405", "a-key", client)
-
-    assert found is not None
-    assert asked == ["00034000002405", "034000002405"]
-
-
-def test_a_hit_on_some_other_product_s_digits_does_not_count():
-    other = {**USDA_HIT, "gtinUpc": "00034000009999"}
-    with transport(answering({"foods": [other]})) as client:
-        assert foods_api.lookup_usda("034000002405", "a-key", client) is None
-
-
-def test_the_newest_printing_of_a_label_wins():
-    older = {**USDA_HIT, "publishedDate": "2019-01-01", "description": "OLD WRAPPER"}
-    newer = {**USDA_HIT, "publishedDate": "2025-06-01", "description": "NEW WRAPPER"}
-    with transport(answering({"foods": [older, newer]})) as client:
-        found = foods_api.lookup_usda("034000002405", "a-key", client)
-
-    assert found is not None
-    assert found.name == "New Wrapper"
-
-
-def test_an_install_with_no_key_never_asks_the_branded_set():
-    def handler(request):
-        raise AssertionError(f"a request went out to {request.url}")
-
-    with transport(handler) as client:
-        assert foods_api.lookup_usda("034000002405", "", client) is None
-
-
-def test_a_lookup_falls_through_to_the_other_source():
-    def handler(request):
-        if "openfoodfacts" in str(request.url):
-            return httpx.Response(200, json=OFF_PRODUCT)
-        return httpx.Response(200, json={"foods": []})
-
-    with transport(handler) as client:
-        found = foods_api.lookup("034000002405", "a-key", client)
-
-    assert found is not None
-    assert found.source == "off"
 
 
 # ---- Servings and density ----

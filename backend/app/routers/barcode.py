@@ -22,7 +22,6 @@ from sqlalchemy import select
 from sqlalchemy.orm import Session
 
 from app import foods_api, models
-from app.config import settings
 from app.db import get_db
 from app.deps import require_user
 from app.models import NUTRIENTS, now_utc
@@ -45,7 +44,6 @@ CACHE_DAYS = 30
 # because they live in a column; these are what a person reads.
 SOURCE_NAMES = {
     "off": "Open Food Facts",
-    "usda": "USDA FoodData Central",
 }
 
 # A record with no product name at all is still worth prefilling from: every
@@ -179,7 +177,7 @@ def resolve_barcode(
             return {"state": "prefill", "prefill": prefill(cached)}
 
     try:
-        result = foods_api.lookup(code, settings.usda_api_key)
+        result = foods_api.lookup(code)
     except foods_api.FoodApiError as failure:
         # A reading this instance already has beats an error about a network.
         # It is out of date rather than wrong, and the person is standing in

@@ -57,8 +57,6 @@ class Settings(BaseSettings):
     # tare offers, which is what the deploy check below holds it to.
     tz: str = Field(default="America/New_York", validation_alias="TARE_TZ")
 
-    usda_api_key: str = ""
-
     # Whether a member may hand this server a health export as a file. On by
     # default, because that is how somebody moves a year of history in. An
     # instance that would rather only ever be posted to by a phone turns it

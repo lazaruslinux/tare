@@ -32,7 +32,6 @@ Then open `.env` and go down it. In the file's order:
 | `SITE_URL` | Where the instance answers, no trailing slash: `https://tare.example.com`. Only used to build the links that go out by mail; an instance that sends none can leave it empty. |
 | `TRUSTED_PROXY_HOPS` | How many proxies of your own stand in front of the web container. One TLS proxy, which is the shape below, is `1`, and that is the default. Reaching the web container with nothing in front of it is `0`. Setting it higher than the number really there lets a caller pick their own rate-limit bucket. |
 | `TARE_UPLOADS` | Whether members may hand the instance a health export as a file. `true` unless you want that address to stop existing. |
-| `USDA_API_KEY` | Optional. A free key from api.data.gov adds USDA's Branded set to barcode lookups. Without one, lookups use Open Food Facts alone. |
 | `SMTP_HOST`, `SMTP_PORT`, `SMTP_USER`, `SMTP_PASSWORD`, `SMTP_FROM` | Optional, and all five together or none. With them the instance can mail invites, verification and password resets; without them it sends nothing and the sign-in screen stops offering a reset link. |
 
 `POSTGRES_PASSWORD` and `SECRET_KEY` must change. The api refuses to start

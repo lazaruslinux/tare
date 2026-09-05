@@ -7,11 +7,8 @@ row, reads a session, or knows what an account is; it takes a barcode and hands
 back a normalised reading, so the routes stay thin and the tests can put a fake
 transport under it instead of a network.
 
-Two sources, in the order they are tried. USDA FoodData Central's Branded set is
-transcribed from United States labels and matched on an exact barcode, so it is
-asked first when the instance has a key. Open Food Facts needs no key and covers
-the rest of the world, so it is the fallback and the only source a keyless
-install has.
+One source. Open Food Facts needs no key, covers the whole world, and is what
+every install here reads from.
 """
 
 from __future__ import annotations
@@ -23,7 +20,6 @@ from typing import Any
 
 import httpx
 
-USDA_SEARCH_URL = "https://api.nal.usda.gov/fdc/v1/foods/search"
 OFF_PRODUCT_URL = "https://world.openfoodfacts.org/api/v2/product/{barcode}.json"
 
 # Named rather than anonymous. Open Food Facts asks callers to identify
@@ -38,21 +34,6 @@ OFF_FIELDS = (
     "product_name,brands,nutriments,serving_size,serving_quantity,"
     "serving_quantity_unit,ingredients_text"
 )
-
-# USDA reports nutrients by number rather than by name. Sodium and cholesterol
-# arrive in milligrams and the rest in grams, which is what the columns here
-# already hold, so only energy needs any arithmetic.
-N_ENERGY_KCAL = "208"
-N_ENERGY_KJ = "268"
-N_PROTEIN = "203"
-N_CARBS = "205"
-N_FAT = "204"
-N_SATURATED = "606"
-N_TRANS = "605"
-N_CHOLESTEROL = "601"
-N_SODIUM = "307"
-N_FIBER = "291"
-N_SUGAR = "269"
 
 
 class FoodApiError(Exception):
@@ -313,15 +294,6 @@ def measured_serving(size: object, unit: object, text: str) -> Measured:
     return found
 
 
-def normalised_barcode(code: object) -> str:
-    """A barcode as it compares: digits only, leading zeros dropped.
-
-    The same product is stored as a twelve-digit code in one place and a
-    zero-padded fourteen-digit one in another, and neither is wrong.
-    """
-    return "".join(character for character in str(code or "") if character.isdigit()).lstrip("0")
-
-
 # A word, apostrophes and all. str.title() capitalises the letter after an
 # apostrophe, which turns HERSHEY'S into Hershey'S.
 _WORD = re.compile(r"[A-Za-z]+(?:'[A-Za-z]+)*")
@@ -337,79 +309,6 @@ def _titled(text: str) -> str:
     if text and text == text.upper() and any(character.isalpha() for character in text):
         return _WORD.sub(lambda word: word.group(0).capitalize(), text)
     return text
-
-
-def _usda_result(hit: dict[str, Any], barcode: str) -> FoodResult:
-    by_number: dict[str, Any] = {}
-    for entry in hit.get("foodNutrients") or []:
-        if isinstance(entry, dict):
-            by_number[str(entry.get("nutrientNumber"))] = entry.get("value")
-    brand = hit.get("brandName") or hit.get("brandOwner") or ""
-    household = str(hit.get("householdServingFullText") or "").strip()
-    measured = measured_serving(hit.get("servingSize"), hit.get("servingSizeUnit"), household)
-    return repair_energy(
-        FoodResult(
-            source="usda",
-            # The barcode, not the record's own id: what identifies this row
-            # here is the code that was scanned to find it.
-            source_id=barcode,
-            name=_titled(str(hit.get("description") or "").strip()),
-            brand=_titled(str(brand).strip()),
-            calories=_energy_kcal(by_number.get(N_ENERGY_KCAL), by_number.get(N_ENERGY_KJ)),
-            protein_g=_num(by_number.get(N_PROTEIN)),
-            carbs_g=_num(by_number.get(N_CARBS)),
-            fat_g=_num(by_number.get(N_FAT)),
-            saturated_fat_g=_num(by_number.get(N_SATURATED)),
-            trans_fat_g=_num(by_number.get(N_TRANS)),
-            cholesterol_mg=_num(by_number.get(N_CHOLESTEROL)),
-            sodium_mg=_num(by_number.get(N_SODIUM)),
-            fiber_g=_num(by_number.get(N_FIBER)),
-            sugar_g=_num(by_number.get(N_SUGAR)),
-            base_unit=measured.base_unit,
-            density_g_per_ml=measured.density_g_per_ml,
-            serving=household,
-            serving_amount=measured.amount,
-            ingredients_text=str(hit.get("ingredients") or "").strip(),
-        )
-    )
-
-
-def lookup_usda(barcode: str, api_key: str, client: httpx.Client | None = None) -> FoodResult | None:
-    """One barcode in USDA's Branded set, or nothing.
-
-    An install with no key skips this source entirely rather than failing over
-    it: Open Food Facts needs no key and covers the same scan.
-
-    The catalogue matches its stored barcode string exactly, and stores it
-    zero-padded to fourteen digits far more often than bare, so the padded form
-    is asked first. A miss falls through to the other source anyway, so the
-    second request only costs anything on the rare codes.
-    """
-    if not api_key:
-        return None
-    hits: list[dict[str, Any]] = []
-    wanted = normalised_barcode(barcode)
-    for query in dict.fromkeys((barcode.zfill(14), barcode)):
-        payload = _get(
-            USDA_SEARCH_URL,
-            params={"api_key": api_key, "query": query, "pageSize": 10, "dataType": "Branded"},
-            client=client,
-        )
-        # Only an exact barcode counts. The catalogue is searched by text, so a
-        # loose match on some other product's digits is entirely possible.
-        hits = [
-            food
-            for food in payload.get("foods") or []
-            if isinstance(food, dict) and normalised_barcode(food.get("gtinUpc")) == wanted
-        ]
-        if hits:
-            break
-    if not hits:
-        return None
-    # The same product is listed once per label revision. The newest printing is
-    # the one on the packet somebody is holding.
-    newest = max(hits, key=lambda food: str(food.get("publishedDate") or ""))
-    return _usda_result(newest, barcode)
 
 
 def lookup_off(barcode: str, client: httpx.Client | None = None) -> FoodResult | None:
@@ -484,21 +383,10 @@ def _get(url: str, params: dict[str, Any], client: httpx.Client | None) -> dict[
     return payload if isinstance(payload, dict) else {}
 
 
-def lookup(barcode: str, api_key: str, client: httpx.Client | None = None) -> FoodResult | None:
-    """A barcode against every source this instance has, in order.
+def lookup(barcode: str, client: httpx.Client | None = None) -> FoodResult | None:
+    """A barcode against the one source this instance reads.
 
-    USDA first when there is a key, because its Branded set is transcribed from
-    the label rather than typed in by whoever scanned it last. Open Food Facts
-    after, and alone on an install with no key.
-
-    One client for however many requests this takes, so a scan that falls
-    through from one source to the other opens one connection rather than three.
+    Kept as its own function though it now has one line to do: the routes call
+    this, so where a reading comes from stays a question this module answers.
     """
-    borrowed = client is not None
-    client = client if client is not None else session()
-    try:
-        found = lookup_usda(barcode, api_key, client)
-        return found if found is not None else lookup_off(barcode, client)
-    finally:
-        if not borrowed:
-            client.close()
+    return lookup_off(barcode, client)

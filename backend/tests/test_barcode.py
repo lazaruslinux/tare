@@ -12,7 +12,6 @@ import httpx
 import pytest
 
 from app import foods_api, models
-from app.config import settings
 from app.models import now_utc
 from app.routers.barcode import CACHE_DAYS
 from tests.conftest import PASSWORD
@@ -55,15 +54,6 @@ OFF_PRODUCT = {
         },
     },
 }
-
-
-@pytest.fixture(autouse=True)
-def no_usda_key():
-    """Most cases are about the order, not about which source answered."""
-    was = settings.usda_api_key
-    settings.usda_api_key = ""
-    yield
-    settings.usda_api_key = was
 
 
 @pytest.fixture()
@@ -266,41 +256,6 @@ def test_something_that_is_not_a_barcode_is_refused_in_one_sentence(client, sign
         response = client.get(f"/api/barcode/{code}")
         assert response.status_code == 400
         assert response.json() == {"detail": "That is not a barcode."}
-
-
-def test_the_branded_set_is_skipped_when_there_is_no_key(client, signed_in, network):
-    def handler(request):
-        if "nal.usda.gov" in str(request.url):
-            raise AssertionError("the branded set was asked without a key")
-        return httpx.Response(200, json=OFF_PRODUCT)
-
-    network(handler)
-    assert client.get(f"/api/barcode/{CODE}").json()["state"] == "prefill"
-
-
-def test_the_branded_set_is_asked_first_when_there_is_one(client, signed_in, network, monkeypatch):
-    monkeypatch.setattr(settings, "usda_api_key", "a-key")
-    usda_hit = {
-        "fdcId": 1,
-        "description": "MILK CHOCOLATE",
-        "brandName": "HERSHEY'S",
-        "gtinUpc": "00034000002405",
-        "publishedDate": "2025-01-01",
-        "servingSize": 43,
-        "servingSizeUnit": "g",
-        "householdServingFullText": "1 bar",
-        "foodNutrients": [{"nutrientNumber": "208", "value": 535}],
-    }
-
-    def handler(request):
-        if "nal.usda.gov" in str(request.url):
-            return httpx.Response(200, json={"foods": [usda_hit]})
-        raise AssertionError("the second source was asked though the first answered")
-
-    network(handler)
-    body = client.get(f"/api/barcode/{CODE}").json()
-    assert body["prefill"]["source"] == "USDA FoodData Central"
-    assert body["prefill"]["name"] == "Milk Chocolate"
 
 
 def test_a_cached_reading_is_not_a_food_anybody_can_reach(
