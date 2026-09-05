@@ -1,8 +1,8 @@
-"""Kept meals: a list of things to log, and what logging it comes to.
+"""Kept meals: a list of things to eat together, and the one line it logs as.
 
 A meal holds no numbers of its own, so what these cases are mostly about is
-when the numbers are worked out: at the moment the meal is logged, from the
-foods as they stand then.
+when the numbers are worked out: at the moment the meal is read or logged,
+from the foods as they stand then.
 """
 
 import pytest
@@ -72,8 +72,10 @@ def breakfast(client, toast, coffee):
     return made.json()
 
 
-def log_meal(client, meal, slot="breakfast"):
-    return client.post(f"/api/meals/{meal['id']}/log", json={"date": TODAY, "slot": slot})
+def log_meal(client, meal, slot="breakfast", **extra):
+    return client.post(
+        f"/api/meals/{meal['id']}/log", json={"date": TODAY, "slot": slot, **extra}
+    )
 
 
 def entries(client, slot="breakfast"):
@@ -81,7 +83,7 @@ def entries(client, slot="breakfast"):
     return day["slots"][slot]["entries"]
 
 
-def test_a_meal_is_a_list_of_things_to_log(client, breakfast):
+def test_a_meal_is_a_list_of_things_to_eat_together(client, breakfast):
     assert breakfast["name"] == "Usual breakfast"
     first, second = breakfast["items"]
     assert (first["name"], first["amount"], first["unit"]) == ("Sourdough", 2, "serving")
@@ -94,25 +96,69 @@ def test_a_meal_is_a_list_of_things_to_log(client, breakfast):
             "id": breakfast["id"],
             "name": "Usual breakfast",
             "items": 2,
-            # Nothing in the diary says a meal was the reason for an entry, so
-            # this list has no date to read. The key is sent all the same.
+            "totals": breakfast["totals"],
+            # Nothing has been eaten yet, so there is no date to read.
             "last_logged": None,
         }
     ]
 
 
-def test_logging_a_meal_makes_one_entry_for_each_thing_in_it(client, breakfast):
+def test_a_meal_is_worth_what_the_things_in_it_are_worth(client, breakfast):
+    first, second = breakfast["items"]
+    # Two slices of 45 g at 260 calories per 100 g, and 200 mL at 60 per 100.
+    assert round(first["calories"], 4) == round(260 * 0.9, 4)
+    assert round(second["calories"], 4) == 120
+    assert round(breakfast["totals"]["calories"], 4) == round(234 + 120, 4)
+    assert round(breakfast["totals"]["protein_g"], 4) == round(9 * 0.9 + 6, 4)
+    for field in ("calories", "protein_g", "carbs_g", "fat_g"):
+        assert round(breakfast["totals"][field], 4) == round(
+            sum(item[field] for item in breakfast["items"]), 4
+        )
+    # Neither label gave a saturated fat figure, so the meal has no answer for
+    # it rather than none of it, and added sugars is never read off an item.
+    assert breakfast["totals"]["saturated_fat_g"] is None
+    assert breakfast["totals"]["added_sugars_g"] is None
+
+
+def test_logging_a_meal_makes_one_line_with_everything_in_it(client, breakfast):
     logged = log_meal(client, breakfast)
     assert logged.status_code == 201
     answer = logged.json()
     assert answer["skipped"] == []
-    assert [row["name"] for row in answer["entries"]] == ["Sourdough", "Flat white"]
 
-    # Two slices of 45 g at 260 calories per 100 g, and 200 mL at 60 per 100.
-    assert round(answer["entries"][0]["calories"], 4) == round(260 * 0.9, 4)
-    assert answer["entries"][0]["serving_label"] == "1 slice"
-    assert round(answer["entries"][1]["calories"], 4) == 120
-    assert len(entries(client)) == 2
+    entry = answer["entry"]
+    assert entry["name"] == "Usual breakfast"
+    assert (entry["meal_id"], entry["food_id"], entry["recipe_id"]) == (breakfast["id"], None, None)
+    assert (entry["amount"], entry["unit"], entry["serving_label"]) == (1, "serving", "serving")
+    assert round(entry["calories"], 4) == round(234 + 120, 4)
+    assert round(entry["protein_g"], 4) == round(9 * 0.9 + 6, 4)
+
+    day = entries(client)
+    assert len(day) == 1
+    assert day[0]["meal_id"] == breakfast["id"]
+
+    # And the list can now say when this meal was last eaten.
+    assert client.get("/api/meals").json()[0]["last_logged"] == TODAY
+
+
+def test_a_meal_can_be_logged_more_than_once_over(client, breakfast):
+    answer = log_meal(client, breakfast, servings=2).json()
+    assert answer["entry"]["amount"] == 2
+    assert round(answer["entry"]["calories"], 4) == round((234 + 120) * 2, 4)
+
+
+def test_a_meal_is_logged_in_servings_of_itself(client, breakfast):
+    refused = log_meal(client, breakfast, servings=0)
+    assert refused.status_code == 400
+    assert entries(client) == []
+
+
+def test_a_logged_meal_is_edited_by_the_serving(client, breakfast):
+    entry = log_meal(client, breakfast).json()["entry"]
+    changed = client.patch(f"/api/diary/{entry['id']}", json={"amount": 3})
+    assert changed.status_code == 200
+    assert changed.json()["amount"] == 3
+    assert round(changed.json()["calories"], 4) == round((234 + 120) * 3, 4)
 
 
 def test_the_numbers_come_from_the_food_as_it_stands_when_the_meal_is_logged(
@@ -134,7 +180,7 @@ def test_the_numbers_come_from_the_food_as_it_stands_when_the_meal_is_logged(
 
     answer = log_meal(client, breakfast).json()
     # The meal kept no panel of its own, so the correction is what was logged.
-    assert round(answer["entries"][1]["calories"], 4) == 60
+    assert round(answer["entry"]["calories"], 4) == round(234 + 60, 4)
 
 
 def test_something_whose_food_has_gone_is_left_out_and_named(client, breakfast, toast):
@@ -142,9 +188,15 @@ def test_something_whose_food_has_gone_is_left_out_and_named(client, breakfast, 
 
     answer = log_meal(client, breakfast).json()
     assert answer["skipped"] == ["Sourdough"]
-    assert [row["name"] for row in answer["entries"]] == ["Flat white"]
-    # The rest of the meal really was eaten, so the rest of it is logged.
+    # The rest of the meal really was eaten, so the line still lands, worth
+    # what is left of it.
+    assert round(answer["entry"]["calories"], 4) == 120
     assert len(entries(client)) == 1
+
+    # And the meal reads the same way while that food is gone.
+    meal = client.get(f"/api/meals/{breakfast['id']}").json()
+    assert meal["items"][0]["calories"] is None
+    assert round(meal["totals"]["calories"], 4) == 120
 
 
 def test_a_meal_needs_a_name_and_a_workable_list(client, toast):
@@ -188,15 +240,19 @@ def test_a_meal_is_replaced_wholesale(client, breakfast, coffee):
     assert [row["name"] for row in changed.json()["items"]] == ["Flat white"]
 
     answer = log_meal(client, breakfast).json()
-    assert round(answer["entries"][0]["calories"], 4) == 180
+    assert round(answer["entry"]["calories"], 4) == 180
 
 
 def test_a_meal_is_deleted_and_what_was_logged_from_it_stays(client, breakfast):
     log_meal(client, breakfast)
     assert client.delete(f"/api/meals/{breakfast['id']}").status_code == 204
     assert client.get("/api/meals").json() == []
-    # The entries were ordinary entries the moment they were written.
-    assert len(entries(client)) == 2
+    # The line keeps its name and its numbers, and stops pointing at a meal
+    # that is not there.
+    day = entries(client)
+    assert len(day) == 1
+    assert (day[0]["name"], day[0]["meal_id"]) == ("Usual breakfast", None)
+    assert round(day[0]["calories"], 4) == round(234 + 120, 4)
 
 
 def test_a_meal_is_logged_into_a_meal_that_exists(client, breakfast):

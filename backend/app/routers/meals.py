@@ -1,9 +1,9 @@
-"""Kept meals: the foods somebody eats together, logged in one go.
+"""Kept meals: the foods somebody eats together, logged as one line.
 
-A meal holds no numbers of its own. It is a list of things to log, and each of
-them takes its panel from the food as that food stands at the moment the meal
-is logged, through the very code path a single food goes through. Nothing here
-is a recipe: a recipe is cooked and shared out, a meal is a shortcut.
+A meal holds no numbers of its own. It is a list of things, and each of them
+takes its panel from the food as that food stands at the moment the meal is
+read or eaten, through the very code path a single food goes through. Nothing
+here is a recipe: a recipe is cooked and shared out, a meal is a shortcut.
 
 A meal is private without qualification. Somebody else's answers exactly what
 an id that was never used answers.
@@ -12,22 +12,23 @@ an id that was never used answers.
 from __future__ import annotations
 
 from fastapi import APIRouter, Depends, HTTPException, status
-from sqlalchemy import select
+from sqlalchemy import select, update
 from sqlalchemy.orm import Session, selectinload
 
 from app import clock, models, schemas
 from app.db import get_db
 from app.deps import require_user
-from app.models import now_utc
+from app.models import NUTRIENTS, SERVING_UNIT, now_utc
+from app.recipes import HEADLINE
 from app.routers.diary import (
     checked_slot,
     entry_row,
-    log_food,
     measure,
     refuse_if_complete,
+    snapshot,
     stored_unit,
 )
-from app.routers.foods import MY_LIST_CAP, readable_food
+from app.routers.foods import MY_LIST_CAP, last_logged_by, readable_food
 from app.routers.recipes import checked_name, part_food
 
 router = APIRouter(prefix="/meals", tags=["meals"])
@@ -72,9 +73,67 @@ def held_names(meal: models.MealTemplate) -> dict[int, str]:
     return {row.food_id: row.name for row in meal.items if row.food_id is not None}
 
 
-def item_row(row: models.MealTemplateItem) -> dict[str, object]:
-    """One item. food_id is null once its food is gone, and the name stays."""
-    return {
+def item_panel(
+    db: Session, user: models.User, item: models.MealTemplateItem
+) -> dict[str, float | None] | None:
+    """What one item comes to, from its food as that food stands now.
+
+    Nothing at all when the food has gone, or when the serving it was measured
+    in has been renamed away: either way there is no longer anything to measure
+    with. The two the diary uses do the arithmetic, so an item in a meal and
+    the same portion logged by hand cannot come out different. The row it fills
+    in is never kept: this is read every time a meal is shown.
+    """
+    if item.food_id is None:
+        return None
+    try:
+        food = readable_food(db, user, item.food_id)
+        base_amount, _, _ = measure(food, item.amount, stored_unit(item, food))
+    except HTTPException:
+        return None
+    scratch = models.DiaryEntry()
+    snapshot(scratch, food, base_amount)
+    return {field: getattr(scratch, field) for field in NUTRIENTS}
+
+
+def portions(
+    db: Session, user: models.User, meal: models.MealTemplate
+) -> tuple[list[dict[str, float | None] | None], list[str]]:
+    """Every item worked out, in order, and the names of the ones that cannot
+    be worked out any more."""
+    panels: list[dict[str, float | None] | None] = []
+    skipped: list[str] = []
+    for item in meal.items:
+        panel = item_panel(db, user, item)
+        if panel is None:
+            skipped.append(item.name)
+        panels.append(panel)
+    return panels, skipped
+
+
+def totals(panels: list[dict[str, float | None] | None]) -> dict[str, float | None]:
+    """The whole meal added up, by the rule a recipe's total uses: a nutrient
+    one item is missing is unknown for the meal, not a smaller amount of it."""
+    carried = [panel for panel in panels if panel is not None]
+    whole: dict[str, float | None] = {}
+    for field in NUTRIENTS:
+        figures = [value for panel in carried if (value := panel[field]) is not None]
+        whole[field] = sum(figures) if len(figures) == len(carried) else None
+    # An item keeps the ten a portion carries and nothing a packet says about
+    # itself, so how much sugar was added is unknown here rather than none.
+    whole["added_sugars_g"] = None
+    return whole
+
+
+def item_row(
+    row: models.MealTemplateItem, panel: dict[str, float | None] | None
+) -> dict[str, object]:
+    """One item. food_id is null once its food is gone, and the name stays.
+
+    The four the lists and the form read come with it, and they are null on an
+    item whose food has gone, the same way the row itself says so.
+    """
+    data: dict[str, object] = {
         "id": row.id,
         "food_id": row.food_id,
         "name": row.name,
@@ -83,13 +142,18 @@ def item_row(row: models.MealTemplateItem) -> dict[str, object]:
         "unit": row.unit,
         "serving_label": row.serving_label,
     }
+    for field in HEADLINE:
+        data[field] = None if panel is None else panel[field]
+    return data
 
 
-def meal_detail(meal: models.MealTemplate) -> dict[str, object]:
+def meal_detail(db: Session, user: models.User, meal: models.MealTemplate) -> dict[str, object]:
+    panels, _ = portions(db, user, meal)
     return {
         "id": meal.id,
         "name": meal.name,
-        "items": [item_row(row) for row in meal.items],
+        "items": [item_row(row, panel) for row, panel in zip(meal.items, panels)],
+        "totals": totals(panels),
     }
 
 
@@ -97,25 +161,37 @@ def meal_detail(meal: models.MealTemplate) -> dict[str, object]:
 def list_meals(
     db: Session = Depends(get_db), user: models.User = Depends(require_user)
 ) -> list[dict[str, object]]:
-    """This account's kept meals, newest first.
+    """This account's kept meals, by when each was last eaten.
 
-    last_logged is always null here, and the ordering is by when each meal was
-    written down. Logging a meal writes one ordinary entry per food in it and
-    leaves no mark saying the meal was the reason, so there is nothing to read
-    a date off. The key is sent all the same, so the three lists on the Food
-    page read the same shape and this one starts answering the moment the diary
-    has somewhere to record it.
+    A logged meal is one line that names the meal it came from, so there is a
+    date to read here now, and the ordering is the food list's: last eaten
+    first, and by when it was written down for the ones nobody has logged yet.
     """
+    logged = last_logged_by(models.DiaryEntry.meal_id, user)
     query = (
-        select(models.MealTemplate)
+        select(models.MealTemplate, logged.c.last_logged)
         .options(selectinload(models.MealTemplate.items))
+        .outerjoin(logged, logged.c.owner == models.MealTemplate.id)
         .where(models.MealTemplate.user_id == user.id)
-        .order_by(models.MealTemplate.created_at.desc(), models.MealTemplate.id.desc())
+        .order_by(
+            logged.c.last_logged.desc().nullslast(),
+            models.MealTemplate.created_at.desc(),
+            models.MealTemplate.id.desc(),
+        )
         .limit(MY_LIST_CAP)
     )
     return [
-        {"id": meal.id, "name": meal.name, "items": len(meal.items), "last_logged": None}
-        for meal in db.execute(query).scalars()
+        {
+            "id": meal.id,
+            "name": meal.name,
+            "items": len(meal.items),
+            # What the whole meal comes to, so a row can say it. The foods
+            # behind a list of meals are read once each: the session hands the
+            # same food back to every meal that holds it.
+            "totals": totals(portions(db, user, meal)[0]),
+            "last_logged": stamp,
+        }
+        for meal, stamp in db.execute(query).all()
     ]
 
 
@@ -132,7 +208,7 @@ def create_meal(
     )
     db.add(meal)
     db.commit()
-    return meal_detail(meal)
+    return meal_detail(db, user, meal)
 
 
 @router.get("/{meal_id}")
@@ -141,7 +217,7 @@ def read_meal(
     db: Session = Depends(get_db),
     user: models.User = Depends(require_user),
 ) -> dict[str, object]:
-    return meal_detail(own_meal(db, user, meal_id))
+    return meal_detail(db, user, own_meal(db, user, meal_id))
 
 
 @router.put("/{meal_id}")
@@ -159,7 +235,7 @@ def replace_meal(
     meal.items = rows
     meal.updated_at = now_utc()
     db.commit()
-    return meal_detail(meal)
+    return meal_detail(db, user, meal)
 
 
 @router.delete("/{meal_id}", status_code=status.HTTP_204_NO_CONTENT)
@@ -168,10 +244,18 @@ def delete_meal(
     db: Session = Depends(get_db),
     user: models.User = Depends(require_user),
 ) -> None:
+    meal = own_meal(db, user, meal_id)
+    # What the foreign key already says, said again here so SQLite and the rows
+    # this process is holding stay in step with Postgres. What was eaten keeps
+    # its numbers either way.
+    db.execute(
+        update(models.DiaryEntry)
+        .where(models.DiaryEntry.meal_id == meal.id)
+        .values(meal_id=None)
+    )
     # Through the session, so the items go with it on SQLite too, where the
-    # foreign key is only enforced when it is asked for. Anything already
-    # logged from this meal is an ordinary entry and stays where it is.
-    db.delete(own_meal(db, user, meal_id))
+    # foreign key is only enforced when it is asked for.
+    db.delete(meal)
     db.commit()
 
 
@@ -182,33 +266,34 @@ def log_meal(
     db: Session = Depends(get_db),
     user: models.User = Depends(require_user),
 ) -> dict[str, object]:
-    """Log the whole meal: one ordinary entry for each thing in it.
+    """Log the whole meal as one line: what all of it comes to, that often.
 
-    An item whose food has gone is left out and named rather than holding up
-    the rest of the meal, because the other four things really were eaten.
+    A breakfast is one thing somebody ate, so it reads as one row in the day
+    rather than five, the way a recipe already did. An item whose food has gone
+    is left out and named rather than holding up the rest of the meal, because
+    the other four things really were eaten.
     """
     meal = own_meal(db, user, meal_id)
     day = body.date or clock.user_today(user)
     refuse_if_complete(db, user, day)
     slot = checked_slot(body.slot)
 
-    made: list[models.DiaryEntry] = []
-    skipped: list[str] = []
-    for item in meal.items:
-        if item.food_id is None:
-            skipped.append(item.name)
-            continue
-        try:
-            food = readable_food(db, user, item.food_id)
-            unit = stored_unit(item, food)
-        except HTTPException:
-            # The food is gone, or the serving it was measured in has been
-            # renamed away. Either way there is nothing left to measure with.
-            skipped.append(item.name)
-            continue
-        entry = log_food(user, day, slot, food, item.amount, unit)
-        db.add(entry)
-        made.append(entry)
-
+    panels, skipped = portions(db, user, meal)
+    whole = totals(panels)
+    entry = models.DiaryEntry(
+        user_id=user.id,
+        date_for=day,
+        slot=slot,
+        name=meal.name,
+        brand="",
+        meal_id=meal.id,
+        amount=body.servings,
+        unit=SERVING_UNIT,
+        serving_label=SERVING_UNIT,
+    )
+    for field in NUTRIENTS:
+        value = whole[field]
+        setattr(entry, field, None if value is None else value * body.servings)
+    db.add(entry)
     db.commit()
-    return {"entries": [entry_row(entry) for entry in made], "skipped": skipped}
+    return {"entry": entry_row(entry), "skipped": skipped}

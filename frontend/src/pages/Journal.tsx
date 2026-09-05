@@ -85,10 +85,12 @@ function withoutExercise(day: DiaryDay, id: number): DiaryDay {
   }
 }
 
-// The brand and the portion, whichever of them there is. A recipe is counted in
-// servings of itself rather than measured in anything.
+// The brand and the portion, whichever of them there is. A recipe and a kept
+// meal are counted in servings of themselves rather than measured in anything.
+const counted = (entry: DiaryEntry) => entry.recipe_id !== null || entry.meal_id !== null
+
 const under = (entry: DiaryEntry) =>
-  entry.recipe_id !== null && entry.amount !== null
+  counted(entry) && entry.amount !== null
     ? servingsText(entry.amount)
     : [entry.brand, portionText(entry)].filter(Boolean).join(' · ')
 
@@ -127,8 +129,8 @@ export function Journal({
   const [exercising, setExercising] = useState(false)
   // The one workout this tab opens over itself, when a synced row is tapped.
   const [viewing, setViewing] = useState<number | null>(null)
-  // A logged recipe is edited by the serving, which is the only thing about it
-  // that can change.
+  // A logged recipe or kept meal is edited by the serving, which is the only
+  // thing about it that can change.
   const [servings, setServings] = useState<{ entry: DiaryEntry; slot: Slot } | null>(null)
   const [saving, setSaving] = useState(false)
   const [refusal, setRefusal] = useState('')
@@ -248,7 +250,7 @@ export function Journal({
   }
 
   const openEntry = async (entry: DiaryEntry, slot: Slot) => {
-    if (entry.recipe_id !== null) {
+    if (counted(entry)) {
       setRefusal('')
       setServings({ entry, slot })
       return

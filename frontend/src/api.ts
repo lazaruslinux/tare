@@ -500,18 +500,27 @@ export type Recipe = {
   per_serving: Panel
 }
 
-// A kept meal as a list reads it, by how much is in it.
-// last_logged is always null on a meal: logging one writes an ordinary entry
-// per food in it and leaves nothing saying the meal was the reason.
-export type MealRow = { id: number; name: string; items: number; last_logged: string | null }
+// A kept meal as a list reads it: how much is in it, and what all of it comes
+// to.
+export type MealRow = {
+  id: number
+  name: string
+  items: number
+  totals: Panel
+  last_logged: string | null
+}
 
-// The whole meal. It has no numbers of its own: each item takes them from the
-// food as it stands when the meal is logged.
-export type Meal = { id: number; name: string; items: Part[] }
+// One thing in a kept meal, with what that much of its food comes to. The four
+// are null once the food is gone, which is what the row itself says too.
+export type MealItem = Part & Record<Headline, number | null>
 
-// What logging a whole meal came to, and the names of anything left out
-// because the food behind it is gone.
-export type MealLogged = { entries: DiaryEntry[]; skipped: string[] }
+// The whole meal. It keeps no numbers of its own: every figure here is worked
+// out from the foods as they stand now.
+export type Meal = { id: number; name: string; items: MealItem[]; totals: Panel }
+
+// What logging a whole meal came to: one line, and the names of anything left
+// out because the food behind it is gone.
+export type MealLogged = { entry: DiaryEntry; skipped: string[] }
 
 // One thing eaten. The numbers are for the amount served, not per 100 of
 // anything, and they were worked out when it was logged. food_id is null once
@@ -527,6 +536,8 @@ export type DiaryEntry = {
   // Set instead of food_id when what was eaten was a recipe, in which case the
   // amount is a number of its servings.
   recipe_id: number | null
+  // Or a kept meal, counted the same way: in servings of the whole meal.
+  meal_id: number | null
   // Which standing auto-log wrote this row. Null on one somebody logged.
   auto_log_id: number | null
   calories: number | null

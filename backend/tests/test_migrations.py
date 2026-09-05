@@ -131,6 +131,8 @@ def test_upgrade_head_builds_the_identity_schema(tmp_path):
     assert journal_columns == {"user_id", "date", "completed_at"}
     entry_columns = {column["name"] for column in inspector.get_columns("diary_entries")}
     assert "recipe_id" in entry_columns
+    # And the kept meal a line came out of, which is the same link again.
+    assert "meal_id" in entry_columns
     # Which standing auto-log wrote a row, and the one instruction a member
     # may have per food per meal.
     assert "auto_log_id" in entry_columns

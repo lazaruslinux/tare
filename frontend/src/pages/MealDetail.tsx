@@ -3,6 +3,7 @@ import { useEffect, useState } from 'react'
 
 import { api, errorText, type Meal, type MealLogged, type Me } from '../api'
 import { LogSheet } from '../components/LogSheet'
+import { PanelFacts, nutrientText } from '../components/NutritionLabel'
 import { useTopBar } from '../hooks/useTopBar'
 import { SLOT_LABEL, slotByTime, today, type Slot } from '../lib/day'
 import { portionText } from '../lib/units'
@@ -10,7 +11,8 @@ import { portionText } from '../lib/units'
 // How long the line saying what was logged stays up.
 const NOTICE = 5000
 
-// One kept meal: what is in it, and the one thing it exists for.
+// One kept meal: what it is worth, what is in it, and the one thing it exists
+// for.
 export function MealDetail({
   id,
   me,
@@ -60,18 +62,17 @@ export function MealDetail({
     return () => window.clearTimeout(timer)
   }, [notice])
 
-  const log = async (slot: Slot) => {
-    if (meal === null) return
+  const log = async (servings: number | null, slot: Slot) => {
+    if (meal === null || servings === null) return
     setSaving(true)
     setRefusal('')
     try {
       const answer = await api<MealLogged>(`/meals/${meal.id}/log`, {
         method: 'POST',
-        body: { date: today(me.timezone), slot },
+        body: { date: today(me.timezone), slot, servings },
       })
       setLogging(false)
-      const many = answer.entries.length === 1 ? '1 food' : `${answer.entries.length} foods`
-      setNotice(`Logged ${many} into ${SLOT_LABEL[slot].toLowerCase()}.`)
+      setNotice(`Logged ${meal.name} into ${SLOT_LABEL[slot].toLowerCase()}.`)
       setLeft(
         answer.skipped.length === 0
           ? ''
@@ -92,9 +93,11 @@ export function MealDetail({
       {meal && (
         <>
           {/* The bar above already says which meal this is. */}
-          <p className="mb-3 text-sm text-muted">
-            Logs {meal.items.length === 1 ? 'one food' : `${meal.items.length} foods`} at once.
-          </p>
+          <p className="mb-3 text-sm text-muted">Logs as one line item.</p>
+
+          <div className="t-card mb-3">
+            <PanelFacts values={meal.totals} note="Everything in it" />
+          </div>
 
           <div className="t-card mb-3">
             <p className="t-micro mb-1">In it</p>
@@ -107,6 +110,9 @@ export function MealDetail({
                   </span>
                 </span>
                 {row.food_id === null && <span className="t-chip shrink-0">food is gone</span>}
+                <span className="t-nums shrink-0 text-sm">
+                  {nutrientText('calories', row.calories)}
+                </span>
               </div>
             ))}
           </div>
@@ -117,7 +123,7 @@ export function MealDetail({
               type="button"
               onClick={() => setLogging(true)}
             >
-              Log all
+              Log
             </button>
             <button className="t-btn" type="button" onClick={() => onEdit(meal)}>
               <Pencil className="h-4 w-4" strokeWidth={2} />
@@ -131,14 +137,14 @@ export function MealDetail({
           {logging && (
             <LogSheet
               title="Log"
-              action="Log all"
+              action="Log"
               name={meal.name}
-              servings={null}
+              servings={1}
               slot={slotByTime(me.timezone)}
               error={refusal}
               saving={saving}
               onClose={() => setLogging(false)}
-              onSubmit={(_, slot) => void log(slot)}
+              onSubmit={(servings, slot) => void log(servings, slot)}
             />
           )}
 

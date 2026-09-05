@@ -543,6 +543,12 @@ class DiaryEntry(Base):
     recipe_id: Mapped[int | None] = mapped_column(
         ForeignKey("recipes.id", ondelete="SET NULL"), nullable=True, index=True
     )
+    # Set instead when what was eaten was a kept meal, in which case the amount
+    # is a number of servings of the whole meal. SET NULL for the same reason
+    # again: deleting the meal leaves the line standing.
+    meal_id: Mapped[int | None] = mapped_column(
+        ForeignKey("meal_templates.id", ondelete="SET NULL"), nullable=True, index=True
+    )
 
     # For the amount served, not per 100 of anything.
     calories: Mapped[float | None] = mapped_column(Float, nullable=True)
@@ -704,7 +710,7 @@ class RecipeIngredient(Base):
 
 
 class MealTemplate(Base):
-    """Foods somebody eats together, kept so they can be logged in one go."""
+    """Foods somebody eats together, kept so they log as one line."""
 
     __tablename__ = "meal_templates"
 
@@ -724,8 +730,8 @@ class MealTemplate(Base):
 class MealTemplateItem(Base):
     """One thing in a kept meal: a food and how much of it.
 
-    No panel of its own. A meal is a list of things to log, and each of them
-    takes its numbers from the food as it stands when the meal is logged.
+    No panel of its own. A meal is a list of things, and each of them takes its
+    numbers from the food as it stands when the meal is read or logged.
     """
 
     __tablename__ = "meal_template_items"

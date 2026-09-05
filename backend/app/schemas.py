@@ -290,8 +290,10 @@ class MealIn(BaseModel):
 
 
 class MealLogIn(BaseModel):
-    """Logging a whole kept meal at once."""
+    """Logging a whole kept meal, as one line counted in servings of it."""
 
     # Left out means today, wherever the account says it is.
     date: dt.date | None = None
     slot: str
+    # How many of the whole meal. One, unless somebody says otherwise.
+    servings: float = Field(default=1, gt=0)

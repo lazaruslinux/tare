@@ -201,8 +201,9 @@ export function MealLine({ row, onOpen }: { row: MealRow; onOpen: () => void }) 
   return (
     <button type="button" className="t-row w-full text-left" onClick={onOpen}>
       <span className="min-w-0 flex-1 truncate text-sm">{row.name}</span>
-      <span className="shrink-0 text-xs text-muted">
-        {row.items === 1 ? '1 food' : `${row.items} foods`}
+      <span className="t-nums shrink-0 text-xs text-muted">
+        {row.items === 1 ? '1 food' : `${row.items} foods`} ·{' '}
+        {nutrientText('calories', row.totals.calories)} cal
       </span>
     </button>
   )

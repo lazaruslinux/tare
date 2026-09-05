@@ -147,8 +147,8 @@ def log_food(
 ) -> models.DiaryEntry:
     """One entry from a food measured out, with its numbers already worked out.
 
-    The one place a portion becomes a row, so a food logged by hand and a whole
-    meal logged in one go cannot come out different.
+    The one place a portion becomes a row, so a food logged by hand and one a
+    standing auto-log writes cannot come out different.
     """
     base_amount, label, kept_unit = measure(food, amount, unit)
     entry = models.DiaryEntry(
@@ -220,6 +220,8 @@ def entry_row(entry: models.DiaryEntry) -> dict[str, object]:
         "food_id": entry.food_id,
         # Set instead, when what was eaten was a recipe.
         "recipe_id": entry.recipe_id,
+        # Or a kept meal, which is one line counted in servings of itself.
+        "meal_id": entry.meal_id,
         # Which standing auto-log wrote this row, and null on one somebody
         # logged themselves.
         "auto_log_id": entry.auto_log_id,
@@ -887,8 +889,10 @@ def update_entry(
                 # A quick add is a name and a number. There is no portion under
                 # it to make larger or smaller.
                 raise HTTPException(status.HTTP_400_BAD_REQUEST, NO_PORTION)
-            # Nothing left to recompute from, so the numbers that survived the
-            # food are stretched. Null stays null.
+            # A quick add, a row whose food has gone, or a kept meal, which is
+            # counted in servings of what it came to when it was logged. There
+            # is nothing to work out again, so what the row carries is
+            # stretched. Null stays null.
             factor = amount / entry.amount
             for field in NUTRIENTS:
                 carried = getattr(entry, field)

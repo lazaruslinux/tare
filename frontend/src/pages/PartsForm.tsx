@@ -5,19 +5,19 @@ import {
   api,
   errorText,
   type Food,
+  type Headline,
   type Meal,
   type Me,
   type Part,
   type Recipe,
 } from '../api'
 import { FoodPicker } from '../components/FoodPicker'
-import { nutrientText } from '../components/NutritionLabel'
+import { HEADLINE, nutrientText } from '../components/NutritionLabel'
 import { useTopBar } from '../hooks/useTopBar'
 import { portionText, scale, toBase, type Unit } from '../lib/units'
 
 // The one form behind both a recipe and a kept meal. They are the same screen
-// with two differences: a recipe says how many servings it makes, and its rows
-// show what each one came to.
+// but for one thing: a recipe says how many servings it makes.
 
 const SERVING = 'serving:'
 
@@ -41,15 +41,15 @@ const WORDS = {
 }
 
 // One row being filled in. The unit is the one the server reads, which for a
-// food's own serving is its id: the recipe keeps only the name.
-type Draft = {
+// food's own serving is its id: the recipe keeps only the name. The four are
+// what the row shows and what the line under the list adds up.
+type Draft = Record<Headline, number | null> & {
   food_id: number | null
   unit: string | null
   name: string
   brand: string
   amount: number
   serving_label: string | null
-  calories: number | null
 }
 
 // A portion just chosen, as a row.
@@ -58,32 +58,44 @@ function drafted(food: Food, amount: number, unit: string): Draft {
     ? food.servings.find((row) => `${SERVING}${row.id}` === unit)
     : undefined
   const baseAmount = serving ? amount * serving.base_amount : toBase(food, amount, unit as Unit)
-  return {
+  const row = {
     food_id: food.id,
     unit,
     name: food.name,
     brand: food.brand,
     amount,
     serving_label: serving?.name ?? null,
-    calories: scale(food.calories, baseAmount),
-  }
+  } as Draft
+  for (const fact of HEADLINE) row[fact.key] = scale(food[fact.key], baseAmount)
+  return row
 }
+
+// Everything in the list added up, by the rule the server totals by: a figure
+// one part is missing is unknown for the whole, not less of it.
+function summed(rows: Draft[], key: Headline): number | null {
+  if (rows.some((row) => row[key] === null)) return null
+  return rows.reduce((total, row) => total + (row[key] ?? 0), 0)
+}
+
+// A row as it comes back from the server: an ingredient or an item in a meal,
+// both of which carry the four.
+type Saved = Part & Partial<Record<Headline, number | null>>
 
 // A row that is already saved, as one that can be sent back.
 //
 // A serving is kept by its name, which is all a recipe needs to read; sending
 // it again needs the id, and only the food has that. A null unit is a row that
 // can no longer be measured, and saving says so rather than guessing.
-async function sendable(part: Part & { calories?: number | null }): Promise<Draft> {
-  const row: Draft = {
+async function sendable(part: Saved): Promise<Draft> {
+  const row = {
     food_id: part.food_id,
     unit: part.food_id === null ? null : part.unit,
     name: part.name,
     brand: part.brand,
     amount: part.amount,
     serving_label: part.serving_label,
-    calories: part.calories ?? null,
-  }
+  } as Draft
+  for (const fact of HEADLINE) row[fact.key] = part[fact.key] ?? null
   if (part.food_id === null || part.serving_label === null) return row
   const food = await api<Food>(`/foods/${part.food_id}`).catch(() => null)
   const serving = food?.servings.find((one) => one.name === part.serving_label)
@@ -108,8 +120,7 @@ export function PartsForm({
 }) {
   const words = WORDS[kind]
   const existing = kind === 'recipe' ? (recipe ?? null) : (meal ?? null)
-  const parts: (Part & { calories?: number | null })[] =
-    recipe?.ingredients ?? meal?.items ?? []
+  const parts: Saved[] = recipe?.ingredients ?? meal?.items ?? []
 
   const [name, setName] = useState(existing?.name ?? '')
   const [yields, setYields] = useState(String(recipe?.yield_servings ?? 4))
@@ -221,11 +232,9 @@ export function PartsForm({
                         })}
                   </span>
                 </span>
-                {kind === 'recipe' && (
-                  <span className="t-nums shrink-0 text-sm">
-                    {nutrientText('calories', row.calories)}
-                  </span>
-                )}
+                <span className="t-nums shrink-0 text-sm">
+                  {nutrientText('calories', row.calories)}
+                </span>
                 <button
                   type="button"
                   className="t-tap44 shrink-0 text-muted"
@@ -245,6 +254,15 @@ export function PartsForm({
             <Plus className="h-3.5 w-3.5" strokeWidth={2.5} />
             {words.add}
           </button>
+
+          {rows.length > 0 && (
+            <p className="t-nums mt-3 border-t border-line pt-2 text-xs text-muted">
+              Total {nutrientText('calories', summed(rows, 'calories'))} cal ·{' '}
+              {nutrientText('protein_g', summed(rows, 'protein_g'))}g protein ·{' '}
+              {nutrientText('carbs_g', summed(rows, 'carbs_g'))}g carbs ·{' '}
+              {nutrientText('fat_g', summed(rows, 'fat_g'))}g fat
+            </p>
+          )}
         </div>
 
         {error && <p className="t-error mb-3">{error}</p>}
