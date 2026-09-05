@@ -56,8 +56,12 @@ export function MemberView({
   if (failed !== '') return <p className="t-error">{failed}</p>
   if (member === null) return <p className="text-sm text-muted">Loading.</p>
 
-  const shared =
-    member.age !== undefined || member.sex !== undefined || member.location !== undefined
+  const whoLine = [
+    member.sex === undefined ? null : (SEX_LABEL[member.sex] ?? member.sex),
+    member.age === undefined ? null : String(member.age),
+  ]
+    .filter((part) => part !== null)
+    .join(', ')
 
   return (
     <div className="t-card mb-3">
@@ -72,22 +76,17 @@ export function MemberView({
           {roleLabel(member.role) !== null && (
             <p className="text-xs text-muted">{roleLabel(member.role)}</p>
           )}
+          {/* What they chose to share, said the way a person would: "Male, 33",
+              then where they live. Nothing shared, nothing said. */}
+          {whoLine !== '' && <p className="text-sm text-muted">{whoLine}</p>}
+          {member.location !== undefined && (
+            <p className="text-sm text-muted">{member.location}</p>
+          )}
           <p className="t-micro mt-1">Member since {monthText(member.member_since)}</p>
         </div>
       </div>
       <Fact label="Foods submitted" value={String(member.submitted)} />
       <Fact label="Foods approved" value={String(member.approved)} />
-      {shared ? (
-        <>
-          {member.age !== undefined && <Fact label="Age" value={String(member.age)} />}
-          {member.sex !== undefined && (
-            <Fact label="Gender" value={SEX_LABEL[member.sex] ?? member.sex} />
-          )}
-          {member.location !== undefined && <Fact label="Lives in" value={member.location} />}
-        </>
-      ) : (
-        <p className="text-sm text-muted">This member keeps their details private.</p>
-      )}
     </div>
   )
 }
