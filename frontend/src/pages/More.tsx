@@ -22,14 +22,12 @@ import {
 import { useEffect, useState, type FormEvent } from 'react'
 
 import { api, errorText, type Me, type SyncKey, type Units } from '../api'
-import { MeasurementsSheet } from '../components/MeasurementsSheet'
 import { Sheet } from '../components/Sheet'
 import { type Glyph } from '../components/TabBar'
 import { SaveMarks, useSavedChip } from '../components/SaveMarks'
 import { useTopBar, type TopBarHeader } from '../hooks/useTopBar'
 import { useRailLayout } from '../hooks/useWideLayout'
 import { type Clock } from '../lib/clock'
-import { today } from '../lib/day'
 import { reviews } from '../lib/roles'
 import { ZONES, offList } from '../lib/zones'
 import { applyTheme, rememberTheme, useTheme, type Theme } from '../theme'
@@ -190,7 +188,6 @@ export function More({
   // What the sync row says under itself. One request when this tab opens, and
   // nothing after that: it is a line on a row, not a live figure.
   const [sync, setSync] = useState<SyncKey | null>(null)
-  const [measuring, setMeasuring] = useState(false)
   // Whether the reviewer application sheet is open, and whether it has been
   // sent. The account's own answer opens it, and this keeps it there for the
   // rest of the session without a second read.
@@ -371,15 +368,7 @@ export function More({
   if (screen === 'profile') {
     return (
       <>
-        <Profile me={me} onChange={onChange} onAddMeasurement={() => setMeasuring(true)} />
-        {measuring && (
-          <MeasurementsSheet
-            me={me}
-            date={today(me.timezone)}
-            onClose={() => setMeasuring(false)}
-            onSaved={() => setMeasuring(false)}
-          />
-        )}
+        <Profile me={me} onChange={onChange} />
       </>
     )
   }

@@ -1,5 +1,5 @@
 import { AnimatePresence, motion, useReducedMotion } from 'framer-motion'
-import type { ReactNode } from 'react'
+import { useEffect, useRef, type ReactNode } from 'react'
 
 // The one thing that opens over a page. Everything that does uses this, so the
 // backdrop, the corner, the safe area and the motion are decided once instead
@@ -45,6 +45,21 @@ export function Sheet({
   children: ReactNode
 }) {
   const reduced = useReducedMotion()
+  const box = useRef<HTMLDivElement>(null)
+  // Escape closes the sheet on top and only that one, so two layers peel one
+  // at a time.
+  useEffect(() => {
+    if (!open) return
+    const onKey = (event: KeyboardEvent) => {
+      if (event.key !== 'Escape') return
+      const dialogs = document.querySelectorAll('[role=dialog]')
+      if (dialogs[dialogs.length - 1] !== box.current) return
+      event.preventDefault()
+      onClose()
+    }
+    window.addEventListener('keydown', onKey)
+    return () => window.removeEventListener('keydown', onKey)
+  }, [open, onClose])
   return (
     <AnimatePresence>
       {open && (
@@ -59,6 +74,7 @@ export function Sheet({
           onClick={onClose}
         >
           <motion.div
+            ref={box}
             role="dialog"
             aria-label={label}
             // Capped and scrollable: a long list inside must not push the

@@ -14,6 +14,7 @@ import {
   type Me,
   type Measurement,
   type Measurements,
+  type Profile as HealthProfile,
   type ShareKey,
   type SharePoint,
   type Stamp,
@@ -758,6 +759,9 @@ export function Dashboard({
   // What a phone sent for today. Null until it answers, and the strip it draws
   // appears only once a device is connected.
   const [fitness, setFitness] = useState<FitnessSummary | null>(null)
+  // Worked out on the server from the latest weight and the height; shown
+  // on Progress, where the weight it comes from lives.
+  const [bmi, setBmi] = useState<number | null>(null)
   // The span every card is read over, and the weight line for it, which is its
   // own request: a trend over six months is not a trend over a month cut short.
   const [span, setSpan] = useState(rememberedSpan)
@@ -827,6 +831,9 @@ export function Dashboard({
       .catch(() => undefined)
     api<FitnessSummary>(`/fitness/summary?date=${todayIso}`)
       .then((loaded) => alive && setFitness(loaded))
+      .catch(() => undefined)
+    api<HealthProfile>('/health/profile')
+      .then((loaded) => alive && setBmi(loaded.bmi))
       .catch(() => undefined)
     return () => {
       alive = false
@@ -1317,6 +1324,12 @@ export function Dashboard({
               <div className="t-row min-h-9 text-sm">
                 <span className="flex-1 text-muted">Lean weight</span>
                 <span className="t-nums">{weightText(recorded[0].lean_kg, me.units)}</span>
+              </div>
+            )}
+            {bmi !== null && (
+              <div className="t-row min-h-9 text-sm">
+                <span className="flex-1 text-muted">Body mass index</span>
+                <span className="t-nums">{bmi}</span>
               </div>
             )}
           </div>

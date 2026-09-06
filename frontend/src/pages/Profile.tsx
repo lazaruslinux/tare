@@ -5,9 +5,8 @@ import { Sheet } from '../components/Sheet'
 import { api, errorText, uploadFile, type Me, type Profile as ProfileRow, type Sex } from '../api'
 import { Avatar } from '../components/Avatar'
 import { AvatarCrop } from '../components/AvatarCrop'
-import { dayLabel, today } from '../lib/day'
 import { SaveMarks, useSavedChip } from '../components/SaveMarks'
-import { heightParts, partsToCm, weightText } from '../lib/units'
+import { heightParts, partsToCm } from '../lib/units'
 
 const SEXES: { value: Sex; label: string }[] = [
   { value: 'female', label: 'Female' },
@@ -22,13 +21,11 @@ const asNumber = (raw: string): number | null => {
 export function Profile({
   me,
   onChange,
-  onAddMeasurement,
 }: {
   me: Me
   onChange: (me: Me) => void
   // The one thing on this screen that is not a setting: a weight is a
   // measurement, and it is recorded where measurements are.
-  onAddMeasurement: () => void
 }) {
   const metric = me.units === 'metric'
   const [profile, setProfile] = useState<ProfileRow | null>(null)
@@ -355,26 +352,6 @@ export function Profile({
           >
             <CircleHelp className="h-4 w-4" strokeWidth={2} />
           </button>
-        </div>
-      )}
-
-      <div className="t-row">
-        <span className="flex-1 text-sm">Latest weight</span>
-        <button type="button" className="text-sm text-accent" onClick={onAddMeasurement}>
-          {profile === null || profile.latest_weight_kg === null
-            ? 'Add'
-            : `${weightText(profile.latest_weight_kg, me.units)}${
-                profile.latest_weight_date === null
-                  ? ''
-                  : ` · ${dayLabel(profile.latest_weight_date, today(me.timezone))}`
-              }`}
-        </button>
-      </div>
-
-      {profile !== null && profile.bmi !== null && (
-        <div className="t-row">
-          <span className="flex-1 text-sm">Body mass index</span>
-          <span className="t-nums text-right text-sm">{profile.bmi}</span>
         </div>
       )}
 

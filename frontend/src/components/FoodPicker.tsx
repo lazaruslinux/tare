@@ -1,4 +1,4 @@
-import { ScanLine, Star, Zap } from 'lucide-react'
+import { ScanLine, Star, X, Zap } from 'lucide-react'
 import { useEffect, useState, type FormEvent } from 'react'
 
 import { api, errorText, type Food, type FoodRow, type Me, type RepeatRow } from '../api'
@@ -286,7 +286,19 @@ export function FoodPicker({
   return (
     <>
       <Sheet open top tall={browsing} wide={browsing} label={title} onClose={onClose}>
-        <p className="t-micro mb-2">{title}</p>
+        {/* A way out that is not the backdrop: on a wide screen the list can
+            fill the window, and then there is no backdrop left to tap. */}
+        <div className="mb-2 flex items-center justify-between gap-3">
+          <p className="t-micro">{title}</p>
+          <button
+            type="button"
+            className="t-tap44 -mr-2 text-muted"
+            aria-label="Close"
+            onClick={onClose}
+          >
+            <X className="h-5 w-5" strokeWidth={2} />
+          </button>
+        </div>
         <input
           className="t-input mb-3"
           type="search"
