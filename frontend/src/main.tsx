@@ -2,7 +2,7 @@
 // the first paint is already on the right ground. The font and the stylesheet
 // follow, then the app.
 import './theme'
-import '@fontsource-variable/inter'
+import '@fontsource-variable/figtree'
 import '@fontsource/righteous'
 import './index.css'
 

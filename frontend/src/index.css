@@ -99,14 +99,14 @@
   --color-orange: var(--orange);
   --color-violet: var(--violet);
   --color-gold: var(--gold);
-  --font-sans: 'Inter Variable', ui-sans-serif, system-ui, sans-serif;
+  --font-sans: 'Figtree Variable', ui-sans-serif, system-ui, sans-serif;
 }
 
 @layer base {
   body {
     background: var(--bg);
     color: var(--text);
-    font-family: 'Inter Variable', ui-sans-serif, system-ui, sans-serif;
+    font-family: 'Figtree Variable', ui-sans-serif, system-ui, sans-serif;
     -webkit-font-smoothing: antialiased;
   }
 
