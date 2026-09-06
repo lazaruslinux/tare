@@ -19,8 +19,7 @@ TODAY = dt.date(2026, 9, 2)
 def case_a():
     """Female, 165 cm, 70 kg, born 1996-03-15, Not much, losing at 0.45.
 
-    The case where the quarter-of-maintenance cap binds and the pace that
-    really happens is slower than the one that was picked.
+    The case a pound a week takes 500 a day off, with room above the floor.
     """
     age = health.age_on(dt.date(1996, 3, 15), TODAY)
     resting = health.rmr_mifflin("female", 70, 165, age)
@@ -91,22 +90,23 @@ def test_lean_mass_takes_over_when_body_fat_is_known():
     )
 
 
-def test_the_cap_binds_before_the_chosen_goal_rate_does(case_a):
-    worked = health.budget(case_a["maintenance"], "lose", 0.45, "female", False)
-    # The first step asks for 450 a day; a quarter of 1704.3 is 426.075, and
-    # that wins.
-    assert worked.calories == pytest.approx(1278.225)
-    assert health.round_for_display(worked.calories, "calories") == 1280
-    assert worked.notes == ("cap",)
-    assert round(worked.weekly_rate_kg, 2) == 0.43
+def test_the_first_step_asks_for_five_hundred_a_day(case_a):
+    worked = health.budget(case_a["maintenance"], "lose", health.LOSE_STEPS[0], "female", False)
+    # A pound a week is 3,500 kcal, 500 a day, taken off 1704.3 in full: there
+    # is no cap on losing any more, only the floor, and 1204.3 is above it.
+    assert worked.calories == pytest.approx(case_a["maintenance"] - 500.0, abs=0.05)
+    assert health.round_for_display(worked.calories, "calories") == 1200
+    assert worked.notes == ()
+    assert round(worked.weekly_rate_kg, 2) == 0.45
 
 
-def test_the_floor_is_the_last_word_and_says_it_will_take_longer(case_c):
-    worked = health.budget(case_c["maintenance"], "lose", 0.45, "female", False)
-    # The cap gives 1064.475, which is under the floor for a female member.
+def test_the_floor_is_the_last_word(case_c):
+    worked = health.budget(case_c["maintenance"], "lose", health.LOSE_STEPS[0], "female", False)
+    # 1419.3 less 500 is 919.3, which is under the floor for a female member,
+    # so the floor stands and the pace that really happens is what it leaves.
     assert worked.calories == 1200.0
-    assert set(worked.notes) == {"cap", "floor"}
-    assert round(worked.weekly_rate_kg, 2) == 0.22
+    assert worked.notes == ("floor",)
+    assert round(worked.weekly_rate_kg, 2) == 0.2
 
 
 def test_the_male_floor_is_the_higher_one():
@@ -131,8 +131,9 @@ def test_the_direction_is_read_off_the_two_weights():
     assert health.direction(None, 75.0) == "maintain"
 
 
-def test_the_steps_are_the_three_and_the_two():
-    assert health.steps_for("lose") == (0.45, 0.7, 0.9)
+def test_the_steps_are_the_five_and_the_two():
+    # 1, 1.25, 1.5, 1.75 and 2 lb a week, as exact kilograms.
+    assert health.steps_for("lose") == (0.4536, 0.567, 0.6804, 0.7938, 0.9072)
     assert health.steps_for("gain") == (0.25, 0.45)
     assert health.steps_for("maintain") == ()
 
@@ -140,19 +141,19 @@ def test_the_steps_are_the_three_and_the_two():
 def test_a_rate_off_the_direction_s_steps_falls_back_to_its_first(case_a):
     # 0.9 belongs to losing, and a turned-around goal leaves it behind.
     worked = health.budget(2000, "gain", 0.9, "male", False)
-    assert worked.calories == pytest.approx(2250.0)
+    assert worked.calories == pytest.approx(2000 + 0.25 * health.KCAL_PER_DAY_PER_KG_WEEK)
     assert worked.notes == ()
 
 
 def test_gaining_is_capped_at_a_fifth_of_the_day():
-    # A fifth of 2000 is 400, so the 450 step is eased back.
+    # A fifth of 2000 is 400, so the 0.45 step's 496 a day is eased back.
     worked = health.budget(2000, "gain", 0.45, "male", False)
     assert worked.calories == pytest.approx(2400.0)
     assert "cap" in worked.notes
-    assert round(worked.weekly_rate_kg, 2) == 0.4
-    # And the 250 step sits inside it untouched.
+    assert round(worked.weekly_rate_kg, 2) == 0.36
+    # And the 0.25 step's 276 a day sits inside it untouched.
     gentle = health.budget(2000, "gain", 0.25, "male", False)
-    assert gentle.calories == pytest.approx(2250.0)
+    assert gentle.calories == pytest.approx(2000 + 0.25 * health.KCAL_PER_DAY_PER_KG_WEEK)
     assert gentle.notes == ()
 
 

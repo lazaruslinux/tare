@@ -463,12 +463,10 @@ def rate_options(state: Reckoning, maintenance_kcal: float | None) -> list[dict[
             {
                 "rate_kg_per_week": step,
                 "calories": health.round_for_display(worked.calories, "calories"),
-                "asked": health.round_for_display(
-                    step * health.KCAL_PER_DAY_PER_KG_WEEK, "calories"
-                ),
-                "change": health.round_for_display(
-                    abs(maintenance_kcal - worked.calories), "calories"
-                ),
+                # The gap is the real figure, to the calorie: a pound a week
+                # is 500, and a quarter pound more is 625, not 630.
+                "asked": round(step * health.KCAL_PER_DAY_PER_KG_WEEK),
+                "change": round(abs(maintenance_kcal - worked.calories)),
                 "notes": list(worked.notes),
             }
         )
@@ -875,9 +873,9 @@ def read_targets(
         # used to say. The key is kept so the screens read the same word.
         "goal": state.direction,
         "rate_kg_per_week": (
-            profile.rate_kg_per_week
-            if profile.rate_kg_per_week in health.steps_for(state.direction)
-            else next(iter(health.steps_for(state.direction)), None)
+            None
+            if not health.steps_for(state.direction)
+            else health.snap_rate(profile.rate_kg_per_week, health.steps_for(state.direction))
         ),
         "rate_steps": list(health.steps_for(state.direction)),
         "rate_options": rate_options(state, maintenance_now),

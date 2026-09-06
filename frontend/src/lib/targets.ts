@@ -5,7 +5,7 @@
 // goals, and one of them drifting would be a screen disagreeing with a screen.
 
 import type { ActivityLevel, Goal, Units, RateOption } from '../api'
-import { kgToLb, round1 } from './units'
+import { kgToLb } from './units'
 
 // Decision 5's four levels. The names are the member's; the multipliers they
 // come from are never said (decision 29).
@@ -63,36 +63,36 @@ export const GOAL_LABEL: Record<Goal, string> = {
 // A goal rate in whichever units the account reads in. The server keeps
 // kilograms a week, and the words say which way it is going.
 export const rateStepText = (kg: number, units: Units, goal: Goal): string => {
-  const lb = round1(kgToLb(kg))
-  const amount = units === 'imperial' ? `${lb} ${lb === 1 ? 'lb' : 'lbs'}` : `${kg} kg`
+  // The steps are quarter pounds, stored as exact kilograms.
+  const lb = Math.round(kgToLb(kg) * 4) / 4
+  const amount =
+    units === 'imperial' ? `${lb} ${lb === 1 ? 'lb' : 'lbs'}` : `${Math.round(kg * 100) / 100} kg`
   return `${goal === 'gain' ? 'Gain' : 'Lose'} ${amount} per week`
 }
 
-// Where the 1 percent of body weight a week guidance starts to bite.
-const FAST_SHARE = 0.01
+// The three fastest steps ask the member to say they have read the review.
+export const ACKNOWLEDGE_FROM = 2
+export const READ_THE_REVIEW =
+  'Check this box to indicate that you have read the goal rate review above.'
 
-// What the review note says about the goal rate that is set. The words are
-// the doc's decision 13, and the tier is picked from the rate against the
-// weight it is a share of.
+// What the review note says about each step. His words, one for the first
+// step, one for the second, and one shared by the three fastest.
 const LOSE_REVIEW = [
-  'Steady. Keeps the most muscle.',
-  'Faster, with a bigger daily gap. Ease back if it stops feeling right.',
-  'The fastest Tare offers. Harder to keep up, and some muscle goes with the fat.',
+  'This rate is often easier to maintain over time. Many people find it supports ' +
+    'consistency and nourishment, without needing to push or restrict further.',
+  'This creates a larger difference between energy intake and expenditure. While it ' +
+    'may work for some, many find it harder to maintain over time. Pay attention to ' +
+    'recovery and overall well-being.',
+  'This creates a very large gap between intake and expenditure. At this level, many ' +
+    'people notice lower energy, increased hunger, or difficulty recovering from ' +
+    'activities. Choosing a slower rate is an option some people find more achievable ' +
+    'over longer periods.',
 ]
 const GAIN_REVIEW = ['Slow and steady gains more muscle.', 'Faster. More of the gain is fat.']
 
-export const rateReview = (
-  index: number,
-  kg: number,
-  latestKg: number | null,
-  goal: Goal
-): string => {
+export const rateReview = (index: number, goal: Goal): string => {
   const list = goal === 'gain' ? GAIN_REVIEW : LOSE_REVIEW
-  const line = list[Math.min(Math.max(index, 0), list.length - 1)]
-  if (goal !== 'gain' && latestKg !== null && kg > latestKg * FAST_SHARE) {
-    return `${line} Over 1 percent of your weight a week: much of it is water.`
-  }
-  return line
+  return list[Math.min(Math.max(index, 0), list.length - 1)]
 }
 
 // What one step costs, in the member's day: its budget and the gap, or where
@@ -102,14 +102,13 @@ export const rateCostText = (option: RateOption, goal: Goal): string => {
   if (option.notes.includes('floor')) {
     return (
       `Asks for ${calText(option.asked)} cal a day ${way} what you use. Tare holds your ` +
-      `budget at the ${calText(option.calories)} cal floor, so the goal takes longer.`
+      `budget at the ${calText(option.calories)} cal floor.`
     )
   }
   if (option.notes.includes('cap')) {
     return (
       `Asks for ${calText(option.asked)} cal a day ${way} what you use. Tare holds it at ` +
-      `${calText(option.change)}, ${goal === 'gain' ? 'a fifth' : 'a quarter'} of what you ` +
-      'use, so the goal takes longer.'
+      `${calText(option.change)}, a fifth of what you use.`
     )
   }
   return `Budget ${calText(option.calories)} cal: ${calText(option.change)} cal a day ${way} what you use.`

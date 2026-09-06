@@ -22,17 +22,21 @@ ACTIVITY_MULTIPLIER = {
 }
 
 # Decisions 13 and 17: the goal rates on offer, in kilograms a week. Losing
-# reads 1, 1.5 and 2 lb a week; gaining reads 0.5 and 1 lb.
-LOSE_STEPS = (0.45, 0.7, 0.9)
+# reads 1, 1.25, 1.5, 1.75 and 2 lb a week, stored as the exact kilogram each
+# pound is, so the day's figure comes out as the round number people know;
+# gaining reads 0.5 and 1 lb.
+KG_PER_LB = 0.45359237
+LOSE_STEPS = tuple(round(lb * KG_PER_LB, 4) for lb in (1, 1.25, 1.5, 1.75, 2))
 GAIN_STEPS = (0.25, 0.45)
 
-# What a kilogram a week costs or earns in a day, which is the pairing the two
-# rate tables in decisions 13 and 17 are written with. Not the 7,700 kcal per
-# kilogram of decision 20: that figure sizes a correction, not a pace.
-KCAL_PER_DAY_PER_KG_WEEK = 1000.0
+# A pound of body fat is 3,500 kcal, the figure every rate table is built on,
+# so a pound a week is 500 kcal a day. Said per kilogram a week, per day.
+KCAL_PER_LB = 3500.0
+KCAL_PER_DAY_PER_KG_WEEK = KCAL_PER_LB / KG_PER_LB / 7.0
 
-# Decisions 14 and 17: how far from maintenance a budget may sit.
-DEFICIT_CAP = 0.25
+# Decision 17: how far over maintenance a gaining budget may sit. The deficit
+# cap that used to bound losing (decision 14) is retired: the steps ask for
+# what they ask for, and the floor below is the one wall.
 SURPLUS_CAP = 0.20
 
 # Decision 15.
@@ -227,6 +231,19 @@ def direction(latest_weight_kg: float | None, goal_weight_kg: float | None) -> s
     return "maintain"
 
 
+def snap_rate(rate_kg_per_week: float | None, steps: tuple[float, ...]) -> float:
+    """The step a stored rate means, or the first one.
+
+    A rate saved under an older table sits a few hundredths off today's exact
+    figure; it is the same choice, so it lands on the nearest step rather than
+    quietly falling back to the slowest.
+    """
+    if rate_kg_per_week is None or not steps:
+        return steps[0] if steps else 0.0
+    nearest = min(steps, key=lambda step: abs(step - rate_kg_per_week))
+    return nearest if abs(nearest - rate_kg_per_week) <= 0.06 else steps[0]
+
+
 def steps_for(way: str) -> tuple[float, ...]:
     """Decisions 13 and 17: the goal rates offered for going that way."""
     if way == "lose":
@@ -263,13 +280,14 @@ def budget(
     # A stored rate belongs to the direction it was picked under, and a
     # weigh-in can turn that direction around. The direction's own first step
     # stands until the member picks again.
-    chosen = rate_kg_per_week if rate_kg_per_week in steps else steps[0]
+    chosen = snap_rate(rate_kg_per_week, steps)
 
     change = chosen * KCAL_PER_DAY_PER_KG_WEEK
-    cap = maintenance_kcal * (DEFICIT_CAP if way == "lose" else SURPLUS_CAP)
-    if change > cap:
-        change = cap
-        notes.append("cap")
+    if way == "gain":
+        cap = maintenance_kcal * SURPLUS_CAP
+        if change > cap:
+            change = cap
+            notes.append("cap")
 
     raw = maintenance_kcal - change if way == "lose" else maintenance_kcal + change
     calories = _floored(raw, sex, notes)
@@ -465,12 +483,10 @@ def reestimate(
 def clamp_budget(calories: float, maintenance_kcal: float, sex: str, goal: str) -> float:
     """Hold a hand-corrected budget inside the same walls an automatic one has.
 
-    Decision 20 says the offer never breaks the floor or the cap, and this is
-    where that holds.
+    Decision 20 says the offer never breaks the floor or the surplus cap, and
+    this is where that holds.
     """
-    if goal == "lose":
-        calories = max(calories, maintenance_kcal * (1.0 - DEFICIT_CAP))
-    elif goal == "gain":
+    if goal == "gain":
         calories = min(calories, maintenance_kcal * (1.0 + SURPLUS_CAP))
     return max(calories, FLOOR.get(sex, FLOOR["female"]))
 

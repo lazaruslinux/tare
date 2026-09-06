@@ -10,6 +10,8 @@ import datetime as dt
 
 import pytest
 
+from app import health
+
 from app import clock, models
 from app.routers.health import (
     BAD_MINUTES_GOAL,
@@ -109,45 +111,49 @@ def test_without_details_the_targets_are_the_published_ones(client, member):
 def test_the_worked_case_comes_out_of_the_route(client, case_a):
     body = client.get("/api/health/targets").json()
     assert body["complete"] is True
-    assert body["budget"]["calories"] == 1280
-    assert body["budget"]["protein_g"] == 112
-    assert body["budget"]["carbs_g"] == 112
-    assert body["budget"]["fat_g"] == 43
-    assert body["budget"]["fiber_g"] == 18
-    assert body["budget"]["saturated_fat_g_max"] == 14
+    # 1,704 a day less the 500 a pound a week asks for is 1,204, shown as 1,200.
+    assert body["budget"]["calories"] == 1200
+    # The losing split is 35 / 35 / 30 of that day.
+    assert body["budget"]["protein_g"] == 105
+    assert body["budget"]["carbs_g"] == 105
+    assert body["budget"]["fat_g"] == 40
+    assert body["budget"]["fiber_g"] == 17
+    assert body["budget"]["saturated_fat_g_max"] == 13
     # The heart association's figure for a woman, not a share of the budget.
     assert body["budget"]["sugar_g_max"] == 25
-    assert body["weekly_rate"] == 0.43
+    assert body["weekly_rate"] == 0.45
     # The cap and the carbs sentence, and no clinician sentence at this weight.
-    assert set(body["notes"]) == {NOTE_TEXT["cap"], NOTE_TEXT["carbs_low"]}
+    assert set(body["notes"]) == {NOTE_TEXT["carbs_low"]}
     assert body["nudges"] == []
     # The goal weight sits under the weigh-in, so the direction is losing and
     # the three steps are on offer.
     assert body["goal"] == "lose"
-    assert body["rate_steps"] == [0.45, 0.7, 0.9]
-    assert body["rate_kg_per_week"] == 0.45
+    assert body["rate_steps"] == list(health.LOSE_STEPS)
+    assert body["rate_kg_per_week"] == health.LOSE_STEPS[0]
     assert body["trend_kg"] == 70.0
 
 
 def test_the_working_out_behind_the_budget_is_three_figures(client, case_a):
     body = client.get("/api/health/targets").json()
     # About what you use, eating a bit less, and what is left.
-    assert body["breakdown"] == {"use": 1700, "adjustment": -430, "budget": 1280}
+    assert body["breakdown"] == {"use": 1700, "adjustment": -500, "budget": 1200}
     # And the sentences carry their keys, so a screen can place each one.
-    assert set(body["note_keys"]) == {"cap", "carbs_low"}
+    assert set(body["note_keys"]) == {"carbs_low"}
     assert len(body["note_keys"]) == len(body["notes"])
 
 
 def test_every_goal_rate_says_what_it_costs(client, case_a):
     body = client.get("/api/health/targets").json()
     options = body["rate_options"]
-    assert [row["rate_kg_per_week"] for row in options] == [0.45, 0.7, 0.9]
-    assert [row["asked"] for row in options] == [450, 700, 900]
-    # The worked case's quarter-of-maintenance cap holds every step to one day,
-    # and each step says so rather than pretending to differ.
-    assert all("cap" in row["notes"] for row in options)
+    assert [row["rate_kg_per_week"] for row in options] == list(health.LOSE_STEPS)
+    # A pound a week is 500 kcal a day, and each step asks for exactly its own.
+    assert [row["asked"] for row in options] == [500, 625, 750, 875, 1000]
     assert options[0]["calories"] == body["budget"]["calories"]
     assert abs(options[0]["change"] + body["breakdown"]["adjustment"]) <= 10
+    # The worked case uses 1,700 a day: every step past the first would go under
+    # the 1,200 floor, and says so, rather than being capped short.
+    assert all("floor" in row["notes"] for row in options[1:])
+    assert all("cap" not in row["notes"] for row in options)
 
 
 def test_a_man_gets_the_higher_added_sugars_ceiling(client, member):
@@ -166,8 +172,8 @@ def test_a_rate_off_the_steps_is_refused_with_the_reason(client, case_a):
     assert refused.status_code == 400
     assert refused.json() == {"detail": BAD_RATE}
     # And one of the three is taken.
-    assert profile(client, rate_kg_per_week=0.9).status_code == 200
-    assert client.get("/api/health/profile").json()["rate_kg_per_week"] == 0.9
+    assert profile(client, rate_kg_per_week=health.LOSE_STEPS[-1]).status_code == 200
+    assert client.get("/api/health/profile").json()["rate_kg_per_week"] == health.LOSE_STEPS[-1]
 
 
 def test_pregnancy_leaves_the_budget_at_the_day(client, case_a):
@@ -240,10 +246,10 @@ def test_grams_replace_the_four_numbers_and_can_be_handed_back(client, case_a):
     # The working out still describes the day tare would have set, which is
     # what the percentages screen divides. The screen showing a typed-in
     # budget hides it.
-    assert body["breakdown"] == {"use": 1700, "adjustment": -430, "budget": 1280}
+    assert body["breakdown"] == {"use": 1700, "adjustment": -500, "budget": 1200}
 
     back = client.put("/api/health/targets", json={"mode": "auto"})
-    assert back.json()["budget"]["calories"] == 1280
+    assert back.json()["budget"]["calories"] == 1200
     # What was typed is kept, so switching back does not lose it.
     assert back.json()["manual"]["calories"] == 2100
 
@@ -263,13 +269,13 @@ def test_percentages_divide_the_worked_out_day(client, case_a):
     body = answer.json()
     assert body["mode"] == "pct"
     # The size of the day is still tare's; only the way it is divided changed.
-    assert body["budget"]["calories"] == 1280
-    assert body["budget"]["protein_g"] == 96
-    assert body["budget"]["carbs_g"] == 128
-    assert body["budget"]["fat_g"] == 43
+    assert body["budget"]["calories"] == 1200
+    assert body["budget"]["protein_g"] == 90
+    assert body["budget"]["carbs_g"] == 120
+    assert body["budget"]["fat_g"] == 40
     assert body["percentages"] == {"protein_pct": 30, "carbs_pct": 40, "fat_pct": 30}
     # And the working out still stands behind the calories.
-    assert body["breakdown"] == {"use": 1700, "adjustment": -430, "budget": 1280}
+    assert body["breakdown"] == {"use": 1700, "adjustment": -500, "budget": 1200}
 
 
 def test_a_starting_point_fills_the_percentages(client, case_a):
@@ -553,7 +559,7 @@ def test_a_workout_can_be_taken_back(client, member):
 
 
 def test_a_goal_weight_that_turns_the_direction_around_drops_the_goal_rate(client, case_a):
-    assert profile(client, rate_kg_per_week=0.9).status_code == 200
+    assert profile(client, rate_kg_per_week=health.LOSE_STEPS[-1]).status_code == 200
     # 75 kg is above the 70 on the scale, so this is a gaining plan now and
     # the losing rate it was picked under does not come with it.
     assert profile(client, goal_weight_kg=75).status_code == 200

@@ -14,6 +14,8 @@ import {
   asNumber,
   calText,
   dateText,
+  ACKNOWLEDGE_FROM,
+  READ_THE_REVIEW,
   notesFor,
   rateCostText,
   rateReview,
@@ -108,7 +110,6 @@ export function WeightGoal({
   const steps = targets.rate_steps
   const rate = targets.rate_kg_per_week
   const at = rate === null ? 0 : Math.max(steps.indexOf(rate), 0)
-  const latestKg = profile?.latest_weight_kg ?? null
 
   // The stepper only moves a draft; Save below the overview is what sends it.
   const [draftAt, setDraftAt] = useState(at)
@@ -118,6 +119,11 @@ export function WeightGoal({
   // one saved, so the numbers below follow the stepper rather than the save.
   const option =
     targets.rate_options.find((row) => row.rate_kg_per_week === steps[draftAt]) ?? null
+  // The fastest steps are saved only once the review has been read and said
+  // so. The box clears whenever the stepper moves.
+  const [read, setRead] = useState(false)
+  useEffect(() => setRead(false), [draftAt])
+  const mustRead = targets.goal === 'lose' && draftAt >= ACKNOWLEDGE_FROM
 
   const step = (to: number) => {
     if (to < 0 || to >= steps.length) return
@@ -196,10 +202,21 @@ export function WeightGoal({
               <CircleCheck className="mt-0.5 h-4 w-4 shrink-0" strokeWidth={2.5} />
               <span className="min-w-0">
                 <span className="block font-semibold">Goal rate review</span>
-                {rateReview(draftAt, steps[draftAt], latestKg, targets.goal)}
+                {rateReview(draftAt, targets.goal)}
               </span>
             </div>
             {option !== null && <p className="t-note mt-2">{rateCostText(option, targets.goal)}</p>}
+            {mustRead && (
+              <label className="mt-3 flex items-start gap-3 rounded-lg border border-danger p-3 text-sm">
+                <input
+                  type="checkbox"
+                  className="mt-0.5 h-4 w-4 shrink-0 accent-danger"
+                  checked={read}
+                  onChange={(event) => setRead(event.target.checked)}
+                />
+                <span>{READ_THE_REVIEW}</span>
+              </label>
+            )}
           </>
         )}
       </div>
@@ -260,7 +277,7 @@ export function WeightGoal({
             <button
               type="button"
               className="t-btn t-btn-primary flex-1"
-              disabled={busy || !rateDirty}
+              disabled={busy || !rateDirty || (mustRead && !read)}
               onClick={() => void saveRate()}
             >
               {busy ? 'Saving' : 'Save'}
