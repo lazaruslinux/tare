@@ -479,3 +479,67 @@ def test_a_key_that_has_never_synced_says_so(client, db_session, signed_in):
 
     assert body["connected"] is True
     assert body["last_sync"] is None
+
+
+# ---- A run of whole days, which the Dashboard's Exercise card reads.
+
+
+def utc_yesterday() -> dt.date:
+    """The day before today in the account's own zone, which every fixture
+    account reads in UTC. The route takes no date, so a case has to line its
+    export up with the run the server will answer with."""
+    return dt.datetime.now(dt.timezone.utc).date() - dt.timedelta(days=1)
+
+
+def test_a_run_of_days_lists_the_workouts_on_a_day(client, db_session, make_user):
+    day = utc_yesterday()
+    signed_in_with_export(client, db_session, make_user, day)
+
+    rows = client.get("/api/fitness/days?days=2").json()["days"]
+
+    assert [row["date"] for row in rows] == [
+        day.isoformat(),
+        (day + dt.timedelta(days=1)).isoformat(),
+    ]
+    landed = rows[0]
+    assert landed["steps"] == 8500
+    assert landed["exercise_minutes"] == 42
+    assert landed["active_kcal"] == 430
+    assert [one["activity"] for one in landed["workouts"]] == ["Outdoor Run"]
+    assert landed["workouts"][0]["duration_s"] == 2520
+    assert round(landed["workouts"][0]["distance_m"]) == 6470
+
+
+def test_a_day_nothing_arrived_for_has_no_workouts_and_no_figures(
+    client, db_session, make_user
+):
+    signed_in_with_export(client, db_session, make_user, utc_yesterday())
+
+    rows = client.get("/api/fitness/days?days=2").json()["days"]
+
+    quiet = rows[-1]
+    assert quiet["workouts"] == []
+    assert quiet["steps"] is None
+    assert quiet["exercise_minutes"] is None
+    assert quiet["active_kcal"] is None
+
+
+def test_a_run_of_days_can_be_one_day(client, db_session, make_user):
+    signed_in_with_export(client, db_session, make_user, utc_yesterday())
+
+    rows = client.get("/api/fitness/days?days=1").json()["days"]
+
+    assert len(rows) == 1
+    # The one day is the last of a longer run: today in the account's own zone
+    # rather than on whatever machine the process runs on.
+    assert rows[0]["date"] == client.get("/api/fitness/days?days=3").json()["days"][-1]["date"]
+
+
+def test_a_span_tare_will_not_answer_is_refused(client, db_session, make_user):
+    signed_in_with_export(client, db_session, make_user, utc_yesterday())
+
+    response = client.get("/api/fitness/days?days=0")
+
+    assert response.status_code == 400
+    assert response.json() == {"detail": "Ask for between 1 and 190 days."}
+    assert client.get("/api/fitness/days?days=191").status_code == 400

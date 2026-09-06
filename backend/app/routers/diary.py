@@ -682,6 +682,11 @@ def read_days(
             select(
                 models.DiaryEntry.date_for,
                 func.sum(func.coalesce(models.DiaryEntry.calories, 0.0)).label("calories"),
+                # The three the day is also read against, summed the same way,
+                # so a readout on one bar can say what the day was made of.
+                func.sum(func.coalesce(models.DiaryEntry.protein_g, 0.0)).label("protein_g"),
+                func.sum(func.coalesce(models.DiaryEntry.carbs_g, 0.0)).label("carbs_g"),
+                func.sum(func.coalesce(models.DiaryEntry.fat_g, 0.0)).label("fat_g"),
                 func.count(models.DiaryEntry.id).label("entries"),
             )
             .where(
@@ -743,6 +748,9 @@ def read_days(
                 # Nothing logged is nothing consumed, which is a bar of no
                 # height rather than a day with no answer.
                 "calories": 0 if food is None else round(food.calories),
+                "protein_g": 0 if food is None else round(food.protein_g),
+                "carbs_g": 0 if food is None else round(food.carbs_g),
+                "fat_g": 0 if food is None else round(food.fat_g),
                 "budget": budget,
                 "exercise_kcal": exercise_credit(counted),
                 "steps": steps.get(day),

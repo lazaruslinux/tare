@@ -482,6 +482,27 @@ def test_a_run_of_days_ends_today_and_reads_oldest_first(client, signed_in, froz
     assert all(row["budget"] == rows[0]["budget"] for row in rows)
 
 
+def test_a_run_of_days_carries_the_three_a_day_was_made_of(client, signed_in, frozen):
+    logged = client.post(
+        "/api/diary",
+        json={
+            "date": TODAY,
+            "slot": "breakfast",
+            "name": "Quick add",
+            "calories": 500,
+            "protein_g": 30.4,
+            "carbs_g": 60,
+            "fat_g": 12.6,
+        },
+    )
+    assert logged.status_code == 201
+
+    rows = days(client)["days"]
+    assert (rows[-1]["protein_g"], rows[-1]["carbs_g"], rows[-1]["fat_g"]) == (30, 60, 13)
+    # A day nobody logged is nothing of each, the way it is nothing consumed.
+    assert (rows[0]["protein_g"], rows[0]["carbs_g"], rows[0]["fat_g"]) == (0, 0, 0)
+
+
 def test_a_day_nobody_logged_reads_as_nothing_consumed(client, signed_in, frozen):
     assert quick(client, TODAY, 500).status_code == 201
 

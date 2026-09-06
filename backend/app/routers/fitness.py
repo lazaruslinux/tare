@@ -40,6 +40,11 @@ BAD_HIDDEN = "That is not something Tare can hide."
 DEFAULT_DAYS = 30
 MAX_DAYS = 365
 
+# The longest run of whole days one answer carries, which is the six months the
+# Dashboard reads over with a little room over it.
+MAX_RUN_DAYS = 190
+BAD_SPAN = f"Ask for between 1 and {MAX_RUN_DAYS} days."
+
 # How many workouts one page of the list carries.
 PAGE = 30
 
@@ -378,6 +383,64 @@ def read_trends(
                 "direction": _direction(recent, prior),
             }
             for key, unit, recent, prior in pairs
+        ]
+    }
+
+
+@router.get("/days")
+def read_days(
+    days: int = DEFAULT_DAYS,
+    db: Session = Depends(get_db),
+    user: models.User = Depends(require_user),
+) -> dict[str, object]:
+    """A run of days ending today: the three figures a day is read by, and what
+    was worked on it.
+
+    One answer rather than one request a metric, because the card that draws it
+    reads all three off the same bar. A span outside what a screen asks for is
+    refused rather than quietly cut down: a number nobody meant is a bug
+    somewhere else, and answering it hides that.
+    """
+    if not 1 <= days <= MAX_RUN_DAYS:
+        raise HTTPException(status.HTTP_400_BAD_REQUEST, BAD_SPAN)
+    last = clock.user_today(user)
+    first = last - dt.timedelta(days=days - 1)
+    values = _tile_values(db, user, first, last)
+
+    # Every session across the run in one query, newest first within its day.
+    worked: dict[dt.date, list[models.Workout]] = {}
+    for row in db.execute(
+        select(models.Workout)
+        .where(
+            models.Workout.user_id == user.id,
+            models.Workout.date_for >= first,
+            models.Workout.date_for <= last,
+        )
+        .order_by(models.Workout.started_at.desc(), models.Workout.id.desc())
+    ).scalars():
+        worked.setdefault(row.date_for, []).append(row)
+
+    return {
+        "days": [
+            {
+                "date": each.isoformat(),
+                "steps": values.get((each, "steps")),
+                "exercise_minutes": values.get((each, "exercise_minutes")),
+                "active_kcal": values.get((each, "active_kcal")),
+                # Hidden sessions included: this is the owner reading their own
+                # days, and the feed is the only place hiding one means
+                # anything.
+                "workouts": [
+                    {
+                        "id": row.id,
+                        "activity": row.activity,
+                        "distance_m": row.distance_m,
+                        "duration_s": row.duration_s,
+                    }
+                    for row in worked.get(each, [])
+                ],
+            }
+            for each in _run(first, last)
         ]
     }
 

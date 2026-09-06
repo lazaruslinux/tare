@@ -19,7 +19,7 @@ import { ActivityIcon } from '../components/ActivityIcon'
 import { HourBars } from '../components/HourBars'
 import { WorkoutDetails } from '../components/WorkoutDetails'
 import { useTopBar } from '../hooks/useTopBar'
-import { stampText, useClock } from '../lib/clock'
+import { dateText as stampDate, stampText, useClock } from '../lib/clock'
 import { dayLabel, today } from '../lib/day'
 import { distanceIn, distanceUnit, durationText, round1 } from '../lib/units'
 import { Moves } from './Moves'
@@ -252,6 +252,7 @@ function HourCard({
   value,
   hours,
   note,
+  when,
   onOpen,
 }: {
   tile: Tile
@@ -260,13 +261,15 @@ function HourCard({
   hours: (number | null)[]
   // One line under the number, for a card that has nothing to draw yet.
   note?: string
+  // Which day the figure is of: "Today", or the day somebody was sent to.
+  when: string
   onOpen: () => void
 }) {
   const said = value === null ? null : tile.read(value, units)
   return (
     <div className="t-card">
       <CardHead title={tile.label} aria={tile.aria} onOpen={onOpen} />
-      <p className="text-xs text-muted">Today</p>
+      <p className="text-xs text-muted">{when}</p>
       <p className={`t-nums text-2xl font-semibold ${tile.tone}`}>
         {said === null ? '-' : said.number}
         {said !== null && said.unit !== '' && (
@@ -291,11 +294,16 @@ function HourCard({
 function SessionsCard({
   units,
   workouts,
+  when,
+  empty,
   onOpen,
   onOpenAll,
 }: {
   units: Units
   workouts: Workout[]
+  when: string
+  // What the card says on a day with no sessions on it.
+  empty: string
   onOpen: (id: number) => void
   onOpenAll: () => void
 }) {
@@ -304,7 +312,7 @@ function SessionsCard({
       <CardHead title="Sessions" aria="All workouts" onOpen={onOpenAll} />
       <div className="flex-1">
         {workouts.length === 0 ? (
-          <p className="mt-1 text-sm text-muted">No sessions today.</p>
+          <p className="mt-1 text-sm text-muted">{empty}</p>
         ) : (
           workouts.map((row) => {
             const said =
@@ -337,7 +345,7 @@ function SessionsCard({
         )}
       </div>
       <div className="mt-3 flex items-center justify-between border-t border-line pt-2">
-        <span className="text-xs text-muted">Today</span>
+        <span className="text-xs text-muted">{when}</span>
         <span className="t-nums text-xs text-muted">{workouts.length}</span>
       </div>
     </div>
@@ -512,6 +520,7 @@ function MetricDetail({
 export function Fitness({
   me,
   refresh,
+  date,
   onBack,
   onOpenSync,
 }: {
@@ -519,6 +528,9 @@ export function Fitness({
   // The app-wide change tick. A workout that arrived while this was open
   // belongs on the screen, and reading again leaves what is up alone.
   refresh: number
+  // The day this screen reads. Empty or absent is today, which is what every
+  // way in but a Dashboard readout means.
+  date?: string
   // This screen names itself, because it holds screens of its own and each of
   // them is a level deeper than the list it was reached from.
   onBack: () => void
@@ -527,6 +539,10 @@ export function Fitness({
   onOpenSync: () => void
 }) {
   const todayIso = today(me.timezone)
+  const shown = date === undefined || date === '' ? todayIso : date
+  // What the cards call the day they are of.
+  const when = shown === todayIso ? 'Today' : stampDate(shown)
+  const noSessions = shown === todayIso ? 'No sessions today.' : `No sessions on ${when}.`
   const [summary, setSummary] = useState<FitnessSummary | null>(null)
   const [hours, setHours] = useState<HourSeries>({})
   const [trends, setTrends] = useState<TrendRow[]>(NO_TRENDS)
@@ -537,21 +553,21 @@ export function Fitness({
 
   useEffect(() => {
     let alive = true
-    api<FitnessSummary>(`/fitness/summary?date=${todayIso}`)
+    api<FitnessSummary>(`/fitness/summary?date=${shown}`)
       .then((row) => alive && setSummary(row))
       .catch((failure) => alive && setFailed(errorText(failure)))
-    api<FitnessTrends>(`/fitness/trends?date=${todayIso}`)
+    api<FitnessTrends>(`/fitness/trends?date=${shown}`)
       .then((row) => alive && setTrends(row.rows))
       .catch(() => alive && setTrends(NO_TRENDS))
     for (const tile of TILES) {
-      api<FitnessHours>(`/fitness/intraday?metric=${tile.hours}&date=${todayIso}`)
+      api<FitnessHours>(`/fitness/intraday?metric=${tile.hours}&date=${shown}`)
         .then((row) => alive && setHours((held) => ({ ...held, [tile.metric]: row.hours })))
         .catch(() => {})
     }
     return () => {
       alive = false
     }
-  }, [todayIso, refresh])
+  }, [shown, refresh])
 
   useTopBar(screen === null ? { title: 'Fitness', back: { label: 'More', onBack } } : null)
 
@@ -578,7 +594,7 @@ export function Fitness({
       <MetricDetail
         me={me}
         metric={screen.metric}
-        date={todayIso}
+        date={shown}
         onBack={() => setScreen(null)}
       />
     )
@@ -595,6 +611,7 @@ export function Fitness({
       value={todayValue(tile, summary, hours)}
       hours={hoursIn(tile, hours[tile.metric] ?? NO_HOURS, me.units)}
       note={note}
+      when={when}
       onOpen={() => setScreen({ kind: 'metric', metric: tile.metric })}
     />
   )
@@ -622,6 +639,8 @@ export function Fitness({
         <SessionsCard
           units={me.units}
           workouts={summary?.workouts ?? []}
+          when={when}
+          empty={noSessions}
           onOpen={(id) => setScreen({ kind: 'workout', id })}
           onOpenAll={() => setScreen({ kind: 'workouts' })}
         />

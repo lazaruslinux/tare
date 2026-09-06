@@ -621,6 +621,10 @@ export type DayEnergy = {
 export type DayRow = {
   date: string
   calories: number
+  // The three the day was made of, summed the same way and read whole.
+  protein_g: number
+  carbs_g: number
+  fat_g: number
   budget: number
   exercise_kcal: number
   // What a phone counted, or null on a day no phone sent.
@@ -978,6 +982,28 @@ export type TrendRow = {
 }
 
 export type FitnessTrends = { rows: TrendRow[] }
+
+// One session as a day's readout names it: enough to say what was done and how
+// far, and nothing a whole workout page carries.
+export type DayWorkout = {
+  id: number
+  activity: string
+  distance_m: number | null
+  duration_s: number
+}
+
+// One whole day as the Dashboard's Exercise card reads it. A figure is null on
+// a day no phone ever sent it, which is not the same as a day of sitting.
+export type FitnessDay = {
+  date: string
+  steps: number | null
+  exercise_minutes: number | null
+  active_kcal: number | null
+  workouts: DayWorkout[]
+}
+
+// A run of days ending today, oldest first.
+export type FitnessDays = { days: FitnessDay[] }
 
 export type FitnessHours = { date: string; metric: HourMetric; hours: (number | null)[] }
 

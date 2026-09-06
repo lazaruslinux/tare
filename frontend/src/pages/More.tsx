@@ -148,6 +148,7 @@ export function More({
   start,
   onStarted,
   onScreen,
+  fitnessDate,
 }: {
   me: Me
   onChange: (me: Me) => void
@@ -176,6 +177,8 @@ export function More({
   // Which screen this tab is on, said upward so the rail can light the row
   // that leads to it.
   onScreen?: (screen: Screen) => void
+  // The day the Fitness screen should read, when somebody was sent to one.
+  fitnessDate?: string
 }) {
   const theme = useTheme()
   // At rail width the rail already lists Targets and Fitness, so this list
@@ -383,6 +386,7 @@ export function More({
       <Fitness
         me={me}
         refresh={refresh}
+        date={fitnessDate}
         onBack={() => go(null)}
         onOpenSync={() => go('sync')}
       />

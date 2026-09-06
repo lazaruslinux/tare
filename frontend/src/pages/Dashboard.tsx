@@ -1,13 +1,15 @@
-import { ChevronRight, Plus } from 'lucide-react'
-import { useEffect, useRef, useState } from 'react'
+import { ChevronRight, CircleCheck, Plus } from 'lucide-react'
+import { useEffect, useRef, useState, type PointerEvent } from 'react'
 
 import {
   api,
   errorText,
   type DayRow,
+  type DayWorkout,
   type DiaryDay,
   type DiaryDays,
-  type FitnessHistory,
+  type FitnessDay,
+  type FitnessDays,
   type FitnessSummary,
   type Me,
   type Measurement,
@@ -27,9 +29,18 @@ import { MemberView } from '../components/MemberView'
 import { WorkoutDetails } from '../components/WorkoutDetails'
 import { useTopBar } from '../hooks/useTopBar'
 import { useWideLayout } from '../hooks/useWideLayout'
+import { dateText as stampDate } from '../lib/clock'
 import { dayLabel, shiftDay, slotByTime, today, weekday } from '../lib/day'
 import { calText, dateText } from '../lib/targets'
-import { round1, weightIn, weightText, weightUnit } from '../lib/units'
+import {
+  distanceIn,
+  distanceUnit,
+  elapsedText,
+  round1,
+  weightIn,
+  weightText,
+  weightUnit,
+} from '../lib/units'
 
 // How far back the newest of each measured number is looked for, and how long
 // a deleted reading can be brought back.
@@ -274,12 +285,24 @@ type Line = { key: string; points: { date: string; value: number }[]; colour: st
 //
 // With an axis the lines get a ground to stand on and their dots get dates, so
 // that a weight line is not read as whatever number happens to sit beside it.
-function Spark({ series, tall, axis }: {
+function Spark({ series, tall, axis, selected = null, onSelect }: {
   series: Line[]
   tall?: boolean
   axis?: boolean
+  // Which day the reader is on, and how that is said upward. Keyed by the day
+  // itself rather than by a position, because the lines do not share one.
+  selected?: string | null
+  onSelect?: (date: string | null) => void
 }) {
   const inset = 6
+  const pick = onSelect !== undefined
+  // The same three the bars keep, for the same reasons: what a gesture settled
+  // on, where it began, and whether it moved off.
+  const pinned = useRef<string | null>(selected)
+  const from = useRef<string | null>(null)
+  const dragged = useRef(false)
+  const box = useRef<SVGSVGElement>(null)
+  if (selected === null) pinned.current = null
   // A single reading is a dot, not a line, so it is left out of both the
   // drawing and the dates under it.
   const drawn = series
@@ -311,8 +334,81 @@ function Spark({ series, tall, axis }: {
   })
   const dated = axis === true ? ticked(dates.length) : []
 
+  // The nearest reading to where the pointer is, across every line's days.
+  const at = (event: PointerEvent<SVGSVGElement>): string | null => {
+    const rect = box.current?.getBoundingClientRect()
+    if (rect === undefined || rect.width <= 0) return null
+    const part = ((event.clientX - rect.left) / rect.width) * 100
+    let closest = dates[0]
+    for (const date of dates) {
+      if (Math.abs(across(date) - part) < Math.abs(across(closest) - part)) closest = date
+    }
+    return closest
+  }
+
+  const down = (event: PointerEvent<SVGSVGElement>) => {
+    const date = at(event)
+    if (date === null) return
+    // Capture, so a drag off the edge keeps reading rather than handing the
+    // drag back to the page. A pointer the browser is not tracking cannot be
+    // captured, and the reading does not need it.
+    try {
+      event.currentTarget.setPointerCapture(event.pointerId)
+    } catch {
+      // Nothing to hold on to.
+    }
+    from.current = pinned.current === date ? date : null
+    dragged.current = false
+    pinned.current = date
+    onSelect?.(date)
+  }
+
+  const move = (event: PointerEvent<SVGSVGElement>) => {
+    const date = at(event)
+    if (date === null) return
+    if (event.pointerType === 'mouse' && event.buttons === 0) {
+      onSelect?.(date)
+      return
+    }
+    if (date !== pinned.current) dragged.current = true
+    pinned.current = date
+    onSelect?.(date)
+  }
+
+  const up = () => {
+    if (from.current !== null && !dragged.current) {
+      pinned.current = null
+      onSelect?.(null)
+    }
+    from.current = null
+  }
+
+  const away = () => onSelect?.(pinned.current)
+
   const line = (
-    <svg className={`w-full ${tall ? 'h-22' : 'h-11'}`} aria-hidden="true">
+    <svg
+      className={`w-full ${tall ? 'h-22' : 'h-11'}${pick ? ' touch-pan-y select-none' : ''}`}
+      aria-hidden={pick ? undefined : true}
+      role={pick ? 'group' : undefined}
+      aria-label={pick ? 'Readings' : undefined}
+      ref={box}
+      onPointerDown={pick ? down : undefined}
+      onPointerMove={pick ? move : undefined}
+      onPointerUp={pick ? up : undefined}
+      onPointerLeave={pick ? away : undefined}
+      onPointerCancel={pick ? away : undefined}
+    >
+      {/* Where the reader is, straight down through every line at once. */}
+      {selected !== null && dates.includes(selected) && (
+        <line
+          x1={`${across(selected)}%`}
+          y1="0"
+          x2={`${across(selected)}%`}
+          y2="100%"
+          stroke="var(--text)"
+          strokeWidth="1"
+        />
+      )}
       {placed.map((one) => (
         <g key={one.key}>
           {one.spots.slice(1).map((spot, index) => (
@@ -332,8 +428,10 @@ function Spark({ series, tall, axis }: {
               key={spot.date}
               cx={`${spot.x}%`}
               cy={`${spot.y}%`}
-              r="3.5"
+              r={spot.date === selected ? 5 : 3.5}
               fill={one.colour}
+              // The rest step back while one day is being read.
+              opacity={selected !== null && spot.date !== selected ? 0.55 : undefined}
             />
           ))}
         </g>
@@ -404,6 +502,41 @@ function LineChips({ lines, onPick }: { lines: Lines; onPick: (next: Lines) => v
         </button>
       ))}
     </div>
+  )
+}
+
+// What a point with nothing behind it says. His words.
+const NOTHING = 'No data for this selection'
+
+// One point read off a chart, standing where the card's own headline stands
+// and taking its place while something is chosen: a few parts joined by a dot,
+// a tick for a day that was closed, and a way into the day itself.
+function PointReadout({ parts, done, onOpen, className = '' }: {
+  parts: string[]
+  done?: boolean
+  onOpen?: () => void
+  className?: string
+}) {
+  return (
+    <p className={`t-nums min-h-4 text-xs text-muted ${className}`} role="status">
+      {/* A part stays whole when the line wraps: the spaces inside one are the
+          kind that do not break, so a wrap only ever falls between parts. */}
+      {parts.map((part) => part.replace(/ /g, ' ')).join(' · ')}
+      {done === true && (
+        <CircleCheck
+          className="ml-1 inline h-3.5 w-3.5 align-text-bottom text-accent"
+          aria-label="Journal complete"
+        />
+      )}
+      {onOpen !== undefined && (
+        <>
+          {' · '}
+          <button type="button" className="t-link" onClick={onOpen}>
+            Open
+          </button>
+        </>
+      )}
+    </p>
   )
 }
 
@@ -587,6 +720,8 @@ export function Dashboard({
   refresh,
   onOpenJournal,
   onOpenFitness,
+  onOpenJournalDay,
+  onOpenFitnessDay,
   onChanged,
   start,
   onStarted,
@@ -601,6 +736,9 @@ export function Dashboard({
   onOpenJournal: () => void
   // The Fitness screen, which is where the Exercise card leads.
   onOpenFitness: () => void
+  // The same two, on the day a readout is about rather than on today.
+  onOpenJournalDay: (date: string) => void
+  onOpenFitnessDay: (date: string) => void
   // Which screen to open on. Only ever set by something outside this tab
   // sending somebody straight to it, and handed back the moment it is read.
   start?: DashScreen
@@ -625,8 +763,14 @@ export function Dashboard({
   const [span, setSpan] = useState(rememberedSpan)
   const [lines, setLines] = useState<Lines>(readLines)
   const [windowed, setWindowed] = useState<Measurements | null>(null)
-  // Steps over a longer span. The week's own come with the summary.
-  const [stepRun, setStepRun] = useState<FitnessHistory | null>(null)
+  // The whole span a day at a time: what was walked, worked and burned, and
+  // the sessions on each day. One request, whatever the span is.
+  const [fitDays, setFitDays] = useState<FitnessDay[]>([])
+  // Which point on each card the reader is on. A card with nothing chosen
+  // shows its own headline.
+  const [foodPick, setFoodPick] = useState<number | null>(null)
+  const [movePick, setMovePick] = useState<number | null>(null)
+  const [weighPick, setWeighPick] = useState<string | null>(null)
   const [error, setError] = useState('')
   const [again, setAgain] = useState(0)
   const [screen, setScreen] = useState<DashScreen>(null)
@@ -704,17 +848,23 @@ export function Dashboard({
     }
   }, [todayIso, span, refresh, again])
 
-  // Only past the week, which the summary already carries.
   useEffect(() => {
-    if (span === WEEK) return
     let alive = true
-    api<FitnessHistory>(`/fitness/daily?metric=steps&days=${span}`)
-      .then((loaded) => alive && setStepRun(loaded))
+    api<FitnessDays>(`/fitness/days?days=${span}`)
+      .then((loaded) => alive && setFitDays(loaded.days))
       .catch(() => undefined)
     return () => {
       alive = false
     }
   }, [todayIso, span, refresh, again])
+
+  // A different span is a different set of columns, so whatever was being read
+  // on the old one is not a point on the new one. A refresh is the same story.
+  useEffect(() => {
+    setFoodPick(null)
+    setMovePick(null)
+    setWeighPick(null)
+  }, [span, refresh])
 
   const erase = (row: Measurement) => {
     pendingRef.current = null
@@ -872,11 +1022,11 @@ export function Dashboard({
   // set on Activity goals; the fitness answer carries the same figure and
   // stands in until targets arrive.
   const stepGoal = targets?.step_goal ?? fitness?.goals.steps ?? 0
-  const sent = isWeek
-    ? (fitness?.week ?? []).map((row) => ({ date: row.date, steps: row.steps }))
-    : (stepRun?.days ?? []).map((row) => ({ date: row.date, steps: row.value }))
+  // Aligned by date rather than by position: the week is Monday to Sunday and
+  // the run ends today, so the two do not line up on their own. A day the run
+  // does not carry is a gap, which is what the rest of the week is.
   const stepDaily: Bar[] = dates.map((date) => {
-    const row = sent.find((one) => one.date === date)
+    const row = fitDays.find((one) => one.date === date)
     return {
       date,
       value: row?.steps ?? 0,
@@ -895,6 +1045,120 @@ export function Dashboard({
   const sessionsLine =
     sessions === 0 ? 'No workouts' : sessions === 1 ? '1 workout' : `${sessions} workouts`
   const movedDays = inSpan.filter((row) => row.exercise_kcal > 0).length
+
+  // ---- What a chosen column says.
+
+  // A column is a day or a week, and a week is named by the Monday it starts
+  // on. Either way it is the date on the bar that was tapped.
+  const columnDate = (bars: Bar[], index: number | null): string | null =>
+    index === null ? null : (bars[index]?.date ?? null)
+
+  const macroParts = (protein: number, carbs: number, fat: number): string[] => [
+    `${Math.round(protein)}g protein`,
+    `${Math.round(carbs)}g carbs`,
+    `${Math.round(fat)}g fat`,
+  ]
+
+  // The rows of one week that are also inside the span, which is what a part
+  // week at either end of a run is made of.
+  const weekRows = <T extends { date: string }>(rows: T[], monday: string): T[] => {
+    const last = shiftDay(monday, 6)
+    return rows.filter((row) => row.date >= monday && row.date <= last)
+  }
+
+  const mean = (values: number[]): number =>
+    values.reduce((sum, one) => sum + one, 0) / values.length
+
+  type Readout = { parts: string[]; done?: boolean; open?: boolean }
+
+  const foodDayRead = (date: string): Readout => {
+    const row = run.find((one) => one.date === date)
+    if (row === undefined || !row.logged) return { parts: [NOTHING] }
+    return {
+      parts: [
+        stampDate(date),
+        `${calText(row.calories)} cal`,
+        ...macroParts(row.protein_g, row.carbs_g, row.fat_g),
+      ],
+      done: row.completed,
+      open: true,
+    }
+  }
+
+  const foodWeekRead = (monday: string): Readout => {
+    const week = weekRows(inSpan, monday)
+    const kept = week.filter((row) => row.logged)
+    if (kept.length === 0) return { parts: [NOTHING] }
+    return {
+      parts: [
+        `Week of ${monthDay(monday)}`,
+        `${calText(mean(kept.map((row) => row.calories)))} cal a day`,
+        ...macroParts(
+          mean(kept.map((row) => row.protein_g)),
+          mean(kept.map((row) => row.carbs_g)),
+          mean(kept.map((row) => row.fat_g))
+        ),
+      ],
+      done: week.every((row) => row.completed),
+    }
+  }
+
+  // One session, as the feed prints it: what it was, how far, and how long.
+  const workoutPart = (row: DayWorkout): string =>
+    row.distance_m === null
+      ? `${row.activity} ${elapsedText(row.duration_s)}`
+      : `${row.activity} ${distanceIn(row.distance_m, me.units).toFixed(2)} ${distanceUnit(
+          me.units
+        )} ${elapsedText(row.duration_s)}`
+
+  const moveDayRead = (date: string): Readout => {
+    const row = fitDays.find((one) => one.date === date)
+    const said: string[] = []
+    if (row !== undefined) {
+      // A figure no phone ever sent is left out rather than read as a zero.
+      if (row.steps !== null) said.push(`${calText(row.steps)} steps`)
+      if (row.exercise_minutes !== null) said.push(`${Math.round(row.exercise_minutes)} min`)
+      if (row.active_kcal !== null) said.push(`${calText(row.active_kcal)} cal`)
+      said.push(...row.workouts.map(workoutPart))
+    }
+    return said.length === 0
+      ? { parts: [NOTHING] }
+      : { parts: [stampDate(date), ...said], open: true }
+  }
+
+  const moveWeekRead = (monday: string): Readout => {
+    const week = weekRows(fitDays, monday)
+    const average = (pick: (row: FitnessDay) => number | null): number | null => {
+      const known = week.map(pick).filter((value): value is number => value !== null)
+      return known.length === 0 ? null : mean(known)
+    }
+    const steps = average((row) => row.steps)
+    const minutes = average((row) => row.exercise_minutes)
+    const kcal = average((row) => row.active_kcal)
+    const sessions = week.reduce((count, row) => count + row.workouts.length, 0)
+    const said: string[] = []
+    if (steps !== null) said.push(`${calText(steps)} steps a day`)
+    if (minutes !== null) said.push(`${Math.round(minutes)} min a day`)
+    if (kcal !== null) said.push(`${calText(kcal)} cal a day`)
+    if (sessions > 0) said.push(sessions === 1 ? '1 workout' : `${sessions} workouts`)
+    return said.length === 0
+      ? { parts: [NOTHING] }
+      : { parts: [`Week of ${monthDay(monday)}`, ...said] }
+  }
+
+  const foodDate = columnDate(intake, foodPick)
+  const foodRead =
+    foodDate === null ? null : weeks ? foodWeekRead(foodDate) : foodDayRead(foodDate)
+  const moveDate = columnDate(stepBars, movePick)
+  const moveRead =
+    moveDate === null ? null : weeks ? moveWeekRead(moveDate) : moveDayRead(moveDate)
+
+  // The one weigh-in a point on the chart is about, and the shares it carried.
+  const picked = weighPick === null ? undefined : recorded.find((row) => row.date === weighPick)
+  const shareParts = LINE_SPECS.filter((spec) => spec.key !== 'weight').flatMap((spec) => {
+    const value = picked === undefined ? null : picked[spec.field]
+    return value === null ? [] : [`${spec.word} ${round1(value)}%`]
+  })
 
   // Today as rings: what was walked, what is left to eat, and what was worked,
   // then the three the day's food is made of. The row is always the same
@@ -1163,7 +1427,20 @@ export function Dashboard({
 
       <div className="t-card mb-3">
         <CardHead label="Food" onOpen={onOpenJournal} onAdd={() => setPicking(true)} />
-        {day !== null && <p className="t-nums mb-2 text-xs text-muted">{leftToday}</p>}
+        {foodRead !== null ? (
+          <PointReadout
+            className="mb-2"
+            parts={foodRead.parts}
+            done={foodRead.done}
+            onOpen={
+              foodRead.open === true && foodDate !== null
+                ? () => onOpenJournalDay(foodDate)
+                : undefined
+            }
+          />
+        ) : (
+          day !== null && <p className="t-nums mb-2 text-xs text-muted">{leftToday}</p>
+        )}
         {logged.length === 0 && (
           <p className="mb-2 text-sm">Log a day to see your {chosen.label.toLowerCase()}.</p>
         )}
@@ -1181,6 +1458,8 @@ export function Dashboard({
           weeks={weeks}
           label={labelled ? calText : undefined}
           titleUnit="cal"
+          selected={foodPick}
+          onSelect={setFoodPick}
         />
       </div>
 
@@ -1192,12 +1471,24 @@ export function Dashboard({
         />
         {fitness !== null && fitness.connected ? (
           <>
-            <div className={`flex gap-6 ${isWeek ? 'mb-1' : 'mb-3'}`}>
+            <div className={`flex gap-6 ${isWeek || moveRead !== null ? 'mb-1' : 'mb-3'}`}>
               <Stat value={`${goalMet} of ${dates.length}`} label="Days at step goal" />
             </div>
             {/* How many sessions the week holds. The summary counts no other
                 span, so no other span says it. */}
-            {isWeek && <p className="mb-3 text-xs text-muted">{sessionsLine}</p>}
+            {moveRead !== null ? (
+              <PointReadout
+                className="mb-3"
+                parts={moveRead.parts}
+                onOpen={
+                  moveRead.open === true && moveDate !== null
+                    ? () => onOpenFitnessDay(moveDate)
+                    : undefined
+                }
+              />
+            ) : (
+              isWeek && <p className="mb-3 text-xs text-muted">{sessionsLine}</p>
+            )}
             <DayBars
               bars={stepBars}
               footer={stepsFooter}
@@ -1207,6 +1498,8 @@ export function Dashboard({
               weeks={weeks}
               label={labelled ? stepsLabel : undefined}
               titleUnit="steps"
+              selected={movePick}
+              onSelect={setMovePick}
             />
           </>
         ) : (
@@ -1237,14 +1530,23 @@ export function Dashboard({
             {weighed !== null && (
               <>
                 <span className="t-nums block text-3xl font-semibold leading-tight">
-                  {weightText(weighed.value, me.units)}
+                  {/* A chosen day shows its own weight. A day that weighed
+                      nothing leaves the newest one standing. */}
+                  {weightText(picked?.weight_kg ?? weighed.value, me.units)}
                 </span>
                 {/* The smoothed figure stays off the card: the change and the
                     goal date underneath are read from it, and one number is
                     enough. */}
-                <span className="block text-xs text-muted">
-                  {dayLabel(weighed.date, todayIso)}
-                </span>
+                {weighPick === null ? (
+                  <span className="block text-xs text-muted">
+                    {dayLabel(weighed.date, todayIso)}
+                  </span>
+                ) : (
+                  <PointReadout
+                    parts={picked === undefined ? [NOTHING] : [stampDate(weighPick)]}
+                    onOpen={picked === undefined ? undefined : () => setMeasuring(weighPick)}
+                  />
+                )}
               </>
             )}
             {!trending ? (
@@ -1253,12 +1555,16 @@ export function Dashboard({
               </span>
             ) : (
               <>
-                <span className="block text-xs text-muted">
-                  {changeText(line, shares, me.units, chosen.over, lines)}
-                  {goalMonth}
-                </span>
+                {weighPick === null ? (
+                  <span className="block text-xs text-muted">
+                    {changeText(line, shares, me.units, chosen.over, lines)}
+                    {goalMonth}
+                  </span>
+                ) : (
+                  <PointReadout parts={shareParts} />
+                )}
                 <LineChips lines={lines} onPick={pickLines} />
-                <Spark series={chart} axis />
+                <Spark series={chart} axis selected={weighPick} onSelect={setWeighPick} />
               </>
             )}
             {/* The dated readings are their own block: without the rule the

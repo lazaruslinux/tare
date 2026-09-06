@@ -1,4 +1,4 @@
-import type { CSSProperties } from 'react'
+import { useRef, type CSSProperties, type PointerEvent } from 'react'
 
 import { shiftDay, weekday } from '../lib/day'
 
@@ -138,6 +138,10 @@ export function DayBars({
   // Whether a column is a week rather than a day, which changes what a
   // tooltip is about and puts the marker on the week being lived in.
   weeks = false,
+  // Which column the reader is on, and how that is said upward. With no
+  // handler the chart is a picture, the way it always was.
+  selected = null,
+  onSelect,
 }: {
   bars: Bar[]
   footer: string
@@ -149,6 +153,8 @@ export function DayBars({
   label?: (value: number) => string
   titleUnit?: string
   weeks?: boolean
+  selected?: number | null
+  onSelect?: (index: number | null) => void
 }) {
   const ceiling =
     Math.max(...bars.map((row) => Math.max(row.target, row.value)), 1) * HEADROOM
@@ -158,22 +164,97 @@ export function DayBars({
   const target = bars.length === 0 ? 0 : bars[bars.length - 1].target
   const oneTarget = bars.every((row) => row.target === target)
   const gap = bars.length > 14 ? 'gap-[2px]' : 'gap-1'
+  const pick = onSelect !== undefined
+
+  // The column a gesture settled on. A finger that lifts has not stopped
+  // reading, so the choice outlives the gesture; a mouse only passing over
+  // leaves it alone. The card owns the value, and this is the part of it that
+  // a hover has to go back to.
+  const pinned = useRef<number | null>(selected)
+  // Where the gesture started, and whether it left that column. The two of
+  // them are what tells a second tap on the same day from the end of a drag.
+  const from = useRef<number | null>(null)
+  const dragged = useRef(false)
+  const plot = useRef<HTMLDivElement>(null)
+  // The card clears the choice when the span moves under it, and then there is
+  // nothing to go back to either.
+  if (selected === null) pinned.current = null
+
+  const at = (event: PointerEvent<HTMLDivElement>): number | null => {
+    const box = plot.current?.getBoundingClientRect()
+    if (box === undefined || box.width <= 0 || bars.length === 0) return null
+    const part = (event.clientX - box.left) / box.width
+    return Math.min(bars.length - 1, Math.max(0, Math.floor(part * bars.length)))
+  }
+
+  const down = (event: PointerEvent<HTMLDivElement>) => {
+    const index = at(event)
+    if (index === null) return
+    // Capture, so a thumb dragging off the edge keeps reading rather than
+    // handing the drag back to the page. A pointer the browser is not tracking
+    // cannot be captured, and the reading does not need it.
+    try {
+      event.currentTarget.setPointerCapture(event.pointerId)
+    } catch {
+      // Nothing to hold on to.
+    }
+    from.current = pinned.current === index ? index : null
+    dragged.current = false
+    pinned.current = index
+    onSelect?.(index)
+  }
+
+  const move = (event: PointerEvent<HTMLDivElement>) => {
+    const index = at(event)
+    if (index === null) return
+    if (event.pointerType === 'mouse' && event.buttons === 0) {
+      onSelect?.(index)
+      return
+    }
+    if (index !== pinned.current) dragged.current = true
+    pinned.current = index
+    onSelect?.(index)
+  }
+
+  // A second tap on the day already chosen puts it back, so long as the finger
+  // stayed on it.
+  const up = () => {
+    if (from.current !== null && !dragged.current) {
+      pinned.current = null
+      onSelect?.(null)
+    }
+    from.current = null
+  }
+
+  const away = () => onSelect?.(pinned.current)
 
   return (
     <div>
       <div
-        className="relative h-[var(--bars-h)] min-[900px]:h-[var(--bars-tall)]"
+        className={`relative h-[var(--bars-h)] min-[900px]:h-[var(--bars-tall)]${
+          pick ? ' touch-pan-y select-none' : ''
+        }`}
         style={
           { '--bars-h': `${height}px`, '--bars-tall': `${tall}px` } as CSSProperties
         }
-        aria-hidden="true"
+        aria-hidden={pick ? undefined : true}
+        onPointerDown={pick ? down : undefined}
+        onPointerMove={pick ? move : undefined}
+        onPointerUp={pick ? up : undefined}
+        onPointerLeave={pick ? away : undefined}
+        onPointerCancel={pick ? away : undefined}
       >
         {/* The ground the bars stand on: a hairline across the whole row, so a
             week with little in it reads as a quiet week rather than as a box
             of empty slabs. */}
         <div className="pointer-events-none absolute inset-x-0 bottom-0 border-t border-line" />
-        <div className={`flex h-full items-end ${gap}`}>
-          {bars.map((row) => (
+        <div
+          className={`flex h-full items-end ${gap}`}
+          ref={plot}
+          role={pick ? 'group' : undefined}
+          aria-label={pick ? 'Days' : undefined}
+        >
+          {bars.map((row, index) => (
             <div
               key={row.date}
               className="relative h-full flex-1"
@@ -196,12 +277,20 @@ export function DayBars({
                       warnOver && row.value > row.target
                         ? 'var(--pending)'
                         : 'var(--accent)',
+                    // While one column is being read the rest step back, so
+                    // the eye lands on the day the words are about.
+                    opacity: selected !== null && index !== selected ? 0.55 : undefined,
                   }}
                 />
               ) : (
                 // A day with no answer is a dot on the line and nothing else.
                 // A filled slab in its place reads as a tall bar of something.
-                <span className="absolute bottom-0 left-1/2 h-[3px] w-[3px] -translate-x-1/2 rounded-full bg-muted" />
+                <span
+                  className="absolute bottom-0 left-1/2 h-[3px] w-[3px] -translate-x-1/2 rounded-full bg-muted"
+                  // A day with nothing on it can still be the one being read,
+                  // so its dot brightens rather than staying a grey speck.
+                  style={index === selected ? { background: 'var(--text)' } : undefined}
+                />
               )}
               {label !== undefined && row.has && (
                 <span
@@ -249,6 +338,14 @@ export function DayBars({
                   part of the chart; this only marks where the reader is. */}
               {highlightToday && now && (
                 <span className="mx-auto mt-0.5 block h-0.5 w-3 rounded-full bg-accent" />
+              )}
+              {/* And a thinner one under the column being read. Today's rule
+                  stays where it is: a reader can be on today and know it. */}
+              {index === selected && (
+                <span
+                  className="mx-auto mt-0.5 block h-px w-3 rounded-full"
+                  style={{ background: 'var(--text)' }}
+                />
               )}
             </span>
           )

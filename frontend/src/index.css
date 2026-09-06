@@ -267,6 +267,13 @@
     font-variant-numeric: tabular-nums;
   }
 
+  /* A word inside a line of text that opens something. Small enough to sit in
+     a readout without pushing the line apart. */
+  .t-link {
+    color: var(--accent);
+    font-weight: 600;
+  }
+
   /* A stroke inside a drawing that is stretched to fit its column. The width is
      read in screen pixels rather than in the box's own units, so a route line
      keeps its weight in a small strip and a lane keeps its weight at every

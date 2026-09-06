@@ -99,6 +99,7 @@ type Editing = { entry: DiaryEntry; food: Food | null; slot: Slot }
 export function Journal({
   me,
   refresh,
+  wantDate,
   onDay,
   onScan,
   onOpenTargets,
@@ -106,6 +107,9 @@ export function Journal({
 }: {
   me: Me
   refresh: number
+  // A day somebody was sent to from another tab. Empty means today, and the
+  // pager is free to walk away from it once the tab is open.
+  wantDate?: string
   // Said upward when a sub-view changed a list the rest of the app is showing.
   onChanged?: () => void
   // Which day is on screen, told to the shell so its centre control adds to
@@ -119,7 +123,9 @@ export function Journal({
   onOpenTargets: () => void
 }) {
   const todayIso = today(me.timezone)
-  const [date, setDate] = useState(todayIso)
+  const [date, setDate] = useState(
+    wantDate === undefined || wantDate === '' ? todayIso : wantDate
+  )
   const [day, setDay] = useState<DiaryDay | null>(null)
   const [error, setError] = useState('')
   const [again, setAgain] = useState(0)
@@ -198,6 +204,12 @@ export function Journal({
   }, [])
 
   useEffect(() => onDay(date), [date, onDay])
+
+  // A second send while this tab is already open. The day itself is not a
+  // dependency: paging away from the day somebody arrived on must stick.
+  useEffect(() => {
+    if (wantDate !== undefined && wantDate !== '') setDate(wantDate)
+  }, [wantDate])
 
   // A deletion that has not happened yet.
   const [pending, setPending] = useState<Pending | null>(null)

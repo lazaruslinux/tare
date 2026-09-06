@@ -84,6 +84,11 @@ export default function App() {
   // The day the Journal is showing, so the centre control adds to the day
   // being read rather than always to today.
   const [journalDay, setJournalDay] = useState('')
+  // The two days a Dashboard readout can send somebody to. Empty is today,
+  // which is what every other way in means. Each is dropped once whoever went
+  // there has left, so a later visit opens on today again.
+  const [journalWant, setJournalWant] = useState('')
+  const [fitnessDay, setFitnessDay] = useState('')
   const [measuring, setMeasuring] = useState(false)
   const [exercising, setExercising] = useState(false)
   // What the right-hand column opened, shown in the main well as a sub-view of
@@ -109,6 +114,13 @@ export default function App() {
   const remember = useCallback((who: Me | null) => {
     if (who !== null) setClock(who.clock)
     setMe(who)
+  }, [])
+
+  // Which screen the More tab is on. Leaving Fitness drops the day somebody
+  // was sent to, so the row into it opens on today next time.
+  const noteMoreScreen = useCallback((next: Screen) => {
+    setMoreScreen(next)
+    if (next !== 'fitness') setFitnessDay('')
   }, [])
 
   // Back from wherever somebody went. Everything on screen is read again, the
@@ -148,6 +160,7 @@ export default function App() {
     // rather than added and back still means the way out of the app.
     window.history.replaceState({ tab: next }, '')
     setOverlay(null)
+    if (next !== 'journal') setJournalWant('')
     setPage(next)
     window.scrollTo(0, 0)
   }
@@ -308,7 +321,8 @@ export default function App() {
                       }}
                       start={moreView}
                       onStarted={() => setMoreView(null)}
-                      onScreen={setMoreScreen}
+                      onScreen={noteMoreScreen}
+                      fitnessDate={fitnessDay}
                     />
                   ) : page === 'food' ? (
                     <FoodTab
@@ -324,6 +338,7 @@ export default function App() {
                     <Journal
                       me={me}
                       refresh={logged}
+                      wantDate={journalWant}
                       onDay={setJournalDay}
                       onScan={(day, slot) => setScanning({ date: day, slot })}
                       onOpenTargets={() => {
@@ -338,6 +353,15 @@ export default function App() {
                       refresh={logged}
                       onOpenJournal={() => select('journal')}
                       onOpenFitness={() => {
+                        setMoreView('fitness')
+                        select('more')
+                      }}
+                      onOpenJournalDay={(date) => {
+                        setJournalWant(date)
+                        select('journal')
+                      }}
+                      onOpenFitnessDay={(date) => {
+                        setFitnessDay(date)
                         setMoreView('fitness')
                         select('more')
                       }}
