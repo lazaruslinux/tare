@@ -1,4 +1,5 @@
 import { AnimatePresence, motion, useReducedMotion } from 'framer-motion'
+import { ChevronRight } from 'lucide-react'
 import { useEffect, useState } from 'react'
 
 import { api, errorText, type Me, type Profile } from '../api'
@@ -28,10 +29,14 @@ export function Sharing({
   me,
   onChange,
   onBack,
+  onOpenProfile,
 }: {
   me: Me
   onChange: (me: Me) => void
   onBack: () => void
+  // The page every other member sees, opened from the switches that decide
+  // what is on it.
+  onOpenProfile: () => void
 }) {
   // Read here rather than passed in: the gender a switch would show lives on
   // the health profile, and this is the only screen that needs it.
@@ -132,6 +137,10 @@ export function Sharing({
         <Switch label={ageLabel} checked={age} onChange={setAge} />
         <Switch label={genderLabel} checked={gender} onChange={setGender} />
         <Switch label={placeLabel} checked={place} onChange={setPlace} />
+        <button type="button" className="t-row w-full text-left" onClick={onOpenProfile}>
+          <span className="flex-1 text-sm">View my public profile</span>
+          <ChevronRight className="h-4 w-4 shrink-0 text-muted" strokeWidth={2} />
+        </button>
         <p className="mt-2 text-xs text-muted">These can be edited in your profile settings.</p>
       </div>
 

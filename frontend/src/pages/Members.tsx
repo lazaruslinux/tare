@@ -14,6 +14,12 @@ import { useTopBar } from '../hooks/useTopBar'
 const DEBOUNCE = 250
 const NOTHING = 'No matches.'
 
+// What a row says a member has given, in words rather than a bare figure.
+function countText(count: number): string {
+  if (count === 0) return 'No contributions'
+  return count === 1 ? '1 contribution' : `${count} contributions`
+}
+
 export function Members({
   me,
   onBack,
@@ -99,7 +105,7 @@ export function Members({
                   <RoleMark role={row.role} />
                 </span>
                 <span className="block text-xs text-muted">
-                  {row.submitted} submitted &middot; {row.approved} approved
+                  {countText(row.contributions)}
                 </span>
               </span>
               {row.id === me && <span className="t-chip">You</span>}

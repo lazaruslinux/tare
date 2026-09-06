@@ -491,12 +491,13 @@ def submissions_for(
     ]
 
 
-def submitter_of(db: Session, food: models.Food) -> tuple[str | None, str | None]:
+def submitter_of(
+    db: Session, food: models.Food
+) -> tuple[int | None, str | None, str | None]:
     """Who offered this food to the shared database, and what they are.
 
-    The newest approved offer of it, and (None, None) where there is none or
-    the account has since gone: a submission keeps its row and drops the
-    person.
+    The newest approved offer of it, and nothing where there is none or the
+    account has since gone: a submission keeps its row and drops the person.
     """
     row = db.execute(
         select(models.User)
@@ -510,8 +511,8 @@ def submitter_of(db: Session, food: models.Food) -> tuple[str | None, str | None
         .limit(1)
     ).scalars().first()
     if row is None:
-        return None, None
-    return row.display_name or row.username, profiles.role_of(row)
+        return None, None, None
+    return row.id, row.display_name or row.username, profiles.role_of(row)
 
 
 def food_detail(db: Session, food: models.Food, user: models.User) -> dict[str, object]:
@@ -524,8 +525,8 @@ def food_detail(db: Session, food: models.Food, user: models.User) -> dict[str, 
     """
     state = community_states(db, user, [food])[food.id]
     label_serving = food.servings[0] if food.servings else None
-    submitted_by, submitted_by_role = (
-        submitter_of(db, food) if food.status == "approved" else (None, None)
+    submitted_by_id, submitted_by, submitted_by_role = (
+        submitter_of(db, food) if food.status == "approved" else (None, None, None)
     )
     detail: dict[str, object] = {
         **food_row(
@@ -554,6 +555,8 @@ def food_detail(db: Session, food: models.Food, user: models.User) -> dict[str, 
         # And whether they wear a shield beside that name, the same as anywhere
         # else a member is named.
         "submitted_by_role": submitted_by_role,
+        # Which account that name belongs to, so it opens their member page.
+        "submitted_by_id": submitted_by_id,
         # The nutrition label on file, for a reviewer correcting a shared food
         # to check the numbers against. Nobody else is served it.
         "label_photo_url": (

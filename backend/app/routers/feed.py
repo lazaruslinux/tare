@@ -28,7 +28,7 @@ from sqlalchemy.orm import Session
 from app import clock, health, models
 from app.db import get_db
 from app.deps import require_user, reviews
-from app.profiles import avatar_url, role_of, submission_counts
+from app.profiles import avatar_url, contribution_counts, role_of
 from app.routers.admin import name_match, waiting_items
 from app.routers.diary import fill_auto_logs, total
 from app.routers.fitness import day_exercise, kept_back, steps_on, workouts_on
@@ -464,7 +464,7 @@ def read_members(
     )
     more = len(members) > MEMBERS_PAGE
     members = members[:MEMBERS_PAGE]
-    counts = submission_counts(db, [member.id for member in members])
+    counts = contribution_counts(db, [member.id for member in members])
     return {
         "items": [
             {
@@ -473,7 +473,7 @@ def read_members(
                 "role": role_of(member),
                 "avatar_url": avatar_url(member),
                 "member_since": member.created_at.strftime("%Y-%m"),
-                **counts[member.id],
+                "contributions": counts[member.id],
             }
             for member in members
         ],
@@ -504,7 +504,7 @@ def read_member(
         # What they have given the shared database, shown for everybody. It is
         # a count of work done for the group rather than a fact about them, so
         # there is nothing here to keep private.
-        **submission_counts(db, [member.id])[member.id],
+        "contributions": contribution_counts(db, [member.id])[member.id],
     }
     if member.share_age and member.birthdate is not None:
         # Counted against the date in UTC: an age in whole years is not worth

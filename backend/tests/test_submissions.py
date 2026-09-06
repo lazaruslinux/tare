@@ -725,6 +725,20 @@ def test_a_submitter_with_no_display_name_is_read_by_their_username(
     assert client.get(f"/api/foods/{made['food']['id']}").json()["submitted_by"] == "member"
 
 
+def test_a_food_carries_the_account_behind_that_name(client, make_user, signed_in):
+    """The name opens their member page, so the id is sent beside it."""
+    make_user("reviewer", admin=True)
+    made = offer(client).json()
+
+    sign_in(client, "reviewer")
+    assert (
+        client.post(f"/api/admin/queue/{made['submission_id']}/approve", json={}).status_code
+        == 200
+    )
+    shown = client.get(f"/api/foods/{made['food']['id']}").json()
+    assert shown["submitted_by_id"] == signed_in.id
+
+
 def test_a_food_kept_privately_names_nobody(client, signed_in):
     """Nobody offered it, so there is nothing to say and no query to run."""
     made = client.post(
@@ -739,7 +753,9 @@ def test_a_food_kept_privately_names_nobody(client, signed_in):
         },
     )
     assert made.status_code == 201
-    assert client.get(f"/api/foods/{made.json()['id']}").json()["submitted_by"] is None
+    shown = client.get(f"/api/foods/{made.json()['id']}").json()
+    assert shown["submitted_by"] is None
+    assert shown["submitted_by_id"] is None
 
 
 def fill_day(db, user, count):

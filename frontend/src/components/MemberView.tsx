@@ -1,8 +1,9 @@
-import { useEffect, useState } from 'react'
+import { useEffect, useState, type ReactNode } from 'react'
 
 import { api, errorText, type MemberView as Member } from '../api'
 import { useTopBar } from '../hooks/useTopBar'
 import { Avatar } from './Avatar'
+import { Verified } from './FoodRows'
 import { RoleMark } from './RoleMark'
 import { roleLabel } from '../lib/roles'
 
@@ -16,11 +17,11 @@ function monthText(stamp: string): string {
   return at.toLocaleDateString(undefined, { timeZone: 'UTC', month: 'long', year: 'numeric' })
 }
 
-function Fact({ label, value }: { label: string; value: string }) {
+function Fact({ label, value }: { label: string; value: ReactNode }) {
   return (
     <div className="t-row">
       <span className="flex-1 text-sm">{label}</span>
-      <span className="text-right text-sm text-muted">{value}</span>
+      <span className="flex items-center gap-1.5 text-right text-sm text-muted">{value}</span>
     </div>
   )
 }
@@ -85,8 +86,17 @@ export function MemberView({
           <p className="t-micro mt-1">Member since {monthText(member.member_since)}</p>
         </div>
       </div>
-      <Fact label="Foods submitted" value={String(member.submitted)} />
-      <Fact label="Foods approved" value={String(member.approved)} />
+      {/* The same mark an approved food wears, so the number is read as
+          foods that are in the shared database. */}
+      <Fact
+        label="Contributions"
+        value={
+          <>
+            <Verified />
+            {member.contributions}
+          </>
+        }
+      />
     </div>
   )
 }

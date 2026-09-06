@@ -23,17 +23,33 @@ def sign_in(client, username):
     assert response.status_code == 200
 
 
-def offer(db, user, kind="new", status="pending"):
+def offer(db, user, kind="new", status="pending", food=None):
     """One request in the queue, or one that has already been answered."""
     row = models.FoodSubmission(
         kind=kind,
         status=status,
         submitted_by_id=user.id,
+        food_id=None if food is None else food.id,
         decided_at=None if status == "pending" else now_utc(),
     )
     db.add(row)
     db.commit()
     return row
+
+
+def a_food(db, name, status="approved"):
+    """One food row, straight in."""
+    row = models.Food(status=status, name=name, base_unit="g")
+    db.add(row)
+    db.commit()
+    return row
+
+
+def given(db, user, name):
+    """A food this member offered that was taken, still in the database."""
+    food = a_food(db, name)
+    offer(db, user, status="approved", food=food)
+    return food
 
 
 def send_avatar(client, raw=None):
@@ -47,47 +63,50 @@ def send_avatar(client, raw=None):
 # -----------
 
 
-def test_the_counter_counts_offered_foods_and_the_ones_that_were_taken(
-    client, db_session, make_user
-):
+def test_the_counter_counts_the_foods_that_were_taken(client, db_session, make_user):
     member = make_user("member")
-    offer(db_session, member)
-    offer(db_session, member, status="approved")
-    offer(db_session, member, status="rejected")
+    given(db_session, member, "Oat bar")
+    given(db_session, member, "Rye bread")
+    # Still in the queue, so nobody has it yet.
+    offer(db_session, member, food=a_food(db_session, "Plum jam", status="pending"))
     # A correction is about somebody else's row rather than a food given to
     # everybody, so it is not one of these.
-    offer(db_session, member, kind="edit", status="approved")
+    offer(
+        db_session,
+        member,
+        kind="edit",
+        status="approved",
+        food=a_food(db_session, "Whole milk"),
+    )
     sign_in(client, "member")
 
     shown = client.get(f"/api/feed/members/{member.id}").json()
-    assert shown["submitted"] == 3
-    assert shown["approved"] == 1
+    assert shown["contributions"] == 2
+    assert "submitted" not in shown
+    assert "approved" not in shown
 
 
-def test_a_withdrawn_request_is_not_counted(client, db_session, make_user):
+def test_a_deleted_food_is_no_longer_a_contribution(db_session, make_user, admin_client):
     member = make_user("member")
-    taken_back = offer(db_session, member)
-    offer(db_session, member, status="approved")
-    sign_in(client, "member")
+    given(db_session, member, "Oat bar")
+    gone = given(db_session, member, "Rye bread")
 
-    assert client.delete(f"/api/submissions/{taken_back.id}").status_code == 204
-    shown = client.get(f"/api/feed/members/{member.id}").json()
-    assert shown["submitted"] == 1
-    assert shown["approved"] == 1
+    assert admin_client.delete(f"/api/foods/{gone.id}").status_code == 204
+    shown = admin_client.get(f"/api/feed/members/{member.id}").json()
+    assert shown["contributions"] == 1
 
 
 def test_a_member_who_shares_nothing_still_shows_the_counter(client, db_session, make_user):
     make_user("member")
     other = make_user("other")
-    offer(db_session, other, status="approved")
+    given(db_session, other, "Oat bar")
     sign_in(client, "member")
 
     shown = client.get(f"/api/feed/members/{other.id}").json()
     assert "age" not in shown
     assert "sex" not in shown
     assert "location" not in shown
-    assert shown["submitted"] == 1
-    assert shown["approved"] == 1
+    assert shown["contributions"] == 1
 
 
 # The list
@@ -116,8 +135,8 @@ def test_a_list_row_carries_the_counter_and_no_private_fact(client, db_session, 
     member.display_name = "Test Member"
     member.location = "Phoenix, AZ"
     member.share_location = True
-    offer(db_session, member, status="approved")
-    offer(db_session, member)
+    given(db_session, member, "Oat bar")
+    offer(db_session, member, food=a_food(db_session, "Plum jam", status="pending"))
     db_session.commit()
     sign_in(client, "member")
 
@@ -128,8 +147,7 @@ def test_a_list_row_carries_the_counter_and_no_private_fact(client, db_session, 
         "role": None,
         "avatar_url": None,
         "member_since": member.created_at.strftime("%Y-%m"),
-        "submitted": 2,
-        "approved": 1,
+        "contributions": 1,
     }
 
 

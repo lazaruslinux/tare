@@ -44,6 +44,7 @@ export function FoodDetail({
   onSubmitted,
   onSeen,
   onChanged,
+  onOpenMember,
 }: {
   id: number
   me: Me
@@ -70,6 +71,9 @@ export function FoodDetail({
   // unstarring takes it off, and the list was read once when that screen
   // opened.
   onChanged?: () => void
+  // Open the member page of whoever offered this food. Given the food's name
+  // as well, because that is what the way back from there is called.
+  onOpenMember: (userId: number, backLabel: string) => void
 }) {
   const [food, setFood] = useState<Food | null>(null)
   const [error, setError] = useState('')
@@ -254,6 +258,9 @@ export function FoodDetail({
   // anything else is offered again.
   const latest = food?.submissions[0]
   const waiting = latest !== undefined && latest.status === 'pending' ? latest : undefined
+  // Whose page the name under "Submitted by" opens. Null where the account
+  // has gone, and the name is then read as text.
+  const submitter = food?.submitted_by_id ?? null
 
   return (
     <>
@@ -340,7 +347,20 @@ export function FoodDetail({
                 {!offered && food.submitted_by !== null && (
                   <p className="col-span-2 mb-3 flex min-w-0 items-center gap-1.5 text-xs text-muted">
                     <UserRound className="h-4 w-4 text-muted" strokeWidth={2.25} aria-hidden="true" />
-                    Submitted by {food.submitted_by}
+                    <span className="min-w-0 truncate">
+                      Submitted by{' '}
+                      {submitter === null ? (
+                        food.submitted_by
+                      ) : (
+                        <button
+                          type="button"
+                          className="t-link"
+                          onClick={() => onOpenMember(submitter, food.name)}
+                        >
+                          {food.submitted_by}
+                        </button>
+                      )}
+                    </span>
                     <RoleMark role={food.submitted_by_role} />
                   </p>
                 )}

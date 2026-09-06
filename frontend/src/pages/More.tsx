@@ -194,7 +194,7 @@ export function More({
   const [applying, setApplying] = useState(false)
   const [applied, setApplied] = useState(me.reviewer_requested)
   const [applyError, setApplyError] = useState('')
-  // Which member's profile is open on the Members screen, if any.
+  // Which member's profile is open on the Members or Sharing screen, if any.
   const [member, setMember] = useState<number | null>(null)
 
   const [units, setUnits] = useState<Units>(me.units)
@@ -415,7 +415,16 @@ export function More({
   }
 
   if (screen === 'sharing') {
-    return <Sharing me={me} onChange={onChange} onBack={() => go(null)} />
+    return member === null ? (
+      <Sharing
+        me={me}
+        onChange={onChange}
+        onBack={() => go(null)}
+        onOpenProfile={() => setMember(me.id)}
+      />
+    ) : (
+      <MemberView userId={member} back="Sharing" onBack={() => setMember(null)} />
+    )
   }
 
   if (screen === 'submissions') {

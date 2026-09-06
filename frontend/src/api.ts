@@ -358,6 +358,8 @@ export type Food = FoodRow & {
   submissions: FoodSubmissionRow[]
   // Who offered it to the shared database. Null for a private food.
   submitted_by: string | null
+  // And their account, so the name opens their member page.
+  submitted_by_id: number | null
   submitted_by_role: Role
   // When the row last moved. Sent back with an edit, so one written against an
   // older copy is refused rather than applied over somebody else's.
@@ -981,11 +983,10 @@ export type MemberView = {
   role: Role
   member_since: string
   avatar_url: string | null
-  // What they have offered the shared database, and how much of it was taken.
+  // Foods they offered that were taken and are still in the shared database.
   // Shown for everybody: it is work done for the group rather than a fact
   // about the person.
-  submitted: number
-  approved: number
+  contributions: number
   age?: number
   sex?: Sex
   location?: string
@@ -999,8 +1000,7 @@ export type MemberRow = {
   role: Role
   avatar_url: string | null
   member_since: string
-  submitted: number
-  approved: number
+  contributions: number
 }
 
 // One page of the roster. It is ordered by a name rather than by an id, so the

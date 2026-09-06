@@ -77,3 +77,35 @@ def submission_counts(db: Session, user_ids: Iterable[int]) -> dict[int, dict[st
         if member in counts:
             counts[member] = {"submitted": int(submitted), "approved": int(approved or 0)}
     return counts
+
+
+def contribution_counts(db: Session, user_ids: Iterable[int]) -> dict[int, int]:
+    """How many foods each of these members gave that are still on Tare.
+
+    Counted off the food rather than off the request: a food that was taken
+    and has since been deleted stops being a contribution, and the request it
+    arrived on keeps its row without one. Distinct foods, because what is
+    counted is rows in the shared database, not times somebody asked.
+    """
+    wanted = list(user_ids)
+    counts = {member: 0 for member in wanted}
+    if not wanted:
+        return counts
+    rows = db.execute(
+        select(
+            models.FoodSubmission.submitted_by_id,
+            func.count(models.Food.id.distinct()),
+        )
+        .join(models.Food, models.Food.id == models.FoodSubmission.food_id)
+        .where(
+            models.FoodSubmission.kind == "new",
+            models.FoodSubmission.status == "approved",
+            models.FoodSubmission.submitted_by_id.in_(wanted),
+            models.Food.status == "approved",
+        )
+        .group_by(models.FoodSubmission.submitted_by_id)
+    ).all()
+    for member, total in rows:
+        if member in counts:
+            counts[member] = int(total)
+    return counts

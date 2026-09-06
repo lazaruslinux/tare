@@ -30,6 +30,7 @@ import {
 import { FoodForm } from '../components/FoodForm'
 import { FoodPicker } from '../components/FoodPicker'
 import { FoodLine, MealLine, RecipeLine, favoritesOf } from '../components/FoodRows'
+import { MemberView } from '../components/MemberView'
 import { PortionSheet } from '../components/PortionSheet'
 import { Sheet } from '../components/Sheet'
 import { useTopBar } from '../hooks/useTopBar'
@@ -113,6 +114,9 @@ export function FoodTab({
   onChanged: () => void
 }) {
   const [view, setView] = useState<View>({ at: 'list' })
+  // Whose page is open over the food that named them, and what the way back
+  // to that food is called.
+  const [member, setMember] = useState<{ id: number; back: string } | null>(null)
   const [foods, setFoods] = useState<MyFoodRow[]>([])
   const [recipes, setRecipes] = useState<RecipeRow[]>([])
   const [meals, setMeals] = useState<MealRow[]>([])
@@ -205,6 +209,7 @@ export function FoodTab({
   // it is again.
   useEffect(() => {
     if (open === null) return
+    setMember(null)
     setView({ at: 'detail', id: open, from: { at: 'list' } })
     onOpened()
   }, [open, onOpened])
@@ -309,6 +314,11 @@ export function FoodTab({
 
   if (view.at === 'detail') {
     const from = view.from
+    if (member !== null) {
+      return (
+        <MemberView userId={member.id} back={member.back} onBack={() => setMember(null)} />
+      )
+    }
     return (
       <FoodDetail
         id={view.id}
@@ -329,6 +339,7 @@ export function FoodTab({
           void loadAutos()
           onChanged()
         }}
+        onOpenMember={(id, back) => setMember({ id, back })}
       />
     )
   }
