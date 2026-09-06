@@ -14,6 +14,13 @@ const LETTERS = 'ABCDEFGHIJKLMNOPQRSTUVWXYZ'.split('')
 // shops the freezer comes back to the freezer.
 const SECTION_KEY = 'tare.browse.section'
 
+// How many rows land on the screen at once. A phone shows a handful and offers
+// the rest a tap away; a desktop has the room to show a page.
+const ROOMY = '(min-width: 900px)'
+function pageSize(): number {
+  return window.matchMedia(ROOMY).matches ? 30 : 6
+}
+
 function rememberedSection(): string {
   try {
     const kept = window.localStorage.getItem(SECTION_KEY)
@@ -43,6 +50,8 @@ export function BrowseList({
   const [cursor, setCursor] = useState<string | null>(null)
   const [error, setError] = useState('')
   const [busy, setBusy] = useState(false)
+  // How many of the rows read so far are drawn.
+  const [shown, setShown] = useState(pageSize)
 
   const setSection = (slug: string) => {
     setSectionState(slug)
@@ -59,6 +68,7 @@ export function BrowseList({
   // while it reads.
   useEffect(() => {
     setRows(null)
+    setShown(pageSize())
   }, [letter, section])
 
   useEffect(() => {
@@ -81,7 +91,10 @@ export function BrowseList({
   }, [letter, section, refresh])
 
   const more = async () => {
-    if (cursor === null) return
+    const next = shown + pageSize()
+    setShown(next)
+    // Rows already read cover the next page; nothing to ask for yet.
+    if (cursor === null || (rows !== null && rows.length >= next)) return
     setBusy(true)
     setError('')
     try {
@@ -153,14 +166,14 @@ export function BrowseList({
       )}
 
       {rows !== null && rows.length > 0 && (
-        <div className="t-card mb-3">
-          {rows.map((row) => (
+        <div className="t-card mb-3 min-[900px]:grid min-[900px]:grid-cols-2 min-[900px]:gap-x-6">
+          {rows.slice(0, shown).map((row) => (
             <FoodLine key={row.id} row={row} onOpen={() => onOpen(row.id)} />
           ))}
         </div>
       )}
 
-      {cursor !== null && (
+      {(cursor !== null || (rows !== null && rows.length > shown)) && (
         <button type="button" className="t-btn mb-3 w-full" disabled={busy} onClick={more}>
           Show more
         </button>

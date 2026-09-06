@@ -14,7 +14,12 @@ const MIN_QUERY = 2
 
 // How many results are on screen before the rest are one tap away. A list
 // somebody has to scroll past to reach anything is a list nobody reads.
-const PAGE = 30
+// How many results land on the screen at once. A phone shows a handful and
+// offers the rest a tap away; a desktop has the room to show a page.
+const ROOMY = '(min-width: 900px)'
+function pageSize(): number {
+  return window.matchMedia(ROOMY).matches ? 30 : 6
+}
 
 // What the box is for, in the words of the thing being looked for. The heading
 // above it says which screen this is; this says what to type.
@@ -214,7 +219,7 @@ export function FoodPicker({
   const [error, setError] = useState('')
   // How many results are drawn. Back to the first page whenever the results
   // are a different question's answer.
-  const [shown, setShown] = useState(PAGE)
+  const [shown, setShown] = useState(pageSize)
 
   useEffect(() => {
     // Not asked for when the sheet is the shared database: nothing there shows
@@ -231,7 +236,7 @@ export function FoodPicker({
 
   useEffect(() => {
     const needle = query.trim()
-    setShown(PAGE)
+    setShown(pageSize())
     if (needle.length < MIN_QUERY) {
       setResults(null)
       return
@@ -281,7 +286,7 @@ export function FoodPicker({
 
   return (
     <>
-      <Sheet open tall={browsing} label={title} onClose={onClose}>
+      <Sheet open top tall={browsing} wide={browsing} label={title} onClose={onClose}>
         <p className="t-micro mb-2">{title}</p>
         <input
           className="t-input mb-3"
@@ -299,18 +304,22 @@ export function FoodPicker({
             <p className="text-sm text-muted">Nothing here goes by that name.</p>
           ) : (
             <>
-              {results.slice(0, shown).map((row) => (
-                <Row
-                  key={row.id}
-                  row={row}
-                  onOpen={() => (browse ? browse.onOpen(row.id) : open(row.id))}
-                />
-              ))}
+              {/* Two columns where there is room for two: a list somebody is
+                  looking a name up in reads across as well as down. */}
+              <div className={browsing ? 'min-[900px]:grid min-[900px]:grid-cols-2 min-[900px]:gap-x-6' : ''}>
+                {results.slice(0, shown).map((row) => (
+                  <Row
+                    key={row.id}
+                    row={row}
+                    onOpen={() => (browse ? browse.onOpen(row.id) : open(row.id))}
+                  />
+                ))}
+              </div>
               {results.length > shown && (
                 <button
                   type="button"
                   className="t-btn mt-3 w-full"
-                  onClick={() => setShown(shown + PAGE)}
+                  onClick={() => setShown(shown + pageSize())}
                 >
                   Show more
                 </button>
