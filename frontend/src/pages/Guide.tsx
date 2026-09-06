@@ -8,81 +8,71 @@ import { useState } from 'react'
 const QUESTIONS: { q: string; a: string }[] = [
   {
     q: "Why can't I search for a food online?",
-    a:
-      'Search looks in the Tare database and in your own foods, nothing else. The ' +
-      'database starts empty and is built by the members, so every food in it has been ' +
-      'checked by a person. Scanning a barcode is the one moment Tare asks an online ' +
-      'source; after that the food is yours to correct and submit.',
+    a: "Search covers the Tare database and your own foods. Members build the database, and a person checks every food in it. A barcode scan is the only online lookup.",
   },
   {
-    q: 'What happens when I submit a food?',
-    a:
-      'It waits for an administrator to check it against the label. You can log it ' +
-      'straight away while it waits. Once approved it is in the Tare database for ' +
-      'everyone and only an administrator can change it; if you spot a mistake, open the ' +
-      'food and tap Report an issue. If it is not approved you get a note, and you can ' +
-      'fix it and submit again.',
+    q: "What happens when I scan a barcode?",
+    a: "A food already in Tare opens ready to log. A new one is filled in from the barcode for you to check, then keep private or submit.",
   },
   {
-    q: 'What is Recently used?',
-    a:
-      'The foods you have logged lately, newest first, with the ones you made or ' +
-      'scanned under them. It fills itself in as you eat: nothing is added or taken ' +
-      'off by hand. To keep a food where you can always reach it, open it and tap ' +
-      'Favorite.',
+    q: "What happens when I submit a food?",
+    a: "A reviewer checks it against the label. Log it right away while it waits. Approved foods get the green check. A turned-down food comes back with a note so you can fix it and send it again.",
   },
   {
-    q: 'Label serving or weigh it?',
-    a:
-      'Every food opens on its label serving. Tap Weigh it to switch to grams or ounces, ' +
-      'and Tare remembers that choice for that food from then on.',
+    q: "Who are the reviewers?",
+    a: "Members who check submissions against labels. They wear a shield by their name and never review their own. Apply under More once 100 of your foods are approved.",
   },
   {
-    q: 'How does Tare work out my calorie budget?',
-    a:
-      'From your age, gender, height, weight and how active your days are, with your ' +
-      'weight goal on top. Until your profile is filled in, Tare uses a general 2,000 ' +
-      'calorie guideline. You can see and change every number under Targets. Tare ' +
-      'estimates. It is not medical advice.',
+    q: "Weigh it or a serving?",
+    a: "Log sheets open on Weigh it, in grams, ounces or pounds. Tap 1 serving when you are not weighing. Tare remembers your choice for each food.",
   },
   {
-    q: 'What is BMR?',
-    a:
-      'Your BMR or Basal Metabolic Rate is the estimated amount of calories your body ' +
-      'burns daily, based on age, gender, height, weight, and body fat percentage.',
+    q: "What is Recently used?",
+    a: "Your last ten logged foods. Favorites sits under it: tap Favorite on any food to keep it there.",
   },
   {
-    q: 'What does Mark day as complete do?',
-    a:
-      "It locks that day's journal so nothing changes by accident, and the Dashboard " +
-      'counts it as a completed day. Tap the check again to unlock it.',
+    q: "What is the difference between a recipe and a meal?",
+    a: "A recipe is made in servings, like a pot of soup. A meal is one plate logged as one line, like your usual breakfast. Both can take a final weight in grams.",
   },
   {
-    q: 'What is Auto-log?',
-    a:
-      "A food you eat every day, logged for you. Set it once from the food's page with " +
-      'an amount and a meal, and it lands in that meal each day with an Auto chip. ' +
-      'Delete it on one day and only that day changes.',
+    q: "How does Tare work out my calorie budget?",
+    a: "From your age, gender, height, weight, activity and weight goal. Without a profile it uses 2,000 calories. Change any number under Targets. Tare estimates; it is not medical advice.",
   },
   {
-    q: 'How do I sync my phone?',
-    a:
-      'Open More, then Health data sync, and follow the steps for your phone. An iPhone ' +
-      'sends through the Health Auto Export app; an Android phone sends through Health ' +
-      'Connect. Steps, workouts, exercise minutes and weigh-ins arrive on their own once ' +
-      'it is set up.',
+    q: "What is BMR?",
+    a: "Your BMR or Basal Metabolic Rate is the estimated amount of calories your body burns daily, based on age, gender, height, weight, and body fat percentage.",
   },
   {
-    q: 'Who can see what?',
-    a:
-      'Only invited members can sign in, and nothing on Tare is public. Your workouts ' +
-      'are shared with other members unless you turn that off under Sharing, where you ' +
-      'also choose whether heart rate, calories burned and the route line are shown. ' +
-      'Your age, gender and location are hidden unless you switch them on. Your food ' +
-      'journal, weight, measurements and targets are private: other members never see ' +
-      'them, and neither does an administrator. Your weight stays private unless you ' +
-      'turn on Share weight lost since last weigh-in, which tells the feed how much you ' +
-      'lost and nothing else.',
+    q: "What does Complete do in the Journal?",
+    a: "Tap Complete at the top of a day to lock it and count it on the Dashboard. Tap Completed to unlock it.",
+  },
+  {
+    q: "What is Auto-log?",
+    a: "A food logged for you every day. Set it once from the food's page. Deleting it on one day changes only that day.",
+  },
+  {
+    q: "How do I sync my phone?",
+    a: "More, then Health data sync. iPhone uses the Health Auto Export app; Android uses Health Connect. Steps, workouts and weigh-ins then arrive on their own.",
+  },
+  {
+    q: "What does Fitness show?",
+    a: "Steps, distance, sessions and active calories by the hour, with trends. Open a workout for splits, heart rate, pace and the route map. The first and last 200 meters of a route are hidden.",
+  },
+  {
+    q: "How do I read the Dashboard?",
+    a: "The rings are today. Week to 6 months changes what the cards show. Tap or drag the bars for one day's numbers. Progress holds your weight line and goal.",
+  },
+  {
+    q: "Who can see what?",
+    a: "Only invited members with a verified email. Workouts are shared unless you turn them off under Sharing, along with heart rate, calories and route maps. Age, gender and location show only if you switch them on. Your journal, weight, measurements and targets are always private, even from administrators.",
+  },
+  {
+    q: "Where does feedback go?",
+    a: "More, then Send feedback. Administrators read every one.",
+  },
+  {
+    q: "Can I use pounds and ounces?",
+    a: "Yes. More, then Display: units, clock and time zone.",
   },
 ]
 
