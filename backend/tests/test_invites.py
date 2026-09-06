@@ -2,6 +2,7 @@ import datetime as dt
 
 from app import models
 from app.models import now_utc
+from app.routers import auth, invites
 from app.routers.invites import DEAD_INVITE
 from tests.conftest import BIRTHDATE, PASSWORD
 
@@ -37,19 +38,13 @@ def test_every_dead_ending_reads_the_same(client, db_session, admin, invite):
     # Never minted.
     answers.append(client.get("/api/invites/never-minted"))
 
-    # Claimed.
-    invite.used_by = admin.id
-    db_session.commit()
-    answers.append(client.get(f"/api/invites/{invite.code}"))
-
-    # Revoked.
-    invite.used_by = None
-    invite.revoked_at = now_utc()
+    # Every seat spent.
+    invite.used = invite.seats
     db_session.commit()
     answers.append(client.get(f"/api/invites/{invite.code}"))
 
     # Run out.
-    invite.revoked_at = None
+    invite.used = 0
     invite.expires_at = now_utc() - dt.timedelta(seconds=1)
     db_session.commit()
     answers.append(client.get(f"/api/invites/{invite.code}"))
@@ -85,4 +80,55 @@ def test_one_invite_makes_exactly_one_account(client, db_session, invite):
 
     assert db_session.query(models.User).filter_by(username="second").count() == 0
     db_session.refresh(invite)
-    assert invite.used_by == db_session.query(models.User).filter_by(username="first").one().id
+    assert invite.used == 1
+    first = db_session.query(models.User).filter_by(username="first").one()
+    assert first.invite_id == invite.id
+
+
+def test_a_three_seat_link_makes_exactly_three_accounts(client, db_session, admin):
+    """One link in a group chat, three people through it, and the fourth is
+    told what everybody holding a dead link is told."""
+    row = invites.mint(db_session, admin, 0, 3)
+    db_session.commit()
+
+    for name in ("first", "second", "third"):
+        assert signup(client, row.code, name).status_code == 200
+
+    fourth = signup(client, row.code, "fourth")
+    assert fourth.status_code == 404
+    assert fourth.json() == {"detail": DEAD_INVITE}
+    assert db_session.query(models.User).filter_by(username="fourth").count() == 0
+
+    db_session.refresh(row)
+    assert row.used == 3
+    came_in = (
+        db_session.query(models.User)
+        .filter_by(invite_id=row.id)
+        .order_by(models.User.id)
+        .all()
+    )
+    assert [user.username for user in came_in] == ["first", "second", "third"]
+
+
+def test_two_people_spending_the_last_seat_at_once_leave_one_of_them_out(
+    client, db_session, admin, monkeypatch
+):
+    """The claim is one conditional UPDATE, so the loser is the registration
+    whose UPDATE touched nothing, and the count never passes the seats."""
+    row = invites.mint(db_session, admin, 0, 2)
+    db_session.commit()
+    assert signup(client, row.code, "first").status_code == 200
+    assert signup(client, row.code, "second").status_code == 200
+    db_session.refresh(row)
+    assert row.used == 2
+
+    # Somebody else took the last seat between this registration's read and its
+    # write. The read still hands back a live row; the UPDATE finds none.
+    monkeypatch.setattr(auth, "live_invite", lambda db, code: row)
+    loser = signup(client, row.code, "third")
+    assert loser.status_code == 404
+    assert loser.json() == {"detail": DEAD_INVITE}
+
+    assert db_session.query(models.User).filter_by(username="third").count() == 0
+    db_session.refresh(row)
+    assert row.used == 2

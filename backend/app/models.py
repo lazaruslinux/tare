@@ -112,6 +112,13 @@ class User(Base):
     # Whether a weigh-in that came in lower than the one before it says so in
     # the feed. The weight itself never goes, only how much of it went.
     share_weight_loss: Mapped[bool] = mapped_column(Boolean, nullable=False, default=False)
+    # Which link this account came in through. Kept here rather than on the
+    # invite, because one link seats several people and only the account knows
+    # which of them it is. Null for the first administrator and for anybody
+    # whose link has since been deleted.
+    invite_id: Mapped[int | None] = mapped_column(
+        ForeignKey("invites.id", ondelete="SET NULL"), nullable=True, index=True
+    )
     created_at: Mapped[dt.datetime] = mapped_column(UtcDateTime, nullable=False, default=now_utc)
 
 
@@ -147,10 +154,12 @@ class Invite(Base):
     id: Mapped[int] = mapped_column(Integer, primary_key=True)
     code: Mapped[str] = mapped_column(String(64), unique=True, nullable=False)
     created_by: Mapped[int] = mapped_column(ForeignKey("users.id"), nullable=False)
-    used_by: Mapped[int | None] = mapped_column(ForeignKey("users.id"), nullable=True)
+    # How many people the link lets in, fixed when it is minted, and how many
+    # of those seats have been spent. A link is a way in while used < seats.
+    seats: Mapped[int] = mapped_column(Integer, nullable=False, default=1)
+    used: Mapped[int] = mapped_column(Integer, nullable=False, default=0)
     created_at: Mapped[dt.datetime] = mapped_column(UtcDateTime, nullable=False, default=now_utc)
     expires_at: Mapped[dt.datetime | None] = mapped_column(UtcDateTime, nullable=True)
-    revoked_at: Mapped[dt.datetime | None] = mapped_column(UtcDateTime, nullable=True)
 
 
 class IngestToken(Base):

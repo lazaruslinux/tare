@@ -21,6 +21,7 @@ from app.config import check_deploy_config
 from app.db import SessionLocal
 from app.models import now_utc
 from app.routers import invites
+from app.routers.admin import BAD_SEATS, MAX_SEATS, MIN_SEATS
 from app.routers.auth import MIN_AGE
 
 
@@ -99,6 +100,10 @@ def create_admin(args: argparse.Namespace) -> int:
 
 def create_invite(args: argparse.Namespace) -> int:
     """Mint a code and print the path it lives at."""
+    if not MIN_SEATS <= args.seats <= MAX_SEATS:
+        print(BAD_SEATS, file=sys.stderr)
+        return 2
+
     with SessionLocal() as db:
         # The lowest-numbered administrator, which on a fresh instance is the
         # only one. A code has to be minted by somebody, and the welcome page
@@ -112,12 +117,13 @@ def create_invite(args: argparse.Namespace) -> int:
             print("There is no administrator yet. Run create-admin first.", file=sys.stderr)
             return 1
 
-        invite = invites.mint(db, admin, args.days)
-        code, expires = invite.code, invite.expires_at
+        invite = invites.mint(db, admin, args.days, args.seats)
+        code, expires, seats = invite.code, invite.expires_at, invite.seats
         db.commit()
 
     print(f"Code:  {code}")
     print(f"Path:  {invites.invite_path(code)}")
+    print(f"Seats: {seats}")
     if expires is None:
         print("Expires: never, until it is claimed.")
     else:
@@ -161,6 +167,9 @@ def build_parser() -> argparse.ArgumentParser:
     invite = commands.add_parser("create-invite", help="mint an invite link")
     invite.add_argument(
         "--days", type=int, default=0, help="days until it expires; omit for no expiry"
+    )
+    invite.add_argument(
+        "--seats", type=int, default=1, help="how many people it lets in, 1 to 10"
     )
     invite.set_defaults(run=create_invite)
 

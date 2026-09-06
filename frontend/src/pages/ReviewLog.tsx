@@ -20,6 +20,8 @@ const SAID: Record<string, string> = {
   role_granted: 'made a reviewer:',
   role_revoked: 'took the reviewer role from',
   applied: 'applied to review',
+  invite_minted: 'made an invite link:',
+  invite_deleted: 'deleted an invite link:',
 }
 
 function sentence(row: ReviewLogRow): string {

@@ -1,8 +1,8 @@
 """The page somebody sent an invite link lands on.
 
-One shape for a live code and the same 404 for every dead one. Unknown,
-claimed, revoked, and expired are four different endings and one answer,
-because a link that no longer works has no business going on to say why.
+One shape for a live code and the same 404 for every dead one. Unknown, full,
+and expired are three different endings and one answer, because a link that no
+longer works has no business going on to say why.
 """
 
 from __future__ import annotations
@@ -33,15 +33,19 @@ CODE_BYTES = 16
 INVITE_DAYS = 7
 
 
-def mint(db: Session, admin: models.User, days: int = INVITE_DAYS) -> models.Invite:
+def mint(
+    db: Session, admin: models.User, days: int = INVITE_DAYS, seats: int = 1
+) -> models.Invite:
     """A fresh code and the row behind it, added but not committed.
 
     Shared by the command line and the administration screens, so a link minted
-    either way is the same link with the same lifetime rules.
+    either way is the same link with the same lifetime and seat rules.
     """
     invite = models.Invite(
         code=secrets.token_urlsafe(CODE_BYTES),
         created_by=admin.id,
+        seats=seats,
+        used=0,
         created_at=now_utc(),
         # Zero days means it never expires, which is what the command line
         # mints unless it is asked for a date.
@@ -60,14 +64,14 @@ def invite_path(code: str) -> str:
 def live_invite(db: Session, code: str) -> models.Invite | None:
     """The invite behind a code, if it is still worth anything.
 
-    Claimed, revoked, and expired all read as nothing here, which is what makes
-    the four dead cases answer identically: they never reach a branch that
-    could tell them apart.
+    Full and expired both read as nothing here, which is what makes the dead
+    cases answer identically: they never reach a branch that could tell them
+    apart.
     """
     invite = db.execute(
         select(models.Invite).where(models.Invite.code == code)
     ).scalar_one_or_none()
-    if invite is None or invite.used_by is not None or invite.revoked_at is not None:
+    if invite is None or invite.used >= invite.seats:
         return None
     # Null means it never expires, which is what the command line mints unless
     # it is asked for a date.

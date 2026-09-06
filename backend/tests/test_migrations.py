@@ -55,6 +55,7 @@ def test_upgrade_head_builds_the_identity_schema(tmp_path):
             for constraint in inspector.get_unique_constraints("weight_entries")
         }
         user_columns = {column["name"] for column in inspector.get_columns("users")}
+        invite_columns = {column["name"] for column in inspector.get_columns("invites")}
         journal_columns = {column["name"] for column in inspector.get_columns("journal_days")}
         photo_columns = {column["name"] for column in inspector.get_columns("food_photos")}
         food_columns = {column["name"] for column in inspector.get_columns("foods")}
@@ -173,6 +174,12 @@ def test_upgrade_head_builds_the_identity_schema(tmp_path):
     assert "final_weight_g" in meal_columns
     # And the one that holds a member to a single weigh-in a day.
     assert "uq_weight_entries_user_day" in weight_unique
+    # A link seats several people, so how many it holds and how many have gone
+    # are on the link, and who came in through it is on the member.
+    assert "invite_id" in user_columns
+    assert {"seats", "used"} <= invite_columns
+    assert "used_by" not in invite_columns
+    assert "revoked_at" not in invite_columns
 
 
 def test_the_kept_list_becomes_favorites_without_doubling_anything(tmp_path):

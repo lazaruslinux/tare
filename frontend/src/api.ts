@@ -467,8 +467,15 @@ export type AdminInvite = {
   path: string
   created_at: string
   expires_at: string | null
-  // Null while it is still a way in; a name once somebody came through it.
-  used_by: string | null
+  // How many people it lets in, and how many of those have come in. A link is
+  // still a way in while used is under seats.
+  seats: number
+  used: number
+  // Who came in through it, oldest account first. Empty while nobody has.
+  members: string[]
+  // Who minted it, and whether that is the reader.
+  inviter: string
+  mine: boolean
 }
 
 export type AdminUser = {

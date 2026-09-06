@@ -21,7 +21,7 @@ invite links that are out, and who is on the instance.
 from __future__ import annotations
 
 from fastapi import APIRouter, Depends, HTTPException, status
-from sqlalchemy import delete, func, or_, select
+from sqlalchemy import delete, func, or_, select, update
 from sqlalchemy.orm import Session
 
 from app import models, profiles, schemas
@@ -75,7 +75,11 @@ MISSING_MEMBER = "There is no such member."
 OPEN_INVITES = 3
 TOO_MANY_INVITES = "Three invites are already open."
 MISSING_INVITE = "There is no such invite."
-INVITE_USED = "That invite has already been used."
+# How many people one link may let in. Ten is a group chat; more than that is
+# an open door with a code in front of it.
+MIN_SEATS = 1
+MAX_SEATS = 10
+BAD_SEATS = "An invite holds 1 to 10 seats."
 
 
 def proposed(food: models.Food) -> dict[str, object]:
@@ -578,7 +582,14 @@ def reject(
 # ---- The invite links that are out ----
 
 
-def invite_row(invite: models.Invite, used_by: str | None) -> dict[str, object]:
+# How many links the list reaches back over. Newest first, and far enough
+# back that a spent one is still there to read.
+INVITE_ROWS = 200
+
+
+def invite_row(
+    invite: models.Invite, members: list[str], inviter: str, mine: bool
+) -> dict[str, object]:
     """One link, as the screen that hands it out reads it.
 
     The path and not a whole address: this server does not know what somebody
@@ -590,10 +601,24 @@ def invite_row(invite: models.Invite, used_by: str | None) -> dict[str, object]:
         "path": invites.invite_path(invite.code),
         "created_at": invite.created_at,
         "expires_at": invite.expires_at,
-        # Null while it is still a way in. A name here is the record of who
-        # came through it.
-        "used_by": used_by,
+        "seats": invite.seats,
+        "used": invite.used,
+        # Who came in through it, oldest account first. Empty while nobody has.
+        "members": members,
+        "inviter": inviter,
+        # Whether the reader minted it, which is what the allowance counts.
+        "mine": mine,
     }
+
+
+def member_name(user: models.User) -> str:
+    """What a member is called on the invite screen."""
+    return user.display_name or user.username
+
+
+def seat_words(seats: int) -> str:
+    """How many seats, in words a line of the record can end on."""
+    return "1 seat" if seats == 1 else f"{seats} seats"
 
 
 def open_invites(db: Session, admin: models.User) -> int:
@@ -603,8 +628,7 @@ def open_invites(db: Session, admin: models.User) -> int:
         .select_from(models.Invite)
         .where(
             models.Invite.created_by == admin.id,
-            models.Invite.used_by.is_(None),
-            models.Invite.revoked_at.is_(None),
+            models.Invite.used < models.Invite.seats,
             or_(models.Invite.expires_at.is_(None), models.Invite.expires_at > now_utc()),
         )
     ).scalar_one()
@@ -613,17 +637,24 @@ def open_invites(db: Session, admin: models.User) -> int:
 
 @router.post("/invites", status_code=status.HTTP_201_CREATED)
 def create_invite(
-    db: Session = Depends(get_db), admin: models.User = Depends(require_admin)
+    body: schemas.InviteIn | None = None,
+    db: Session = Depends(get_db),
+    admin: models.User = Depends(require_admin),
 ) -> dict[str, object]:
-    """Mint a link that lets one person in, up to three at a time."""
+    """Mint a link that lets one to ten people in, up to three links at a time."""
+    seats = body.seats if body is not None else MIN_SEATS
+    if not MIN_SEATS <= seats <= MAX_SEATS:
+        raise HTTPException(status.HTTP_400_BAD_REQUEST, BAD_SEATS)
     # The administrator's own row is taken first, so two taps on the button
     # cannot both read two open invites and both write the third.
     db.execute(select(models.User.id).where(models.User.id == admin.id).with_for_update())
     if open_invites(db, admin) >= OPEN_INVITES:
         raise HTTPException(status.HTTP_409_CONFLICT, TOO_MANY_INVITES)
-    invite = invites.mint(db, admin)
+    invite = invites.mint(db, admin, seats=seats)
+    db.flush()
+    log_review(db, admin, "invite_minted", "invite", invite.id, seat_words(seats))
     db.commit()
-    return invite_row(invite, None)
+    return invite_row(invite, [], member_name(admin), True)
 
 
 @router.get("/invites")
@@ -632,28 +663,60 @@ def read_invites(
 ) -> list[dict[str, object]]:
     """Every link this instance has minted, newest first."""
     rows = db.execute(
-        select(models.Invite, models.User.username)
-        .outerjoin(models.User, models.User.id == models.Invite.used_by)
+        select(models.Invite, models.User)
+        .join(models.User, models.User.id == models.Invite.created_by)
         .order_by(models.Invite.created_at.desc(), models.Invite.id.desc())
-        .limit(200)
+        .limit(INVITE_ROWS)
     ).all()
-    return [invite_row(invite, username) for invite, username in rows]
+
+    # One query for everybody who came in, rather than one per link.
+    members: dict[int, list[str]] = {}
+    ids = [invite.id for invite, _ in rows]
+    if ids:
+        for user in db.execute(
+            select(models.User)
+            .where(models.User.invite_id.in_(ids))
+            .order_by(models.User.id)
+        ).scalars():
+            if user.invite_id is not None:
+                members.setdefault(user.invite_id, []).append(member_name(user))
+
+    return [
+        invite_row(invite, members.get(invite.id, []), member_name(inviter), inviter.id == admin.id)
+        for invite, inviter in rows
+    ]
 
 
 @router.delete("/invites/{code}", status_code=status.HTTP_204_NO_CONTENT)
-def revoke_invite(
+def delete_invite(
     code: str, db: Session = Depends(get_db), admin: models.User = Depends(require_admin)
 ) -> None:
-    """Take a link back, by deleting it. Only one nobody has used yet."""
+    """Delete a link, whatever state it is in.
+
+    A spent one is only the record of who came in through it, so deleting it
+    drops that record and leaves the accounts alone.
+    """
     invite = db.execute(
         select(models.Invite).where(models.Invite.code == code)
     ).scalar_one_or_none()
     if invite is None:
         raise HTTPException(status.HTTP_404_NOT_FOUND, MISSING_INVITE)
-    if invite.used_by is not None:
-        # Somebody came in through it. The row is the record of that, and a
-        # record is not a door left open.
-        raise HTTPException(status.HTTP_400_BAD_REQUEST, INVITE_USED)
+    # By hand as well as by the foreign key: SQLite does not enforce ON DELETE
+    # unless it is asked to, and a member left pointing at a deleted row is a
+    # member the list would try to name.
+    db.execute(
+        update(models.User)
+        .where(models.User.invite_id == invite.id)
+        .values(invite_id=None)
+    )
+    log_review(
+        db,
+        admin,
+        "invite_deleted",
+        "invite",
+        invite.id,
+        f"{invite.used} of {invite.seats} used",
+    )
     db.delete(invite)
     db.commit()
 

@@ -188,6 +188,14 @@ class RoleIn(BaseModel):
     is_reviewer: bool
 
 
+class InviteIn(BaseModel):
+    """How many people a new link lets in. The bounds are checked in the
+    handler, so a number outside them is answered in words rather than by the
+    validator."""
+
+    seats: int = 1
+
+
 # Long enough for "serving:" and an id, and short enough that nothing else
 # arrives in the field at all.
 MAX_UNIT = 24

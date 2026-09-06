@@ -277,22 +277,25 @@ def register(
     db.flush()
 
     # The claim itself, as one conditional UPDATE rather than a write to the
-    # row read above. Two people spending the same link at once both pass that
+    # row read above. Two people spending the last seat at once both pass that
     # read; only one of them can touch a row here, and the loser is told what
     # everyone holding a dead link is told.
     claimed = db.execute(
         update(models.Invite)
         .where(
             models.Invite.id == invite.id,
-            models.Invite.used_by.is_(None),
-            models.Invite.revoked_at.is_(None),
+            models.Invite.used < models.Invite.seats,
             or_(models.Invite.expires_at.is_(None), models.Invite.expires_at > now),
         )
-        .values(used_by=user.id)
+        .values(used=models.Invite.used + 1)
     )
     if rows_touched(claimed) != 1:
         db.rollback()
         raise dead_invite
+
+    # Which link this account came in through, written in the same transaction
+    # as the seat it took.
+    user.invite_id = invite.id
 
     if user.email_verified:
         token = security.create_session(db, user.id)

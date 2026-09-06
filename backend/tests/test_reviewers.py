@@ -240,6 +240,23 @@ def test_an_administrator_cannot_be_given_the_role(db_session, make_user, admin_
     assert log_rows(db_session) == []
 
 
+def test_minting_and_deleting_a_link_are_both_written_down(db_session, admin_client):
+    made = admin_client.post("/api/admin/invites", json={"seats": 5})
+    assert made.status_code == 201
+    assert admin_client.delete(f"/api/admin/invites/{made.json()['code']}").status_code == 204
+
+    rows = log_rows(db_session)
+    assert [row.action for row in rows] == ["invite_minted", "invite_deleted"]
+    assert [row.target_kind for row in rows] == ["invite", "invite"]
+    assert rows[0].target_name == "5 seats"
+    assert rows[1].target_name == "0 of 5 used"
+
+
+def test_a_one_seat_link_is_written_down_in_the_singular(db_session, admin_client):
+    assert admin_client.post("/api/admin/invites", json={}).status_code == 201
+    assert log_rows(db_session)[0].target_name == "1 seat"
+
+
 # The record itself
 # -----------------
 

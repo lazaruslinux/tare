@@ -12,6 +12,7 @@ shared food reports it, which is a sentence and not a second panel, so the
 cases below write one as whoever would be deciding it.
 """
 
+import datetime as dt
 import io
 import os
 
@@ -20,9 +21,10 @@ import pytest
 from PIL import Image
 
 from app import foods_api, models, photos
+from app.models import now_utc
 from app.routers import invites
 from app.routers.foods import BROWSE_PAGE
-from tests.conftest import PASSWORD
+from tests.conftest import BIRTHDATE, PASSWORD
 
 CODE = "034000002405"
 
@@ -1039,13 +1041,18 @@ def test_browse_wants_a_section_tare_has(client, signed_in):
 # ---- Invite links ----
 
 
-def test_an_administrator_mints_lists_and_revokes_links(client, db_session, admin_client):
+def test_an_administrator_mints_lists_and_deletes_links(client, db_session, admin_client):
     made = client.post("/api/admin/invites", json={})
     assert made.status_code == 201
     code = made.json()["code"]
     assert made.json()["path"] == f"/welcome/{code}"
-    assert made.json()["used_by"] is None
     assert made.json()["expires_at"] is not None
+    # A body with nothing in it is a link for one person.
+    assert made.json()["seats"] == 1
+    assert made.json()["used"] == 0
+    assert made.json()["members"] == []
+    assert made.json()["inviter"] == "admin"
+    assert made.json()["mine"] is True
 
     listed = client.get("/api/admin/invites").json()
     assert [row["code"] for row in listed] == [code]
@@ -1057,6 +1064,17 @@ def test_an_administrator_mints_lists_and_revokes_links(client, db_session, admi
     assert client.get(f"/api/invites/{code}").status_code == 404
 
 
+def test_a_link_holds_one_to_ten_seats_and_nothing_else(client, admin_client):
+    made = client.post("/api/admin/invites", json={"seats": 5})
+    assert made.status_code == 201
+    assert made.json()["seats"] == 5
+
+    for seats in (0, 11):
+        refused = client.post("/api/admin/invites", json={"seats": seats})
+        assert refused.status_code == 400
+        assert refused.json() == {"detail": "An invite holds 1 to 10 seats."}
+
+
 def test_three_links_at_a_time_is_the_whole_allowance(client, admin_client):
     for _ in range(3):
         assert client.post("/api/admin/invites", json={}).status_code == 201
@@ -1065,31 +1083,76 @@ def test_three_links_at_a_time_is_the_whole_allowance(client, admin_client):
     assert fourth.status_code == 409
     assert fourth.json() == {"detail": "Three invites are already open."}
 
-    # Taking one back makes room for the next.
+    # Deleting one makes room for the next.
     code = client.get("/api/admin/invites").json()[0]["code"]
     client.delete(f"/api/admin/invites/{code}")
     assert client.post("/api/admin/invites", json={}).status_code == 201
 
 
-def test_a_link_somebody_came_in_through_is_a_record_not_a_door(
-    client, db_session, admin_client, make_user
-):
-    joined = make_user("joined")
-    code = client.post("/api/admin/invites", json={}).json()["code"]
-    db_session.execute(
-        models.Invite.__table__.update()
-        .where(models.Invite.__table__.c.code == code)
-        .values(used_by=joined.id)
-    )
-    db_session.commit()
-
-    response = client.delete(f"/api/admin/invites/{code}")
-    assert response.status_code == 400
-    assert response.json() == {"detail": "That invite has already been used."}
-    assert client.get("/api/admin/invites").json()[0]["used_by"] == "joined"
-    # A spent link is not an open one, so it does not count against the three.
+def test_the_allowance_is_each_administrators_own(client, db_session, admin_client, make_user):
+    """Three open links each, and one administrator reads the other's with
+    their name on it."""
+    make_user("otheradmin", admin=True)
     for _ in range(3):
         assert client.post("/api/admin/invites", json={}).status_code == 201
+    assert client.post("/api/admin/invites", json={}).status_code == 409
+
+    sign_in(client, "otheradmin")
+    for _ in range(3):
+        assert client.post("/api/admin/invites", json={}).status_code == 201
+    assert client.post("/api/admin/invites", json={}).status_code == 409
+
+    rows = client.get("/api/admin/invites").json()
+    assert len(rows) == 6
+    assert sum(1 for row in rows if row["mine"]) == 3
+    assert {row["inviter"] for row in rows} == {"admin", "otheradmin"}
+
+
+def test_a_link_records_who_came_in_through_it(client, db_session, admin_client, invite):
+    """Three seats, three accounts, and the list names them oldest first."""
+    invite.seats = 3
+    db_session.commit()
+
+    for name in ("first", "second", "third"):
+        response = client.post(
+            "/api/auth/register",
+            json={
+                "invite_code": invite.code,
+                "username": name,
+                "password": PASSWORD,
+                "birthdate": BIRTHDATE.isoformat(),
+                "timezone": "UTC",
+            },
+        )
+        assert response.status_code == 200
+
+    sign_in(client, "admin")
+    row = client.get("/api/admin/invites").json()[0]
+    assert row["seats"] == 3
+    assert row["used"] == 3
+    assert row["members"] == ["first", "second", "third"]
+
+
+def test_deleting_a_spent_link_drops_the_record_and_keeps_the_accounts(
+    client, db_session, admin_client, make_user, invite
+):
+    joined = make_user("joined")
+    joined.invite_id = invite.id
+    invite.used = 1
+    db_session.commit()
+    assert client.get("/api/admin/invites").json()[0]["members"] == ["joined"]
+
+    assert client.delete(f"/api/admin/invites/{invite.code}").status_code == 204
+    assert client.get("/api/admin/invites").json() == []
+    db_session.refresh(joined)
+    assert joined.invite_id is None
+
+
+def test_an_expired_link_is_deleted_like_any_other(client, db_session, admin_client, invite):
+    invite.expires_at = now_utc() - dt.timedelta(days=1)
+    db_session.commit()
+    assert client.delete(f"/api/admin/invites/{invite.code}").status_code == 204
+    assert client.get("/api/admin/invites").json() == []
 
 
 def test_the_command_line_still_mints_a_link_that_never_expires(db_session, admin):
@@ -1098,7 +1161,16 @@ def test_the_command_line_still_mints_a_link_that_never_expires(db_session, admi
     made = invites.mint(db_session, admin, 0)
     db_session.commit()
     assert made.expires_at is None
+    assert made.seats == 1
     assert invites.invite_path(made.code) == f"/welcome/{made.code}"
+
+
+def test_the_command_line_mints_a_link_with_seats(db_session, admin):
+    """manage.py create-invite --seats 5, which is the same minting again."""
+    made = invites.mint(db_session, admin, 0, 5)
+    db_session.commit()
+    assert made.seats == 5
+    assert made.used == 0
 
 
 def test_a_link_that_was_never_minted_is_absent(client, admin_client):

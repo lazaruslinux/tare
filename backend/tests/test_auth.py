@@ -45,9 +45,11 @@ def test_register_without_mail_signs_the_account_straight_in(client, db_session,
     user = db_session.query(models.User).filter_by(username="newcomer").one()
     assert user.email_verified is True
     assert user.timezone == "America/Phoenix"
-    # The invite is spent, and spent by the account it made.
+    # The invite's one seat is spent, and the account says which link it
+    # came in through.
     db_session.refresh(invite)
-    assert invite.used_by == user.id
+    assert invite.used == 1
+    assert user.invite_id == invite.id
 
     assert client.get("/api/auth/me").status_code == 200
 

@@ -140,9 +140,14 @@ def admin(make_user):
 
 @pytest.fixture()
 def invite(db_session, admin):
-    """An unclaimed code minted by the administrator, with no expiry."""
+    """A one-seat code minted by the administrator, with no expiry."""
     row = models.Invite(
-        code="an-invite-code", created_by=admin.id, created_at=now_utc(), expires_at=None
+        code="an-invite-code",
+        created_by=admin.id,
+        seats=1,
+        used=0,
+        created_at=now_utc(),
+        expires_at=None,
     )
     db_session.add(row)
     db_session.commit()
