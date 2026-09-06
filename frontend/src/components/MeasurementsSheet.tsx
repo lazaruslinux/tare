@@ -82,6 +82,7 @@ export function MeasurementsSheet({
   onClose,
   onSaved,
   onDelete,
+  weighIn,
 }: {
   me: Me
   // The day being recorded. The Journal hands over the day on screen, and
@@ -92,12 +93,15 @@ export function MeasurementsSheet({
   // Only the screens that list past days hand this over; today from the
   // Dashboard has nothing to take back.
   onDelete?: () => void
+  // Straight to the weigh-in form, for the screen that only wants a weight.
+  // A day already recorded still opens on what it holds.
+  weighIn?: boolean
 }) {
   const units = me.units
   const day = date
   // The chooser until the day comes back. A day already recorded opens on
   // what it holds instead, unless the reader has already picked a form.
-  const [mode, setMode] = useState<Mode>('pick')
+  const [mode, setMode] = useState<Mode>(weighIn ? 'weight' : 'pick')
   const [weight, setWeight] = useState('')
   const [fields, setFields] = useState<Fields>({})
   const [modes, setModes] = useState<Record<string, FieldMode>>(readModes)
@@ -115,7 +119,9 @@ export function MeasurementsSheet({
       .then((history) => {
         if (!alive) return
         const found = history.measurements.find((row) => row.date === day)
-        if (found !== undefined) setMode((current) => (current === 'pick' ? 'edit' : current))
+        if (found !== undefined) {
+          setMode((current) => (current === 'pick' || current === 'weight' ? 'edit' : current))
+        }
         setWeight(
           found === undefined || found.weight_kg === null
             ? ''

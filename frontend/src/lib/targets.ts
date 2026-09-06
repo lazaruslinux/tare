@@ -4,7 +4,7 @@
 // and the Activity Levels screen all name the same four levels and the same three
 // goals, and one of them drifting would be a screen disagreeing with a screen.
 
-import type { ActivityLevel, Goal, Units } from '../api'
+import type { ActivityLevel, Goal, Units, RateOption } from '../api'
 import { kgToLb, round1 } from './units'
 
 // Decision 5's four levels. The names are the member's; the multipliers they
@@ -63,8 +63,9 @@ export const GOAL_LABEL: Record<Goal, string> = {
 // A goal rate in whichever units the account reads in. The server keeps
 // kilograms a week, and the words say which way it is going.
 export const rateStepText = (kg: number, units: Units, goal: Goal): string => {
-  const amount = units === 'imperial' ? `${round1(kgToLb(kg))} lb` : `${kg} kg`
-  return `${amount} ${goal === 'gain' ? 'gained' : 'lost'} / week`
+  const lb = round1(kgToLb(kg))
+  const amount = units === 'imperial' ? `${lb} ${lb === 1 ? 'lb' : 'lbs'}` : `${kg} kg`
+  return `${goal === 'gain' ? 'Gain' : 'Lose'} ${amount} per week`
 }
 
 // Where the 1 percent of body weight a week guidance starts to bite.
@@ -73,22 +74,45 @@ const FAST_SHARE = 0.01
 // What the review note says about the goal rate that is set. The words are
 // the doc's decision 13, and the tier is picked from the rate against the
 // weight it is a share of.
+const LOSE_REVIEW = [
+  'Steady. Keeps the most muscle.',
+  'Faster, with a bigger daily gap. Ease back if it stops feeling right.',
+  'The fastest Tare offers. Harder to keep up, and some muscle goes with the fat.',
+]
+const GAIN_REVIEW = ['Slow and steady gains more muscle.', 'Faster. More of the gain is fat.']
+
 export const rateReview = (
+  index: number,
   kg: number,
   latestKg: number | null,
   goal: Goal
 ): string => {
-  if (goal === 'gain') return 'Slow and steady gains more muscle.'
-  if (kg <= 0.45) {
-    return 'Most sustainable. Keeps the most muscle.'
+  const list = goal === 'gain' ? GAIN_REVIEW : LOSE_REVIEW
+  const line = list[Math.min(Math.max(index, 0), list.length - 1)]
+  if (goal !== 'gain' && latestKg !== null && kg > latestKg * FAST_SHARE) {
+    return `${line} Over 1 percent of your weight a week: much of it is water.`
   }
-  if (latestKg !== null && kg > latestKg * FAST_SHARE) {
+  return line
+}
+
+// What one step costs, in the member's day: its budget and the gap, or where
+// the cap or the floor stopped the gap short of what the step asked for.
+export const rateCostText = (option: RateOption, goal: Goal): string => {
+  const way = goal === 'gain' ? 'over' : 'under'
+  if (option.notes.includes('floor')) {
     return (
-      'Aggressive. Over 1 percent of your weight a week: much of it is water, and ' +
-      'muscle goes with it. Most guidance stops at 2 lb.'
+      `Asks for ${calText(option.asked)} cal a day ${way} what you use. Tare holds your ` +
+      `budget at the ${calText(option.calories)} cal floor, so the goal takes longer.`
     )
   }
-  return 'Achievable, with a bigger daily gap. Ease back if it stops feeling right.'
+  if (option.notes.includes('cap')) {
+    return (
+      `Asks for ${calText(option.asked)} cal a day ${way} what you use. Tare holds it at ` +
+      `${calText(option.change)}, ${goal === 'gain' ? 'a fifth' : 'a quarter'} of what you ` +
+      'use, so the goal takes longer.'
+    )
+  }
+  return `Budget ${calText(option.calories)} cal: ${calText(option.change)} cal a day ${way} what you use.`
 }
 
 // What the four details a personal number needs are still waiting on, and

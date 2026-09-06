@@ -138,6 +138,18 @@ def test_the_working_out_behind_the_budget_is_three_figures(client, case_a):
     assert len(body["note_keys"]) == len(body["notes"])
 
 
+def test_every_goal_rate_says_what_it_costs(client, case_a):
+    body = client.get("/api/health/targets").json()
+    options = body["rate_options"]
+    assert [row["rate_kg_per_week"] for row in options] == [0.45, 0.7, 0.9]
+    assert [row["asked"] for row in options] == [450, 700, 900]
+    # The worked case's quarter-of-maintenance cap holds every step to one day,
+    # and each step says so rather than pretending to differ.
+    assert all("cap" in row["notes"] for row in options)
+    assert options[0]["calories"] == body["budget"]["calories"]
+    assert abs(options[0]["change"] + body["breakdown"]["adjustment"]) <= 10
+
+
 def test_a_man_gets_the_higher_added_sugars_ceiling(client, member):
     assert profile(client, sex="male", height_cm=180).status_code == 200
     assert weigh(client, 95).status_code == 200

@@ -15,6 +15,7 @@ import {
   calText,
   dateText,
   notesFor,
+  rateCostText,
   rateReview,
   rateStepText,
 } from '../lib/targets'
@@ -113,6 +114,10 @@ export function WeightGoal({
   const [draftAt, setDraftAt] = useState(at)
   useEffect(() => setDraftAt(at), [at])
   const rateDirty = steps.length > 0 && draftAt !== at
+  // The step under the stepper, worked out by the server as if it were the
+  // one saved, so the numbers below follow the stepper rather than the save.
+  const option =
+    targets.rate_options.find((row) => row.rate_kg_per_week === steps[draftAt]) ?? null
 
   const step = (to: number) => {
     if (to < 0 || to >= steps.length) return
@@ -126,6 +131,9 @@ export function WeightGoal({
   const notes = notesFor(targets.note_keys, targets.notes, PACE_NOTES)
   const offer = targets.reestimate
   const adjustment = targets.breakdown === null ? null : Math.abs(targets.breakdown.adjustment)
+  // Shown for the step under the stepper once the server has worked it out.
+  const shownCalories = option === null ? targets.budget.calories : option.calories
+  const shownChange = option === null ? adjustment : option.change
 
   return (
     <>
@@ -188,9 +196,10 @@ export function WeightGoal({
               <CircleCheck className="mt-0.5 h-4 w-4 shrink-0" strokeWidth={2.5} />
               <span className="min-w-0">
                 <span className="block font-semibold">Goal rate review</span>
-                {rateReview(steps[draftAt], latestKg, targets.goal)}
+                {rateReview(draftAt, steps[draftAt], latestKg, targets.goal)}
               </span>
             </div>
+            {option !== null && <p className="t-note mt-2">{rateCostText(option, targets.goal)}</p>}
           </>
         )}
       </div>
@@ -222,13 +231,13 @@ export function WeightGoal({
       <div className="t-card mb-3">
         <span className="t-micro mb-1 block">Energy target</span>
         <span className="t-nums block text-lg font-semibold leading-tight">
-          {calText(targets.budget.calories)} cal
+          {calText(shownCalories)} cal
         </span>
-        {adjustment !== null && (
+        {shownChange !== null && (
           <p className="t-note mt-1">
-            {targets.goal === 'maintain' || adjustment === 0
+            {targets.goal === 'maintain' || shownChange === 0
               ? 'No deficit. Matches what you use.'
-              : `${calText(adjustment)} cal daily ${
+              : `${calText(shownChange)} cal daily ${
                   targets.goal === 'gain' ? 'surplus' : 'deficit'
                 }`}
           </p>
@@ -316,6 +325,7 @@ export function WeightGoal({
         <MeasurementsSheet
           me={me}
           date={today(me.timezone)}
+          weighIn
           onClose={() => setOpen(null)}
           onSaved={() => {
             setOpen(null)
@@ -349,10 +359,6 @@ export function WeightGoal({
           </button>
           <SaveMarks dirty={goalDirty} saved={savedGoal} />
         </div>
-        <p className="t-note mt-3">
-          A goal under your current weight is a losing plan and one above it is a gaining
-          one. Leave it empty to have no weight goal. Tare then shows no date.
-        </p>
       </Sheet>
     </>
   )

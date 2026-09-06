@@ -142,6 +142,14 @@ export type RestingInputs = {
 // Where the budget came from, in three figures. The adjustment is signed.
 export type Breakdown = { use: number; adjustment: number; budget: number }
 
+export type RateOption = {
+  rate_kg_per_week: number
+  calories: number
+  asked: number
+  change: number
+  notes: string[]
+}
+
 export type Targets = {
   mode: TargetMode
   complete: boolean
@@ -169,6 +177,9 @@ export type Targets = {
   // Kilograms a week, and the steps the stepper moves between.
   rate_kg_per_week: number | null
   rate_steps: number[]
+  // Every step worked out as if chosen: its budget, what it asked for, what it
+  // really takes off, and the notes (cap, floor) that held it there.
+  rate_options: RateOption[]
   goal_weight_kg: number | null
   exercise_minutes_goal: number
   step_goal: number

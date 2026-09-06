@@ -442,6 +442,39 @@ class Reckoning:
         return health.maintenance(resting, self.profile.activity_level)
 
 
+def rate_options(state: Reckoning, maintenance_kcal: float | None) -> list[dict[str, object]]:
+    """Every step for the direction, worked out as if it were the one chosen.
+
+    The screen shows what each step asks for and where the cap or the floor
+    holds it, so two steps that land on the same budget say why.
+    """
+    if maintenance_kcal is None or state.sex is None:
+        return []
+    options: list[dict[str, object]] = []
+    for step in health.steps_for(state.direction):
+        worked = health.budget(
+            maintenance_kcal,
+            state.direction,
+            step,
+            state.sex,
+            state.profile.pregnant_or_breastfeeding,
+        )
+        options.append(
+            {
+                "rate_kg_per_week": step,
+                "calories": health.round_for_display(worked.calories, "calories"),
+                "asked": health.round_for_display(
+                    step * health.KCAL_PER_DAY_PER_KG_WEEK, "calories"
+                ),
+                "change": health.round_for_display(
+                    abs(maintenance_kcal - worked.calories), "calories"
+                ),
+                "notes": list(worked.notes),
+            }
+        )
+    return options
+
+
 def auto_budget(state: Reckoning) -> tuple[dict[str, float], list[str], float]:
     """The worked-out day, its note keys, and the pace it really achieves."""
     maintenance_kcal = state.maintenance()
@@ -847,6 +880,7 @@ def read_targets(
             else next(iter(health.steps_for(state.direction)), None)
         ),
         "rate_steps": list(health.steps_for(state.direction)),
+        "rate_options": rate_options(state, maintenance_now),
         "goal_weight_kg": profile.goal_weight_kg,
         "exercise_minutes_goal": profile.exercise_minutes_goal,
         "step_goal": profile.step_goal,
