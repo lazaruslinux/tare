@@ -121,6 +121,17 @@ def check_deploy_config(current: Settings | None = None) -> None:
             "container so it is created with that password."
         )
 
+    # An instance whose links say https is served over TLS, and a session
+    # cookie without the Secure flag on such a site is one a browser will also
+    # send over plain http.
+    if s.site_url.startswith("https://") and not s.cookie_secure:
+        problems.append(
+            "COOKIE_SECURE must be true when SITE_URL is https. Without it the "
+            "browser will send the session cookie over plain http as well, "
+            "which is a session anybody on the network can take. Set "
+            "COOKIE_SECURE=true in your .env file."
+        )
+
     # Imported here rather than at the top: security reads settings, so the
     # module-level import would be a circle.
     from app.security import US_ZONES

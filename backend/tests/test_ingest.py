@@ -7,6 +7,7 @@ from app import models, security
 from app.config import settings
 from app.deps import BAD_INGEST_TOKEN
 from app.models import now_utc
+from app.throttle import TOO_MANY
 
 PATH = "/api/ingest/health"
 UPLOAD = "/api/ingest/upload"
@@ -430,6 +431,43 @@ def test_a_bad_token_is_refused_before_the_body_is_read(client, db_session, make
     assert response.status_code == 401
     assert response.json() == {"detail": BAD_INGEST_TOKEN}
     assert db_session.scalar(select(models.IngestLog)) is None
+
+
+def test_one_key_runs_out_however_many_addresses_it_arrives_from(
+    client, db_session, make_user
+):
+    """The per-account allowance, proved past the per-address one.
+
+    Every request here comes from an address of its own, so the limiter keyed
+    by address never counts two of them together and what runs out is the
+    account's own allowance.
+    """
+    user = make_user("busy")
+    token = token_for(db_session, user)
+    other = make_user("quiet")
+    other_token = token_for(db_session, other)
+    body = {"data": {"metrics": []}}
+
+    def sync(key, index):
+        return client.post(
+            PATH,
+            json=body,
+            headers={
+                "Authorization": f"Bearer {key}",
+                # Two entries, because one hop is trusted: the left one is what
+                # the limiter reads and the right one stands in for the proxy.
+                "X-Forwarded-For": f"203.0.113.{index}, 10.0.0.1",
+            },
+        )
+
+    for index in range(60):
+        assert sync(token, index).status_code == 200
+
+    refused = sync(token, 60)
+    assert refused.status_code == 429
+    assert refused.json() == {"detail": TOO_MANY}
+    # Somebody else's key is untouched by it.
+    assert sync(other_token, 61).status_code == 200
 
 
 def test_a_session_cookie_is_never_a_sync_key(client, signed_in):

@@ -1,0 +1,9 @@
+# Nothing here is copied into the image, so this only keeps the build context
+# small and stops a local virtualenv being sent to the daemon.
+.venv
+.pytest_cache
+.mypy_cache
+.ruff_cache
+__pycache__
+tests
+*.pyc

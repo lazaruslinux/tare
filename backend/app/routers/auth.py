@@ -14,7 +14,7 @@ from fastapi import (
     status,
 )
 from pydantic import BaseModel
-from sqlalchemy import func, or_, select, update
+from sqlalchemy import delete, func, or_, select, update
 from sqlalchemy.orm import Session
 
 from app import mail, models, profiles, security, throttle
@@ -405,13 +405,24 @@ def read_me(
 
 
 @router.post("/verify-email", status_code=status.HTTP_204_NO_CONTENT)
-def verify_email(body: VerifyBody, response: Response, db: Session = Depends(get_db)) -> Response:
+def verify_email(
+    body: VerifyBody,
+    request: Request,
+    response: Response,
+    db: Session = Depends(get_db),
+) -> Response:
     """Spend an emailed link. Once, and only for what it was issued for.
 
     Two kinds arrive here: the one that proves the address an account was made
     with, and the one that moves an account to a new address. A reset link is
     neither, and cannot be spent here.
     """
+    # Keyed by address, like the forms that ask for these links. Nobody opens
+    # ten links in a quarter of an hour, and anybody trying is working through
+    # the table rather than reading their mail.
+    if throttle.token_limiter.hit(throttle.client_address(request)):
+        raise HTTPException(status.HTTP_429_TOO_MANY_REQUESTS, throttle.TOO_MANY)
+
     row = db.execute(
         select(models.EmailToken).where(
             models.EmailToken.token_hash == security.hash_token(body.token.strip()),
@@ -521,9 +532,17 @@ def forgot_password(
 
 @router.post("/reset")
 def reset_password(
-    body: ResetBody, response: Response, db: Session = Depends(get_db)
+    body: ResetBody,
+    request: Request,
+    response: Response,
+    db: Session = Depends(get_db),
 ) -> dict[str, object]:
     """Spend a reset link: a new password, no sessions, and signed in here."""
+    # The same allowance as the verification link above, and for the same
+    # reason: this address is handed a token and says whether it was a good one.
+    if throttle.token_limiter.hit(throttle.client_address(request)):
+        raise HTTPException(status.HTTP_429_TOO_MANY_REQUESTS, throttle.TOO_MANY)
+
     stale = HTTPException(status.HTTP_400_BAD_REQUEST, STALE_RESET)
     row = db.execute(
         select(models.EmailToken).where(
@@ -556,6 +575,10 @@ def reset_password(
     # doing it because another device is signed in that should not be, and
     # there is no session of their own here to spare yet.
     security.delete_sessions(db, user.id)
+    # And the sync key with them. A reset is what somebody does when they think
+    # a credential of theirs is loose, and the key a phone posts with is one of
+    # those; the Sync a device screen mints another.
+    db.execute(delete(models.IngestToken).where(models.IngestToken.user_id == user.id))
     token = security.create_session(db, user.id)
     db.commit()
     security.set_session_cookie(response, token)
@@ -580,6 +603,9 @@ def change_password(
     # survives: being signed out of the browser you just used to fix the
     # problem reads as the change having failed.
     security.delete_sessions(db, user.id, keep=security.session_token_hash(request))
+    # The sync key stays, unlike a reset. This is somebody changing a password
+    # they already know, and their phone should not quietly stop syncing over
+    # a routine change.
     db.commit()
     response.status_code = status.HTTP_204_NO_CONTENT
     return response

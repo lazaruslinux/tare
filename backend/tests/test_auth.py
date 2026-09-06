@@ -227,6 +227,24 @@ def test_changing_the_password_keeps_this_session_and_ends_the_others(client, si
     )
 
 
+def test_changing_the_password_leaves_the_sync_key_alone(client, db_session, signed_in):
+    """Unlike a reset. A routine change should not stop a phone syncing."""
+    db_session.add(
+        models.IngestToken(
+            user_id=signed_in.id,
+            token_hash=security.hash_token(security.generate_token()),
+            created_at=models.now_utc(),
+        )
+    )
+    db_session.commit()
+
+    assert client.post(
+        "/api/auth/password",
+        json={"current_password": PASSWORD, "new_password": "a-whole-new-one"},
+    ).status_code == 204
+    assert db_session.query(models.IngestToken).count() == 1
+
+
 def test_the_current_password_has_to_be_right(client, signed_in):
     response = client.post(
         "/api/auth/password",

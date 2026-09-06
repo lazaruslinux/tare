@@ -28,7 +28,7 @@ Then open `.env` and go down it. In the file's order:
 | Key | What to put |
 |---|---|
 | `POSTGRES_PASSWORD` | A long random password. Postgres only reads it when it first creates its data directory, so set it before the first start. |
-| `SECRET_KEY` | The output of `openssl rand -hex 32`. It signs sessions and mail tokens; changing it later signs everybody out. |
+| `SECRET_KEY` | The output of `openssl rand -hex 32`. It is checked at start, so an instance is never run on the example value. Sessions and mail links are random tokens rather than signed ones, so changing it later signs nobody out. |
 | `TARE_TZ` | The zone the instance counts days in. One of the seven US zones the file lists. |
 | `COOKIE_SECURE` | `true` once the instance is served over https, which is every real deployment. A browser drops a Secure cookie sent over plain http, which reads as sign-in silently failing. |
 | `SITE_URL` | Where the instance answers, no trailing slash: `https://tare.example.com`. Only used to build the links that go out by mail; an instance that sends none can leave it empty. |
@@ -38,7 +38,10 @@ Then open `.env` and go down it. In the file's order:
 | `SMTP_STARTTLS` | `true`. The one reason to turn it off is a local mail catcher while developing, which has no certificate to offer. |
 
 `POSTGRES_PASSWORD` and `SECRET_KEY` must change. The api refuses to start
-while either is still the example value, and says which one.
+while either is still the example value, and says which one. It refuses the
+same way when `SITE_URL` begins with `https://` while `COOKIE_SECURE` is false,
+because that pair hands out a session cookie the browser will also send over
+plain http.
 
 ## Start
 
@@ -60,6 +63,13 @@ argument:
 
 ```
 docker compose exec api python manage.py create-admin --username you --birthdate 1990-01-15
+```
+
+Nothing in the app makes anybody an administrator, so if that account is lost
+the role is handed to an existing one from the same shell:
+
+```
+docker compose exec api python manage.py grant-admin --username someone
 ```
 
 Then mint a link for everybody else. Each code is good for one account:
@@ -147,6 +157,31 @@ Either way, that is one proxy of your own in front of the web container, so
 `TRUSTED_PROXY_HOPS=1`, which is what `.env.example` already has. The count is
 what rate limiting reads a caller's address through: too high and everybody
 shares one bucket under your proxy's address.
+
+### Behind Cloudflare
+
+Cloudflare is not another hop to count. It sends the real caller in its own
+`CF-Connecting-IP` header rather than adding to `X-Forwarded-For`, so have your
+proxy write that into the header Tare reads and leave `TRUSTED_PROXY_HOPS=1`.
+In Caddy that is one line:
+
+```
+tare.example.com {
+    reverse_proxy 127.0.0.1:8210 {
+        header_up X-Forwarded-For {http.request.header.CF-Connecting-IP}
+    }
+}
+```
+
+Turn off anything that rewrites the page on the way through: Rocket Loader,
+Mirage and email obfuscation each add a script this instance did not send, and
+the Content-Security-Policy it does send allows no inline script at all, so the
+browser refuses them and the app stops loading.
+
+Leave the address a phone syncs to out of any challenge or bot rule. An
+automation posting a health export cannot answer a captcha or run the
+JavaScript one needs, so a challenge in front of it reads on the phone as
+syncing having quietly stopped.
 
 ## Optional: map tiles
 
@@ -258,9 +293,10 @@ them.
 ## If something is wrong
 
 - The api will not start. Read `docker compose logs api`. A refusal that
-  begins "Tare cannot start until this is fixed" names the key in `.env` that
-  is still an example value or is not a zone Tare offers; nothing else in the
-  stack stops it starting.
+  begins "Tare cannot start until this is fixed" names what in `.env` is wrong:
+  a key still on its example value, a zone Tare does not offer, or
+  `COOKIE_SECURE` left false on an https instance. Nothing else in the stack
+  stops it starting.
 - Every screen says the server is not answering. That sentence is the web
   container's, said when the api does not answer it: the api is down or still
   starting. `docker compose ps` says which and `docker compose logs api` says

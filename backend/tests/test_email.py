@@ -67,6 +67,16 @@ def test_a_token_minted_for_something_else_is_not_a_verification_link(
     assert user.email_verified is False
 
 
+def test_spending_links_over_and_over_runs_out(client):
+    for _ in range(10):
+        assert client.post(
+            "/api/auth/verify-email", json={"token": "not-a-link"}
+        ).status_code == 400
+    refused = client.post("/api/auth/verify-email", json={"token": "not-a-link"})
+    assert refused.status_code == 429
+    assert refused.json() == {"detail": throttle.TOO_MANY}
+
+
 def test_a_resend_replaces_the_link_rather_than_adding_one(
     client, db_session, make_user, with_mail
 ):

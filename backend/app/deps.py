@@ -96,6 +96,11 @@ def require_ingest_user(
     user = db.get(models.User, row.user_id)
     if user is None:
         raise refused
+    # And again per account, on top of the address above. A phone that moves
+    # between networks arrives from a new address each time, so without this a
+    # key is only ever limited as far as one address at a time.
+    if throttle.ingest_user_limiter.hit(str(user.id)):
+        raise HTTPException(status.HTTP_429_TOO_MANY_REQUESTS, throttle.TOO_MANY)
     # The same wall the session routes are behind. A sync key is a credential
     # for an account, so an account that cannot open the app cannot post to it
     # either; the check comes after the token so a bad key still reads as a bad

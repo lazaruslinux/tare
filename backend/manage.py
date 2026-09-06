@@ -3,8 +3,9 @@
 
 The things somebody running an instance has to do from a shell, because there
 is deliberately no way to do them from the browser: make the first account,
-mint a link that lets somebody else in, and mark an address verified when there
-is no mail server to answer.
+mint a link that lets somebody else in, mark an address verified when there is
+no mail server to answer, and hand the administrator role back to an account
+that has to have it.
 """
 
 from __future__ import annotations
@@ -146,6 +147,26 @@ def verify_email(args: argparse.Namespace) -> int:
     return 0
 
 
+def grant_admin(args: argparse.Namespace) -> int:
+    """Give an existing account the administrator flag.
+
+    The way back when the only administrator's account is gone or was never
+    made one: a shell on the machine, rather than SQL typed into the database
+    by hand. There is no path in the app that makes anybody an administrator.
+    """
+    with SessionLocal() as db:
+        user = db.execute(
+            select(models.User).where(models.User.username == args.username.strip().lower())
+        ).scalar_one_or_none()
+        if user is None:
+            print("No account has that username.", file=sys.stderr)
+            return 2
+        user.is_admin = True
+        db.commit()
+        print(f"{user.username} is an administrator.")
+    return 0
+
+
 def make_thumbnails(args: argparse.Namespace) -> int:
     """Write the small copy of every front photo that is missing one."""
     with SessionLocal() as db:
@@ -172,6 +193,12 @@ def build_parser() -> argparse.ArgumentParser:
         "--seats", type=int, default=1, help="how many people it lets in, 1 to 10"
     )
     invite.set_defaults(run=create_invite)
+
+    grant = commands.add_parser(
+        "grant-admin", help="make an existing account an administrator"
+    )
+    grant.add_argument("--username", required=True)
+    grant.set_defaults(run=grant_admin)
 
     verify = commands.add_parser("verify-email", help="mark an account verified")
     verify.add_argument("--username", required=True)

@@ -33,3 +33,41 @@ def test_a_timezone_tare_does_not_offer_is_refused():
     with pytest.raises(RuntimeError) as raised:
         check_deploy_config(wrong)
     assert "TARE_TZ" in str(raised.value)
+
+
+def test_an_https_instance_with_a_plain_cookie_is_refused():
+    exposed = Settings(
+        database_url="sqlite://",
+        secret_key="a-real-secret",
+        site_url="https://tare.example.com",
+        cookie_secure=False,
+    )
+    with pytest.raises(RuntimeError) as raised:
+        check_deploy_config(exposed)
+    message = str(raised.value)
+    assert "COOKIE_SECURE" in message
+    assert "SITE_URL" in message
+
+
+def test_an_https_instance_with_a_secure_cookie_passes():
+    check_deploy_config(
+        Settings(
+            database_url="sqlite://",
+            secret_key="a-real-secret",
+            site_url="https://tare.example.com",
+            cookie_secure=True,
+        )
+    )
+
+
+def test_a_plain_http_instance_may_leave_the_cookie_off():
+    # The shape somebody testing locally has, and the reason the flag is off by
+    # default: a Secure cookie never reaches http://127.0.0.1 at all.
+    check_deploy_config(
+        Settings(
+            database_url="sqlite://",
+            secret_key="a-real-secret",
+            site_url="http://127.0.0.1:8210",
+            cookie_secure=False,
+        )
+    )

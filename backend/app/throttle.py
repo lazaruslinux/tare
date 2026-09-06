@@ -139,6 +139,14 @@ barcode_limiter = RateLimiter(30, 600, "barcode")
 # Minting a sync key. Tight because each call replaces the standing key, and a
 # member who has just replaced theirs has no reason to do it again this minute.
 ingest_token_limiter = RateLimiter(5, 60, "ingest-token")
+# Posting a health export again, counted per account this time. The allowance
+# above is spent per address, so a key used from a phone that keeps changing
+# networks would otherwise have as many allowances as it has addresses.
+ingest_user_limiter = RateLimiter(60, 60, "ingest-user")
+# Spending an emailed link: a verification, an address change, or a reset. The
+# tokens are high entropy, so this guards against a client stuck in a loop and
+# against somebody working through the table, not against a guessing run.
+token_limiter = RateLimiter(10, 900, "token")
 
 
 def reset_limiters() -> None:

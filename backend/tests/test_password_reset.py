@@ -152,3 +152,34 @@ def test_a_password_the_rule_refuses_leaves_the_link_usable(client, db_session, 
     assert client.post(
         "/api/auth/reset", json={"token": token, "password": NEW_PASSWORD}
     ).status_code == 200
+
+
+def test_a_reset_takes_the_sync_key_with_it(client, db_session, make_user):
+    user = make_user("member", email="member@example.com")
+    db_session.add(
+        models.IngestToken(
+            user_id=user.id,
+            token_hash=security.hash_token(security.generate_token()),
+            created_at=models.now_utc(),
+        )
+    )
+    db_session.commit()
+    token = reset_token(db_session, user)
+
+    assert client.post(
+        "/api/auth/reset", json={"token": token, "password": NEW_PASSWORD}
+    ).status_code == 200
+    assert db_session.query(models.IngestToken).count() == 0
+
+
+def test_spending_links_over_and_over_runs_out(client):
+    for _ in range(10):
+        refused = client.post(
+            "/api/auth/reset", json={"token": "not-a-link", "password": NEW_PASSWORD}
+        )
+        assert refused.status_code == 400
+    refused = client.post(
+        "/api/auth/reset", json={"token": "not-a-link", "password": NEW_PASSWORD}
+    )
+    assert refused.status_code == 429
+    assert refused.json() == {"detail": TOO_MANY}
