@@ -581,6 +581,33 @@ export function FoodTab({
       </div>
 
       <div className="t-card mb-3">
+        <p className="t-section mb-1">
+          <Star className="h-4 w-4" strokeWidth={2} />
+          Favorites
+        </p>
+        {favorites.length === 0 ? (
+          <p className="text-sm text-muted">
+            Items you add to favorites will show up here.
+          </p>
+        ) : (
+          <>
+            {favorites.slice(0, SHOWN).map((row) => (
+              <FoodLine
+                key={row.id}
+                row={row}
+                onOpen={() => openFavorite(row.id)}
+                onRemove={() => removeFavorite(row)}
+                removeLabel={`Remove ${row.name} from Favorites`}
+              />
+            ))}
+            {favorites.length > SHOWN && (
+              <SeeAll count={favorites.length} onOpen={() => setCatalog('favorites')} />
+            )}
+          </>
+        )}
+      </div>
+
+      <div className="t-card mb-3">
         <div className="mb-1 flex items-center justify-between">
           <p className="t-section">
             <Sandwich className="h-4 w-4" strokeWidth={2} />
@@ -678,39 +705,12 @@ export function FoodTab({
 
       <div className="t-card mb-3">
         <p className="t-section mb-1">
-          <Star className="h-4 w-4" strokeWidth={2} />
-          Favorites
-        </p>
-        {favorites.length === 0 ? (
-          <p className="text-sm text-muted">
-            The foods you favorite on their own page show up here.
-          </p>
-        ) : (
-          <>
-            {favorites.slice(0, SHOWN).map((row) => (
-              <FoodLine
-                key={row.id}
-                row={row}
-                onOpen={() => openFavorite(row.id)}
-                onRemove={() => removeFavorite(row)}
-                removeLabel={`Remove ${row.name} from Favorites`}
-              />
-            ))}
-            {favorites.length > SHOWN && (
-              <SeeAll count={favorites.length} onOpen={() => setCatalog('favorites')} />
-            )}
-          </>
-        )}
-      </div>
-
-      <div className="t-card mb-3">
-        <p className="t-section mb-1">
           <CalendarSync className="h-4 w-4" strokeWidth={2} />
           Auto-log
         </p>
         {autos.length === 0 ? (
           <p className="text-sm text-muted">
-            Foods you eat every day can log themselves. Set it on a food's page.
+            Setup Auto-Log on an item's details page.
           </p>
         ) : (
           autos.map((row) => (
