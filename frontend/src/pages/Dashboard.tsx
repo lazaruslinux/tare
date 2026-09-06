@@ -24,6 +24,7 @@ import {
 import { barsAverage, DayBars, weekly, type Bar } from '../components/DayBars'
 import { ExerciseSheet } from '../components/ExerciseSheet'
 import { FoodPicker } from '../components/FoodPicker'
+import { GoalSheet } from '../components/GoalSheet'
 import { MeasurementsSheet } from '../components/MeasurementsSheet'
 import { Feed } from '../components/Feed'
 import { MemberView } from '../components/MemberView'
@@ -786,6 +787,9 @@ export function Dashboard({
   const [picking, setPicking] = useState(false)
   const [measuring, setMeasuring] = useState<string | null>(null)
   const [exercising, setExercising] = useState(false)
+  // Whether today's own step and exercise goals are open, which is what the
+  // two rings they fill lead to.
+  const [goaling, setGoaling] = useState(false)
   const [pending, setPending] = useState<Measurement | null>(null)
   const pendingRef = useRef<Measurement | null>(null)
 
@@ -919,6 +923,7 @@ export function Dashboard({
     setPicking(false)
     setMeasuring(null)
     setExercising(false)
+    setGoaling(false)
     setAgain(again + 1)
   }
 
@@ -1025,24 +1030,25 @@ export function Dashboard({
   // Over the bars on a wide card, where there are few enough of them to read.
   const labelled = weeks ? intake.length <= MAX_LABELS : isWeek
 
-  // The same span in steps, when a phone is sending them. The goal is the one
-  // set on Activity goals; the fitness answer carries the same figure and
-  // stands in until targets arrive.
-  const stepGoal = targets?.step_goal ?? fitness?.goals.steps ?? 0
+  // The same span in steps, when a phone is sending them. The goal is today's
+  // own, which is the usual one unless today was set apart, so it is read off
+  // the fitness answer rather than off the profile behind it.
+  const stepGoal = fitness?.goals.steps ?? 0
   // Aligned by date rather than by position: the week is Monday to Sunday and
   // the run ends today, so the two do not line up on their own. A day the run
-  // does not carry is a gap, which is what the rest of the week is.
+  // does not carry is a gap, which is what the rest of the week is. Each bar is
+  // read against its own day's goal rather than against today's.
   const stepDaily: Bar[] = dates.map((date) => {
     const row = fitDays.find((one) => one.date === date)
     return {
       date,
       value: row?.steps ?? 0,
-      target: stepGoal,
+      target: row?.step_goal ?? stepGoal,
       has: row !== undefined && row.steps !== null,
     }
   })
   const stepBars = weeks ? weekly(stepDaily) : stepDaily
-  const goalMet = stepDaily.filter((row) => row.has && row.value >= stepGoal).length
+  const goalMet = stepDaily.filter((row) => row.has && row.value >= row.target).length
   const stepsFooter =
     stepDaily.every((row) => !row.has)
       ? 'Sync a few days to see them here.'
@@ -1197,8 +1203,8 @@ export function Dashboard({
       filled: steps === null || stepGoal <= 0 ? 0 : steps / stepGoal,
       centre: steps === null ? '\u2013' : calText(steps),
       caption: steps === null ? 'Sync a device' : `of ${calText(stepGoal)} steps`,
-      label: 'Steps today. Opens Fitness.',
-      onOpen: onOpenFitness,
+      label: "Steps today. Opens today's goals.",
+      onOpen: () => setGoaling(true),
     },
     {
       key: 'calories',
@@ -1213,8 +1219,8 @@ export function Dashboard({
       filled: minutesGoal <= 0 ? 0 : (day?.exercise_minutes ?? 0) / minutesGoal,
       centre: day === null ? '\u2013' : String(day.exercise_minutes),
       caption: `of ${minutesGoal} min`,
-      label: 'Exercise minutes today. Opens Fitness.',
-      onOpen: onOpenFitness,
+      label: "Exercise minutes today. Opens today's goals.",
+      onOpen: () => setGoaling(true),
     },
     macroRing('protein_g', 'protein'),
     macroRing('carbs_g', 'carbs'),
@@ -1661,6 +1667,15 @@ export function Dashboard({
         <ExerciseSheet
           date={todayIso}
           onClose={() => setExercising(false)}
+          onSaved={reload}
+        />
+      )}
+
+      {goaling && (
+        <GoalSheet
+          me={me}
+          date={todayIso}
+          onClose={() => setGoaling(false)}
           onSaved={reload}
         />
       )}

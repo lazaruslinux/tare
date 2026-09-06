@@ -543,3 +543,126 @@ def test_a_span_tare_will_not_answer_is_refused(client, db_session, make_user):
     assert response.status_code == 400
     assert response.json() == {"detail": "Ask for between 1 and 190 days."}
     assert client.get("/api/fitness/days?days=191").status_code == 400
+
+
+# ---- A day of its own goals, when the usual pair is not what was meant.
+
+
+def utc_today() -> dt.date:
+    """Today in the account's own zone, which every fixture account reads in
+    UTC. The same reason utc_yesterday exists."""
+    return dt.datetime.now(dt.timezone.utc).date()
+
+
+def test_a_days_goals_are_the_usual_ones_until_they_are_changed(client, signed_in):
+    body = client.get("/api/fitness/goals").json()
+
+    assert body["date"] == utc_today().isoformat()
+    assert body["steps"] == 8000
+    assert body["exercise_minutes"] == 30
+    assert body["defaults"] == {"steps": 8000, "exercise_minutes": 30}
+    assert body["overridden"] is False
+
+
+def test_a_day_set_apart_reads_back_the_way_it_was_written(client, signed_in):
+    day = utc_today()
+
+    saved = client.put(
+        f"/api/fitness/goals/{day}", json={"steps": 12000, "exercise_minutes": 45}
+    )
+
+    assert saved.status_code == 200
+    assert saved.json() == {
+        "date": day.isoformat(),
+        "steps": 12000,
+        "exercise_minutes": 45,
+        "defaults": {"steps": 8000, "exercise_minutes": 30},
+        "overridden": True,
+    }
+    assert client.get(f"/api/fitness/goals?date={day}").json() == saved.json()
+
+
+def test_every_screen_reads_the_override_for_that_day_and_the_usual_pair_before_it(
+    client, signed_in
+):
+    day = utc_today()
+    before = day - dt.timedelta(days=1)
+    assert (
+        client.put(
+            f"/api/fitness/goals/{day}", json={"steps": 12000, "exercise_minutes": 45}
+        ).status_code
+        == 200
+    )
+
+    summary = client.get(f"/api/fitness/summary?date={day}").json()
+    earlier = client.get(f"/api/fitness/summary?date={before}").json()
+    assert summary["goals"] == {"steps": 12000, "exercise_minutes": 45}
+    assert earlier["goals"] == {"steps": 8000, "exercise_minutes": 30}
+
+    assert client.get(f"/api/diary/day?date={day}").json()["exercise_minutes_goal"] == 45
+    assert client.get(f"/api/diary/day?date={before}").json()["exercise_minutes_goal"] == 30
+
+    rows = {row["date"]: row for row in client.get("/api/fitness/days?days=2").json()["days"]}
+    assert rows[day.isoformat()]["step_goal"] == 12000
+    assert rows[day.isoformat()]["exercise_minutes_goal"] == 45
+    assert rows[before.isoformat()]["step_goal"] == 8000
+    assert rows[before.isoformat()]["exercise_minutes_goal"] == 30
+
+
+def test_one_figure_goes_back_to_the_usual_while_the_other_stands(client, signed_in):
+    day = utc_today()
+    client.put(f"/api/fitness/goals/{day}", json={"steps": 12000, "exercise_minutes": 45})
+
+    body = client.put(f"/api/fitness/goals/{day}", json={"steps": None}).json()
+
+    assert body["steps"] == 8000
+    assert body["exercise_minutes"] == 45
+    assert body["overridden"] is True
+
+
+def test_a_day_with_neither_figure_left_on_it_keeps_no_row(client, db_session, signed_in):
+    day = utc_today()
+    client.put(f"/api/fitness/goals/{day}", json={"steps": 12000, "exercise_minutes": 45})
+
+    body = client.put(
+        f"/api/fitness/goals/{day}", json={"steps": None, "exercise_minutes": None}
+    ).json()
+
+    assert body["steps"] == 8000
+    assert body["exercise_minutes"] == 30
+    assert body["overridden"] is False
+    assert db_session.execute(select(models.DayGoal)).scalars().all() == []
+
+
+def test_a_day_that_has_not_happened_cannot_be_aimed_at(client, signed_in):
+    ahead = utc_today() + dt.timedelta(days=1)
+
+    refused = client.put(f"/api/fitness/goals/{ahead}", json={"steps": 12000})
+
+    assert refused.status_code == 400
+    assert refused.json() == {"detail": "That day is in the future."}
+
+
+def test_a_days_goal_is_held_to_the_bounds_the_usual_one_is(client, signed_in):
+    day = utc_today()
+
+    steps = client.put(f"/api/fitness/goals/{day}", json={"steps": 100})
+    minutes = client.put(f"/api/fitness/goals/{day}", json={"exercise_minutes": 900})
+
+    assert steps.status_code == 400
+    assert steps.json() == {"detail": "Pick a goal between 1,000 and 50,000 steps."}
+    assert minutes.status_code == 400
+    assert minutes.json() == {"detail": "Pick a goal between 5 and 600 minutes."}
+
+
+def test_setting_a_day_apart_leaves_the_usual_goals_alone(client, signed_in):
+    day = utc_today()
+    client.put(f"/api/fitness/goals/{day}", json={"steps": 12000, "exercise_minutes": 45})
+
+    targets = client.get("/api/health/targets").json()
+    profile = client.get("/api/health/profile").json()
+
+    assert targets["step_goal"] == 8000
+    assert targets["exercise_minutes_goal"] == 30
+    assert profile["step_goal"] == 8000
+    assert profile["exercise_minutes_goal"] == 30

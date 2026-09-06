@@ -971,7 +971,22 @@ export type FeedWeight = {
   pronoun: string
 }
 
-export type FeedRow = FeedWorkout | FeedJournal | FeedWeight
+// One member arriving, dated by the moment they answered the questions on the
+// way in. Behind no switch and hideable by nobody: it says they are here,
+// which everybody can already see.
+export type FeedJoined = {
+  kind: 'joined'
+  // The member is the row, so their id is what names it.
+  id: number
+  user_id: number
+  display_name: string
+  role: Role
+  mine: boolean
+  date: string
+  at: string
+}
+
+export type FeedRow = FeedWorkout | FeedJournal | FeedWeight | FeedJoined
 
 // One page of the feed. The marker is opaque and only ever handed back.
 export type FeedPage = { items: FeedRow[]; next_cursor: string | null }
@@ -1030,6 +1045,16 @@ export type FitnessSummary = {
   week_workouts: number
 }
 
+// One day's goals: the figures in force on it, the usual pair behind them, and
+// whether that day was set apart from the usual pair at all.
+export type DayGoals = {
+  date: string
+  steps: number
+  exercise_minutes: number
+  defaults: { steps: number; exercise_minutes: number }
+  overridden: boolean
+}
+
 // What a history can be asked for: the four a day's summary carries, and the
 // distance walked, which is added up from the hour rows.
 export type DailyMetric = FitnessMetric | 'distance'
@@ -1069,6 +1094,10 @@ export type FitnessDay = {
   steps: number | null
   exercise_minutes: number | null
   active_kcal: number | null
+  // What that day itself was aimed at, which is the usual pair unless the day
+  // was set apart.
+  step_goal: number
+  exercise_minutes_goal: number
   workouts: DayWorkout[]
 }
 

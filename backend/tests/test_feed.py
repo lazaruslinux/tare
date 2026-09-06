@@ -635,6 +635,104 @@ def test_a_page_of_every_kind_reads_through_without_repeating_itself(
     assert times == sorted(times, reverse=True)
 
 
+# Somebody arriving
+# -----------------
+
+
+def test_a_member_who_has_been_through_the_way_in_says_so(client, db_session, make_user):
+    joiner = make_user("joiner")
+    joiner.first_run_at = now_utc()
+    # Nothing here is shared, and the row is there all the same: it says only
+    # that they joined.
+    joiner.share_workouts = False
+    joiner.share_journal = False
+    joiner.share_weight_loss = False
+    db_session.commit()
+    make_user("member")
+    sign_in(client, "member")
+
+    rows = client.get("/api/feed").json()["items"]
+
+    assert [row["kind"] for row in rows] == ["joined"]
+    assert rows[0]["display_name"] == "joiner"
+    assert rows[0]["id"] == joiner.id
+    # Nothing to hide, so nothing that says whether it is hidden.
+    assert set(rows[0]) == {
+        "kind",
+        "id",
+        "user_id",
+        "display_name",
+        "role",
+        "mine",
+        "date",
+        "at",
+    }
+
+
+def test_arriving_is_dated_by_the_account_and_not_by_the_walkthrough(
+    client, db_session, make_user
+):
+    # Every account from before the way in existed was given its first-run
+    # stamp at one minute; the row must not say they all arrived then.
+    early = make_user("early")
+    early.created_at = now_utc() - dt.timedelta(days=3)
+    early.first_run_at = now_utc()
+    db_session.commit()
+    make_user("member")
+    sign_in(client, "member")
+
+    rows = client.get("/api/feed").json()["items"]
+
+    assert [row["kind"] for row in rows] == ["joined"]
+    assert rows[0]["date"] == (now_utc() - dt.timedelta(days=3)).date().isoformat()
+
+
+def test_an_account_from_before_the_way_in_existed_gets_no_row(client, make_user):
+    make_user("older")
+    make_user("member")
+    sign_in(client, "member")
+
+    assert client.get("/api/feed").json()["items"] == []
+
+
+def test_arriving_takes_its_place_in_time_beside_the_rest(client, db_session, make_user):
+    runner = make_user("runner")
+    runner.created_at = now_utc() - dt.timedelta(minutes=10)
+    runner.first_run_at = now_utc()
+    db_session.commit()
+    put_workout(db_session, runner, minutes_ago=1)
+    make_user("member")
+    sign_in(client, "member")
+
+    rows = client.get("/api/feed").json()["items"]
+
+    assert [row["kind"] for row in rows] == ["workout", "joined"]
+
+
+def test_a_page_of_arrivals_reads_through_without_repeating_itself(
+    client, db_session, make_user
+):
+    start = now_utc()
+    for step in range(35):
+        joiner = make_user(f"joiner{step}")
+        joiner.created_at = start - dt.timedelta(minutes=step)
+        joiner.first_run_at = start
+    db_session.commit()
+    make_user("member")
+    sign_in(client, "member")
+
+    first = client.get("/api/feed").json()
+    assert len(first["items"]) == 30
+    assert first["next_cursor"] is not None
+
+    second = client.get(f"/api/feed?cursor={first['next_cursor']}").json()
+    assert len(second["items"]) == 5
+    assert second["next_cursor"] is None
+
+    seen = [row["id"] for row in first["items"] + second["items"]]
+    assert len(set(seen)) == 35
+
+
 # The strip beside the screen
 # ---------------------------
 

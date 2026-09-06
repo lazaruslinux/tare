@@ -17,6 +17,7 @@ HEALTH_TABLES = {
     "repeat_hidden",
     "exercise_entries",
     "journal_days",
+    "day_goals",
 }
 FITNESS_TABLES = {
     "fitness_daily",

@@ -1,11 +1,12 @@
 """What the members of this instance show each other.
 
-One list, read only, and it holds three kinds of thing: a workout somebody did,
-a day somebody finished, and a weigh-in that came in under the one before it.
-No food, no steps, no likes and no comments: the feed is here so a small group
-can see that somebody else went out this morning, not so anybody can be scored
-against them. A finished day says that and nothing else, never what was in it,
-and a weigh-in says how much came off, never the weight itself.
+One list, read only, and it holds four kinds of thing: a workout somebody did,
+a day somebody finished, a weigh-in that came in under the one before it, and a
+member arriving. No food, no steps, no likes and no comments: the feed is here
+so a small group can see that somebody else went out this morning, not so
+anybody can be scored against them. A finished day says that and nothing else,
+never what was in it, and a weigh-in says how much came off, never the weight
+itself.
 
 What a member is shown about another member is the shortest list the app
 could work with: a name, how long they have been here, and up to three facts
@@ -44,14 +45,15 @@ BAD_CURSOR = "That page marker is not one of ours."
 MISSING_MEMBER = "There is no such member."
 
 
-# The three kinds of row, and how they break a tie at the same instant: the
-# higher rank is listed first, so a workout comes before a weigh-in and a
-# weigh-in before a finished day. One rule, written once, so the page filter
-# and the merge cannot disagree.
+# The four kinds of row, and how they break a tie at the same instant: the
+# higher rank is listed first, so arriving comes before a workout, a workout
+# before a weigh-in and a weigh-in before a finished day. One rule, written
+# once, so the page filter and the merge cannot disagree.
 WORKOUT = "workout"
 JOURNAL = "journal"
 WEIGHT = "weight"
-RANK = {JOURNAL: 0, WEIGHT: 1, WORKOUT: 2}
+JOINED = "joined"
+RANK = {JOURNAL: 0, WEIGHT: 1, WORKOUT: 2, JOINED: 3}
 
 # How much has to have come off before a weigh-in is worth a row. Under this a
 # sentence would read "lost 0.0", because 0.05 kg is the smallest difference
@@ -131,14 +133,14 @@ def read_feed(
     db: Session = Depends(get_db),
     user: models.User = Depends(require_user),
 ) -> dict[str, object]:
-    """Every member's shared workouts, finished days and weigh-ins, newest
-    first, a page at a time.
+    """Every member's shared workouts, finished days, weigh-ins and arrivals,
+    newest first, a page at a time.
 
-    Three tables, one list. They are read separately with the same "after this
+    Four tables, one list. They are read separately with the same "after this
     marker" filter, merged here, and cut to a page; the marker written back
     names the last row's time, its kind and which row it was, so the next page
     starts exactly after it whichever table that row came out of. Sorting them
-    in the database instead would mean a union of three unlike shapes for no
+    in the database instead would mean a union of four unlike shapes for no
     gain: a page is thirty rows.
 
     A row this account hid is still in its own feed and says so, because the
@@ -165,6 +167,19 @@ def read_feed(
             )
         )
         .order_by(models.Workout.started_at.desc(), models.Workout.id.desc())
+        .limit(PAGE + 1)
+    )
+    # Arriving is not a fact about a body and there is no switch over it: the
+    # row says a member is here, which everybody can already see. An account
+    # from before the first-run screen existed has no moment to date it by and
+    # gets no row.
+    # Dated by when the account was made, not by the walkthrough: the first-run
+    # stamp was given to every account that existed before the screen did, all
+    # at the same minute, and that minute is nobody's arrival.
+    joined = (
+        select(models.User.id.label("user_id"), models.User.created_at)
+        .where(models.User.first_run_at.is_not(None))
+        .order_by(models.User.created_at.desc(), models.User.id.desc())
         .limit(PAGE + 1)
     )
     journals = (
@@ -248,10 +263,20 @@ def read_feed(
                 kind,
             )
         )
+        joined = joined.where(
+            still_to_come(
+                JOINED,
+                models.User.created_at,
+                lambda: models.User.id < int(anchor),
+                at,
+                kind,
+            )
+        )
 
     sessions = list(db.execute(workouts).scalars())
     finished = list(db.execute(journals).scalars())
     weighed = list(db.execute(weights))
+    arrived = list(db.execute(joined))
 
     # Every list in one order, by the rule the cursor is written to. The last
     # two parts of the key are only ever compared inside one kind, because the
@@ -273,6 +298,10 @@ def read_feed(
                 row,
             )
             for row in finished
+        ),
+        *(
+            ((row.created_at, RANK[JOINED], row.user_id, ""), JOINED, row)
+            for row in arrived
         ),
     ]
     ordered.sort(key=lambda each: each[0], reverse=True)
@@ -335,6 +364,24 @@ def read_feed(
             if mine:
                 lost["hidden"] = not user.share_weight_loss
             items.append(lost)
+            continue
+
+        if of == JOINED:
+            # Nothing but that they are here, so there is nothing to hide and
+            # no switch to read.
+            items.append(
+                {
+                    "kind": JOINED,
+                    # The member is the row, so their id names it.
+                    "id": each.user_id,
+                    "user_id": each.user_id,
+                    "display_name": name,
+                    "role": role,
+                    "mine": mine,
+                    "date": each.created_at.date().isoformat(),
+                    "at": each.created_at.isoformat(),
+                }
+            )
             continue
 
         if of == JOURNAL:

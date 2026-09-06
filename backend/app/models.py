@@ -934,6 +934,24 @@ class HealthProfile(Base):
     updated_at: Mapped[dt.datetime] = mapped_column(UtcDateTime, nullable=False, default=now_utc)
 
 
+class DayGoal(Base):
+    """What one day was aimed at, when it was not the usual pair above.
+
+    A row exists only for a day somebody changed. A null column is not "no
+    goal": it is the default on the profile, still standing for that one. A row
+    with both columns null says nothing and is deleted rather than kept.
+    """
+
+    __tablename__ = "day_goals"
+
+    user_id: Mapped[int] = mapped_column(
+        ForeignKey("users.id", ondelete="CASCADE"), primary_key=True
+    )
+    date: Mapped[dt.date] = mapped_column(Date, primary_key=True)
+    step_goal: Mapped[int | None] = mapped_column(Integer, nullable=True)
+    exercise_minutes_goal: Mapped[int | None] = mapped_column(Integer, nullable=True)
+
+
 class WeightEntry(Base):
     """One day's reading: a weight, a body fat, or both.
 

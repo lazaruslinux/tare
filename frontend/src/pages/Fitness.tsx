@@ -16,6 +16,7 @@ import {
   type Workout,
 } from '../api'
 import { ActivityIcon } from '../components/ActivityIcon'
+import { GoalSheet } from '../components/GoalSheet'
 import { HourBars } from '../components/HourBars'
 import { WorkoutDetails } from '../components/WorkoutDetails'
 import { useTopBar } from '../hooks/useTopBar'
@@ -548,6 +549,10 @@ export function Fitness({
   const [trends, setTrends] = useState<TrendRow[]>(NO_TRENDS)
   const [failed, setFailed] = useState('')
   const [screen, setScreen] = useState<FitnessScreen>(null)
+  // Whether the day's goals are open, and the tick that reads the day again
+  // once they have been changed, so the tiles follow.
+  const [goalOpen, setGoalOpen] = useState(false)
+  const [again, setAgain] = useState(0)
   // The sync line is a stamp, so it redraws when the clock changes.
   useClock()
 
@@ -567,7 +572,7 @@ export function Fitness({
     return () => {
       alive = false
     }
-  }, [shown, refresh])
+  }, [shown, refresh, again])
 
   useTopBar(screen === null ? { title: 'Fitness', back: { label: 'More', onBack } } : null)
 
@@ -647,6 +652,25 @@ export function Fitness({
         {card(calories)}
       </div>
 
+      {summary !== null && (
+        <div className="t-card mb-3">
+          <p className="t-micro mb-2">
+            {shown === todayIso ? "Today's goals" : `Goals for ${when}`}
+          </p>
+          <button
+            type="button"
+            className="t-row w-full text-left"
+            onClick={() => setGoalOpen(true)}
+          >
+            <span className="t-nums min-w-0 flex-1 truncate text-sm">
+              {summary.goals.steps.toLocaleString()} steps ·{' '}
+              {summary.goals.exercise_minutes} min
+            </span>
+            <ChevronRight className="h-4 w-4 shrink-0 text-muted" strokeWidth={2.5} />
+          </button>
+        </div>
+      )}
+
       <TrendsCard rows={trends} units={me.units} />
 
       <button
@@ -672,6 +696,18 @@ export function Fitness({
             Set up another device
           </button>
         </p>
+      )}
+
+      {goalOpen && (
+        <GoalSheet
+          me={me}
+          date={shown}
+          onClose={() => setGoalOpen(false)}
+          onSaved={() => {
+            setGoalOpen(false)
+            setAgain(again + 1)
+          }}
+        />
       )}
     </>
   )

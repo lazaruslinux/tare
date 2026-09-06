@@ -1,8 +1,9 @@
-import { ArrowDown, BookCheck, ChevronRight, CircleCheck } from 'lucide-react'
+import { ArrowDown, BookCheck, ChevronRight, CircleCheck, Hand } from 'lucide-react'
 import { useEffect, useState } from 'react'
 
 import {
   api,
+  type FeedJoined,
   type FeedJournal,
   type FeedPage,
   type FeedRow,
@@ -15,9 +16,9 @@ import { clockText, dateText, useClock } from '../lib/clock'
 import { dayLabel, today } from '../lib/day'
 import { distanceCompact, hmsText, weightCompact } from '../lib/units'
 
-// What the members of this instance are doing, read only. Three kinds of row:
-// a workout somebody did, a day somebody finished, and a weigh-in that came in
-// lower. No food, no answering back.
+// What the members of this instance are doing, read only. Four kinds of row:
+// a workout somebody did, a day somebody finished, a weigh-in that came in
+// lower, and somebody arriving. No food, no answering back.
 
 // The two nearest days keep their words. Anything older is the stamp the rest
 // of the app writes a date in.
@@ -85,6 +86,36 @@ function JournalRow({
         </span>
       </span>
       {row.hidden === true && <span className="t-chip shrink-0">Only you</span>}
+    </div>
+  )
+}
+
+// A member arriving. Nothing to open and nothing to hide: it says they are
+// here, and that they are welcome.
+function JoinedRow({
+  me,
+  row,
+  todayIso,
+  onOpenMember,
+}: {
+  me: Me
+  row: FeedJoined
+  todayIso: string
+  onOpenMember: () => void
+}) {
+  return (
+    <div className="t-row">
+      <span className="flex min-w-0 flex-1 items-center gap-2">
+        <Hand className="h-4 w-4 shrink-0 text-accent" strokeWidth={2} aria-hidden="true" />
+        <span className="min-w-0 flex-1">
+          <span className="block text-sm">
+            <Name row={row} onOpenMember={onOpenMember} /> joined Tare. Welcome!
+          </span>
+          <span className="block text-xs text-muted">
+            {dayText(row.date, todayIso)} {clockText(row.at, me.timezone)}
+          </span>
+        </span>
+      </span>
     </div>
   )
 }
@@ -249,6 +280,14 @@ export function Feed({
         ) : row.kind === 'weight' ? (
           <WeightRow
             key={`s${row.id}`}
+            me={me}
+            row={row}
+            todayIso={todayIso}
+            onOpenMember={() => onOpenMember(row.user_id)}
+          />
+        ) : row.kind === 'joined' ? (
+          <JoinedRow
+            key={`m${row.id}`}
             me={me}
             row={row}
             todayIso={todayIso}

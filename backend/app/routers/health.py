@@ -25,7 +25,17 @@ from app.db import get_db
 from app.deps import require_user
 from app.models import now_utc
 from app.routers.account import clean_location
-from app.routers.fitness import day_exercise, workouts_on
+from app.routers.fitness import (
+    BAD_MINUTES_GOAL,
+    BAD_STEP_GOAL,
+    FUTURE_MEASUREMENT,
+    MAX_MINUTES_GOAL,
+    MAX_STEP_GOAL,
+    MIN_MINUTES_GOAL,
+    MIN_STEP_GOAL,
+    day_exercise,
+    workouts_on,
+)
 
 router = APIRouter(prefix="/health", tags=["health"])
 
@@ -41,7 +51,6 @@ PCT_SUM = f"The three percentages have to add up to {health.PCT_TOTAL}."
 BAD_PRESET = "That is not a starting point Tare offers."
 BAD_RATE = "That is not a goal rate Tare offers."
 BAD_MODE = "That is not a way to set targets."
-FUTURE_MEASUREMENT = "That day is in the future."
 NOTHING_RECORDED = "Nothing to record."
 
 # How far back a measurement list reaches by default, and the furthest it will.
@@ -84,15 +93,6 @@ MIN_HEIGHT_CM = 90.0
 MAX_HEIGHT_CM = 250.0
 MAX_MINUTES = 720
 BAD_MINUTES = f"Minutes must be between 1 and {MAX_MINUTES}."
-
-# What a day of movement may be aimed at. Wide enough for anybody's day and
-# narrow enough to catch a figure typed with a digit too many.
-MIN_MINUTES_GOAL = 5
-MAX_MINUTES_GOAL = 600
-MIN_STEP_GOAL = 1000
-MAX_STEP_GOAL = 50000
-BAD_MINUTES_GOAL = f"Pick a goal between {MIN_MINUTES_GOAL} and {MAX_MINUTES_GOAL} minutes."
-BAD_STEP_GOAL = f"Pick a goal between {MIN_STEP_GOAL:,} and {MAX_STEP_GOAL:,} steps."
 
 # The plain sentences behind app.health's note keys. The words are the doc's,
 # and no formula name appears in any of them (decision 29).

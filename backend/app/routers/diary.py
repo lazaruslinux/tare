@@ -24,7 +24,13 @@ from app.db import get_db
 from app.deps import require_user
 from app.models import DIARY_SLOTS, NUTRIENTS, SERVING_UNIT, now_utc
 from app.recipes import own_recipe, per_serving, settled_weight, totals, weight
-from app.routers.fitness import day_exercise, imported_row, steps_on, workouts_on
+from app.routers.fitness import (
+    day_exercise,
+    goals_on,
+    imported_row,
+    steps_on,
+    workouts_on,
+)
 from app.routers.foods import MAX_NAME, readable_food
 from app.routers.health import (
     Reckoning,
@@ -648,6 +654,8 @@ def read_day(
     # holds the rule so the Journal and the Targets screen cannot drift apart.
     kcal, minutes = day_exercise(workouts, imported)
     credit = exercise_credit(kcal)
+    # This day's own goal, which is the usual one unless it was set apart.
+    _, minutes_goal = goals_on(db, user, day)
     weighed = next((row for row in state.rows if row.date_for == day), None)
     eaten = total(entries, "calories") or 0.0
     db.commit()
@@ -675,7 +683,7 @@ def read_day(
         },
         "exercise_kcal": credit,
         "exercise_minutes": minutes,
-        "exercise_minutes_goal": state.profile.exercise_minutes_goal,
+        "exercise_minutes_goal": minutes_goal,
         # Null rather than nothing when no phone has sent a day: the ring on the
         # Dashboard is drawn only for a day that has an answer.
         "steps": steps_on(db, user, [day]).get(day),

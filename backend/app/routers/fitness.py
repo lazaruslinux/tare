@@ -36,6 +36,23 @@ MISSING_WORKOUT = "There is no such workout."
 HIDEABLE = ("avg_hr", "kcal", "route")
 BAD_HIDDEN = "That is not something Tare can hide."
 
+# What a day of movement may be aimed at. Wide enough for anybody's day and
+# narrow enough to catch a figure typed with a digit too many. The bounds sit
+# here rather than beside the two profile fields they were written for, because
+# a day's own goal is held to the same ones and this is the module the profile
+# can read them from.
+MIN_MINUTES_GOAL = 5
+MAX_MINUTES_GOAL = 600
+MIN_STEP_GOAL = 1000
+MAX_STEP_GOAL = 50000
+BAD_MINUTES_GOAL = f"Pick a goal between {MIN_MINUTES_GOAL} and {MAX_MINUTES_GOAL} minutes."
+BAD_STEP_GOAL = f"Pick a goal between {MIN_STEP_GOAL:,} and {MAX_STEP_GOAL:,} steps."
+DEFAULT_MINUTES_GOAL = 30
+DEFAULT_STEP_GOAL = 8000
+
+# A day that has not happened yet is not one to aim at, or to weigh on.
+FUTURE_MEASUREMENT = "That day is in the future."
+
 # How much history a screen may ask for at once, and what it gets by default.
 DEFAULT_DAYS = 30
 MAX_DAYS = 365
@@ -126,6 +143,45 @@ def steps_on(db: Session, user: models.User, days: list[dt.date]) -> dict[dt.dat
         )
     )
     return {row.date_for: round(row.value) for row in rows if row.value is not None}
+
+
+def goals_over(
+    db: Session, user: models.User, days: list[dt.date]
+) -> dict[dt.date, tuple[int, int]]:
+    """The steps and the exercise minutes in force on each of a run of days.
+
+    The profile carries the pair a day is read against unless the member set
+    that one day apart, and a null column on a day's own row means that figure
+    is still the profile's. One query for the whole run rather than one a day,
+    for the same reason the tile figures are read in one.
+    """
+    profile = db.get(models.HealthProfile, user.id)
+    steps = DEFAULT_STEP_GOAL if profile is None else profile.step_goal
+    minutes = DEFAULT_MINUTES_GOAL if profile is None else profile.exercise_minutes_goal
+    apart = {
+        row.date: row
+        for row in db.execute(
+            select(models.DayGoal).where(
+                models.DayGoal.user_id == user.id, models.DayGoal.date.in_(days)
+            )
+        ).scalars()
+    }
+    found = {}
+    for day in days:
+        own = apart.get(day)
+        found[day] = (
+            steps if own is None or own.step_goal is None else own.step_goal,
+            minutes
+            if own is None or own.exercise_minutes_goal is None
+            else own.exercise_minutes_goal,
+        )
+    return found
+
+
+def goals_on(db: Session, user: models.User, day: dt.date) -> tuple[int, int]:
+    """One day's goals: the steps, then the exercise minutes. Every reader of a
+    day's goals goes through here, so an override is the truth everywhere."""
+    return goals_over(db, user, [day])[day]
 
 
 def imported_row(row: models.Workout) -> dict[str, object]:
@@ -227,7 +283,7 @@ def read_summary(
         or 0
     )
     token = db.get(models.IngestToken, user.id)
-    profile = db.get(models.HealthProfile, user.id)
+    step_goal, minutes_goal = goals_on(db, user, day)
 
     return {
         "date": day.isoformat(),
@@ -242,15 +298,102 @@ def read_summary(
             }
             for each in _run(first, day)
         ],
-        "goals": {
-            "exercise_minutes": 30 if profile is None else profile.exercise_minutes_goal,
-            "steps": 8000 if profile is None else profile.step_goal,
-        },
+        # The figures in force on this day, which are the usual pair unless
+        # the member set this one day apart.
+        "goals": {"exercise_minutes": minutes_goal, "steps": step_goal},
         # How many sessions the same seven days hold. The member's own count,
         # so one they keep out of the feed is still one they did.
         "week_workouts": week_workouts,
         "workouts": [workout_row(row) for row in workouts_on(db, user, day)],
     }
+
+
+def goals_payload(db: Session, user: models.User, day: dt.date) -> dict[str, object]:
+    """One day's goals as a screen reads them: the figures in force, the usual
+    pair behind them, and whether this day was set apart from it."""
+    profile = db.get(models.HealthProfile, user.id)
+    steps, minutes = goals_on(db, user, day)
+    own = db.get(models.DayGoal, (user.id, day))
+    return {
+        "date": day.isoformat(),
+        "steps": steps,
+        "exercise_minutes": minutes,
+        "defaults": {
+            "steps": DEFAULT_STEP_GOAL if profile is None else profile.step_goal,
+            "exercise_minutes": (
+                DEFAULT_MINUTES_GOAL if profile is None else profile.exercise_minutes_goal
+            ),
+        },
+        "overridden": own is not None
+        and (own.step_goal is not None or own.exercise_minutes_goal is not None),
+    }
+
+
+class GoalsIn(BaseModel):
+    """What one day is aimed at. Either key may be left out, which leaves that
+    one as it was, and either may be sent as null, which is how a figure is put
+    back to the usual one."""
+
+    steps: int | None = None
+    exercise_minutes: int | None = None
+
+
+@router.get("/goals")
+def read_goals(
+    date: str = "",
+    db: Session = Depends(get_db),
+    user: models.User = Depends(require_user),
+) -> dict[str, object]:
+    """What one day is aimed at, and what it would be aimed at by default."""
+    return goals_payload(db, user, asked_day(date, user))
+
+
+@router.put("/goals/{date}")
+def write_goals(
+    date: str,
+    body: GoalsIn,
+    db: Session = Depends(get_db),
+    user: models.User = Depends(require_user),
+) -> dict[str, object]:
+    """Set one day apart from the usual goals, or put it back.
+
+    The row is the difference and nothing else: a day left with neither figure
+    on it is deleted rather than kept as a copy of the profile, so a later
+    change to the usual goals carries that day with it.
+    """
+    day = asked_day(date, user)
+    if day > clock.user_today(user):
+        raise HTTPException(status.HTTP_400_BAD_REQUEST, FUTURE_MEASUREMENT)
+    sent = body.model_fields_set
+    if body.steps is not None and not (MIN_STEP_GOAL <= body.steps <= MAX_STEP_GOAL):
+        raise HTTPException(status.HTTP_400_BAD_REQUEST, BAD_STEP_GOAL)
+    if body.exercise_minutes is not None and not (
+        MIN_MINUTES_GOAL <= body.exercise_minutes <= MAX_MINUTES_GOAL
+    ):
+        raise HTTPException(status.HTTP_400_BAD_REQUEST, BAD_MINUTES_GOAL)
+
+    row = db.get(models.DayGoal, (user.id, day))
+    steps = None if row is None else row.step_goal
+    minutes = None if row is None else row.exercise_minutes_goal
+    if "steps" in sent:
+        steps = body.steps
+    if "exercise_minutes" in sent:
+        minutes = body.exercise_minutes
+
+    if steps is None and minutes is None:
+        if row is not None:
+            db.delete(row)
+    elif row is None:
+        db.add(
+            models.DayGoal(
+                user_id=user.id, date=day, step_goal=steps, exercise_minutes_goal=minutes
+            )
+        )
+    else:
+        row.step_goal = steps
+        row.exercise_minutes_goal = minutes
+    db.commit()
+    return goals_payload(db, user, day)
 
 
 def _distance_by_day(
@@ -420,6 +563,11 @@ def read_days(
     ).scalars():
         worked.setdefault(row.date_for, []).append(row)
 
+    run = _run(first, last)
+    # Each day's own goals, so a run of days carries what each was aimed at
+    # rather than what today is.
+    goals = goals_over(db, user, run)
+
     return {
         "days": [
             {
@@ -427,6 +575,8 @@ def read_days(
                 "steps": values.get((each, "steps")),
                 "exercise_minutes": values.get((each, "exercise_minutes")),
                 "active_kcal": values.get((each, "active_kcal")),
+                "step_goal": goals[each][0],
+                "exercise_minutes_goal": goals[each][1],
                 # Hidden sessions included: this is the owner reading their own
                 # days, and the feed is the only place hiding one means
                 # anything.
@@ -440,7 +590,7 @@ def read_days(
                     for row in worked.get(each, [])
                 ],
             }
-            for each in _run(first, last)
+            for each in run
         ]
     }
 
