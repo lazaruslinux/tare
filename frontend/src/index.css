@@ -15,6 +15,9 @@
   --surface-2: #1d2220;
   --line: rgba(214, 228, 219, 0.08);
   --line-strong: rgba(214, 228, 219, 0.16);
+  /* The empty part of a ring. Lighter than a border, so an unfilled day
+     reads as room to fill rather than a wall. */
+  --track: rgba(214, 228, 219, 0.12);
   --text: #dbe7dd;
   --muted: #94a89b;
   /* One step up from muted for the small labels, which read as noise at the
@@ -48,17 +51,20 @@
   --surface-2: #f1ede2;
   --line: rgba(46, 79, 63, 0.12);
   --line-strong: rgba(46, 79, 63, 0.24);
+  --track: rgba(46, 79, 63, 0.11);
   --text: #2e4f3f;
   /* Measured against all three light grounds: the old #5e7a6b read 4.01:1 on
      --surface-2, under the 4.5:1 floor. This clears it on every one. */
   --muted: #56705f;
   --label: #45604f;
-  --accent: #35684f;
-  --accent-strong: #24503b;
+  /* A step softer than the forest green it replaced, and still 4.8:1 on
+     --surface-2, the darkest of the three light grounds. */
+  --accent: #3a7257;
+  --accent-strong: #2f5f48;
   --pending: #b7791f;
   /* Same measurement: #b3554b sat at 4.16:1 on --surface-2. */
   --danger: #ab4f45;
-  --ring: rgba(53, 104, 79, 0.3);
+  --ring: rgba(58, 114, 87, 0.3);
   /* The same two, darkened for the cream ground. */
   --chart-water: #1f6f9c;
   --chart-bone: #7a6248;

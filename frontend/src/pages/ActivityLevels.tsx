@@ -43,7 +43,7 @@ function Ring({ slices, total }: { slices: Slice[]; total: number }) {
   let start = 0
   return (
     <svg viewBox="0 0 100 100" className="h-32 w-32 -rotate-90" aria-hidden="true">
-      <circle cx="50" cy="50" r={RADIUS} fill="none" stroke="var(--line-strong)" strokeWidth="9" />
+      <circle cx="50" cy="50" r={RADIUS} fill="none" stroke="var(--track)" strokeWidth="9" />
       {slices.map((slice) => {
         const share = total <= 0 ? 0 : Math.max(slice.value, 0) / total
         const length = share * ROUND

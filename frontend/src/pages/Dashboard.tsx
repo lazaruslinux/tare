@@ -175,7 +175,7 @@ function Ring({ filled }: { filled: number }) {
         cy="50"
         r={RADIUS}
         fill="none"
-        stroke="var(--line-strong)"
+        stroke="var(--track)"
         strokeWidth="8"
       />
       <circle
