@@ -122,14 +122,11 @@ export function RecipeDetail({
               </button>
             </div>
 
-            <PanelFacts
-              values={perServing ? recipe.per_serving : recipe.totals}
-              note={perServing ? 'One serving' : 'Everything in it'}
-            />
+            <PanelFacts values={perServing ? recipe.per_serving : recipe.totals} />
           </div>
 
           <div className="t-card mb-3">
-            <p className="t-micro mb-1">In it</p>
+            <p className="t-micro mb-1">Items / amounts</p>
             {recipe.ingredients.map((row) => (
               <div key={row.id} className="t-row">
                 <span className="min-w-0 flex-1">

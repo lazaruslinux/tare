@@ -108,11 +108,11 @@ export function MealDetail({
             </p>
           )}
           <div className="t-card mb-3">
-            <PanelFacts values={meal.totals} note="Everything in it" />
+            <PanelFacts values={meal.totals} />
           </div>
 
           <div className="t-card mb-3">
-            <p className="t-micro mb-1">In it</p>
+            <p className="t-micro mb-1">Items / amounts</p>
             {meal.items.map((row) => (
               <div key={row.id} className="t-row">
                 <span className="min-w-0 flex-1">

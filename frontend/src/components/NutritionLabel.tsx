@@ -118,7 +118,7 @@ export function PanelFacts({
   children,
 }: {
   values: Panel
-  note: string
+  note?: string
   noteClass?: string
   moreLabel?: string
   open?: boolean
@@ -141,7 +141,7 @@ export function PanelFacts({
         ))}
       </div>
 
-      <p className={`mt-2 text-xs text-muted ${noteClass}`}>{note}</p>
+      {note && <p className={`mt-2 text-xs text-muted ${noteClass}`}>{note}</p>}
 
       <Fold label={moreLabel} open={open}>
         {LABEL_ORDER.map((fact) => (
