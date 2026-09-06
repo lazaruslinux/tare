@@ -1,8 +1,8 @@
 import { TareMark } from './TareMark'
 
-// Zen Dots capitals stand 0.715 em tall, so this is the font size at which
-// the letters are exactly as tall as the mark.
-const CAP = 0.715
+// Righteous capitals stand 0.70 em tall, so this is the font size at which the
+// capital T is exactly as tall as the mark.
+const CAP = 0.7
 
 // The mark and the name together, in the accent colour. One number sizes
 // both: the letters stand `size` tall and the mark stands as tall as the
