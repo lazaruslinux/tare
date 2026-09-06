@@ -13,6 +13,7 @@ import {
 } from '../api'
 import { FoodPicker } from '../components/FoodPicker'
 import { HEADLINE, nutrientText } from '../components/NutritionLabel'
+import { ScanFlow } from '../components/ScanFlow'
 import { useTopBar } from '../hooks/useTopBar'
 import { portionText, scale, toBase, type Unit } from '../lib/units'
 
@@ -127,6 +128,9 @@ export function PartsForm({
   // Null while the saved rows are being made sendable again.
   const [drafts, setDrafts] = useState<Draft[] | null>(existing === null ? [] : null)
   const [picking, setPicking] = useState(false)
+  // The camera, opened from the picker. A packet in somebody's hand is faster
+  // to scan than to spell, here as much as in the Journal.
+  const [scanning, setScanning] = useState(false)
   const [error, setError] = useState('')
   const [saving, setSaving] = useState(false)
 
@@ -284,6 +288,22 @@ export function PartsForm({
           onPick={(food, amount, unit) => {
             setDrafts([...rows, drafted(food, amount, unit)])
             setPicking(false)
+          }}
+          onScan={() => {
+            setPicking(false)
+            setScanning(true)
+          }}
+        />
+      )}
+
+      {scanning && (
+        <ScanFlow
+          me={me}
+          onClose={() => setScanning(false)}
+          onChanged={() => {}}
+          onPick={(food, amount, unit) => {
+            setDrafts([...rows, drafted(food, amount, unit)])
+            setScanning(false)
           }}
         />
       )}

@@ -30,6 +30,7 @@ export function ScanFlow({
   onClose,
   onLogged,
   onChanged,
+  onPick,
 }: {
   me: Me
   // Where what is scanned lands. Left out from the centre control and the Food
@@ -38,10 +39,13 @@ export function ScanFlow({
   date?: string
   slot?: Slot
   onClose: () => void
-  onLogged: () => void
+  onLogged?: () => void
   // A food was written, whether or not it is logged after. The tabs behind this
   // sheet list it, and Done closes the flow without logging anything.
   onChanged: () => void
+  // Given instead when the scan is filling in a recipe or a kept meal. The
+  // portion is handed back and nothing is written to the diary.
+  onPick?: (food: Food, amount: number, unit: string) => void
 }) {
   const [stage, setStage] = useState<Stage>({ at: 'camera' })
   const [code, setCode] = useState('')
@@ -112,7 +116,8 @@ export function ScanFlow({
         slot={slot ?? slotByTime(me.timezone)}
         units={me.units}
         onClose={onClose}
-        onDone={onLogged}
+        onDone={() => onLogged?.()}
+        onPick={onPick}
       />
     )
   }
@@ -135,7 +140,7 @@ export function ScanFlow({
             className="t-btn t-btn-primary flex-1"
             onClick={() => setStage({ at: 'log', food: sent })}
           >
-            Log it now
+            {onPick ? 'Add it now' : 'Log it now'}
           </button>
           <button type="button" className="t-btn" onClick={onClose}>
             Done
