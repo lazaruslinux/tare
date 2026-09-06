@@ -33,7 +33,7 @@ import { FoodLine, MealLine, RecipeLine, favoritesOf } from '../components/FoodR
 import { PortionSheet } from '../components/PortionSheet'
 import { Sheet } from '../components/Sheet'
 import { useTopBar } from '../hooks/useTopBar'
-import { SLOT_LABEL, slotByTime, today } from '../lib/day'
+import { SLOT_LABEL, today } from '../lib/day'
 import { reviews } from '../lib/roles'
 import { portionText } from '../lib/units'
 import { FoodDetail } from './FoodDetail'
@@ -118,9 +118,6 @@ export function FoodTab({
   const [meals, setMeals] = useState<MealRow[]>([])
   const [repeat, setRepeat] = useState<RepeatRow[]>([])
   const [autos, setAutos] = useState<AutoLog[]>([])
-  // The food a favorite row is being logged at, which is the picker's own
-  // sheet.
-  const [logging, setLogging] = useState<FoodItem | null>(null)
   // The standing auto-log open in the same sheet, with the food it is about.
   const [autoEdit, setAutoEdit] = useState<{ food: FoodItem; row: AutoLog } | null>(null)
   // The shared database, open over the tab: a box to type in, and the whole
@@ -282,16 +279,6 @@ export function FoodTab({
       },
     }
     hold(waiting)
-  }
-
-  // A favorite is logged the way the picker logs one, at the portion sheet.
-  const openFavorite = async (id: number) => {
-    setError('')
-    try {
-      setLogging(await api<FoodItem>(`/foods/${id}`))
-    } catch (failure) {
-      setError(errorText(failure))
-    }
   }
 
   // The same sheet the food page opens, on the food this instruction is about.
@@ -565,7 +552,7 @@ export function FoodTab({
               <FoodLine
                 key={row.id}
                 row={row}
-                onOpen={() => openFavorite(row.id)}
+                onOpen={() => setView({ at: 'detail', id: row.id, from: { at: 'list' } })}
                 onRemove={() => removeFavorite(row)}
                 removeLabel={`Remove ${row.name} from Favorites`}
               />
@@ -725,21 +712,6 @@ export function FoodTab({
         />
       )}
 
-      {logging !== null && (
-        <PortionSheet
-          food={logging}
-          date={today(me.timezone)}
-          slot={slotByTime(me.timezone)}
-          units={me.units}
-          onClose={() => setLogging(null)}
-          onDone={() => {
-            setLogging(null)
-            void loadRepeat()
-            onChanged()
-          }}
-        />
-      )}
-
       {autoEdit !== null && (
         <PortionSheet
           food={autoEdit.food}
@@ -789,14 +761,9 @@ export function FoodTab({
                 : undefined
             }
             onOpen={(id) => {
-              if (catalog === 'favorites') {
-                setCatalog(null)
-                void openFavorite(id)
-                return
-              }
               setCatalog(null)
               setView(
-                catalog === 'foods'
+                catalog === 'foods' || catalog === 'favorites'
                   ? { at: 'detail', id, from: { at: 'list' } }
                   : catalog === 'meals'
                     ? { at: 'meal', id, from: { at: 'list' } }
