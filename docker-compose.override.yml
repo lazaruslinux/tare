@@ -6,3 +6,23 @@ services:
     # unusual number, so it cannot collide with a Postgres already installed.
     ports:
       - '127.0.0.1:55434:5432'
+
+  mailpit:
+    # A development mail catcher: it accepts everything and delivers nothing.
+    # The api is pointed at it through .env, with SMTP_HOST=mailpit,
+    # SMTP_PORT=1025, any user and password, and SMTP_STARTTLS=false.
+    # Open http://127.0.0.1:8225 to read what was sent.
+    #
+    # Digest-pinned like every other image here. The tag rides along for
+    # humans: axllent/mailpit:v1.31.1
+    image: axllent/mailpit:v1.31.1@sha256:98b916bd3c8d61f7633a52d3ea2f58d00620cb01ca57ab59edde68c347a95365
+    restart: unless-stopped
+    environment:
+      # Take whatever credentials arrive, over a plain connection. Safe only
+      # because nothing here leaves the compose network.
+      MP_SMTP_AUTH_ACCEPT_ANY: '1'
+      MP_SMTP_AUTH_ALLOW_INSECURE: '1'
+    # The web interface alone, on loopback. SMTP stays unpublished: the api
+    # reaches it as mailpit:1025 over the compose network.
+    ports:
+      - '127.0.0.1:8225:8025'

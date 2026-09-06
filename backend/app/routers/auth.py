@@ -20,7 +20,7 @@ from sqlalchemy.orm import Session
 from app import mail, models, profiles, security, throttle
 from app.config import settings
 from app.db import get_db, rows_touched
-from app.deps import require_user
+from app.deps import require_account, require_user
 from app.models import now_utc
 from app.routers.invites import DEAD_INVITE, live_invite
 
@@ -30,7 +30,6 @@ router = APIRouter(prefix="/auth", tags=["auth"])
 # anyone map out who has an account here, which is the first move of a targeted
 # guessing run.
 BAD_CREDENTIALS = "Username or password is not correct."
-UNVERIFIED = "Check your email and verify your account before signing in."
 STALE_LINK = "That verification link is no longer valid. Ask for a new one."
 
 # Decision 21. tare is for adults, the birthdate is asked for at registration,
@@ -44,9 +43,15 @@ MAX_AGE = 120
 IMPOSSIBLE_BIRTHDATE = "That birthdate is too far back to be right."
 CLEARED_BIRTHDATE = "Tare needs your birthdate."
 
-# What a signup is refused with when the instance has a mail server and the
-# address was left blank.
-EMAIL_REQUIRED = "This Tare needs an email address to sign up."
+# What a signup is refused with when the address was left blank. Every
+# instance: an account with nowhere to write to is one nobody can prove they
+# hold, and this is what the whole verification wall rests on.
+EMAIL_REQUIRED = "Tare needs an email address to sign up."
+
+# What somebody is told when the address they typed belongs to another account,
+# or is waiting to be moved to one. The same sentence at both ends of a change,
+# because the second account may have claimed it while the link sat in an inbox.
+EMAIL_TAKEN = "That email is already taken."
 
 # The one answer a reset request ever gets. The same words for an address with
 # an account, an address without one, and an instance that cannot send mail at
@@ -116,6 +121,9 @@ def me_payload(db: Session, user: models.User) -> dict[str, object]:
         "display_name": user.display_name,
         "email": user.email,
         "email_verified": user.email_verified,
+        # The address a change is waiting on, or null. Set while a link to the
+        # new address is unopened, and the screens that show an address say so.
+        "pending_email": user.pending_email,
         "is_admin": user.is_admin,
         # What this account is, in the one word every screen that shows a name
         # reads. Null for a member, which is most people.
@@ -133,6 +141,11 @@ def me_payload(db: Session, user: models.User) -> dict[str, object]:
         # Null on an account made before the gate existed, which is what sends
         # it to the one screen that asks (decision 21).
         "birthdate": None if user.birthdate is None else user.birthdate.isoformat(),
+        # Whether the questions asked on the way in are still to be answered.
+        # A fact on the account rather than something the client works out from
+        # the door it came through, so meeting the verify screen first does not
+        # cost somebody the first-run screen.
+        "first_run_pending": user.first_run_at is None,
         "location": user.location,
         # The picture other members are shown beside this account's name, or
         # null when it has none.
@@ -185,19 +198,37 @@ def clean_email(raw: str) -> str:
     return cleaned
 
 
-def signup_email(raw: str) -> str | None:
-    """The address a new account is made with, and the one rule about needing one.
+def signup_email(raw: str) -> str:
+    """The address a new account is made with. Required, on every instance.
 
-    An instance that verifies by mail cannot make an account with nowhere to
-    send the link: it would be created unable to sign in and unable to ask for
-    another one. An instance with no mail server has nothing to send anyway, so
-    the field stays optional there.
+    An instance with no mail server has nothing to send, so it verifies the
+    account on the spot; it still asks for the address, because turning a mail
+    server on later must not leave a set of accounts nobody can write to.
     """
-    if raw.strip():
-        return clean_email(raw)
-    if mail.configured():
+    if not raw.strip():
         raise HTTPException(status.HTTP_400_BAD_REQUEST, EMAIL_REQUIRED)
-    return None
+    return clean_email(raw)
+
+
+def address_taken(db: Session, address: str, skip: int) -> bool:
+    """Whether another account holds this address, or is waiting to move to it.
+
+    Both columns, because an address somebody has a live change link for is
+    spoken for: letting a second account claim it in the meantime would leave
+    one of the two links unusable at the moment it is opened.
+    """
+    return (
+        db.execute(
+            select(models.User.id).where(
+                models.User.id != skip,
+                or_(
+                    func.lower(models.User.email) == address,
+                    func.lower(models.User.pending_email) == address,
+                ),
+            )
+        ).first()
+        is not None
+    )
 
 
 @router.post("/register")
@@ -210,10 +241,10 @@ def register(
 ) -> dict[str, str]:
     """Spend an invite and make the account behind it.
 
-    Two endings, and which one arrives depends on the instance rather than on
-    anything the caller sent. With a mail server configured the account is made
-    unverified and has to answer a link; without one there is nowhere to send
-    that link, so the account is verified on the spot and signed in.
+    Signed in either way. Which ending arrives depends on the instance rather
+    than on anything the caller sent: with a mail server the account is made
+    unverified and meets the verify screen until the link is opened; without
+    one there is nowhere to send that link, so it is verified on the spot.
     """
     if throttle.register_limiter.hit(throttle.client_address(request)):
         raise HTTPException(status.HTTP_429_TOO_MANY_REQUESTS, throttle.TOO_MANY)
@@ -248,9 +279,13 @@ def register(
 
     # lower() on the column rather than a plain comparison, so this matches the
     # case-insensitive uniqueness the schema enforces and can use that index.
-    conflicts = [models.User.username == username]
-    if email is not None:
-        conflicts.append(func.lower(models.User.email) == email)
+    # The pending column counts too: an address somebody holds a live change
+    # link for is spoken for until that link is opened or expires.
+    conflicts = [
+        models.User.username == username,
+        func.lower(models.User.email) == email,
+        func.lower(models.User.pending_email) == email,
+    ]
     if db.execute(select(models.User.id).where(or_(*conflicts))).first() is not None:
         # A plain answer, unlike the sentence a dead code gets. Whoever is here
         # holds a working invite, so they are not enumerating anything; they
@@ -297,17 +332,21 @@ def register(
     # as the seat it took.
     user.invite_id = invite.id
 
+    # The session is set either way. An account still to answer its mail is
+    # signed in and walled rather than shut out: the wall is the one screen it
+    # can reach, and reaching it is how it asks for another link.
+    token = security.create_session(db, user.id)
     if user.email_verified:
-        token = security.create_session(db, user.id)
         db.commit()
         security.set_session_cookie(response, token)
         return {"state": "ready"}
 
     verify_token = security.create_email_token(db, user.id, "verify")
     db.commit()
+    security.set_session_cookie(response, token)
     # After the response, so a mail server having a slow morning is not
     # something the person registering has to sit through.
-    background.add_task(mail.send_verification, email or "", verify_token)
+    background.add_task(mail.send_verification, email, verify_token)
     return {"state": "check_email"}
 
 
@@ -330,13 +369,11 @@ def login(
         raise HTTPException(status.HTTP_401_UNAUTHORIZED, BAD_CREDENTIALS)
     if not security.verify_password(body.password, user.password_hash):
         raise HTTPException(status.HTTP_401_UNAUTHORIZED, BAD_CREDENTIALS)
-    if not user.email_verified:
-        # After the password and never before it. The other order answers
-        # differently for a right and a wrong password on an unverified
-        # account, which is a password oracle for anyone who registers once and
-        # then goes looking for other people.
-        raise HTTPException(status.HTTP_403_FORBIDDEN, UNVERIFIED)
 
+    # Verified or not: an account that has not answered its mail signs in like
+    # any other and meets the wall on the next route it asks for. Refusing here
+    # instead answers differently for a right and a wrong password on an
+    # unverified account, which is a password oracle.
     token = security.create_session(db, user.id)
     db.commit()
     security.set_session_cookie(response, token)
@@ -360,21 +397,28 @@ def logout(request: Request, response: Response, db: Session = Depends(get_db)) 
 
 @router.get("/me")
 def read_me(
-    db: Session = Depends(get_db), user: models.User = Depends(require_user)
+    db: Session = Depends(get_db), user: models.User = Depends(require_account)
 ) -> dict[str, object]:
+    # Not behind the wall: this is what the wall itself reads to find out
+    # whether it is still needed.
     return me_payload(db, user)
 
 
 @router.post("/verify-email", status_code=status.HTTP_204_NO_CONTENT)
 def verify_email(body: VerifyBody, response: Response, db: Session = Depends(get_db)) -> Response:
-    """Spend an emailed link. Once, and only for what it was issued for."""
+    """Spend an emailed link. Once, and only for what it was issued for.
+
+    Two kinds arrive here: the one that proves the address an account was made
+    with, and the one that moves an account to a new address. A reset link is
+    neither, and cannot be spent here.
+    """
     row = db.execute(
         select(models.EmailToken).where(
             models.EmailToken.token_hash == security.hash_token(body.token.strip()),
             # What the token authorises is stored with it, never sent by the
             # caller, so this endpoint cannot be handed a token minted for
             # something else.
-            models.EmailToken.purpose == "verify",
+            models.EmailToken.purpose.in_(("verify", "change")),
         )
     ).scalar_one_or_none()
     if row is None or row.expires_at <= now_utc():
@@ -386,6 +430,15 @@ def verify_email(body: VerifyBody, response: Response, db: Session = Depends(get
         raise HTTPException(status.HTTP_400_BAD_REQUEST, STALE_LINK)
 
     user = db.get(models.User, row.user_id)
+    if user is not None and row.purpose == "change" and user.pending_email is not None:
+        # Checked again here rather than only when the change was asked for:
+        # somebody else may have claimed the address while this link sat in an
+        # inbox. Refused before the token is spent, so the link still works for
+        # a second try once that is sorted out.
+        if address_taken(db, user.pending_email, user.id):
+            raise HTTPException(status.HTTP_400_BAD_REQUEST, EMAIL_TAKEN)
+        user.email = user.pending_email
+        user.pending_email = None
     # The token goes whether or not the account is still there, which is what
     # makes the link single use.
     db.delete(row)
@@ -402,13 +455,14 @@ def resend_verification(
     response: Response,
     background: BackgroundTasks,
     db: Session = Depends(get_db),
-    user: models.User = Depends(require_user),
+    user: models.User = Depends(require_account),
 ) -> Response:
     """Send another verification link to the address already on the account.
 
     Behind the session on purpose. An endpoint that mails whatever address it
     is handed is a way to use this server to bother a stranger; this one can
-    only ever mail the account asking.
+    only ever mail the account asking. Not behind the wall: asking for another
+    link is exactly what somebody standing at the wall is there to do.
     """
     if throttle.resend_limiter.hit(throttle.client_address(request)):
         raise HTTPException(status.HTTP_429_TOO_MANY_REQUESTS, throttle.TOO_MANY)

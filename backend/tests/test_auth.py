@@ -11,7 +11,6 @@ from app.routers.auth import (
     FUTURE_BIRTHDATE,
     IMPOSSIBLE_BIRTHDATE,
     UNDER_AGE,
-    UNVERIFIED,
 )
 from app.routers.invites import DEAD_INVITE
 from tests.conftest import BIRTHDATE, PASSWORD
@@ -31,6 +30,9 @@ def signup(client, invite, **overrides):
         "password": PASSWORD,
         "birthdate": BIRTHDATE.isoformat(),
         "timezone": "America/Phoenix",
+        # Required on every instance now, so the default body carries one and
+        # the cases about the rule pass an empty string instead.
+        "email": "newcomer@example.com",
     }
     body.update(overrides)
     return client.post("/api/auth/register", json=body)
@@ -54,13 +56,15 @@ def test_register_without_mail_signs_the_account_straight_in(client, db_session,
     assert client.get("/api/auth/me").status_code == 200
 
 
-def test_register_with_mail_waits_for_the_link(client, db_session, invite, with_mail):
+def test_register_with_mail_signs_in_and_waits_for_the_link(
+    client, db_session, invite, with_mail
+):
     response = signup(client, invite, email="Newcomer@Example.com")
     assert response.status_code == 200
     assert response.json() == {"state": "check_email"}
-    # No cookie: an account that has not answered its mail cannot sign in, so
-    # handing it a session here would make the whole check decorative.
-    assert security.COOKIE_NAME not in response.cookies
+    # A session all the same: the account is signed in and walled rather than
+    # shut out, because the wall is where it asks for another link.
+    assert security.COOKIE_NAME in response.cookies
 
     user = db_session.query(models.User).filter_by(username="newcomer").one()
     assert user.email_verified is False
@@ -71,15 +75,17 @@ def test_register_with_mail_waits_for_the_link(client, db_session, invite, with_
 def test_an_instance_with_mail_will_not_make_an_account_with_nowhere_to_write(
     client, invite, with_mail
 ):
-    refused = signup(client, invite)
+    refused = signup(client, invite, email="")
     assert refused.status_code == 400
     assert refused.json() == {"detail": EMAIL_REQUIRED}
 
 
-def test_an_instance_without_mail_leaves_the_address_optional(client, db_session, invite):
-    assert signup(client, invite).status_code == 200
-    user = db_session.query(models.User).filter_by(username="newcomer").one()
-    assert user.email is None
+def test_an_instance_without_mail_asks_for_the_address_too(client, invite):
+    # Nothing to send today, but turning a mail server on later must not leave
+    # a set of accounts nobody can write to.
+    refused = signup(client, invite, email="")
+    assert refused.status_code == 400
+    assert refused.json() == {"detail": EMAIL_REQUIRED}
 
 
 def test_a_zone_off_the_list_falls_back_rather_than_refusing(client, db_session, invite):
@@ -124,18 +130,22 @@ def test_login_as_nobody_reads_the_same_as_a_wrong_password(client):
     assert response.json() == {"detail": BAD_CREDENTIALS}
 
 
-def test_an_unverified_account_is_told_so_only_once_the_password_is_right(client, make_user):
-    make_user("pending", verified=False)
+def test_an_unverified_account_signs_in_and_says_so_in_the_payload(
+    client, make_user, with_mail
+):
+    make_user("pending", verified=False, email="pending@example.com")
 
     wrong = client.post("/api/auth/login", json={"username": "pending", "password": "not-it-at-all"})
-    # Reads as a wrong password, not as an unverified account: the other order
-    # would tell anyone holding a username whether a guess was correct.
     assert wrong.status_code == 401
     assert wrong.json() == {"detail": BAD_CREDENTIALS}
 
+    # Signed in like anybody else. What it may do is decided route by route,
+    # not at the door: refusing here answers differently for a right and a
+    # wrong password, which is a password oracle.
     right = client.post("/api/auth/login", json={"username": "pending", "password": PASSWORD})
-    assert right.status_code == 403
-    assert right.json() == {"detail": UNVERIFIED}
+    assert right.status_code == 200
+    assert right.json()["email_verified"] is False
+    assert security.COOKIE_NAME in right.cookies
 
 
 def test_login_answers_with_the_me_payload(client, make_user):
@@ -148,6 +158,7 @@ def test_login_answers_with_the_me_payload(client, make_user):
         "display_name": None,
         "email": "member@example.com",
         "email_verified": True,
+        "pending_email": None,
         "is_admin": False,
         "role": None,
         "approved_count": 0,
@@ -157,6 +168,9 @@ def test_login_answers_with_the_me_payload(client, make_user):
         "timezone": "UTC",
         "clock": "12h",
         "birthdate": BIRTHDATE.isoformat(),
+        # The fixture builds accounts straight into the database, so this one
+        # has never been through the screen.
+        "first_run_pending": True,
         "location": None,
         "avatar_url": None,
         "feed_hidden": [],

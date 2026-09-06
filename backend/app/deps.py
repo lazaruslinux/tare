@@ -1,5 +1,5 @@
-"""Who may call what. Four dependencies, so a route says its requirement in
-its signature rather than checking a flag in its body."""
+"""Who may call what. A handful of dependencies, so a route says its
+requirement in its signature rather than checking a flag in its body."""
 
 from __future__ import annotations
 
@@ -7,7 +7,7 @@ from fastapi import Depends, HTTPException, Request, status
 from sqlalchemy import select
 from sqlalchemy.orm import Session
 
-from app import models, security, throttle
+from app import mail, models, security, throttle
 from app.db import get_db
 from app.models import now_utc
 
@@ -16,9 +16,30 @@ from app.models import now_utc
 # somebody working through keys how close they are.
 BAD_INGEST_TOKEN = "Invalid token."
 
+# What an account that has not answered its verification mail is told, on every
+# route but the few it needs to get out of that state.
+UNVERIFIED_ACCOUNT = "Verify your email to continue."
 
-def require_user(user: models.User = Depends(security.current_user)) -> models.User:
+
+def require_account(user: models.User = Depends(security.current_user)) -> models.User:
+    """Signed in, verified or not. The few routes a walled account still needs."""
     return user
+
+
+def verified(user: models.User) -> models.User:
+    """The wall itself, in the one place every requirement reads it from.
+
+    Only on an instance that can send mail: without one there is no link to
+    open, so an old account carrying no address is left alone rather than shut
+    out of the app it is already in.
+    """
+    if mail.configured() and (user.email is None or not user.email_verified):
+        raise HTTPException(status.HTTP_403_FORBIDDEN, UNVERIFIED_ACCOUNT)
+    return user
+
+
+def require_user(user: models.User = Depends(require_account)) -> models.User:
+    return verified(user)
 
 
 def require_admin(user: models.User = Depends(require_user)) -> models.User:
@@ -75,5 +96,10 @@ def require_ingest_user(
     user = db.get(models.User, row.user_id)
     if user is None:
         raise refused
+    # The same wall the session routes are behind. A sync key is a credential
+    # for an account, so an account that cannot open the app cannot post to it
+    # either; the check comes after the token so a bad key still reads as a bad
+    # key rather than as an unverified one.
+    verified(user)
     row.last_used_at = now_utc()
     return user

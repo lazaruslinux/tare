@@ -68,6 +68,10 @@ class Settings(BaseSettings):
     smtp_user: str = ""
     smtp_password: str = ""
     smtp_from: str = ""
+    # Whether the connection is upgraded to TLS before anything is sent. On,
+    # because every real relay wants it. The one reason to turn it off is a
+    # mail catcher on the same machine while developing.
+    smtp_starttls: bool = True
 
     media_dir: str = "/data/media"
 

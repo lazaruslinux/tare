@@ -114,3 +114,29 @@ def test_a_field_left_out_is_left_alone(client, db_session, signed_in):
 
 def test_settings_need_a_session(client):
     assert patch(client, units="metric").status_code == 401
+
+
+# ---- The screen asked on the way in, answered once ----
+
+
+def test_a_new_account_still_has_the_first_run_screen_to_answer(client, signed_in):
+    assert client.get("/api/auth/me").json()["first_run_pending"] is True
+
+
+def test_answering_the_first_run_screen_settles_it_and_asking_twice_changes_nothing(
+    client, db_session, signed_in
+):
+    assert client.post("/api/account/first-run").status_code == 204
+    db_session.refresh(signed_in)
+    answered = signed_in.first_run_at
+    assert answered is not None
+    assert client.get("/api/auth/me").json()["first_run_pending"] is False
+
+    # Idempotent: a browser slow to move on must not move the moment.
+    assert client.post("/api/account/first-run").status_code == 204
+    db_session.refresh(signed_in)
+    assert signed_in.first_run_at == answered
+
+
+def test_answering_the_first_run_screen_needs_a_session(client):
+    assert client.post("/api/account/first-run").status_code == 401

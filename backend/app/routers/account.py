@@ -5,18 +5,33 @@ from __future__ import annotations
 
 import datetime as dt
 
-from fastapi import APIRouter, Depends, File, HTTPException, UploadFile, status
+from fastapi import (
+    APIRouter,
+    BackgroundTasks,
+    Depends,
+    File,
+    HTTPException,
+    UploadFile,
+    status,
+)
 from pydantic import BaseModel
 from sqlalchemy.orm import Session
 
-from app import clock, models, photos, profiles, security, throttle
+from app import clock, mail, models, photos, profiles, security, throttle
 from app.config import settings
 from app.db import get_db
-from app.deps import require_user
+from app.deps import require_account, require_user
 from app.models import now_utc
 from app.review_log import log_review
 from app.routers import fitness
-from app.routers.auth import CLEARED_BIRTHDATE, checked_birthdate, me_payload
+from app.routers.auth import (
+    CLEARED_BIRTHDATE,
+    EMAIL_TAKEN,
+    address_taken,
+    checked_birthdate,
+    clean_email,
+    me_payload,
+)
 from app.routers.ingest import has_uploads
 
 router = APIRouter(tags=["account"])
@@ -138,6 +153,64 @@ def update_account(
 
     db.commit()
     return me_payload(db, user)
+
+
+class EmailBody(BaseModel):
+    email: str
+
+
+@router.post("/account/email")
+def set_email(
+    body: EmailBody,
+    background: BackgroundTasks,
+    db: Session = Depends(get_db),
+    user: models.User = Depends(require_account),
+) -> dict[str, object]:
+    """Put an address on this account, or move it to a different one.
+
+    Not behind the wall: an account whose address is missing or was typed
+    wrongly has no way past it otherwise. The address is never believed on the
+    strength of this call. An account with none takes the new one unverified;
+    an account with one keeps the address it has and holds the new one aside
+    until the link sent there is opened, so a typo cannot lock anybody out of
+    their own mail.
+
+    Counted against the resend allowance and keyed by the address rather than
+    the caller, because what this spends is somebody else's inbox.
+    """
+    address = clean_email(body.email)
+    if throttle.resend_limiter.hit(address):
+        raise HTTPException(status.HTTP_429_TOO_MANY_REQUESTS, throttle.TOO_MANY)
+    if address_taken(db, address, user.id):
+        raise HTTPException(status.HTTP_400_BAD_REQUEST, EMAIL_TAKEN)
+
+    if user.email is None:
+        user.email = address
+        user.email_verified = False
+        purpose = "verify"
+    else:
+        user.pending_email = address
+        purpose = "change"
+    token = security.create_email_token(db, user.id, purpose)
+    db.commit()
+    # After the response, like every other message this instance sends.
+    background.add_task(mail.send_verification, address, token)
+    return me_payload(db, user)
+
+
+@router.post("/account/first-run", status_code=status.HTTP_204_NO_CONTENT)
+def finish_first_run(
+    db: Session = Depends(get_db), user: models.User = Depends(require_user)
+) -> None:
+    """Mark the questions asked on the way in as answered, or skipped.
+
+    Idempotent, and it only ever sets the stamp: the screen is shown once, and
+    a second call from a browser that was slow to move on must not move the
+    moment or offer the screen again.
+    """
+    if user.first_run_at is None:
+        user.first_run_at = now_utc()
+        db.commit()
 
 
 # A picture of a person, not a shelf: smaller than a food photo, because the

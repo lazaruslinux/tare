@@ -78,7 +78,12 @@ export function FirstRun({
           body: { weight_kg: weightFrom(weighed, units) },
         })
       }
-      onDone(who, openTargets)
+      // Both endings answer the screen, the skip included: it is shown once,
+      // and the account is what remembers that rather than the browser it was
+      // shown in. Read back afterwards so what the app routes on is the
+      // server's account rather than this screen's copy of it.
+      await api('/account/first-run', { method: 'POST' })
+      onDone(await api<Me>('/auth/me'), openTargets)
     } catch (failure) {
       setError(errorText(failure))
       setBusy(false)

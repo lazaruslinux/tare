@@ -9,10 +9,12 @@ internet with a certificate. This walks through it in order.
 - Docker with the Compose plugin. Nothing else is installed on the host.
 - A domain name pointing at the machine, `tare.example.com` throughout this
   guide. Substitute your own.
-- A reverse proxy that terminates TLS and sends `X-Forwarded-Proto: https`.
-  Tare marks its session cookie Secure and builds the links it mails from that
-  header, so a proxy that does not send it leaves sign-in failing and the
-  links pointing at `http`.
+- A reverse proxy that terminates TLS and sends `X-Forwarded-For`. That header
+  is the only thing Tare has to tell one caller from another, and the rate
+  limiters read it; a proxy that does not send it counts everybody's attempts
+  into one bucket. Nothing else is read off a header: the session cookie's
+  Secure flag comes from `COOKIE_SECURE` and the links Tare mails are built
+  from `SITE_URL`, both set below.
 - About a gigabyte of disk to start with. Photos are what grows.
 
 ## Configure
@@ -32,7 +34,8 @@ Then open `.env` and go down it. In the file's order:
 | `SITE_URL` | Where the instance answers, no trailing slash: `https://tare.example.com`. Only used to build the links that go out by mail; an instance that sends none can leave it empty. |
 | `TRUSTED_PROXY_HOPS` | How many proxies of your own stand in front of the web container. One TLS proxy, which is the shape below, is `1`, and that is the default. Reaching the web container with nothing in front of it is `0`. Setting it higher than the number really there lets a caller pick their own rate-limit bucket. |
 | `TARE_UPLOADS` | Whether members may hand the instance a health export as a file. `true` unless you want that address to stop existing. |
-| `SMTP_HOST`, `SMTP_PORT`, `SMTP_USER`, `SMTP_PASSWORD`, `SMTP_FROM` | Optional, and all five together or none. With them the instance can mail invites, verification and password resets; without them it sends nothing and the sign-in screen stops offering a reset link. |
+| `SMTP_HOST`, `SMTP_PORT`, `SMTP_USER`, `SMTP_PASSWORD`, `SMTP_FROM` | Optional, and all five together or none. An email address is asked for at sign-up either way. With them the instance mails a verification link and keeps the new member on a verify screen until it is opened; without them there is nowhere to send one, so accounts are verified on the spot and the sign-in screen stops offering a password reset. |
+| `SMTP_STARTTLS` | `true`. The one reason to turn it off is a local mail catcher while developing, which has no certificate to offer. |
 
 `POSTGRES_PASSWORD` and `SECRET_KEY` must change. The api refuses to start
 while either is still the example value, and says which one.
@@ -68,7 +71,9 @@ docker compose exec api python manage.py create-invite
 That prints the code and the path it lives at; the whole link is your address
 followed by that path. `--days 7` gives it an expiry.
 
-On an instance that sends no mail, an address is marked verified by hand:
+An instance that sends mail keeps a new member on the verify screen until they
+open the link. When one never arrives and resending does not help, the address
+can be marked verified by hand:
 
 ```
 docker compose exec api python manage.py verify-email --username someone

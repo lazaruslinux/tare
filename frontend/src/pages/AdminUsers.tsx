@@ -83,9 +83,15 @@ export function AdminUsers({ onBack }: { onBack: () => void }) {
                   {/* They have put their name forward and nobody has answered
                       yet, which is what the switch beside this is for. */}
                   {person.requested && <span className="t-chip shrink-0">Applied to review</span>}
+                  {/* Sitting behind the verify screen, or on an instance that
+                      sends no mail, never asked to answer one. */}
+                  {(person.email === null || !person.email_verified) && (
+                    <span className="t-chip shrink-0">Unverified</span>
+                  )}
                 </span>
                 <span className="block truncate text-xs text-muted">
                   {person.username}, joined {joined(person.created_at)}
+                  {person.email !== null && `, ${person.email}`}
                 </span>
                 <span className="mt-1 flex flex-wrap gap-x-3">
                   <Count label="waiting" total={person.submissions.pending} />

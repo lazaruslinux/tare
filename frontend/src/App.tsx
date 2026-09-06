@@ -29,6 +29,7 @@ import { Login } from './pages/Login'
 import { More, type Screen } from './pages/More'
 import { ResetPassword } from './pages/ResetPassword'
 import { VerifyEmail } from './pages/VerifyEmail'
+import { VerifyWall } from './pages/VerifyWall'
 import { Welcome } from './pages/Welcome'
 
 // What the right-hand column has opened over the tab: one workout, or the
@@ -51,12 +52,21 @@ type Phase =
   | 'verify'
   | 'reset'
   | 'anon'
+  | 'unverified'
   | 'firstrun'
   | 'birthdate'
   | 'signedin'
 
+// Whether this instance sends mail, which is what decides whether an account
+// that has not answered its mail is walled. Without a mail server there is no
+// link to open, and the server gates nothing.
+type Version = { version: string; mail: boolean }
+
 export default function App() {
   const [me, setMe] = useState<Me | null>(null)
+  // Whether this instance sends mail. Null until it has said, and nothing that
+  // decides between the wall and the app runs before then.
+  const [mail, setMail] = useState<boolean | null>(null)
   // An invite, a verification link or a reset link is answered before anything
   // asks who is signed in: all three are opened by somebody who is not.
   const [phase, setPhase] = useState<Phase>(entry.kind === 'app' ? 'loading' : entry.kind)
@@ -116,6 +126,16 @@ export default function App() {
     setMe(who)
   }, [])
 
+  // Where an account lands, whichever door it came through, in the order the
+  // questions have to be answered: the address first, because nothing else
+  // answers until it is settled, then the birthdate every account needs, then
+  // the questions asked on the way in.
+  const landing = (who: Me): Phase => {
+    if (mail === true && (who.email === null || !who.email_verified)) return 'unverified'
+    if (who.birthdate === null) return 'birthdate'
+    return who.first_run_pending ? 'firstrun' : 'signedin'
+  }
+
   // Which screen the More tab is on. Leaving Fitness drops the day somebody
   // was sent to, so the row into it opens on today next time.
   const noteMoreScreen = useCallback((next: Screen) => {
@@ -131,22 +151,34 @@ export default function App() {
     refreshWaiting()
   })
 
+  // Asked once, whichever door the app was opened through, because every one
+  // of them ends in the same question about the account's address.
   useEffect(() => {
-    if (phase !== 'loading') return
+    let alive = true
+    api<Version>('/version')
+      .then((instance) => alive && setMail(instance.mail))
+      // An instance that will not say is read as one that sends nothing. The
+      // server refuses the routes either way; this only picks the screen.
+      .catch(() => alive && setMail(false))
+    return () => {
+      alive = false
+    }
+  }, [])
+
+  useEffect(() => {
+    if (phase !== 'loading' || mail === null) return
     let alive = true
     api<Me>('/auth/me')
       .then((who) => {
         if (!alive) return
         remember(who)
-        // An account made before tare asked for a birthdate answers that one
-        // question before anything else opens.
-        setPhase(who.birthdate === null ? 'birthdate' : 'signedin')
+        setPhase(landing(who))
       })
       .catch(() => alive && setPhase('anon'))
     return () => {
       alive = false
     }
-  }, [phase])
+  }, [phase, mail])
 
   const select = (next: Page) => {
     if (next === page) {
@@ -195,18 +227,26 @@ export default function App() {
     setAdding((was) => !was)
   }
 
-  const enterFirstRun = async () => {
-    // Registration answered "ready", which means the session cookie is already
-    // set; this is the account it belongs to.
-    remember(await api<Me>('/auth/me'))
-    setPhase('firstrun')
-  }
-
   const enter = (who: Me) => {
     remember(who)
-    // The same question the first load asks: an account without a birthdate
-    // answers it before the app opens, whichever door it came through.
-    setPhase(who.birthdate === null ? 'birthdate' : 'signedin')
+    setPhase(landing(who))
+  }
+
+  const enterFirstRun = async () => {
+    // Registration set the session cookie whichever ending it gave, so this is
+    // the account it belongs to. Where it lands is the same question every
+    // other door asks, and the account itself carries the answers.
+    enter(await api<Me>('/auth/me'))
+  }
+
+  // The wall asking whether the link has been opened yet. The app moves on by
+  // itself when it has, and says so when it has not.
+  const recheck = async () => {
+    const who = await api<Me>('/auth/me')
+    remember(who)
+    const next = landing(who)
+    setPhase(next)
+    return next !== 'unverified'
   }
 
   const leave = () => {
@@ -222,7 +262,9 @@ export default function App() {
     return <Welcome code={entry.code} onReady={enterFirstRun} />
   }
   if (phase === 'verify' && entry.kind === 'verify') {
-    return <VerifyEmail token={entry.token} onSignIn={() => setPhase('anon')} />
+    // Back to the first load: with a session it reads the account and lands
+    // where it belongs, and without one it falls through to the sign-in screen.
+    return <VerifyEmail token={entry.token} onContinue={() => setPhase('loading')} />
   }
   if (phase === 'reset' && entry.kind === 'reset') {
     // Spending the link signs the browser in, so this lands where a sign-in
@@ -230,6 +272,11 @@ export default function App() {
     return <ResetPassword token={entry.token} onSignedIn={enter} />
   }
   if (phase === 'anon' || me === null) return <Login onSignedIn={enter} />
+  // Nothing else on this instance answers until the link is opened, so this
+  // stands ahead of every screen the app has.
+  if (phase === 'unverified') {
+    return <VerifyWall me={me} onVerified={recheck} onSignOut={leave} />
+  }
   if (phase === 'birthdate') return <Birthdate onDone={enter} />
   if (phase === 'firstrun') {
     return (

@@ -119,6 +119,8 @@ class User(Base):
     invite_id: Mapped[int | None] = mapped_column(
         ForeignKey("invites.id", ondelete="SET NULL"), nullable=True, index=True
     )
+    # Null until the first-run screen has been answered or skipped.
+    first_run_at: Mapped[dt.datetime | None] = mapped_column(UtcDateTime, nullable=True)
     created_at: Mapped[dt.datetime] = mapped_column(UtcDateTime, nullable=False, default=now_utc)
 
 

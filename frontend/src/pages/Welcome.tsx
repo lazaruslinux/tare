@@ -8,14 +8,9 @@ import { TareWordmark } from '../components/TareWordmark'
 type Invite = { inviter_display_name: string }
 type Registration = { state: 'ready' | 'check_email' }
 
-// Whether this instance sends mail, which is what decides if the address is
-// optional: with a mail server the server refuses to sign anybody up without one.
-type Version = { version: string; mail: boolean }
-
 export function Welcome({ code, onReady }: { code: string; onReady: () => void }) {
   const [invite, setInvite] = useState<Invite | null>(null)
   const [dead, setDead] = useState('')
-  const [sent, setSent] = useState(false)
   // The summary, opened in place. Nothing about the address changes, so the
   // invite code is not spent by a look at what it is an invite to.
   const [about, setAbout] = useState(false)
@@ -24,20 +19,9 @@ export function Welcome({ code, onReady }: { code: string; onReady: () => void }
   const [password, setPassword] = useState('')
   const [birthdate, setBirthdate] = useState('')
   const [email, setEmail] = useState('')
-  const [mail, setMail] = useState(false)
   const [displayName, setDisplayName] = useState('')
   const [error, setError] = useState('')
   const [busy, setBusy] = useState(false)
-
-  useEffect(() => {
-    let alive = true
-    api<Version>('/version')
-      .then((instance) => alive && setMail(instance.mail))
-      .catch(() => {})
-    return () => {
-      alive = false
-    }
-  }, [])
 
   useEffect(() => {
     let alive = true
@@ -54,7 +38,10 @@ export function Welcome({ code, onReady }: { code: string; onReady: () => void }
     setBusy(true)
     setError('')
     try {
-      const answer = await api<Registration>('/auth/register', {
+      // Both endings sign the browser in, so the answer is not read here:
+      // which screen that lands on is the app's call, either the first-run
+      // questions or the wall until the mailed link is opened.
+      await api<Registration>('/auth/register', {
         method: 'POST',
         body: {
           invite_code: code,
@@ -69,8 +56,7 @@ export function Welcome({ code, onReady }: { code: string; onReady: () => void }
           timezone: Intl.DateTimeFormat().resolvedOptions().timeZone,
         },
       })
-      if (answer.state === 'ready') onReady()
-      else setSent(true)
+      onReady()
     } catch (failure) {
       setError(errorText(failure))
       setBusy(false)
@@ -88,16 +74,6 @@ export function Welcome({ code, onReady }: { code: string; onReady: () => void }
   // Nothing at all until the invite has answered: a form that appears and then
   // disappears is worse than a moment of quiet.
   if (!invite) return null
-
-  if (sent) {
-    return (
-      <div className="t-center">
-        <p className="max-w-sm text-center text-muted">
-          Check your email for a link to finish signing up.
-        </p>
-      </div>
-    )
-  }
 
   return (
     <div className="t-center">
@@ -168,11 +144,11 @@ export function Welcome({ code, onReady }: { code: string; onReady: () => void }
             </div>
             <div>
               <label className="t-label" htmlFor="new-email">
-                {mail ? 'Email' : 'Email (optional)'}
+                Email
               </label>
               <input
                 id="new-email"
-                required={mail}
+                required
                 className="t-input"
                 type="email"
                 autoComplete="email"

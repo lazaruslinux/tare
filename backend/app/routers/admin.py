@@ -795,6 +795,9 @@ def read_users(
             "role": profiles.role_of(person),
             # Whether they have asked to review and nobody has answered yet.
             "requested": person.reviewer_requested_at is not None,
+            # The address, so an administrator can tell who is sitting behind
+            # the verify screen and why.
+            "email": person.email,
             "email_verified": person.email_verified,
             "created_at": person.created_at,
             "submissions": {

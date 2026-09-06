@@ -16,6 +16,9 @@ def signup(client, code, username="newcomer"):
             "password": PASSWORD,
             "birthdate": BIRTHDATE.isoformat(),
             "timezone": "UTC",
+            # Required on every instance, and one per name so three seats are
+            # three accounts rather than three tries at the same address.
+            "email": f"{username}@example.com",
         },
     )
 

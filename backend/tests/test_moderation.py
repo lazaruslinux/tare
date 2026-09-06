@@ -1122,6 +1122,7 @@ def test_a_link_records_who_came_in_through_it(client, db_session, admin_client,
                 "password": PASSWORD,
                 "birthdate": BIRTHDATE.isoformat(),
                 "timezone": "UTC",
+                "email": f"{name}@example.com",
             },
         )
         assert response.status_code == 200
@@ -1205,6 +1206,9 @@ def test_the_member_list_counts_what_each_person_has_offered(
     assert rows["member"]["is_admin"] is False
     assert rows["member"]["role"] is None
     assert rows["member"]["requested"] is False
+    # The address rides along, so an administrator can see who is sitting
+    # behind the verify screen and why.
+    assert "email" in rows["member"]
     assert rows["member"]["email_verified"] is True
     assert rows["member"]["created_at"] is not None
 

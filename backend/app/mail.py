@@ -93,7 +93,7 @@ def send_reset(address: str, token: str) -> None:
 
 
 def send(to: str, subject: str, body: str) -> None:
-    """One plain-text message over STARTTLS."""
+    """One plain-text message, over STARTTLS unless it is turned off."""
     message = EmailMessage()
     message["Subject"] = subject
     message["From"] = settings.smtp_from
@@ -102,7 +102,10 @@ def send(to: str, subject: str, body: str) -> None:
 
     try:
         with smtplib.SMTP(settings.smtp_host, settings.smtp_port, timeout=20) as server:
-            server.starttls()
+            # Off only for a local mail catcher, which has no certificate to
+            # offer and never leaves the machine.
+            if settings.smtp_starttls:
+                server.starttls()
             server.login(settings.smtp_user, settings.smtp_password)
             server.send_message(message)
     except (smtplib.SMTPException, OSError):

@@ -119,6 +119,9 @@ def test_upgrade_head_builds_the_identity_schema(tmp_path):
     assert "location" in user_columns
     # The second role, and the application an administrator answers.
     assert {"is_reviewer", "reviewer_requested_at"} <= user_columns
+    # When the first-run screen was answered, which the account carries rather
+    # than the browser it was shown in.
+    assert "first_run_at" in user_columns
     # What everybody with a role did, and the stamp an edit is written against.
     assert "review_log" in tables
     assert "updated_at" in food_columns
@@ -242,3 +245,34 @@ def test_the_kept_list_becomes_favorites_without_doubling_anything(tmp_path):
         engine.dispose()
     assert starred == [(1, 1), (1, 2)]
     assert "kept_foods" not in tables
+
+
+def test_every_account_that_already_exists_is_past_the_first_run_screen(tmp_path):
+    """Nobody who is already a member is sent back through the questions."""
+    database = tmp_path / "tare.db"
+    config = Config(str(BACKEND / "alembic.ini"))
+    config.set_main_option("script_location", str(BACKEND / "migrations"))
+    config.set_main_option("sqlalchemy.url", f"sqlite:///{database}")
+
+    command.upgrade(config, "0034_invite_seats")
+    engine = sa.create_engine(f"sqlite:///{database}")
+    try:
+        with engine.begin() as connection:
+            connection.execute(
+                sa.text(
+                    "INSERT INTO users (id, username, password_hash, created_at,"
+                    " share_age, share_sex, share_location, share_workouts,"
+                    " share_journal, share_weight_loss, clock)"
+                    " VALUES (1, 'member', 'x', :at, 0, 0, 0, 0, 0, 0, '12h')"
+                ),
+                {"at": "2026-09-01 08:00:00"},
+            )
+
+        command.upgrade(config, "head")
+
+        with engine.connect() as connection:
+            stamps = connection.execute(sa.text("SELECT first_run_at FROM users")).scalars().all()
+    finally:
+        engine.dispose()
+    assert len(stamps) == 1
+    assert stamps[0] is not None

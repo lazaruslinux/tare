@@ -23,6 +23,9 @@ export type Me = {
   display_name: string | null
   email: string | null
   email_verified: boolean
+  // The address a change is waiting on, or null. Set while the link sent to
+  // the new address is unopened; the old one is still the account's until then.
+  pending_email: string | null
   is_admin: boolean
   role: Role
   // How many of this account's offers the Tare database took, and whether that
@@ -38,6 +41,10 @@ export type Me = {
   // Null on an account made before tare asked for one, which is what sends it
   // to the one screen that does.
   birthdate: string | null
+  // Whether the questions asked on the way in are still to be answered. The
+  // server's fact, so meeting the verify screen first does not cost somebody
+  // the first-run screen.
+  first_run_pending: boolean
   location: string | null
   // The picture other members see beside this account's name, or null for its
   // initial.
@@ -486,6 +493,7 @@ export type AdminUser = {
   role: Role
   // Whether they have applied to review and nobody has answered yet.
   requested: boolean
+  email: string | null
   email_verified: boolean
   created_at: string
   submissions: { pending: number; approved: number; rejected: number }

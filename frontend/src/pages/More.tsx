@@ -211,6 +211,14 @@ export function More({
   const [passwordSaved, markPasswordSaved] = useSavedChip()
   const [savingPassword, setSavingPassword] = useState(false)
 
+  // Whether the Email card has its field open, and what is typed in it. The
+  // address on the account is not touched until the link sent to the new one
+  // is opened, so this is a request rather than an edit.
+  const [changingEmail, setChangingEmail] = useState(false)
+  const [newEmail, setNewEmail] = useState('')
+  const [emailError, setEmailError] = useState('')
+  const [savingEmail, setSavingEmail] = useState(false)
+
   useEffect(() => {
     let alive = true
     api<SyncKey>('/account/ingest-token')
@@ -294,6 +302,20 @@ export function More({
       setAccountError(errorText(failure))
     }
     setSavingAccount(false)
+  }
+
+  const sendEmailLink = async (event: FormEvent) => {
+    event.preventDefault()
+    setSavingEmail(true)
+    setEmailError('')
+    try {
+      onChange(await api<Me>('/account/email', { method: 'POST', body: { email: newEmail } }))
+      setChangingEmail(false)
+      setNewEmail('')
+    } catch (failure) {
+      setEmailError(errorText(failure))
+    }
+    setSavingEmail(false)
   }
 
   const savePassword = async (event: FormEvent) => {
@@ -435,7 +457,52 @@ export function More({
       <>
         <div className="t-card mb-3">
           <p className="t-micro mb-2">Email</p>
-          <p className="text-sm">{me.email ?? 'Not set'}</p>
+          <div className="flex items-center gap-2">
+            <p className="min-w-0 flex-1 truncate text-sm">{me.email ?? 'Not set'}</p>
+            {!me.email_verified && <span className="t-chip shrink-0">Unverified</span>}
+          </div>
+          {/* The new address is only a request until its link is opened, so the
+              card says where the link went rather than showing it as the one
+              on the account. */}
+          {me.pending_email !== null && (
+            <p className="mt-2 text-sm text-muted">Verification sent to {me.pending_email}.</p>
+          )}
+          <button
+            type="button"
+            className="mt-2 inline-flex min-h-11 items-center text-sm text-accent underline underline-offset-4"
+            onClick={() => {
+              setChangingEmail(!changingEmail)
+              setEmailError('')
+            }}
+          >
+            Change
+          </button>
+          {changingEmail && (
+            <form className="mt-1 flex flex-col gap-3" onSubmit={sendEmailLink}>
+              <div>
+                <label className="t-label" htmlFor="settings-email">
+                  New email
+                </label>
+                <input
+                  id="settings-email"
+                  className="t-input"
+                  type="email"
+                  autoComplete="email"
+                  autoCapitalize="none"
+                  value={newEmail}
+                  onChange={(event) => setNewEmail(event.target.value)}
+                />
+              </div>
+              {emailError && <p className="t-error">{emailError}</p>}
+              <button
+                className="t-btn t-btn-primary"
+                type="submit"
+                disabled={!newEmail || savingEmail}
+              >
+                Send the link
+              </button>
+            </form>
+          )}
           <p className="mt-2 text-xs text-muted">
             Used to sign in and to reset your password. Never sold, never added to a list.
           </p>
