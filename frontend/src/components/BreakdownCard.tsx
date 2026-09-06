@@ -1,6 +1,6 @@
 import { AnimatePresence, motion, useReducedMotion } from 'framer-motion'
 import { ChevronDown } from 'lucide-react'
-import { useState, type ReactNode } from 'react'
+import { useEffect, useState, type ReactNode } from 'react'
 
 import type { DayEnergy } from '../api'
 import { LEVEL_LABEL, calText } from '../lib/targets'
@@ -66,15 +66,25 @@ const signed = (value: number): string =>
 // the card instead of sitting in one.
 export function BreakdownCard({
   energy,
+  reveal,
   children,
 }: {
   // Null while the budget is typed in by hand or the profile is short of a
   // detail: then this is an ordinary card with nothing to open.
   energy: DayEnergy | null
+  // Bumped by whatever owns the card to open the fold from inside it, the
+  // way a badge that stands for one of the five figures does.
+  reveal?: number
   children: ReactNode
 }) {
   const [open, setOpen] = useState(remembered)
   const reduced = useReducedMotion()
+
+  useEffect(() => {
+    if (reveal === undefined || reveal === 0) return
+    setOpen(true)
+    keep(true)
+  }, [reveal])
 
   const toggle = () => {
     const next = !open

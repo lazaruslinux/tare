@@ -153,6 +153,18 @@ export function Journal({
   // A day the member has closed. Nothing on it can be written until the check
   // is tapped again, and the server holds the same rule.
   const locked = day !== null && day.completed
+  // Against what the body uses today, exercise included, rather than against
+  // the target: on a fast goal rate a day over target is still a day under.
+  const gap =
+    day === null || day.energy === null
+      ? null
+      : Math.round(
+          day.energy.resting +
+            day.energy.activity +
+            day.energy.exercise -
+            (day.totals.calories ?? 0)
+        )
+  const [reveal, setReveal] = useState(0)
 
   const toggleComplete = async () => {
     if (day === null || marking) return
@@ -343,7 +355,7 @@ export function Journal({
       )}
 
       {day !== null && (
-        <BreakdownCard energy={day.energy}>
+        <BreakdownCard energy={day.energy} reveal={reveal}>
           <div className="mb-1 flex items-center justify-between">
             <p className="t-micro">Remaining today</p>
             <button
@@ -359,9 +371,23 @@ export function Journal({
             {calText(day.remaining_calories)}
             <span className="ml-1 text-sm font-normal text-muted">cal</span>
           </span>
-          <span className="block text-xs text-muted">
-            {nutrientText('calories', day.totals.calories ?? 0)} consumed of{' '}
-            {calText(day.budget.calories + day.exercise_kcal)}
+          <span className="flex items-center gap-2 text-xs text-muted">
+            <span>
+              {nutrientText('calories', day.totals.calories ?? 0)} consumed of{' '}
+              {calText(day.budget.calories + day.exercise_kcal)}
+            </span>
+            {gap !== null && (
+              <button
+                type="button"
+                className={`t-chip ${
+                  gap > 0 ? 'border-accent text-accent' : gap < 0 ? 'border-orange text-orange' : ''
+                }`}
+                aria-label="Show where the number comes from"
+                onClick={() => setReveal((count) => count + 1)}
+              >
+                {gap > 0 ? `Deficit ${calText(gap)}` : gap < 0 ? `Surplus ${calText(-gap)}` : 'Even'}
+              </button>
+            )}
           </span>
           {day.exercise_kcal > 0 && (
             <span className="block text-xs text-muted">
