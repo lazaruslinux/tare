@@ -181,6 +181,24 @@ def test_a_reviewer_is_served_the_panel_a_proposal_was_read_off(db_session, make
         readable_photo(db_session, stranger, label.id)
 
 
+def test_the_queue_says_whose_each_row_is(client, db_session, make_user):
+    """A reviewer reads one name for one person, and knows their own row."""
+    member = make_user("member")
+    member.display_name = "Sam"
+    reviewer = make_reviewer(db_session, make_user)
+    theirs = a_request(db_session, member, a_food(db_session, member))
+    own = a_request(db_session, reviewer, a_food(db_session, reviewer, name="Fig roll"))
+    sign_in(client, "reviewer")
+
+    rows = {item["id"]: item for item in client.get("/api/admin/queue").json()}
+    assert rows[theirs.id]["submitted_by"] == "Sam"
+    assert rows[theirs.id]["submitted_by_id"] == member.id
+    assert rows[theirs.id]["mine"] is False
+    # Nobody has named themselves here, so the login name is what there is.
+    assert rows[own.id]["submitted_by"] == "reviewer"
+    assert rows[own.id]["mine"] is True
+
+
 # And what they may not
 # ---------------------
 
@@ -207,6 +225,37 @@ def test_the_rest_of_the_administration_is_shut_to_a_reviewer(client, db_session
     gone = client.delete(f"/api/foods/{food.id}")
     assert gone.status_code == 403
     assert db_session.get(models.Food, food.id) is not None
+
+
+def test_a_reviewer_cannot_decide_their_own_submission(client, db_session, make_user):
+    reviewer = make_reviewer(db_session, make_user)
+    member = make_user("member")
+    mine = a_request(db_session, reviewer, a_food(db_session, reviewer))
+    theirs = a_request(db_session, member, a_food(db_session, member, name="Fig roll"))
+    sign_in(client, "reviewer")
+
+    for call in (
+        lambda: client.post(f"/api/admin/queue/{mine.id}/approve", json={}),
+        lambda: client.post(f"/api/admin/queue/{mine.id}/reject", json={"note": "no"}),
+    ):
+        refused = call()
+        assert refused.status_code == 403
+        assert refused.json() == {"detail": "You can't review your own submission."}
+    db_session.refresh(mine)
+    assert mine.status == "pending"
+
+    # Somebody else's is the job, and it decides as it always did.
+    assert client.post(f"/api/admin/queue/{theirs.id}/approve", json={}).status_code == 200
+
+
+def test_an_administrator_decides_their_own_submission(db_session, admin, admin_client):
+    """They see the whole queue, and there is nobody above them to ask."""
+    mine = a_request(db_session, admin, a_food(db_session, admin))
+
+    decided = admin_client.post(f"/api/admin/queue/{mine.id}/approve", json={})
+    assert decided.status_code == 200
+    db_session.refresh(mine)
+    assert mine.status == "approved"
 
 
 # Handing the role out

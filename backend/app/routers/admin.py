@@ -56,6 +56,9 @@ NOT_WAITING = "That submission has already been decided."
 # A no is the one decision somebody has to be able to answer, so it carries a
 # reason or it is not made.
 NO_REASON = "Give a reason."
+# A reviewer answering their own request is reading the answer to it. An
+# administrator is trusted with the whole queue, their own included.
+OWN_SUBMISSION = "You can't review your own submission."
 NO_FOOD = "The food this was about is gone."
 NO_PHOTO = "The photo this was about is gone."
 # A picture offered on its own is the picture: there is nothing to swap it for
@@ -146,6 +149,12 @@ def waiting(db: Session, submission_id: int) -> models.FoodSubmission:
     return submission
 
 
+def not_your_own(submission: models.FoodSubmission, reviewer: models.User) -> None:
+    """Nobody reviews their own, unless they are the administrator."""
+    if not reviewer.is_admin and submission.submitted_by_id == reviewer.id:
+        raise HTTPException(status.HTTP_403_FORBIDDEN, OWN_SUBMISSION)
+
+
 def offered_food(db: Session, submission: models.FoodSubmission) -> models.Food:
     food = db.get(models.Food, submission.food_id) if submission.food_id else None
     if food is None:
@@ -191,7 +200,10 @@ def named(food: models.Food) -> dict[str, object]:
 
 
 def queue_item(
-    db: Session, submission: models.FoodSubmission, username: str | None
+    db: Session,
+    submission: models.FoodSubmission,
+    submitted_by: str | None,
+    mine: bool = False,
 ) -> dict[str, object] | None:
     """One waiting request with everything it is judged against.
 
@@ -230,8 +242,13 @@ def queue_item(
         "note": submission.note,
         "created_at": submission.created_at,
         # Null once the account that asked is gone. The request is still worth
-        # judging; there is just nobody to tell.
-        "submitted_by": username,
+        # judging; there is just nobody to tell. The name every other screen
+        # shows them under, so a reviewer reads one name for one person.
+        "submitted_by": submitted_by,
+        "submitted_by_id": submission.submitted_by_id,
+        # Whether the reader is the one who asked. A reviewer does not decide
+        # their own, so the screen greys the row rather than offering it.
+        "mine": mine,
         "photo_url": None if photo is None else photo_url(photo.id),
         # The nutrition panel this was read off, for checking the numbers
         # against. Only this screen ever asks for it, and only an
@@ -244,7 +261,9 @@ def queue_item(
     }
 
 
-def waiting_items(db: Session) -> list[dict[str, object]]:
+def waiting_items(
+    db: Session, reviewer: models.User | None = None
+) -> list[dict[str, object]]:
     """Everything waiting, oldest first: a queue, not a feed.
 
     Its own function so the strip that says how many are waiting counts the
@@ -252,7 +271,7 @@ def waiting_items(db: Session) -> list[dict[str, object]]:
     most of the time.
     """
     rows = db.execute(
-        select(models.FoodSubmission, models.User.username)
+        select(models.FoodSubmission, models.User.username, models.User.display_name)
         .outerjoin(models.User, models.User.id == models.FoodSubmission.submitted_by_id)
         .where(models.FoodSubmission.status == "pending")
         .order_by(models.FoodSubmission.created_at, models.FoodSubmission.id)
@@ -260,8 +279,13 @@ def waiting_items(db: Session) -> list[dict[str, object]]:
     ).all()
 
     queue: list[dict[str, object]] = []
-    for submission, username in rows:
-        item = queue_item(db, submission, username)
+    for submission, username, display_name in rows:
+        item = queue_item(
+            db,
+            submission,
+            display_name or username,
+            reviewer is not None and submission.submitted_by_id == reviewer.id,
+        )
         if item is not None:
             queue.append(item)
     return queue
@@ -271,7 +295,7 @@ def waiting_items(db: Session) -> list[dict[str, object]]:
 def read_queue(
     db: Session = Depends(get_db), reviewer: models.User = Depends(require_reviewer)
 ) -> list[dict[str, object]]:
-    return waiting_items(db)
+    return waiting_items(db, reviewer)
 
 
 def approve_edit(
@@ -385,6 +409,7 @@ def approve(
 ) -> dict[str, object]:
     """Say yes. What that means depends on what was asked for."""
     submission = waiting(db, submission_id)
+    not_your_own(submission, reviewer)
     if submission.kind == "edit":
         return approve_edit(db, submission, reviewer)
     if submission.kind == "photo":
@@ -555,6 +580,7 @@ def reject(
     file rather than a state.
     """
     submission = waiting(db, submission_id)
+    not_your_own(submission, reviewer)
     reason = body.note.strip()
     # Read while the food this was about is still reachable: rejecting a
     # correction throws its working copy away.

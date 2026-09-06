@@ -453,6 +453,10 @@ export type QueueItem = {
   note: string
   created_at: string
   submitted_by: string | null
+  submitted_by_id: number | null
+  // Whether the reader is the one who asked. A reviewer does not decide their
+  // own, so the row is greyed rather than opened.
+  mine: boolean
   // The picture being offered. Null unless one came with the request.
   photo_url: string | null
   // The nutrition panel it was read off, for checking the numbers against.

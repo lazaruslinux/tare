@@ -1,3 +1,4 @@
+import { ChevronRight } from 'lucide-react'
 import { useEffect, useId, useState, type ChangeEvent } from 'react'
 
 import {
@@ -7,6 +8,7 @@ import {
   foodPhoto,
   upload,
   type Food,
+  type Me,
   type PhotoPurpose,
   type Proposed,
   type QueueItem,
@@ -294,10 +296,13 @@ function Comparison({
 }
 
 export function AdminQueue({
+  me,
   refresh,
   onBack,
   onDecided,
 }: {
+  // Read for one thing: an administrator decides their own, a reviewer does not.
+  me: Me
   // The app-wide change tick. Somebody submitting a food while this is open
   // puts it in the queue, and the queue is what this screen is.
   refresh: number
@@ -328,10 +333,26 @@ export function AdminQueue({
   // The request an approval is being confirmed for. His decision: yes is the
   // one answer here that cannot be taken back, so it is asked twice.
   const [approving, setApproving] = useState<QueueItem | null>(null)
+  // Which row is open. The queue is a list of line items; one card at a time
+  // is read out of it.
+  const [selected, setSelected] = useState<number | null>(null)
+
+  const items = queue ?? []
+  // The open one, or nothing: a row withdrawn or decided while it was open is
+  // no longer in the queue, and the list is where that leaves the screen.
+  const chosen = selected === null ? null : (items.find((row) => row.id === selected) ?? null)
+  const chosenAbout = chosen === null ? null : chosen.kind === 'new' ? chosen.food : chosen.target
 
   // The form names itself while a proposal is being corrected.
   useTopBar(
-    adjusting === null ? { title: 'Review queue', back: { label: 'More', onBack } } : null
+    adjusting !== null
+      ? null
+      : chosen === null
+        ? { title: 'Review queue', back: { label: 'More', onBack } }
+        : {
+            title: chosenAbout?.name ?? 'A deleted food',
+            back: { label: 'Review queue', onBack: () => setSelected(null) },
+          }
   )
 
   const load = () =>
@@ -371,6 +392,7 @@ export function AdminQueue({
       setRejecting(null)
       setReason('')
       setApproving(null)
+      setSelected(null)
       await load()
       onDecided()
     } catch (failure) {
@@ -500,7 +522,41 @@ export function AdminQueue({
         </div>
       )}
 
-      {(queue ?? []).map((item) => {
+      {chosen === null && items.length > 0 && (
+        <div className="t-card mb-3">
+          {items.map((item) => {
+            const about = item.kind === 'new' ? item.food : item.target
+            // Their own row is greyed and does not open. An administrator has
+            // no such row: they decide everything, their own included.
+            const locked = item.mine && !me.is_admin
+            const who = locked ? 'by You' : `From ${item.submitted_by ?? 'a closed account'}`
+            return (
+              <button
+                key={item.id}
+                type="button"
+                className={`t-row w-full text-left ${locked ? 'opacity-50' : ''}`}
+                aria-disabled={locked || undefined}
+                onClick={locked ? undefined : () => setSelected(item.id)}
+              >
+                <span className="min-w-0 flex-1">
+                  <span className="block truncate text-sm font-medium">
+                    {about?.name ?? 'A deleted food'}
+                  </span>
+                  <span className="block truncate text-xs text-muted">
+                    {who} &middot; {about?.brand || 'No brand'}
+                  </span>
+                </span>
+                <span className="t-chip shrink-0">{KIND_LABEL[item.kind] ?? item.kind}</span>
+                {!locked && (
+                  <ChevronRight className="h-4 w-4 shrink-0 text-muted" strokeWidth={2} />
+                )}
+              </button>
+            )
+          })}
+        </div>
+      )}
+
+      {(chosen === null ? [] : [chosen]).map((item) => {
         const about = item.kind === 'new' ? item.food : item.target
         // What the food is, in the words on the package. A proposal carries its
         // own; anything about a shared food carries the shared one's.

@@ -436,7 +436,9 @@ export function More({
   if (screen === 'feedbacklog') return <FeedbackLog />
 
   if (screen === 'queue') {
-    return <AdminQueue refresh={refresh} onBack={leaveAdmin} onDecided={onReviewed} />
+    return (
+      <AdminQueue me={me} refresh={refresh} onBack={leaveAdmin} onDecided={onReviewed} />
+    )
   }
   if (screen === 'reviewlog') return <ReviewLog me={me} onBack={() => go(null)} />
   if (screen === 'invites') return <AdminInvites onBack={leaveAdmin} />
