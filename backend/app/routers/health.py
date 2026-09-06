@@ -18,6 +18,7 @@ import datetime as dt
 from fastapi import APIRouter, Depends, HTTPException, status
 from pydantic import BaseModel, Field
 from sqlalchemy import func, select
+from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session
 
 from app import clock, health, models
@@ -206,9 +207,21 @@ def profile_of(db: Session, user: models.User) -> models.HealthProfile:
     """
     row = db.get(models.HealthProfile, user.id)
     if row is None:
-        row = models.HealthProfile(user_id=user.id, dismissed_nudges=[])
-        db.add(row)
-        db.flush()
+        # A first screen asks for the day, the profile and the summary at once,
+        # so two requests can reach here together. The insert goes in a
+        # savepoint: the one that loses the race keeps its transaction and
+        # reads the row the other one made.
+        try:
+            with db.begin_nested():
+                row = models.HealthProfile(user_id=user.id, dismissed_nudges=[])
+                db.add(row)
+                db.flush()
+        except IntegrityError:
+            db.expire_all()
+            made = db.get(models.HealthProfile, user.id)
+            if made is None:
+                raise
+            row = made
     return row
 
 
