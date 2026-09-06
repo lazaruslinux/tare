@@ -12,6 +12,7 @@ import {
   type QueueItem,
 } from '../api'
 import { Lightbox } from '../components/Lightbox'
+import { Fold } from '../components/NutritionLabel'
 import { FoodForm } from '../components/FoodForm'
 import { Sheet } from '../components/Sheet'
 import { useTopBar } from '../hooks/useTopBar'
@@ -193,7 +194,7 @@ function Evidence({
 // prints, which is what the photograph beside it shows. Position 0 is that
 // serving. A proposal without one is read per the 100 it is stored in, named
 // as the serving it stands in for.
-function Panel({ food }: { food: Proposed }) {
+function Panel({ food, ingredients }: { food: Proposed; ingredients?: string | null }) {
   const serving = food.servings[0] ?? null
   const per =
     serving === null
@@ -216,7 +217,7 @@ function Panel({ food }: { food: Proposed }) {
         ))}
       </div>
 
-      <p className="t-micro mt-3 mb-1">Servings</p>
+      <p className="t-micro mt-3 mb-1">Serving name / size</p>
       {food.servings.map((serving, index) => (
         <div key={index} className="t-row min-h-8 text-sm">
           <span className="flex-1 text-muted">{serving.name}</span>
@@ -225,6 +226,15 @@ function Panel({ food }: { food: Proposed }) {
           </span>
         </div>
       ))}
+
+      {/* What the submitter says is in it, read against the label photo.
+          Folded, like the rest of the label: it is long and it is checked
+          second. */}
+      {ingredients && (
+        <Fold label="Ingredients">
+          <p className="text-xs text-muted whitespace-pre-line">{ingredients}</p>
+        </Fold>
+      )}
     </>
   )
 }
@@ -496,8 +506,6 @@ export function AdminQueue({
         // own; anything about a shared food carries the shared one's.
         const description =
           item.kind === 'new' ? item.food?.description : item.current?.description
-        // What the submitter says is in it, read against the label photo.
-        const ingredients = item.food?.ingredients_text
         // Held in a const so the buttons below narrow it too: a closure does
         // not keep the narrowing a JSX guard gave.
         const proposal = item.food
@@ -509,9 +517,6 @@ export function AdminQueue({
                   {about?.name ?? 'A deleted food'}
                 </p>
                 {description && <p className="truncate text-sm text-muted">{description}</p>}
-                {ingredients && (
-                  <p className="line-clamp-4 text-xs text-muted">{ingredients}</p>
-                )}
                 <p className="truncate text-sm text-muted">{about?.brand || 'No brand'}</p>
                 {item.kind === 'new' && item.food && (
                   <p className="truncate text-sm text-muted">{sectionLabel(item.food.section)}</p>
@@ -539,7 +544,7 @@ export function AdminQueue({
                   onRemove={(purpose) => void removePhoto(item.id, purpose)}
                 />
                 {item.kind === 'new' ? (
-                  <Panel food={proposal} />
+                  <Panel food={proposal} ingredients={proposal.ingredients_text} />
                 ) : (
                   <Comparison
                     now={item.current as Proposed}
@@ -561,7 +566,7 @@ export function AdminQueue({
 
             {item.kind === 'report' && item.current && (
               <>
-                <Panel food={item.current} />
+                <Panel food={item.current} ingredients={item.current.ingredients_text} />
                 <button
                   type="button"
                   className="t-btn mt-3 w-full"
@@ -636,7 +641,7 @@ export function AdminQueue({
                     setKeepPhoto({ ...keepPhoto, [item.id]: event.target.checked })
                   }
                 />
-                <span className="flex-1">Publish the photo with it</span>
+                <span className="flex-1">Keep front photo</span>
               </label>
             )}
 

@@ -19,7 +19,7 @@ import { joined } from './AdminUsers'
 const PICKER = 'Add a reviewer'
 const DEBOUNCE = 250
 const NOBODY = 'Nobody reviews yet. Add a reviewer below.'
-const NOTHING = 'Nobody matches that.'
+const NOTHING = 'No matches.'
 const FROM_THE_SHELL = 'The administrator role is granted from the shell, never from here.'
 
 // The three lists this screen is, read separately so each is the server's own
@@ -47,9 +47,9 @@ export function AdminRoles({ onBack }: { onBack: () => void }) {
   const [lists, setLists] = useState<Lists | null>(null)
   const [error, setError] = useState('')
   const [note, setNote] = useState('')
-  // Which reviewer a second tap would remove. Asking twice rather than opening
-  // a dialogue: the answer is one word and the row is already on screen.
-  const [sure, setSure] = useState<number | null>(null)
+  // The two questions this screen asks before it acts, each naming the person.
+  const [demoting, setDemoting] = useState<AdminUser | null>(null)
+  const [promoting, setPromoting] = useState<AdminUser | null>(null)
 
   const [picking, setPicking] = useState(false)
   const [find, setFind] = useState('')
@@ -91,7 +91,6 @@ export function AdminRoles({ onBack }: { onBack: () => void }) {
     const was = lists
     setError('')
     setNote('')
-    setSure(null)
     setLists((had) =>
       had === null
         ? had
@@ -154,7 +153,7 @@ export function AdminRoles({ onBack }: { onBack: () => void }) {
                 <button
                   type="button"
                   className="t-btn t-btn-primary flex-1"
-                  onClick={() => void decide(person, true)}
+                  onClick={() => setPromoting(person)}
                 >
                   Make a reviewer
                 </button>
@@ -184,11 +183,9 @@ export function AdminRoles({ onBack }: { onBack: () => void }) {
             <button
               type="button"
               className="shrink-0 text-sm font-semibold text-danger"
-              onClick={() =>
-                sure === person.id ? void decide(person, false) : setSure(person.id)
-              }
+              onClick={() => setDemoting(person)}
             >
-              {sure === person.id ? 'Sure?' : 'Remove'}
+              Remove
             </button>
           </div>
         ))}
@@ -217,11 +214,19 @@ export function AdminRoles({ onBack }: { onBack: () => void }) {
 
       <Sheet open={picking} label={PICKER} top tall onClose={() => setPicking(false)}>
         <p className="t-micro mb-2">{PICKER}</p>
+        {/* Nothing here may read as a sign-in field, or a phone offers its
+            saved passwords over the keyboard: no autofill, and no "username"
+            in the hint. */}
         <input
           className="t-input mb-3"
           type="search"
+          name="find-member"
+          autoComplete="off"
+          autoCorrect="off"
+          autoCapitalize="none"
+          spellCheck={false}
           autoFocus
-          placeholder="Name or username"
+          placeholder="Type a name"
           aria-label={PICKER}
           value={find}
           onChange={(event) => setFind(event.target.value)}
@@ -235,7 +240,7 @@ export function AdminRoles({ onBack }: { onBack: () => void }) {
             key={person.id}
             type="button"
             className="t-row w-full text-left"
-            onClick={() => void add(person)}
+            onClick={() => setPromoting(person)}
           >
             <span className="min-w-0 flex-1">
               <span className="block truncate text-sm">{shownName(person)}</span>
@@ -243,6 +248,71 @@ export function AdminRoles({ onBack }: { onBack: () => void }) {
             </span>
           </button>
         ))}
+      </Sheet>
+
+      <Sheet
+        open={demoting !== null}
+        label="Demote to member"
+        center
+        onClose={() => setDemoting(null)}
+      >
+        {demoting && (
+          <>
+            <p className="text-base font-semibold">Demote {shownName(demoting)} to member?</p>
+            <p className="mt-2 text-sm text-muted">They will not receive a notification.</p>
+            <div className="mt-4 flex gap-3">
+              <button
+                type="button"
+                className="t-btn t-btn-danger flex-1"
+                onClick={() => {
+                  const person = demoting
+                  setDemoting(null)
+                  void decide(person, false)
+                }}
+              >
+                Demote
+              </button>
+              <button type="button" className="t-btn" onClick={() => setDemoting(null)}>
+                Cancel
+              </button>
+            </div>
+          </>
+        )}
+      </Sheet>
+
+      <Sheet
+        open={promoting !== null}
+        label="Promote to reviewer"
+        center
+        onClose={() => setPromoting(null)}
+      >
+        {promoting && (
+          <>
+            <p className="text-base font-semibold">Promote {shownName(promoting)} to Reviewer?</p>
+            <p className="mt-2 text-sm text-muted">
+              They will be allowed to review &amp; approve item submissions for Tare. This can be
+              undone.
+            </p>
+            <div className="mt-4 flex gap-3">
+              <button
+                type="button"
+                className="t-btn t-btn-primary flex-1"
+                onClick={() => {
+                  const person = promoting
+                  setPromoting(null)
+                  // From the picker the whole screen is re-read; from the
+                  // waiting list the row moves at once.
+                  void (picking ? add(person) : decide(person, true))
+                }}
+              >
+                Promote
+              </button>
+              <button type="button" className="t-btn" onClick={() => setPromoting(null)}>
+                Cancel
+              </button>
+            </div>
+          </>
+        )}
       </Sheet>
     </>
   )

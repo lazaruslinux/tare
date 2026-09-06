@@ -10,7 +10,7 @@ import { useTopBar } from '../hooks/useTopBar'
 // How long the box waits after the last keystroke. Long enough that typing a
 // name is one request rather than six.
 const DEBOUNCE = 250
-const NOTHING = 'Nobody matches that.'
+const NOTHING = 'No matches.'
 
 export function joined(when: string): string {
   return new Date(when).toLocaleDateString(undefined, {
@@ -77,7 +77,8 @@ export function AdminUsers({ onBack }: { onBack: () => void }) {
       <input
         className="t-input mb-3"
         type="search"
-        placeholder="Name or username"
+          autoComplete="off"
+        placeholder="Type a name"
         aria-label="Search member accounts"
         value={query}
         onChange={(event) => setQuery(event.target.value)}

@@ -12,7 +12,7 @@ import { useTopBar } from '../hooks/useTopBar'
 
 // The same wait as every other box that types as somebody types.
 const DEBOUNCE = 250
-const NOTHING = 'Nobody matches that.'
+const NOTHING = 'No matches.'
 
 export function Members({
   me,
@@ -71,7 +71,8 @@ export function Members({
       <input
         className="t-input mb-3"
         type="search"
-        placeholder="Name or username"
+          autoComplete="off"
+        placeholder="Type a name"
         aria-label="Search members"
         value={query}
         onChange={(event) => setQuery(event.target.value)}
