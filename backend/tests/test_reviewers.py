@@ -364,6 +364,26 @@ def test_applying_at_the_threshold_is_recorded_once(client, db_session, make_use
     assert len(log_rows(db_session)) == 1
 
 
+def test_turning_an_application_down_answers_it_and_says_so(
+    db_session, make_user, admin_client
+):
+    member = make_user("member")
+    member.reviewer_requested_at = now_utc()
+    db_session.commit()
+
+    answered = admin_client.patch(f"/api/admin/users/{member.id}", json={"is_reviewer": False})
+    assert answered.status_code == 200
+    assert answered.json() == {"id": member.id, "role": None, "requested": False}
+    db_session.refresh(member)
+    # Answered, so it is no longer waiting on anybody, and they may ask again.
+    assert member.reviewer_requested_at is None
+    assert member.is_reviewer is False
+
+    row = log_rows(db_session)[-1]
+    assert row.action == "application_declined"
+    assert row.target_name == "member"
+
+
 def test_somebody_who_already_reviews_has_nothing_to_apply_for(
     client, db_session, make_user
 ):
@@ -381,12 +401,14 @@ def test_granting_the_role_answers_the_application(
     member.reviewer_requested_at = now_utc()
     db_session.commit()
 
-    waiting = {row["username"]: row for row in admin_client.get("/api/admin/users").json()}
+    listed = admin_client.get("/api/admin/users").json()["items"]
+    waiting = {row["username"]: row for row in listed}
     assert waiting["member"]["requested"] is True
 
     admin_client.patch(f"/api/admin/users/{member.id}", json={"is_reviewer": True})
     db_session.refresh(member)
     assert member.reviewer_requested_at is None
-    answered = {row["username"]: row for row in admin_client.get("/api/admin/users").json()}
+    again = admin_client.get("/api/admin/users").json()["items"]
+    answered = {row["username"]: row for row in again}
     assert answered["member"]["requested"] is False
     assert answered["member"]["role"] == "reviewer"

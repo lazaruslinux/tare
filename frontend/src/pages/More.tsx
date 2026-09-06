@@ -36,6 +36,7 @@ import { applyTheme, rememberTheme, useTheme, type Theme } from '../theme'
 import { About } from './About'
 import { AdminInvites } from './AdminInvites'
 import { AdminQueue } from './AdminQueue'
+import { AdminRoles } from './AdminRoles'
 import { AdminUploads } from './AdminUploads'
 import { AdminUsers } from './AdminUsers'
 import { Feedback, FeedbackLog } from './Feedback'
@@ -70,6 +71,7 @@ export type Screen =
   | 'queue'
   | 'reviewlog'
   | 'invites'
+  | 'roles'
   | 'users'
   | 'uploads'
   | 'feedbacklog'
@@ -449,6 +451,7 @@ export function More({
   }
   if (screen === 'reviewlog') return <ReviewLog me={me} onBack={() => go(null)} />
   if (screen === 'invites') return <AdminInvites onBack={leaveAdmin} />
+  if (screen === 'roles') return <AdminRoles onBack={leaveAdmin} />
   if (screen === 'users') return <AdminUsers onBack={leaveAdmin} />
   if (screen === 'uploads') return <AdminUploads onBack={() => go(null)} />
 
@@ -718,6 +721,7 @@ export function More({
               <>
                 <Row label="Review log" icon={History} onOpen={() => go('reviewlog')} />
                 <Row label="Invites" icon={Mail} onOpen={() => go('invites')} />
+                <Row label="Roles" icon={ShieldCheck} onOpen={() => go('roles')} />
                 <Row label="Member accounts" icon={Users} onOpen={() => go('users')} />
                 <Row label="Uploads" icon={Upload} onOpen={() => go('uploads')} />
                 <Row label="Feedback log" icon={ScrollText} onOpen={() => go('feedbacklog')} />

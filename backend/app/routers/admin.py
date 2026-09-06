@@ -21,7 +21,7 @@ invite links that are out, and who is on the instance.
 from __future__ import annotations
 
 from fastapi import APIRouter, Depends, HTTPException, status
-from sqlalchemy import delete, func, or_, select, update
+from sqlalchemy import ColumnElement, delete, func, or_, select, tuple_, update
 from sqlalchemy.orm import Session
 
 from app import models, profiles, schemas
@@ -33,6 +33,7 @@ from app.routers import invites
 from app.routers.foods import (
     FRONT_LABEL,
     LABEL_LABEL,
+    like_literal,
     photo_url,
     record_changes,
 )
@@ -762,17 +763,82 @@ def read_uploads(
 
 # ---- Who is on the instance ----
 
+# One page of the account list. Long enough that a small instance is one
+# request, short enough that the screen never draws a thousand rows nobody
+# asked for.
+USERS_PAGE = 50
+# The page marker, shared by both lists here that have one: it is the id of the
+# last row handed over and nothing else.
+BAD_CURSOR = "That page marker is not one of ours."
+# Which slice of the account list is wanted. Not a permission: it is the filter
+# above the list, so anything else is a typed mistake said back in words.
+USER_ROLES = ("reviewer", "admin", "requested")
+BAD_ROLE = "That is not a role Tare has."
+
+
+def name_match(needle: str) -> ColumnElement[bool]:
+    """Where a typed word may sit: the sign-in name, or the chosen one.
+
+    Read by both lists of people, so the account list and the roster can never
+    disagree about what a search found. Wildcards are taken out of the word: a
+    typed % otherwise matches everybody.
+    """
+    literal = like_literal(needle.strip().lower())
+    return or_(
+        func.lower(models.User.username).like(f"%{literal}%", escape="\\"),
+        func.lower(func.coalesce(models.User.display_name, "")).like(
+            f"%{literal}%", escape="\\"
+        ),
+    )
+
 
 @router.get("/users")
 def read_users(
-    db: Session = Depends(get_db), admin: models.User = Depends(require_admin)
-) -> list[dict[str, object]]:
-    """Everybody with an account, and how much each has offered.
+    q: str = "",
+    role: str | None = None,
+    cursor: str | None = None,
+    db: Session = Depends(get_db),
+    admin: models.User = Depends(require_admin),
+) -> dict[str, object]:
+    """One page of everybody with an account, newest first.
 
-    The counts are one grouped query rather than three per person: a small
-    instance would not notice the difference and a list that scales by asking
-    once is the one worth writing.
+    A page with a box above it rather than the whole table: every row carries
+    an address and a tally, and a list that draws all of them is a list that
+    gets slower every time somebody joins. Newest first because the account an
+    administrator has come here about is nearly always a recent one.
+
+    The counts are one grouped query rather than three per person, scoped to
+    the ids on this page: a list that scales by asking once is the one worth
+    writing.
     """
+    query = select(models.User)
+    if q.strip():
+        query = query.where(name_match(q))
+    if role is not None:
+        if role not in USER_ROLES:
+            raise HTTPException(status.HTTP_400_BAD_REQUEST, BAD_ROLE)
+        if role == "reviewer":
+            query = query.where(models.User.is_reviewer.is_(True))
+        elif role == "admin":
+            query = query.where(models.User.is_admin.is_(True))
+        else:
+            query = query.where(models.User.reviewer_requested_at.is_not(None))
+    if cursor is not None:
+        if not cursor.isdigit():
+            raise HTTPException(status.HTTP_400_BAD_REQUEST, BAD_CURSOR)
+        seen = db.get(models.User, int(cursor))
+        if seen is None:
+            raise HTTPException(status.HTTP_400_BAD_REQUEST, BAD_CURSOR)
+        # The pair rather than the id alone: two accounts made in the same
+        # second would otherwise hide each other at the seam of two pages.
+        query = query.where(
+            tuple_(models.User.created_at, models.User.id) < (seen.created_at, seen.id)
+        )
+
+    query = query.order_by(models.User.created_at.desc(), models.User.id.desc())
+    rows = list(db.execute(query.limit(USERS_PAGE + 1)).scalars())
+    more = len(rows) > USERS_PAGE
+    people = rows[:USERS_PAGE]
     tallies = {
         (user_id, outcome): int(total)
         for user_id, outcome, total in db.execute(
@@ -781,32 +847,36 @@ def read_users(
                 models.FoodSubmission.status,
                 func.count(),
             )
-            .where(models.FoodSubmission.submitted_by_id.is_not(None))
+            .where(models.FoodSubmission.submitted_by_id.in_([person.id for person in people]))
             .group_by(models.FoodSubmission.submitted_by_id, models.FoodSubmission.status)
         ).all()
     }
-    people = db.execute(select(models.User).order_by(models.User.id)).scalars()
-    return [
-        {
-            "id": person.id,
-            "username": person.username,
-            "display_name": person.display_name,
-            "is_admin": person.is_admin,
-            "role": profiles.role_of(person),
-            # Whether they have asked to review and nobody has answered yet.
-            "requested": person.reviewer_requested_at is not None,
-            # The address, so an administrator can tell who is sitting behind
-            # the verify screen and why.
-            "email": person.email,
-            "email_verified": person.email_verified,
-            "created_at": person.created_at,
-            "submissions": {
-                outcome: tallies.get((person.id, outcome), 0)
-                for outcome in SUBMISSION_STATUSES
-            },
-        }
-        for person in people
-    ]
+    return {
+        "items": [
+            {
+                "id": person.id,
+                "username": person.username,
+                "display_name": person.display_name,
+                "is_admin": person.is_admin,
+                "role": profiles.role_of(person),
+                # Whether they have asked to review and nobody has answered yet,
+                # and when they asked, which is what the Roles screen reads.
+                "requested": person.reviewer_requested_at is not None,
+                "requested_at": person.reviewer_requested_at,
+                # The address, so an administrator can tell who is sitting behind
+                # the verify screen and why.
+                "email": person.email,
+                "email_verified": person.email_verified,
+                "created_at": person.created_at,
+                "submissions": {
+                    outcome: tallies.get((person.id, outcome), 0)
+                    for outcome in SUBMISSION_STATUSES
+                },
+            }
+            for person in people
+        ],
+        "next_cursor": str(people[-1].id) if more and people else None,
+    }
 
 
 @router.patch("/users/{user_id}")
@@ -829,13 +899,20 @@ def set_role(
         raise HTTPException(status.HTTP_400_BAD_REQUEST, ALREADY_REVIEWS)
 
     member.is_reviewer = body.is_reviewer
+    # Answered either way, so the request is no longer waiting on anybody. A no
+    # to somebody who put their name forward is its own line in the record: the
+    # log has to say what happened, and turning an application down is not the
+    # same act as taking the role off somebody who had it.
+    declined = not body.is_reviewer and member.reviewer_requested_at is not None
+    member.reviewer_requested_at = None
     if body.is_reviewer:
-        # Answered, so the request is no longer waiting on anybody.
-        member.reviewer_requested_at = None
+        action = "role_granted"
+    else:
+        action = "application_declined" if declined else "role_revoked"
     log_review(
         db,
         admin,
-        "role_granted" if body.is_reviewer else "role_revoked",
+        action,
         "user",
         member.id,
         member.display_name or member.username,
@@ -849,7 +926,6 @@ def set_role(
 # One page of the record. Long enough to read a morning's reviewing in one go,
 # short enough that the screen is one request.
 LOG_PAGE = 50
-BAD_CURSOR = "That page marker is not one of ours."
 
 
 @router.get("/review-log")

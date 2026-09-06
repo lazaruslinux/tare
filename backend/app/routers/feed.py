@@ -29,7 +29,7 @@ from app import clock, health, models
 from app.db import get_db
 from app.deps import require_user, reviews
 from app.profiles import avatar_url, role_of, submission_counts
-from app.routers.admin import waiting_items
+from app.routers.admin import name_match, waiting_items
 from app.routers.diary import fill_auto_logs, total
 from app.routers.fitness import day_exercise, kept_back, steps_on, workouts_on
 from app.routers.health import Reckoning, exercise_on
@@ -426,35 +426,44 @@ def read_today(
     return figures
 
 
-# The most rows the members list ever answers with. An instance is one small
-# invited group, so this is a ceiling rather than a page: nothing pages past it,
-# and reaching it would mean an instance far larger than tare is for.
-MEMBERS_CAP = 500
+# One page of the roster. The list is read in the order of the name each
+# member is shown under, which is a name somebody can change, so a page is
+# counted from the top rather than marked by a row: a marker made of a name
+# would point at nothing the moment its owner renamed themselves.
+MEMBERS_PAGE = 50
 
 
 @router.get("/members")
 def read_members(
+    q: str = "",
+    offset: int = 0,
     db: Session = Depends(get_db),
     user: models.User = Depends(require_user),
 ) -> dict[str, object]:
-    """Everybody in this Tare, by the name they are shown under.
+    """One page of everybody in this Tare, by the name they are shown under.
 
-    The whole list in one answer: an instance is a small invited group, and a
-    list nobody has to page through is a list somebody can read. Capped at
-    MEMBERS_CAP rows all the same, so one request can never be the whole of a
-    much larger table.
+    Fifty at a time with a box above them rather than the whole list: every row
+    carries a picture, so a screen that draws all of them is a screen that gets
+    slower every time somebody joins.
 
     An administrator is shown exactly what anybody else is shown. This is the
     community list, not the account list.
     """
     shown = func.coalesce(models.User.display_name, models.User.username)
+    query = select(models.User)
+    if q.strip():
+        query = query.where(name_match(q))
+    # A page before the first one is the first one.
+    start = max(offset, 0)
     members = list(
         db.execute(
-            select(models.User)
-            .order_by(func.lower(shown), models.User.username)
-            .limit(MEMBERS_CAP)
+            query.order_by(func.lower(shown), models.User.username, models.User.id)
+            .offset(start)
+            .limit(MEMBERS_PAGE + 1)
         ).scalars()
     )
+    more = len(members) > MEMBERS_PAGE
+    members = members[:MEMBERS_PAGE]
     counts = submission_counts(db, [member.id for member in members])
     return {
         "items": [
@@ -467,7 +476,8 @@ def read_members(
                 **counts[member.id],
             }
             for member in members
-        ]
+        ],
+        "next_offset": start + len(members) if more else None,
     }
 
 

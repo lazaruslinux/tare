@@ -491,13 +491,22 @@ export type AdminUser = {
   display_name: string | null
   is_admin: boolean
   role: Role
-  // Whether they have applied to review and nobody has answered yet.
+  // Whether they have applied to review and nobody has answered yet, and when
+  // they asked. Null once somebody has answered, either way.
   requested: boolean
+  requested_at: string | null
   email: string | null
   email_verified: boolean
   created_at: string
   submissions: { pending: number; approved: number; rejected: number }
 }
+
+// One page of the account list, newest first. The marker is the id of the last
+// row handed over, and is only ever handed back as it came.
+export type AdminUserPage = { items: AdminUser[]; next_cursor: string | null }
+
+// Which slice of the account list is wanted, where a screen wants one.
+export type UserFilter = 'reviewer' | 'admin' | 'requested'
 
 // One line of the record: who did what, to what, and when. The names are
 // copies taken as it happened, so a renamed account or a deleted food still
@@ -710,6 +719,17 @@ export const STALE = 'tare:stale'
 
 export function errorText(failure: unknown): string {
   return failure instanceof ApiError ? failure.detail : 'Something went wrong. Try again.'
+}
+
+// A query string out of whatever is actually set. An empty value is left off
+// rather than sent blank, and everything that goes is encoded.
+export function queryString(parts: Record<string, string | number | undefined>): string {
+  const set: string[] = []
+  for (const [key, value] of Object.entries(parts)) {
+    if (value === undefined || value === '') continue
+    set.push(`${key}=${encodeURIComponent(value)}`)
+  }
+  return set.length === 0 ? '' : `?${set.join('&')}`
 }
 
 type Options = { method?: string; body?: unknown }
@@ -963,6 +983,10 @@ export type MemberRow = {
   submitted: number
   approved: number
 }
+
+// One page of the roster. It is ordered by a name rather than by an id, so the
+// marker is how far down the list the last page reached.
+export type MemberPage = { items: MemberRow[]; next_offset: number | null }
 
 // The few figures the wide layout keeps beside whatever is on screen. The
 // waiting count is an administrator's alone.

@@ -106,10 +106,10 @@ submitted, approve, turn down or correct it, change the pictures on it, and
 correct a food that is already shared. Nothing else about the instance is
 theirs, and there is no path in the app that makes anybody an administrator.
 
-Roles are handed out from More, Member accounts: a Reviewer switch on each
-member's row. A member whose submissions have mostly been taken can apply for
-the role from their own More list, which puts a note on their row; an
-administrator still decides. Every decision either role makes is written to the
+Roles are handed out from More, Roles: a list of who reviews, and a picker that
+adds one. A member whose submissions have mostly been taken can apply for the
+role from their own More list, which puts them at the top of that screen for an
+administrator to answer. Every decision either role makes is written to the
 review log, which administrators read under More.
 
 ## Put a proxy in front

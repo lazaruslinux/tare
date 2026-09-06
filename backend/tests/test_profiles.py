@@ -133,6 +133,47 @@ def test_a_list_row_carries_the_counter_and_no_private_fact(client, db_session, 
     }
 
 
+def test_the_roster_pages_and_keeps_its_order_across_the_seam(client, make_user):
+    # Named so the alphabet and the order they were made in disagree.
+    for number in range(50):
+        make_user(f"m{99 - number:02d}")
+    make_user("member")
+    sign_in(client, "member")
+
+    first = client.get("/api/feed/members").json()
+    assert len(first["items"]) == 50
+    assert first["items"][0]["display_name"] == "m50"
+    assert first["next_offset"] == 50
+
+    second = client.get("/api/feed/members?offset=50").json()
+    assert [row["display_name"] for row in second["items"]] == ["member"]
+    assert second["next_offset"] is None
+
+    # The rule the whole list is read by, held page by page.
+    names = [row["display_name"] for row in first["items"] + second["items"]]
+    assert names == sorted(names)
+
+
+def test_the_roster_is_searched_by_the_shown_name_and_the_username(
+    client, db_session, make_user
+):
+    bea = make_user("bea")
+    bea.display_name = "Winifred"
+    make_user("zoe")
+    member = make_user("member")
+    member.display_name = "Alice"
+    db_session.commit()
+    sign_in(client, "member")
+
+    def found(query):
+        return {row["display_name"] for row in client.get(query).json()["items"]}
+
+    assert found("/api/feed/members?q=WINI") == {"Winifred"}
+    assert found("/api/feed/members?q=bea") == {"Winifred"}
+    assert found("/api/feed/members?q=zo") == {"zoe"}
+    assert found("/api/feed/members?q=nobody") == set()
+
+
 def test_the_members_list_is_for_members(client, make_user):
     make_user("member")
     assert client.get("/api/feed/members").status_code == 401

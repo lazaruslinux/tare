@@ -1197,7 +1197,7 @@ def test_the_member_list_counts_what_each_person_has_offered(
         f"/api/admin/queue/{second.json()['submission_id']}/reject", json={"note": "No."}
     )
 
-    rows = {row["username"]: row for row in client.get("/api/admin/users").json()}
+    rows = {row["username"]: row for row in client.get("/api/admin/users").json()["items"]}
     assert set(rows) == {"member", "stranger", "reviewer"}
     assert rows["member"]["submissions"] == {"pending": 0, "approved": 1, "rejected": 1}
     assert rows["stranger"]["submissions"] == {"pending": 0, "approved": 0, "rejected": 0}
@@ -1211,6 +1211,69 @@ def test_the_member_list_counts_what_each_person_has_offered(
     assert "email" in rows["member"]
     assert rows["member"]["email_verified"] is True
     assert rows["member"]["created_at"] is not None
+
+
+def test_the_account_list_pages_newest_first(db_session, make_user, admin_client):
+    for number in range(50):
+        make_user(f"member{number:02d}")
+
+    first = admin_client.get("/api/admin/users").json()
+    # Fifty and the administrator who is reading, so one page and one row over.
+    assert len(first["items"]) == 50
+    assert first["items"][0]["username"] == "member49"
+    assert first["next_cursor"] is not None
+
+    second = admin_client.get(f"/api/admin/users?cursor={first['next_cursor']}").json()
+    assert [row["username"] for row in second["items"]] == ["admin"]
+    assert second["next_cursor"] is None
+
+
+def test_a_page_marker_that_is_not_one_of_ours_is_refused(admin_client):
+    for marker in ("abc", "9999"):
+        refused = admin_client.get(f"/api/admin/users?cursor={marker}")
+        assert refused.status_code == 400
+        assert refused.json() == {"detail": "That page marker is not one of ours."}
+
+
+def test_the_account_list_is_searched_by_either_name(db_session, make_user, admin_client):
+    bea = make_user("bea")
+    bea.display_name = "Winifred"
+    make_user("zoe")
+    db_session.commit()
+
+    def found(query):
+        return {row["username"] for row in admin_client.get(query).json()["items"]}
+
+
+    # Either name, either case, and anywhere inside it.
+    assert found("/api/admin/users?q=WINI") == {"bea"}
+    assert found("/api/admin/users?q=BEA") == {"bea"}
+    assert found("/api/admin/users?q=fred") == {"bea"}
+    assert found("/api/admin/users?q=zo") == {"zoe"}
+    assert found("/api/admin/users?q=nobody") == set()
+    # A typed wildcard is a letter, not a search for everybody.
+    assert found("/api/admin/users?q=%25") == set()
+
+
+def test_the_account_list_filters_by_role(db_session, make_user, admin_client):
+    reviewer = make_user("reviewer")
+    reviewer.is_reviewer = True
+    applicant = make_user("applicant")
+    applicant.reviewer_requested_at = now_utc()
+    make_user("member")
+    db_session.commit()
+
+    def found(role):
+        page = admin_client.get(f"/api/admin/users?role={role}").json()
+        return {row["username"] for row in page["items"]}
+
+    assert found("reviewer") == {"reviewer"}
+    assert found("admin") == {"admin"}
+    assert found("requested") == {"applicant"}
+
+    refused = admin_client.get("/api/admin/users?role=owner")
+    assert refused.status_code == 400
+    assert refused.json() == {"detail": "That is not a role Tare has."}
 
 
 # ---- None of it is for anybody else ----
