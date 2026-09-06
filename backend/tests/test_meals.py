@@ -9,7 +9,7 @@ import pytest
 
 from app.routers.diary import BAD_SLOT
 from app.routers.foods import MISSING_FOOD
-from app.routers.meals import MISSING_MEAL
+from app.routers.meals import MISSING_MEAL, NO_WEIGHT
 from tests.conftest import PASSWORD
 
 TODAY = "2026-09-01"
@@ -288,3 +288,91 @@ def test_meals_need_a_session(client):
     assert client.put("/api/meals/1", json=body).status_code == 401
     assert client.delete("/api/meals/1").status_code == 401
     assert client.post("/api/meals/1/log", json={"slot": "lunch"}).status_code == 401
+
+
+# ---- What the whole meal weighs, and logging a share of it ----
+
+# Two slices at 45 g, and another hundred grams weighed out.
+TOAST_GRAMS = 2 * 45 + 100
+TOAST_CALORIES = 260 * TOAST_GRAMS / 100
+
+
+@pytest.fixture()
+def toast_plate(client, toast):
+    """Bread twice: by its own serving, and weighed out."""
+    serving = toast["servings"][0]["id"]
+    made = client.post(
+        "/api/meals",
+        json={
+            "name": "Toast plate",
+            "items": [
+                {"food_id": toast["id"], "amount": 2, "unit": f"serving:{serving}"},
+                {"food_id": toast["id"], "amount": 100, "unit": "g"},
+            ],
+        },
+    )
+    assert made.status_code == 201
+    return made.json()
+
+
+def test_a_meal_weighs_what_its_items_weigh(client, toast_plate):
+    assert toast_plate["weight_g"] == TOAST_GRAMS
+    assert toast_plate["unweighed"] == []
+    assert toast_plate["final_weight_g"] is None
+
+
+def test_an_item_nothing_can_weigh_leaves_the_meal_unweighed(client, breakfast):
+    # The coffee is poured and nothing gave its density, so 200 mL of it
+    # weighs nothing anybody here knows.
+    assert breakfast["weight_g"] is None
+    assert breakfast["unweighed"] == ["Flat white"]
+
+
+def test_a_meal_keeps_what_the_scale_said(client, toast, toast_plate):
+    serving = toast["servings"][0]["id"]
+    saved = client.put(
+        f"/api/meals/{toast_plate['id']}",
+        json={
+            "name": "Toast plate",
+            "final_weight_g": 180,
+            "items": [
+                {"food_id": toast["id"], "amount": 2, "unit": f"serving:{serving}"},
+                {"food_id": toast["id"], "amount": 100, "unit": "g"},
+            ],
+        },
+    )
+    assert saved.status_code == 200
+    assert saved.json()["final_weight_g"] == 180
+    assert saved.json()["weight_g"] == TOAST_GRAMS
+
+
+def test_a_meal_is_logged_by_what_the_scale_says(client, toast_plate):
+    logged = log_meal(client, toast_plate, grams=95)
+    assert logged.status_code == 201
+    made = logged.json()["entry"]
+    assert (made["amount"], made["unit"], made["serving_label"]) == (95, "g", None)
+    assert round(made["calories"], 4) == round(TOAST_CALORIES * 95 / TOAST_GRAMS, 4)
+
+
+def test_the_final_weight_beats_what_the_items_come_to(client, toast, toast_plate):
+    serving = toast["servings"][0]["id"]
+    client.put(
+        f"/api/meals/{toast_plate['id']}",
+        json={
+            "name": "Toast plate",
+            "final_weight_g": 100,
+            "items": [
+                {"food_id": toast["id"], "amount": 2, "unit": f"serving:{serving}"},
+                {"food_id": toast["id"], "amount": 100, "unit": "g"},
+            ],
+        },
+    )
+    made = log_meal(client, toast_plate, grams=50).json()["entry"]
+    # Half of what the scale said, whatever the items add up to.
+    assert round(made["calories"], 4) == round(TOAST_CALORIES / 2, 4)
+
+
+def test_a_meal_nothing_can_weigh_refuses_to_be_logged_by_weight(client, breakfast):
+    refused = log_meal(client, breakfast, grams=100)
+    assert refused.status_code == 400
+    assert refused.json()["detail"] == NO_WEIGHT

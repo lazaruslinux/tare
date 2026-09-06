@@ -8,7 +8,7 @@ BACKEND = Path(__file__).resolve().parents[1]
 
 IDENTITY_TABLES = {"users", "sessions", "email_tokens", "invites", "ingest_tokens"}
 FOOD_TABLES = {"foods", "food_servings"}
-DIARY_TABLES = {"diary_entries", "saved_foods", "kept_foods", "auto_logs", "auto_log_days"}
+DIARY_TABLES = {"diary_entries", "saved_foods", "auto_logs", "auto_log_days"}
 COMMUNITY_TABLES = {"food_photos", "food_submissions"}
 RECIPE_TABLES = {"recipes", "recipe_ingredients", "meal_templates", "meal_template_items"}
 HEALTH_TABLES = {
@@ -48,9 +48,8 @@ def test_upgrade_head_builds_the_identity_schema(tmp_path):
         saved_unique = {
             constraint["name"] for constraint in inspector.get_unique_constraints("saved_foods")
         }
-        kept_unique = {
-            constraint["name"] for constraint in inspector.get_unique_constraints("kept_foods")
-        }
+        recipe_columns = {column["name"] for column in inspector.get_columns("recipes")}
+        meal_columns = {column["name"] for column in inspector.get_columns("meal_templates")}
         weight_unique = {
             constraint["name"]
             for constraint in inspector.get_unique_constraints("weight_entries")
@@ -167,7 +166,72 @@ def test_upgrade_head_builds_the_identity_schema(tmp_path):
         assert f"'{kind}'" in submission_checks
     # And the pair that stops one food being pinned twice.
     assert "uq_saved_foods_user_food" in saved_unique
-    # And the one that stops a food sitting twice on one person's own list.
-    assert "uq_kept_foods_user_food" in kept_unique
+    # The list of kept foods is gone: a favorite is the one saved list.
+    assert "kept_foods" not in tables
+    # And what a scale said a recipe or a meal came to.
+    assert "final_weight_g" in recipe_columns
+    assert "final_weight_g" in meal_columns
     # And the one that holds a member to a single weigh-in a day.
     assert "uq_weight_entries_user_day" in weight_unique
+
+
+def test_the_kept_list_becomes_favorites_without_doubling_anything(tmp_path):
+    """Everything kept is starred afterwards, and a food already starred once
+    is starred once."""
+    database = tmp_path / "tare.db"
+    config = Config(str(BACKEND / "alembic.ini"))
+    config.set_main_option("script_location", str(BACKEND / "migrations"))
+    config.set_main_option("sqlalchemy.url", f"sqlite:///{database}")
+
+    command.upgrade(config, "0032_reviewers")
+    engine = sa.create_engine(f"sqlite:///{database}")
+    stamp = "2026-09-01 08:00:00"
+    try:
+        with engine.begin() as connection:
+            connection.execute(
+                sa.text(
+                    "INSERT INTO users (id, username, password_hash, created_at,"
+                    " share_age, share_sex, share_location, share_workouts,"
+                    " share_journal, share_weight_loss, clock)"
+                    " VALUES (1, 'member', 'x', :at, 0, 0, 0, 0, 0, 0, '12h')"
+                ),
+                {"at": stamp},
+            )
+            for food_id, name in ((1, "Rolled oats"), (2, "Greek yoghurt")):
+                connection.execute(
+                    sa.text(
+                        "INSERT INTO foods (id, status, name, brand, description,"
+                        " section, base_unit, created_at, updated_at)"
+                        " VALUES (:id, 'approved', :name, '', '', 'other', 'g', :at, :at)"
+                    ),
+                    {"id": food_id, "name": name, "at": stamp},
+                )
+            # One food on both lists, one only kept, so the copy has a
+            # duplicate to skip and a row to write.
+            connection.execute(
+                sa.text(
+                    "INSERT INTO saved_foods (user_id, food_id, created_at)"
+                    " VALUES (1, 1, :at)"
+                ),
+                {"at": stamp},
+            )
+            for food_id in (1, 2):
+                connection.execute(
+                    sa.text(
+                        "INSERT INTO kept_foods (user_id, food_id, added_at)"
+                        " VALUES (1, :food, :at)"
+                    ),
+                    {"food": food_id, "at": stamp},
+                )
+
+        command.upgrade(config, "head")
+
+        with engine.connect() as connection:
+            starred = connection.execute(
+                sa.text("SELECT user_id, food_id FROM saved_foods ORDER BY food_id")
+            ).all()
+            tables = set(sa.inspect(engine).get_table_names())
+    finally:
+        engine.dispose()
+    assert starred == [(1, 1), (1, 2)]
+    assert "kept_foods" not in tables

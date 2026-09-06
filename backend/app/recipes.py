@@ -15,8 +15,9 @@ from __future__ import annotations
 from fastapi import HTTPException, status
 from sqlalchemy.orm import Session
 
-from app import models
+from app import models, units
 from app.models import NUTRIENTS
+from app.routers.foods import readable_food
 
 # One recipe that is not there and one that is somebody else's read the same.
 MISSING_RECIPE = "There is no such recipe."
@@ -51,3 +52,41 @@ def per_serving(recipe: models.Recipe) -> dict[str, float | None]:
         field: None if value is None else value / recipe.yield_servings
         for field, value in totals(recipe).items()
     }
+
+
+def weight(
+    db: Session, user: models.User, recipe: models.Recipe
+) -> tuple[float | None, list[str]]:
+    """What the whole recipe weighs in grams, and the parts nothing can weigh.
+
+    Null the moment one part cannot be weighed, for the reason a nutrient is:
+    a total that quietly left an ingredient out would be a lighter recipe
+    rather than the same one measured worse.
+    """
+    grams = 0.0
+    unweighed: list[str] = []
+    for row in recipe.ingredients:
+        each = None
+        food = None if row.food_id is None else readable(db, user, row.food_id)
+        if food is not None:
+            each = units.to_grams(food, row.amount, row.unit, row.base_amount)
+        if each is None:
+            unweighed.append(row.name)
+        else:
+            grams += each
+    # Whole grams, so the figure a screen prints is the one a share is worked
+    # out from.
+    return (None if unweighed else round(grams)), unweighed
+
+
+def readable(db: Session, user: models.User, food_id: int) -> models.Food | None:
+    """The food behind a part, or nothing where it is gone or out of reach."""
+    try:
+        return readable_food(db, user, food_id)
+    except HTTPException:
+        return None
+
+
+def settled_weight(final: float | None, computed: float | None) -> float | None:
+    """What a portion by weight is worked out from: the scale beats the parts."""
+    return final if final is not None else computed

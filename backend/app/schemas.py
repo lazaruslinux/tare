@@ -211,6 +211,9 @@ class DiaryIn(BaseModel):
     # A unit from a measure family, or "serving:<id>" for one of the food's own.
     amount: float | None = Field(default=None, gt=0)
     unit: str | None = Field(default=None, max_length=MAX_UNIT)
+    # What a recipe weighed on the plate, given instead of an amount of
+    # servings. Only a recipe is logged this way.
+    grams: float | None = Field(default=None, gt=0)
 
     # The quick add. What was eaten, and what it was worth.
     name: str = ""
@@ -281,6 +284,10 @@ class PartIn(BaseModel):
     unit: str = Field(max_length=MAX_UNIT)
 
 
+# The least a scale can be told a pot weighs. Under a gram is a typo.
+MIN_WEIGHT = 1
+
+
 class RecipeIn(BaseModel):
     """A recipe as the form sends it, whole.
 
@@ -290,6 +297,9 @@ class RecipeIn(BaseModel):
 
     name: str
     yield_servings: float = Field(gt=0, le=MAX_YIELD)
+    # What the scale said when it was done, where somebody weighed it. Left out
+    # means nobody did, and the parts are what it weighs.
+    final_weight_g: float | None = Field(default=None, ge=MIN_WEIGHT)
     ingredients: list[PartIn] = Field(min_length=1, max_length=MAX_PARTS)
 
 
@@ -297,14 +307,18 @@ class MealIn(BaseModel):
     """A kept meal: a name, and the things it is a shortcut for."""
 
     name: str
+    final_weight_g: float | None = Field(default=None, ge=MIN_WEIGHT)
     items: list[PartIn] = Field(min_length=1, max_length=MAX_PARTS)
 
 
 class MealLogIn(BaseModel):
-    """Logging a whole kept meal, as one line counted in servings of it."""
+    """Logging a whole kept meal: so many servings of it, or so many grams."""
 
     # Left out means today, wherever the account says it is.
     date: dt.date | None = None
     slot: str
     # How many of the whole meal. One, unless somebody says otherwise.
     servings: float = Field(default=1, gt=0)
+    # Or what was taken off the scale, which is a share of what all of it
+    # weighs. Given instead of servings, never beside it.
+    grams: float | None = Field(default=None, gt=0)

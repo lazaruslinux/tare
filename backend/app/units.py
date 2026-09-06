@@ -59,3 +59,19 @@ def to_base(food: models.Food, amount: float, unit: str) -> float:
     # A millilitre of this food weighs `density` grams, so a gram of it takes
     # up 1/density millilitres.
     return base_amount * density if food.base_unit == "g" else base_amount / density
+
+
+def to_grams(food: models.Food, amount: float, unit: str, base_amount: float) -> float | None:
+    """What that much of this food weighs, or nothing when it cannot be weighed.
+
+    A mass unit is a weight already, whatever the food is kept in. Anything
+    else, a volume or one of the food's own servings, is a weight only when the
+    food is kept by weight or when its label gave up a density. A pinch of
+    something poured, with no density anywhere, weighs nothing anybody knows.
+    """
+    if unit in MASS_UNITS:
+        return amount * MASS_UNITS[unit]
+    if food.base_unit == "g":
+        return base_amount
+    density = food.density_g_per_ml
+    return None if density is None else base_amount * density

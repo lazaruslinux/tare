@@ -23,7 +23,7 @@ from app import clock, health, models, schemas, units
 from app.db import get_db
 from app.deps import require_user
 from app.models import DIARY_SLOTS, NUTRIENTS, SERVING_UNIT, now_utc
-from app.recipes import own_recipe, per_serving
+from app.recipes import own_recipe, per_serving, settled_weight, totals, weight
 from app.routers.fitness import day_exercise, imported_row, steps_on, workouts_on
 from app.routers.foods import MAX_NAME, readable_food
 from app.routers.health import (
@@ -60,6 +60,10 @@ NO_PORTION = "This entry has no amount to change."
 LINKED_NUTRIENTS = "The numbers on a logged food come from the food itself."
 RECIPE_NUTRIENTS = "The numbers on a logged recipe come from the recipe itself."
 RECIPE_SERVINGS = "A recipe is counted in servings."
+# What is said to somebody logging by weight a recipe nothing can weigh.
+NO_WEIGHT = "This recipe has no weight yet."
+# Grams are a share of a whole thing, so there has to be a whole thing.
+GRAMS_NEED_A_RECIPE = "Only a recipe is logged by weight."
 BOTH_KINDS = "Log a food or a recipe, not both."
 
 # How a serving is asked for, as against a unit from a measure family.
@@ -186,6 +190,38 @@ def log_recipe(
         serving_label=SERVING_UNIT,
     )
     serve(entry, recipe, servings)
+    return entry
+
+
+def log_recipe_by_weight(
+    user: models.User,
+    day: dt.date,
+    slot: str,
+    recipe: models.Recipe,
+    grams: float,
+    weighs: float,
+) -> models.DiaryEntry:
+    """One entry from a recipe weighed out: that share of the whole thing.
+
+    The row reads in grams rather than servings, because that is what somebody
+    put on the scale, and the numbers are that share of everything in the pot.
+    """
+    share = grams / weighs
+    entry = models.DiaryEntry(
+        user_id=user.id,
+        date_for=day,
+        slot=slot,
+        name=recipe.name,
+        brand="",
+        recipe_id=recipe.id,
+        amount=grams,
+        unit="g",
+        serving_label=None,
+    )
+    whole = totals(recipe)
+    for field in NUTRIENTS:
+        value = whole[field]
+        setattr(entry, field, None if value is None else value * share)
     return entry
 
 
@@ -811,6 +847,8 @@ def add_entry(
     slot = checked_slot(body.slot)
     if body.food_id is not None and body.recipe_id is not None:
         raise HTTPException(status.HTTP_400_BAD_REQUEST, BOTH_KINDS)
+    if body.grams is not None and body.recipe_id is None:
+        raise HTTPException(status.HTTP_400_BAD_REQUEST, GRAMS_NEED_A_RECIPE)
 
     if body.food_id is not None:
         food = readable_food(db, user, body.food_id)
@@ -819,9 +857,15 @@ def add_entry(
         entry = log_food(user, day, slot, food, body.amount, body.unit)
     elif body.recipe_id is not None:
         recipe = own_recipe(db, user, body.recipe_id)
-        if body.amount is None:
+        if body.grams is not None:
+            weighs = settled_weight(recipe.final_weight_g, weight(db, user, recipe)[0])
+            if weighs is None:
+                raise HTTPException(status.HTTP_400_BAD_REQUEST, NO_WEIGHT)
+            entry = log_recipe_by_weight(user, day, slot, recipe, body.grams, weighs)
+        elif body.amount is None:
             raise HTTPException(status.HTTP_400_BAD_REQUEST, NO_AMOUNT)
-        entry = log_recipe(user, day, slot, recipe, body.amount)
+        else:
+            entry = log_recipe(user, day, slot, recipe, body.amount)
     else:
         entry = models.DiaryEntry(user_id=user.id, date_for=day, slot=slot, brand="")
         name = body.name.strip()
@@ -874,7 +918,9 @@ def update_entry(
         amount = body.amount if body.amount is not None else entry.amount
         if amount is None or amount <= 0:
             raise HTTPException(status.HTTP_400_BAD_REQUEST, NO_AMOUNT)
-        if recipe is not None:
+        # A recipe row logged by weight is a number of grams, so it stretches
+        # the way a meal's does rather than being served again.
+        if recipe is not None and entry.unit == SERVING_UNIT:
             if "unit" in sent:
                 raise HTTPException(status.HTTP_400_BAD_REQUEST, RECIPE_SERVINGS)
             # Worked out again from the recipe as it stands now, for the same

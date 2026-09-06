@@ -29,13 +29,7 @@ import {
 } from '../api'
 import { FoodForm } from '../components/FoodForm'
 import { FoodPicker } from '../components/FoodPicker'
-import {
-  FoodLine,
-  MealLine,
-  RecipeLine,
-  RemoveKeptSheet,
-  favoritesOf,
-} from '../components/FoodRows'
+import { FoodLine, MealLine, RecipeLine, favoritesOf } from '../components/FoodRows'
 import { PortionSheet } from '../components/PortionSheet'
 import { Sheet } from '../components/Sheet'
 import { useTopBar } from '../hooks/useTopBar'
@@ -252,40 +246,19 @@ export function FoodTab({
     })
   }
 
-  // A shared food only leaves this account's list: the food itself stays in
-  // the Tare database. The X asks first, and the row goes once the server has
-  // said yes.
-  const [removing, setRemoving] = useState<MyFoodRow | null>(null)
-  const removeKept = (row: MyFoodRow) => setRemoving(row)
-  const confirmRemoveKept = (row: MyFoodRow) =>
-    api(`/foods/${row.id}/keep`, { method: 'DELETE' }).then(() => {
-      setFoods((rows) => rows.filter((item) => item.id !== row.id))
-      setRemoving(null)
-      onChanged()
-    })
-  const removeSheet = (
-    <RemoveKeptSheet
-      key={removing?.id ?? 'none'}
-      row={removing}
-      onCancel={() => setRemoving(null)}
-      onRemove={confirmRemoveKept}
-    />
-  )
-
   // A list a card holds more of, open as a catalog over the tab. The tab stays
   // rendered underneath, so closing it has nothing to put back.
   const [catalog, setCatalog] = useState<ListKind | null>(null)
 
-  // The sheet closes on Escape. The confirm above it does not listen, so while
-  // that one is up the key is left alone.
+  // The sheet closes on Escape.
   useEffect(() => {
-    if (catalog === null || removing !== null) return
+    if (catalog === null) return
     const onKey = (event: KeyboardEvent) => {
       if (event.key === 'Escape') setCatalog(null)
     }
     window.addEventListener('keydown', onKey)
     return () => window.removeEventListener('keydown', onKey)
-  }, [catalog, removing])
+  }, [catalog])
 
   const removeRecipe = (recipe: Recipe) => {
     setRecipes((rows) => rows.filter((row) => row.id !== recipe.id))
@@ -529,7 +502,7 @@ export function FoodTab({
         <div className="mb-1 flex items-center justify-between">
           <p className="t-section">
             <Library className="h-4 w-4" strokeWidth={2} />
-            My foods (recently used)
+            Recently used
           </p>
           <button
             type="button"
@@ -565,9 +538,6 @@ export function FoodTab({
                 key={row.id}
                 row={row}
                 onOpen={() => setView({ at: 'detail', id: row.id, from: { at: 'list' } })}
-                // A food of their own is deleted from its own page. Only a
-                // shared one comes off the list here.
-                onRemove={row.status === 'approved' ? () => removeKept(row) : undefined}
               />
             ))}
             {foods.length > SHOWN && (
@@ -811,14 +781,12 @@ export function FoodTab({
             // belongs to the page under this sheet, and a sheet over it is a
             // sheet nobody can reach it through.
             onRemove={
-              catalog === 'foods'
-                ? removeKept
-                : catalog === 'favorites'
-                  ? (row) => {
-                      setCatalog(null)
-                      removeFavorite(row)
-                    }
-                  : undefined
+              catalog === 'favorites'
+                ? (row) => {
+                    setCatalog(null)
+                    removeFavorite(row)
+                  }
+                : undefined
             }
             onOpen={(id) => {
               if (catalog === 'favorites') {
@@ -855,9 +823,6 @@ export function FoodTab({
         </Sheet>
       )}
 
-      {/* Later than the catalog on purpose: two sheets share one layer, so the
-          confirm is the one that paints on top. */}
-      {removeSheet}
       {undo !== null && (
         <div className="pointer-events-none fixed inset-x-0 bottom-24 z-30 px-4">
           <div className="pointer-events-auto mx-auto flex w-full max-w-md items-center justify-between gap-3 rounded-xl border border-line bg-surface-2 px-4 py-3 text-sm">

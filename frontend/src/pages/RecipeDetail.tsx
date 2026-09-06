@@ -6,7 +6,7 @@ import { LogSheet } from '../components/LogSheet'
 import { PanelFacts, nutrientText } from '../components/NutritionLabel'
 import { useTopBar } from '../hooks/useTopBar'
 import { SLOT_LABEL, slotByTime, today, type Slot } from '../lib/day'
-import { portionText, servingsText } from '../lib/units'
+import { gramsText, portionText, servingsText } from '../lib/units'
 
 // How long the line saying what was logged stays up.
 const NOTICE = 5000
@@ -60,18 +60,24 @@ export function RecipeDetail({
     return () => window.clearTimeout(timer)
   }, [notice])
 
-  const log = async (servings: number | null, slot: Slot) => {
-    if (recipe === null || servings === null) return
+  const log = async (amount: number | null, slot: Slot, byWeight: boolean) => {
+    if (recipe === null || amount === null) return
     setSaving(true)
     setRefusal('')
     try {
       await api('/diary', {
         method: 'POST',
-        body: { date: today(me.timezone), slot, recipe_id: recipe.id, amount: servings },
+        body: {
+          date: today(me.timezone),
+          slot,
+          recipe_id: recipe.id,
+          ...(byWeight ? { grams: amount } : { amount }),
+        },
       })
       setLogging(false)
       setNotice(
-        `Logged ${servingsText(servings)} into ${SLOT_LABEL[slot].toLowerCase()}.`
+        `Logged ${byWeight ? gramsText(amount) : servingsText(amount)} into ` +
+          `${SLOT_LABEL[slot].toLowerCase()}.`
       )
       onLogged()
     } catch (failure) {
@@ -80,13 +86,21 @@ export function RecipeDetail({
     setSaving(false)
   }
 
+  // What the whole recipe weighs: what the scale said, or what the parts come
+  // to. The scale is what a share by weight is worked out from.
+  const weight = recipe === null ? null : (recipe.final_weight_g ?? recipe.weight_g)
+
   return (
     <>
       {error && <p className="t-error">{error}</p>}
       {recipe && (
         <>
           {/* The bar above already says which recipe this is. */}
-          <p className="mb-3 text-sm text-muted">Makes {servingsText(recipe.yield_servings)}</p>
+          <p className="mb-3 text-sm text-muted">
+            Makes {servingsText(recipe.yield_servings)}
+            {weight !== null &&
+              ` · ${recipe.final_weight_g === null ? '' : 'Final weight '}${gramsText(weight)}`}
+          </p>
 
           <div className="t-card mb-3">
             <div className="mb-3 flex flex-wrap items-center gap-2">
@@ -156,10 +170,12 @@ export function RecipeDetail({
               name={recipe.name}
               servings={1}
               slot={slotByTime(me.timezone)}
+              units={me.units}
+              weight={weight}
               error={refusal}
               saving={saving}
               onClose={() => setLogging(false)}
-              onSubmit={(servings, slot) => void log(servings, slot)}
+              onSubmit={(amount, slot, byWeight) => void log(amount, slot, byWeight)}
             />
           )}
 

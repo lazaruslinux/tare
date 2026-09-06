@@ -709,6 +709,9 @@ class Recipe(Base):
     # How many servings the whole recipe makes, which is what every per-serving
     # figure is divided by.
     yield_servings: Mapped[float] = mapped_column(Float, nullable=False, default=1.0)
+    # What the scale said when it was done, where somebody weighed it. Null is
+    # nobody having weighed it, and then the parts are what it weighs.
+    final_weight_g: Mapped[float | None] = mapped_column(Float, nullable=True)
     created_at: Mapped[dt.datetime] = mapped_column(UtcDateTime, nullable=False, default=now_utc)
     updated_at: Mapped[dt.datetime] = mapped_column(UtcDateTime, nullable=False, default=now_utc)
 
@@ -767,6 +770,8 @@ class MealTemplate(Base):
         ForeignKey("users.id", ondelete="CASCADE"), nullable=False, index=True
     )
     name: Mapped[str] = mapped_column(String(200), nullable=False)
+    # What the scale said when it was made up, where somebody weighed it.
+    final_weight_g: Mapped[float | None] = mapped_column(Float, nullable=True)
     created_at: Mapped[dt.datetime] = mapped_column(UtcDateTime, nullable=False, default=now_utc)
     updated_at: Mapped[dt.datetime] = mapped_column(UtcDateTime, nullable=False, default=now_utc)
 
@@ -815,30 +820,6 @@ class SavedFood(Base):
         ForeignKey("foods.id", ondelete="CASCADE"), nullable=False
     )
     created_at: Mapped[dt.datetime] = mapped_column(UtcDateTime, nullable=False, default=now_utc)
-
-
-class KeptFood(Base):
-    """A shared food somebody put on their own list of foods.
-
-    A food in the Tare database belongs to nobody, so wanting it to hand is a
-    thing the member keeps rather than a thing the food carries. The row is the
-    whole answer: it exists, so the food is on their list.
-    """
-
-    __tablename__ = "kept_foods"
-    __table_args__ = (UniqueConstraint("user_id", "food_id", name="uq_kept_foods_user_food"),)
-
-    id: Mapped[int] = mapped_column(Integer, primary_key=True)
-    user_id: Mapped[int] = mapped_column(
-        ForeignKey("users.id", ondelete="CASCADE"), nullable=False, index=True
-    )
-    # CASCADE, like a pin: a place on a list for a food that is gone is nothing.
-    food_id: Mapped[int] = mapped_column(
-        ForeignKey("foods.id", ondelete="CASCADE"), nullable=False
-    )
-    # What the list is ordered by, so the food somebody added last is the one
-    # they see first.
-    added_at: Mapped[dt.datetime] = mapped_column(UtcDateTime, nullable=False, default=now_utc)
 
 
 class RepeatHidden(Base):

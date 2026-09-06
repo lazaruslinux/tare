@@ -332,9 +332,6 @@ export type Food = FoodRow & {
   mine: boolean
   // Whether this account keeps it to hand.
   pinned: boolean
-  // Whether it is on this account's own list of foods. True for a food of
-  // their own, which is on that list by nature.
-  kept: boolean
   // Why an administrator turned this account's own offer of it down. Empty
   // unless that is what happened to it.
   decision_note: string
@@ -539,6 +536,16 @@ export type Recipe = {
   ingredients: RecipeIngredient[]
   totals: Panel
   per_serving: Panel
+} & Weighed
+
+// What something made of parts weighs. weight_g is what the parts come to,
+// null the moment one of them cannot be weighed, and those are named in
+// unweighed. final_weight_g is what the scale said when it was done, which
+// beats the sum whenever somebody typed one.
+export type Weighed = {
+  weight_g: number | null
+  unweighed: string[]
+  final_weight_g: number | null
 }
 
 // A kept meal as a list reads it: how much is in it, and what all of it comes
@@ -557,7 +564,12 @@ export type MealItem = Part & Record<Headline, number | null>
 
 // The whole meal. It keeps no numbers of its own: every figure here is worked
 // out from the foods as they stand now.
-export type Meal = { id: number; name: string; items: MealItem[]; totals: Panel }
+export type Meal = {
+  id: number
+  name: string
+  items: MealItem[]
+  totals: Panel
+} & Weighed
 
 // What logging a whole meal came to: one line, and the names of anything left
 // out because the food behind it is gone.

@@ -6,7 +6,7 @@ import { LogSheet } from '../components/LogSheet'
 import { PanelFacts, nutrientText } from '../components/NutritionLabel'
 import { useTopBar } from '../hooks/useTopBar'
 import { SLOT_LABEL, slotByTime, today, type Slot } from '../lib/day'
-import { portionText } from '../lib/units'
+import { gramsText, portionText } from '../lib/units'
 
 // How long the line saying what was logged stays up.
 const NOTICE = 5000
@@ -62,14 +62,18 @@ export function MealDetail({
     return () => window.clearTimeout(timer)
   }, [notice])
 
-  const log = async (servings: number | null, slot: Slot) => {
-    if (meal === null || servings === null) return
+  const log = async (amount: number | null, slot: Slot, byWeight: boolean) => {
+    if (meal === null || amount === null) return
     setSaving(true)
     setRefusal('')
     try {
       const answer = await api<MealLogged>(`/meals/${meal.id}/log`, {
         method: 'POST',
-        body: { date: today(me.timezone), slot, servings },
+        body: {
+          date: today(me.timezone),
+          slot,
+          ...(byWeight ? { grams: amount } : { servings: amount }),
+        },
       })
       setLogging(false)
       setNotice(`Logged ${meal.name} into ${SLOT_LABEL[slot].toLowerCase()}.`)
@@ -87,12 +91,22 @@ export function MealDetail({
     setSaving(false)
   }
 
+  // What the whole meal weighs: what the scale said, or what the items come
+  // to. The scale is what a share by weight is worked out from.
+  const weight = meal === null ? null : (meal.final_weight_g ?? meal.weight_g)
+
   return (
     <>
       {error && <p className="t-error">{error}</p>}
       {meal && (
         <>
           {/* The bar above already says which meal this is. */}
+          {weight !== null && (
+            <p className="mb-3 text-sm text-muted">
+              {meal.final_weight_g === null ? '' : 'Final weight '}
+              {gramsText(weight)}
+            </p>
+          )}
           <div className="t-card mb-3">
             <PanelFacts values={meal.totals} note="Everything in it" />
           </div>
@@ -139,10 +153,12 @@ export function MealDetail({
               name={meal.name}
               servings={1}
               slot={slotByTime(me.timezone)}
+              units={me.units}
+              weight={weight}
               error={refusal}
               saving={saving}
               onClose={() => setLogging(false)}
-              onSubmit={(servings, slot) => void log(servings, slot)}
+              onSubmit={(amount, slot, byWeight) => void log(amount, slot, byWeight)}
             />
           )}
 

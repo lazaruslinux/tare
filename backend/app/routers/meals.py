@@ -15,11 +15,11 @@ from fastapi import APIRouter, Depends, HTTPException, status
 from sqlalchemy import select, update
 from sqlalchemy.orm import Session, selectinload
 
-from app import clock, models, schemas
+from app import clock, models, schemas, units
 from app.db import get_db
 from app.deps import require_user
 from app.models import NUTRIENTS, SERVING_UNIT, now_utc
-from app.recipes import HEADLINE
+from app.recipes import HEADLINE, settled_weight
 from app.routers.diary import (
     checked_slot,
     entry_row,
@@ -36,6 +36,8 @@ router = APIRouter(prefix="/meals", tags=["meals"])
 # One meal that is not there and one that is somebody else's read the same.
 MISSING_MEAL = "There is no such meal."
 NO_NAME = "A meal needs a name."
+# What is said to somebody logging by weight a meal nothing can weigh.
+NO_WEIGHT = "This meal has no weight yet."
 
 
 def own_meal(db: Session, user: models.User, meal_id: int) -> models.MealTemplate:
@@ -96,6 +98,45 @@ def item_panel(
     return {field: getattr(scratch, field) for field in NUTRIENTS}
 
 
+def item_grams(
+    db: Session, user: models.User, item: models.MealTemplateItem
+) -> float | None:
+    """What one item weighs, from its food as that food stands now.
+
+    Nothing at all where the food has gone or the amount is a volume nothing
+    has given a weight for, which is the same silence the panel above keeps.
+    """
+    if item.food_id is None:
+        return None
+    try:
+        food = readable_food(db, user, item.food_id)
+        base_amount, _, unit = measure(food, item.amount, stored_unit(item, food))
+    except HTTPException:
+        return None
+    return units.to_grams(food, item.amount, unit, base_amount)
+
+
+def weight(
+    db: Session, user: models.User, meal: models.MealTemplate
+) -> tuple[float | None, list[str]]:
+    """What the whole meal weighs in grams, and the items nothing can weigh.
+
+    Null the moment one item cannot be weighed: a total that left one out
+    would be a lighter meal rather than the same one measured worse.
+    """
+    grams = 0.0
+    unweighed: list[str] = []
+    for item in meal.items:
+        each = item_grams(db, user, item)
+        if each is None:
+            unweighed.append(item.name)
+        else:
+            grams += each
+    # Whole grams, so the figure a screen prints is the one a share is worked
+    # out from.
+    return (None if unweighed else round(grams)), unweighed
+
+
 def portions(
     db: Session, user: models.User, meal: models.MealTemplate
 ) -> tuple[list[dict[str, float | None] | None], list[str]]:
@@ -149,11 +190,17 @@ def item_row(
 
 def meal_detail(db: Session, user: models.User, meal: models.MealTemplate) -> dict[str, object]:
     panels, _ = portions(db, user, meal)
+    grams, unweighed = weight(db, user, meal)
     return {
         "id": meal.id,
         "name": meal.name,
         "items": [item_row(row, panel) for row, panel in zip(meal.items, panels)],
         "totals": totals(panels),
+        # What the items weigh, the ones nothing can weigh, and what the scale
+        # said when it was made up.
+        "weight_g": grams,
+        "unweighed": unweighed,
+        "final_weight_g": meal.final_weight_g,
     }
 
 
@@ -204,6 +251,7 @@ def create_meal(
     meal = models.MealTemplate(
         user_id=user.id,
         name=checked_name(body.name, NO_NAME),
+        final_weight_g=body.final_weight_g,
         items=build_items(db, user, body.items, {}),
     )
     db.add(meal)
@@ -232,6 +280,7 @@ def replace_meal(
     meal = own_meal(db, user, meal_id)
     rows = build_items(db, user, body.items, held_names(meal))
     meal.name = checked_name(body.name, NO_NAME)
+    meal.final_weight_g = body.final_weight_g
     meal.items = rows
     meal.updated_at = now_utc()
     db.commit()
@@ -272,6 +321,10 @@ def log_meal(
     rather than five, the way a recipe already did. An item whose food has gone
     is left out and named rather than holding up the rest of the meal, because
     the other four things really were eaten.
+
+    Weighed instead of counted where somebody says what came off the scale: the
+    share of the whole meal that many grams is, worked out from what the scale
+    said it all weighed, or from what the items come to when nobody weighed it.
     """
     meal = own_meal(db, user, meal_id)
     day = body.date or clock.user_today(user)
@@ -280,6 +333,18 @@ def log_meal(
 
     panels, skipped = portions(db, user, meal)
     whole = totals(panels)
+    amount: float
+    unit: str
+    label: str | None
+    if body.grams is None:
+        share = body.servings
+        amount, unit, label = body.servings, SERVING_UNIT, SERVING_UNIT
+    else:
+        weighs = settled_weight(meal.final_weight_g, weight(db, user, meal)[0])
+        if weighs is None:
+            raise HTTPException(status.HTTP_400_BAD_REQUEST, NO_WEIGHT)
+        share = body.grams / weighs
+        amount, unit, label = body.grams, "g", None
     entry = models.DiaryEntry(
         user_id=user.id,
         date_for=day,
@@ -287,13 +352,13 @@ def log_meal(
         name=meal.name,
         brand="",
         meal_id=meal.id,
-        amount=body.servings,
-        unit=SERVING_UNIT,
-        serving_label=SERVING_UNIT,
+        amount=amount,
+        unit=unit,
+        serving_label=label,
     )
     for field in NUTRIENTS:
         value = whole[field]
-        setattr(entry, field, None if value is None else value * body.servings)
+        setattr(entry, field, None if value is None else value * share)
     db.add(entry)
     db.commit()
     return {"entry": entry_row(entry), "skipped": skipped}

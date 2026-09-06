@@ -73,6 +73,22 @@ export function toBase(food: Measured, amount: number, unit: Unit): number {
   return food.base_unit === 'g' ? baseAmount * density : baseAmount / density
 }
 
+// What that much of a food weighs in grams, or null when nothing says. The
+// mirror of the server's units.to_grams: a mass unit is a weight already, and
+// anything else is one only when the food is kept by weight or its label gave
+// up a density.
+export function toGrams(
+  food: Measured,
+  amount: number,
+  unit: string,
+  baseAmount: number
+): number | null {
+  if (MASS_UNITS.includes(unit as Unit)) return amount * UNIT_TO_BASE[unit as Unit]
+  if (food.base_unit === 'g') return baseAmount
+  const density = food.density_g_per_ml
+  return density ? baseAmount * density : null
+}
+
 // What somebody chose to measure with: a unit, or one of the food's own named
 // servings, which is already an amount of the base unit and converts to nothing.
 export type Pick = { kind: 'unit'; unit: Unit } | { kind: 'serving'; index: number }
@@ -113,6 +129,9 @@ const FRACTIONS: { value: number; glyph: string }[] = [
 // How near one of them an amount has to be to be called it. Tight, because a
 // third is only 0.03 away from 28.3 g, and a weighed 28.3 g is 28 g.
 const NEAR = 0.02
+
+// A weight said out loud, always in whole grams.
+export const gramsText = (grams: number): string => `${Math.round(grams)} g`
 
 // The units a scale or a jug reads in whole numbers: nobody says a third of a
 // gram, and 37.5 g on a scale is 38 g when said aloud.

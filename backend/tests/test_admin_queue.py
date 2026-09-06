@@ -415,17 +415,18 @@ def test_a_food_waiting_on_a_decision_stands_at_pending(client, make_user):
     assert client.get(f"/api/foods/{made['food']['id']}").json()["community"] == "pending"
 
 
-def test_a_food_approved_stays_in_my_list_marked_as_shared(client, make_user):
+def test_a_food_approved_is_marked_as_shared(client, make_user):
     made = member_and_admin(client, make_user)
     sign_in(client, "reviewer")
     assert client.post(f"/api/admin/queue/{made['submission_id']}/approve", json={}).status_code == 200
 
     sign_in(client, "member")
-    assert community(client, made["food"]["id"]) == "approved"
     detail = client.get(f"/api/foods/{made['food']['id']}").json()
     assert detail["community"] == "approved"
-    # It belongs to everybody now, so the owner's own actions are gone with it.
+    # It belongs to everybody now, so the owner's own actions are gone with it,
+    # and it is on their own list only for as long as they keep eating it.
     assert detail["mine"] is False
+    assert community(client, made["food"]["id"]) is None
 
 
 def test_a_food_turned_down_stands_at_rejected(client, make_user):

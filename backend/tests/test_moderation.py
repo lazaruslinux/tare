@@ -1297,8 +1297,10 @@ def test_approving_a_food_keeps_its_panel_on_the_food(client, db_session, make_u
     )
 
 
-def test_approving_a_food_keeps_it_on_the_submitter_list(client, db_session, make_user):
-    """It stops being theirs and stays where they have always found it."""
+def test_approving_a_food_hands_it_over_and_lists_it_for_nobody(
+    client, db_session, make_user
+):
+    """It stops being theirs. Favoriting it is what keeps it to hand."""
     people(client, make_user)
     front_id = a_photo(client)
     label_id = a_photo(client, "label")
@@ -1314,13 +1316,14 @@ def test_approving_a_food_keeps_it_on_the_submitter_list(client, db_session, mak
     )
     assert approved.status_code == 200
     food_id = approved.json()["food"]["id"]
-    # Nobody else is given a place for it.
+    # Nobody is given a place for it, the person who offered it included: the
+    # one saved list is the one they star themselves.
     assert client.get("/api/foods/mine").json() == []
 
     sign_in(client, "member")
-    listed = client.get("/api/foods/mine").json()
-    assert [(row["id"], row["status"]) for row in listed] == [(food_id, "approved")]
-    assert client.get(f"/api/foods/{food_id}").json()["kept"] is True
+    assert client.get("/api/foods/mine").json() == []
+    assert client.post(f"/api/foods/{food_id}/pin").status_code == 204
+    assert client.get(f"/api/foods/{food_id}").json()["pinned"] is True
 
 
 def test_approving_a_correction_hands_its_panel_to_the_shared_food(

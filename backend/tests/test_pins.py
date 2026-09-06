@@ -171,3 +171,29 @@ def test_a_food_that_is_not_visible_cannot_be_taken_off_repeat(client, make_user
     assert refused.json() == absent.json() == {"detail": MISSING_FOOD}
     assert client.delete(f"/api/foods/{food['id']}/pin").status_code == 404
     assert client.get("/api/foods/repeat").json() == []
+
+
+def test_a_food_of_my_own_waiting_for_review_can_be_favorited(client, db_session, make_food):
+    """Theirs to eat while it waits, so theirs to keep to hand while it waits."""
+    food = make_food("Rolled oats")
+    db_session.get(models.Food, food["id"]).status = "pending"
+    db_session.commit()
+
+    assert client.post(f"/api/foods/{food['id']}/pin").status_code == 204
+    assert client.get(f"/api/foods/{food['id']}").json()["pinned"] is True
+    assert [row["name"] for row in client.get("/api/foods/repeat").json()] == ["Rolled oats"]
+
+
+def test_somebody_else_s_food_waiting_for_review_cannot_be_favorited(
+    client, db_session, make_user, make_food
+):
+    food = make_food("Rolled oats")
+    db_session.get(models.Food, food["id"]).status = "pending"
+    db_session.commit()
+    make_user("stranger")
+    sign_in(client, "stranger")
+
+    refused = client.post(f"/api/foods/{food['id']}/pin")
+    assert refused.status_code == 404
+    assert refused.json() == {"detail": MISSING_FOOD}
+    assert db_session.query(models.SavedFood).count() == 0

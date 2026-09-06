@@ -14,7 +14,7 @@ import re
 from collections.abc import Sequence
 from typing import NamedTuple
 
-from fastapi import APIRouter, Depends, HTTPException, Response, status
+from fastapi import APIRouter, Depends, HTTPException, status
 from sqlalchemy import Select, Subquery, and_, case, delete, func, or_, select, update
 from sqlalchemy.orm import InstrumentedAttribute, Session
 
@@ -35,8 +35,6 @@ MISSING_PHOTO_TO_ATTACH = "That photo is not there to attach."
 # Two reviewers can have one food open at the same time. Whoever saves second
 # is told rather than quietly writing over the first.
 STALE_EDIT = "Someone changed this while you were editing. Reload to see it."
-# What is said to somebody adding a food of their own to their own list.
-ALREADY_YOURS = "That food is already yours."
 BAD_PURPOSE = "A photo is of the front or of the label."
 
 MAX_NAME = 200
@@ -390,14 +388,6 @@ def is_pinned(db: Session, user: models.User, food_id: int) -> bool:
     return db.execute(query).first() is not None
 
 
-def is_kept(db: Session, user: models.User, food_id: int) -> bool:
-    """Whether this account put this shared food on its own list."""
-    query = select(models.KeptFood.id).where(
-        models.KeptFood.user_id == user.id, models.KeptFood.food_id == food_id
-    )
-    return db.execute(query).first() is not None
-
-
 def rejection_note(db: Session, user: models.User, food: models.Food) -> str:
     """What an administrator said when they turned this account's offer down.
 
@@ -551,9 +541,6 @@ def food_detail(db: Session, food: models.Food, user: models.User) -> dict[str, 
         # id is somebody's account.
         "mine": food.owner_id == user.id,
         "pinned": is_pinned(db, user, food.id),
-        # Whether it is on this account's own list of foods. Their own food is
-        # on it by nature, so one flag answers the whole question.
-        "kept": food.owner_id == user.id or is_kept(db, user, food.id),
         "servings": [
             {
                 "id": serving.id,
@@ -886,36 +873,34 @@ def search_foods(
 def list_my_foods(
     db: Session = Depends(get_db), user: models.User = Depends(require_user)
 ) -> list[dict[str, object]]:
-    """This account's own foods, and the shared ones it keeps.
+    """What this account has been eating lately, and its own foods.
 
-    Two kinds of row, one list. A food of their own, private or waiting; and a
-    food out of the shared database they put on this list, which is how a food
-    they offered and had approved stays here after it stops being theirs.
+    Nothing is put here by hand and nothing is taken off: a shared food is on
+    the list because it was logged, and it drops down the list as other things
+    are. A food of their own is here from the moment it is entered, because
+    they made it and it is theirs to find.
 
     Ordered by when each was last eaten, newest first, which is the Journal's
     own order: what somebody ate this morning is what they reach for again.
-    Under those, the ones nobody has logged yet, by when each was added: when
-    it was entered for their own, when it was kept for the rest.
+    Under those, the ones nobody has logged yet, by when each was entered.
     """
-    kept = (
-        select(models.KeptFood.food_id, models.KeptFood.added_at)
-        .where(models.KeptFood.user_id == user.id)
-        .subquery()
-    )
     logged = last_logged_by(models.DiaryEntry.food_id, user)
-    # One sortable date for both kinds of row.
-    added = func.coalesce(kept.c.added_at, models.Food.created_at)
     query = (
         select(models.Food)
-        .outerjoin(kept, kept.c.food_id == models.Food.id)
         .outerjoin(logged, logged.c.owner == models.Food.id)
         .where(
             or_(
                 and_(models.Food.owner_id == user.id, models.Food.status.in_(LISTED)),
-                and_(models.Food.status == "approved", kept.c.food_id.is_not(None)),
+                and_(
+                    models.Food.status == "approved", logged.c.last_logged.is_not(None)
+                ),
             )
         )
-        .order_by(logged.c.last_logged.desc().nullslast(), added.desc(), models.Food.id.desc())
+        .order_by(
+            logged.c.last_logged.desc().nullslast(),
+            models.Food.created_at.desc(),
+            models.Food.id.desc(),
+        )
         # A ceiling rather than paging: this is one person's own list, and the
         # screen that reads it filters what it was given rather than asking
         # again.
@@ -1251,7 +1236,12 @@ def pin_food(
     db: Session = Depends(get_db),
     user: models.User = Depends(require_user),
 ) -> None:
-    """Keep a food to hand. Pinning one that is already pinned changes nothing."""
+    """Keep a food to hand. Pinning one that is already pinned changes nothing.
+
+    A food of their own that is still waiting for review counts: it is theirs
+    to eat today, so it is theirs to favorite today. Somebody else's is absent
+    until it is approved, and favoriting it answers what reading it does.
+    """
     food = readable_food(db, user, food_id)
     # A pin is the stronger word: it also puts back a food taken off Repeat.
     unhide(db, user, food.id)
@@ -1270,49 +1260,6 @@ def unpin_food(
     db.execute(
         delete(models.SavedFood).where(
             models.SavedFood.user_id == user.id, models.SavedFood.food_id == food.id
-        )
-    )
-    db.commit()
-
-
-@router.post("/{food_id}/keep", status_code=status.HTTP_201_CREATED)
-def keep_food(
-    food_id: int,
-    response: Response,
-    db: Session = Depends(get_db),
-    user: models.User = Depends(require_user),
-) -> dict[str, object]:
-    """Put a shared food on this account's own list of foods.
-
-    Only a food out of the shared database can be kept: a food of their own is
-    already on that list, and there is nothing to add. Keeping one twice
-    changes nothing and says so plainly.
-    """
-    food = readable_food(db, user, food_id)
-    if food.status != "approved":
-        raise HTTPException(status.HTTP_400_BAD_REQUEST, ALREADY_YOURS)
-    if is_kept(db, user, food.id):
-        # Nothing was made, so it does not answer as though something was.
-        response.status_code = status.HTTP_200_OK
-        return {"kept": True}
-    db.add(models.KeptFood(user_id=user.id, food_id=food.id))
-    db.commit()
-    return {"kept": True}
-
-
-@router.delete("/{food_id}/keep", status_code=status.HTTP_204_NO_CONTENT)
-def unkeep_food(
-    food_id: int,
-    db: Session = Depends(get_db),
-    user: models.User = Depends(require_user),
-) -> None:
-    """Take a shared food off this list. The food stays in the Tare database:
-    what goes is this account's place for it. Taking off one already off
-    changes nothing."""
-    food = readable_food(db, user, food_id)
-    db.execute(
-        delete(models.KeptFood).where(
-            models.KeptFood.user_id == user.id, models.KeptFood.food_id == food.id
         )
     )
     db.commit()
@@ -1419,7 +1366,6 @@ def delete_food(
         .values(food_id=None)
     )
     db.execute(delete(models.SavedFood).where(models.SavedFood.food_id == food.id))
-    db.execute(delete(models.KeptFood).where(models.KeptFood.food_id == food.id))
     # Through the session rather than in SQL, so the servings go with it on
     # SQLite too, where the foreign key is only enforced when it is asked for.
     db.delete(food)

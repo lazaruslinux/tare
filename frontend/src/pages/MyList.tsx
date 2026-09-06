@@ -13,7 +13,7 @@ import { FoodLine, MealLine, RecipeLine } from '../components/FoodRows'
 export type ListKind = 'foods' | 'favorites' | 'meals' | 'recipes'
 
 export const LIST_TITLE: Record<ListKind, string> = {
-  foods: 'My foods (recently used)',
+  foods: 'Recently used',
   favorites: 'Favorites',
   meals: 'My meals',
   recipes: 'My recipes',
@@ -171,17 +171,9 @@ export function MyList({
               key={row.id}
               row={row}
               onOpen={() => onOpen(row.id)}
-              // A food of their own comes off My foods by being deleted on its
-              // own page; a favorite is unstarred wherever it is read.
-              onRemove={
-                onRemove !== undefined &&
-                (listed.kind === 'favorites' || row.status === 'approved')
-                  ? () => onRemove(row)
-                  : undefined
-              }
-              removeLabel={
-                listed.kind === 'favorites' ? `Remove ${row.name} from Favorites` : undefined
-              }
+              // Nothing comes off Recently used: it is what was eaten. A
+              // favorite is unstarred wherever it is read.
+              onRemove={onRemove === undefined ? undefined : () => onRemove(row)}
             />
           ))
         ) : listed.kind === 'meals' ? (

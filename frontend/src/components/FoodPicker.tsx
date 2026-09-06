@@ -155,7 +155,7 @@ function QuickAdd({
           </div>
         ))}
         <p className="mt-2 text-xs text-muted">
-          Quick add only logs a journal entry and is not added to My foods.
+          Quick add only logs a journal entry and is not saved as a food.
         </p>
 
         {error && <p className="t-error mt-3">{error}</p>}

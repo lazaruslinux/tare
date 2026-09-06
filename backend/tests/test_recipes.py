@@ -7,7 +7,14 @@ density, and milk that is poured and whose label never gave its sodium.
 
 import pytest
 
-from app.routers.diary import BOTH_KINDS, NO_AMOUNT, RECIPE_NUTRIENTS, RECIPE_SERVINGS
+from app.routers.diary import (
+    BOTH_KINDS,
+    GRAMS_NEED_A_RECIPE,
+    NO_AMOUNT,
+    NO_WEIGHT,
+    RECIPE_NUTRIENTS,
+    RECIPE_SERVINGS,
+)
 from app.routers.foods import MISSING_FOOD
 from app.recipes import MISSING_RECIPE
 from tests.conftest import PASSWORD
@@ -360,3 +367,128 @@ def test_recipes_need_a_session(client):
     assert client.get("/api/recipes/1").status_code == 401
     assert client.put("/api/recipes/1", json=body).status_code == 401
     assert client.delete("/api/recipes/1").status_code == 401
+
+
+# ---- What the whole thing weighs, and logging a share of it ----
+
+# A cup of these oats is 236.588 mL at 0.4 g each.
+CUP_OF_OATS = 236.588 * 0.4
+# Weighed oats and a cup of them: both are a weight, so the recipe is one too.
+FLAPJACK_GRAMS = round(200 + CUP_OF_OATS)
+FLAPJACK_CALORIES = 380 * (200 + CUP_OF_OATS) / 100
+
+
+@pytest.fixture()
+def flapjack(client, oats):
+    """Oats twice: weighed out, and measured out by the cup."""
+    made = client.post(
+        "/api/recipes",
+        json={
+            "name": "Flapjack",
+            "yield_servings": 2,
+            "ingredients": [
+                {"food_id": oats["id"], "amount": 200, "unit": "g"},
+                {"food_id": oats["id"], "amount": 1, "unit": "cup"},
+            ],
+        },
+    )
+    assert made.status_code == 201
+    return made.json()
+
+
+def test_a_recipe_weighs_what_its_parts_weigh(client, flapjack):
+    # 200 g weighed, plus a cup that comes to 94.6352 g, to the nearest gram.
+    assert FLAPJACK_GRAMS == 295
+    assert flapjack["weight_g"] == FLAPJACK_GRAMS
+    assert flapjack["unweighed"] == []
+    assert flapjack["final_weight_g"] is None
+
+
+def test_a_part_nothing_can_weigh_leaves_the_recipe_unweighed(client, porridge):
+    # The milk is poured and its label never gave a density, so nothing here
+    # knows what half a litre of it weighs.
+    assert porridge["weight_g"] is None
+    assert porridge["unweighed"] == ["Whole milk"]
+
+
+def test_the_final_weight_is_kept_and_read_back(client, oats, flapjack):
+    saved = client.put(
+        f"/api/recipes/{flapjack['id']}",
+        json={
+            "name": "Flapjack",
+            "yield_servings": 2,
+            "final_weight_g": 280,
+            "ingredients": [
+                {"food_id": oats["id"], "amount": 200, "unit": "g"},
+                {"food_id": oats["id"], "amount": 1, "unit": "cup"},
+            ],
+        },
+    )
+    assert saved.status_code == 200
+    # What the parts come to is still said, beside what the scale said.
+    assert saved.json()["final_weight_g"] == 280
+    assert saved.json()["weight_g"] == FLAPJACK_GRAMS
+    assert client.get(f"/api/recipes/{flapjack['id']}").json()["final_weight_g"] == 280
+
+
+def test_a_recipe_is_logged_by_what_the_scale_says(client, flapjack):
+    logged = client.post(
+        "/api/diary",
+        json={"date": TODAY, "slot": "breakfast", "recipe_id": flapjack["id"], "grams": 100},
+    )
+    assert logged.status_code == 201
+    made = logged.json()
+    # The row reads as what was weighed, not as a share of a serving.
+    assert (made["amount"], made["unit"], made["serving_label"]) == (100, "g", None)
+    assert round(made["calories"], 4) == round(FLAPJACK_CALORIES * 100 / FLAPJACK_GRAMS, 4)
+
+
+def test_the_final_weight_beats_what_the_parts_come_to(client, oats, flapjack):
+    client.put(
+        f"/api/recipes/{flapjack['id']}",
+        json={
+            "name": "Flapjack",
+            "yield_servings": 2,
+            "final_weight_g": 250,
+            "ingredients": [
+                {"food_id": oats["id"], "amount": 200, "unit": "g"},
+                {"food_id": oats["id"], "amount": 1, "unit": "cup"},
+            ],
+        },
+    )
+    made = client.post(
+        "/api/diary",
+        json={"date": TODAY, "slot": "breakfast", "recipe_id": flapjack["id"], "grams": 125},
+    ).json()
+    # Half of 250, whatever the parts add up to.
+    assert round(made["calories"], 4) == round(FLAPJACK_CALORIES / 2, 4)
+
+
+def test_a_recipe_nothing_can_weigh_refuses_to_be_logged_by_weight(client, porridge):
+    refused = client.post(
+        "/api/diary",
+        json={"date": TODAY, "slot": "breakfast", "recipe_id": porridge["id"], "grams": 100},
+    )
+    assert refused.status_code == 400
+    assert refused.json()["detail"] == NO_WEIGHT
+
+
+def test_only_a_recipe_is_logged_by_weight(client, oats):
+    refused = client.post(
+        "/api/diary",
+        json={"date": TODAY, "slot": "breakfast", "food_id": oats["id"], "grams": 100},
+    )
+    assert refused.status_code == 400
+    assert refused.json()["detail"] == GRAMS_NEED_A_RECIPE
+
+
+def test_a_row_logged_by_weight_is_edited_by_the_gram(client, flapjack):
+    made = client.post(
+        "/api/diary",
+        json={"date": TODAY, "slot": "breakfast", "recipe_id": flapjack["id"], "grams": 100},
+    ).json()
+
+    changed = client.patch(f"/api/diary/{made['id']}", json={"amount": 200})
+    assert changed.status_code == 200
+    assert (changed.json()["amount"], changed.json()["unit"]) == (200, "g")
+    assert round(changed.json()["calories"], 4) == round(made["calories"] * 2, 4)

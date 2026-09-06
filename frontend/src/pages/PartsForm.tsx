@@ -15,7 +15,15 @@ import { FoodPicker } from '../components/FoodPicker'
 import { HEADLINE, nutrientText } from '../components/NutritionLabel'
 import { ScanFlow } from '../components/ScanFlow'
 import { useTopBar } from '../hooks/useTopBar'
-import { portionText, scale, toBase, type Unit } from '../lib/units'
+import {
+  MASS_UNITS,
+  UNIT_TO_BASE,
+  portionText,
+  scale,
+  toBase,
+  toGrams,
+  type Unit,
+} from '../lib/units'
 
 // The one form behind both a recipe and a kept meal. They are the same screen
 // but for one thing: a recipe says how many servings it makes.
@@ -51,6 +59,8 @@ type Draft = Record<Headline, number | null> & {
   brand: string
   amount: number
   serving_label: string | null
+  // What this much of it weighs, or null when nothing says so.
+  grams: number | null
 }
 
 // A portion just chosen, as a row.
@@ -66,6 +76,7 @@ function drafted(food: Food, amount: number, unit: string): Draft {
     brand: food.brand,
     amount,
     serving_label: serving?.name ?? null,
+    grams: toGrams(food, amount, unit, baseAmount),
   } as Draft
   for (const fact of HEADLINE) row[fact.key] = scale(food[fact.key], baseAmount)
   return row
@@ -76,6 +87,16 @@ function drafted(food: Food, amount: number, unit: string): Draft {
 function summed(rows: Draft[], key: Headline): number | null {
   if (rows.some((row) => row[key] === null)) return null
   return rows.reduce((total, row) => total + (row[key] ?? 0), 0)
+}
+
+// What the lot weighs, by the same rule, and the parts nothing can weigh.
+function weighed(rows: Draft[]): { grams: number | null; unweighed: string[] } {
+  const unweighed = rows.filter((row) => row.grams === null).map((row) => row.name)
+  return {
+    grams:
+      unweighed.length > 0 ? null : rows.reduce((total, row) => total + (row.grams ?? 0), 0),
+    unweighed,
+  }
 }
 
 // A row as it comes back from the server: an ingredient or an item in a meal,
@@ -95,12 +116,27 @@ async function sendable(part: Saved): Promise<Draft> {
     brand: part.brand,
     amount: part.amount,
     serving_label: part.serving_label,
+    grams: null,
   } as Draft
   for (const fact of HEADLINE) row[fact.key] = part[fact.key] ?? null
-  if (part.food_id === null || part.serving_label === null) return row
+  if (part.food_id === null) return row
+  // A row measured by weight is a weight already. Anything else asks the food:
+  // a serving for its id, a volume for what it weighs.
+  if (part.serving_label === null && MASS_UNITS.includes(part.unit as Unit)) {
+    return { ...row, grams: part.amount * UNIT_TO_BASE[part.unit as Unit] }
+  }
   const food = await api<Food>(`/foods/${part.food_id}`).catch(() => null)
-  const serving = food?.servings.find((one) => one.name === part.serving_label)
-  return { ...row, unit: serving ? `${SERVING}${serving.id}` : null }
+  if (food === null) return part.serving_label === null ? row : { ...row, unit: null }
+  const serving = food.servings.find((one) => one.name === part.serving_label)
+  const unit =
+    part.serving_label === null ? part.unit : serving ? `${SERVING}${serving.id}` : null
+  // The serving it was measured in has been renamed away, so there is nothing
+  // left to measure it with.
+  if (unit === null) return { ...row, unit }
+  const baseAmount = serving
+    ? part.amount * serving.base_amount
+    : toBase(food, part.amount, part.unit as Unit)
+  return { ...row, unit, grams: toGrams(food, part.amount, unit, baseAmount) }
 }
 
 export function PartsForm({
@@ -125,6 +161,11 @@ export function PartsForm({
 
   const [name, setName] = useState(existing?.name ?? '')
   const [yields, setYields] = useState(String(recipe?.yield_servings ?? 4))
+  // What the scale said when it was done. Empty means nobody weighed it, and
+  // the parts are what it weighs.
+  const [finalWeight, setFinalWeight] = useState(
+    existing?.final_weight_g == null ? '' : String(Math.round(existing.final_weight_g))
+  )
   // Null while the saved rows are being made sendable again.
   const [drafts, setDrafts] = useState<Draft[] | null>(existing === null ? [] : null)
   const [picking, setPicking] = useState(false)
@@ -162,9 +203,19 @@ export function PartsForm({
       return
     }
 
+    const typedWeight = finalWeight.trim()
+    const weight = Math.round(Number(typedWeight))
+    if (typedWeight !== '' && (!Number.isFinite(weight) || weight < 1)) {
+      setError('A final weight is a whole number of grams.')
+      return
+    }
+
     setSaving(true)
     setError('')
-    const body: Record<string, unknown> = { name }
+    const body: Record<string, unknown> = {
+      name,
+      final_weight_g: typedWeight === '' ? null : weight,
+    }
     const sent = rows.map((row) => ({ food_id: row.food_id, amount: row.amount, unit: row.unit }))
     if (kind === 'recipe') {
       body.yield_servings = Number(yields.trim())
@@ -186,6 +237,7 @@ export function PartsForm({
   }
 
   const rows = drafts ?? []
+  const total = weighed(rows)
 
   return (
     <>
@@ -215,6 +267,21 @@ export function PartsForm({
               <span className="w-16 text-xs text-muted">servings</span>
             </div>
           )}
+          <div className="t-row mt-3">
+            <label className="flex-1 text-sm" htmlFor="parts-weight">
+              Final weight (g), optional
+            </label>
+            <input
+              id="parts-weight"
+              className="t-input t-nums w-24 text-right"
+              inputMode="numeric"
+              value={finalWeight}
+              onChange={(event) => setFinalWeight(event.target.value)}
+            />
+          </div>
+          <p className="mt-1 text-xs text-muted">
+            What the scale says when it's done, if that differs.
+          </p>
         </div>
 
         <div className="t-card mb-3">
@@ -260,12 +327,22 @@ export function PartsForm({
           </button>
 
           {rows.length > 0 && (
-            <p className="t-nums mt-3 border-t border-line pt-2 text-xs text-muted">
-              Total {nutrientText('calories', summed(rows, 'calories'))} cal ·{' '}
-              {nutrientText('protein_g', summed(rows, 'protein_g'))}g protein ·{' '}
-              {nutrientText('carbs_g', summed(rows, 'carbs_g'))}g carbs ·{' '}
-              {nutrientText('fat_g', summed(rows, 'fat_g'))}g fat
-            </p>
+            <>
+              <p className="t-nums mt-3 border-t border-line pt-2 text-xs text-muted">
+                Total {nutrientText('calories', summed(rows, 'calories'))} cal ·{' '}
+                {nutrientText('protein_g', summed(rows, 'protein_g'))}g protein ·{' '}
+                {nutrientText('carbs_g', summed(rows, 'carbs_g'))}g carbs ·{' '}
+                {nutrientText('fat_g', summed(rows, 'fat_g'))}g fat
+              </p>
+              {/* What it all weighs, which is what logging it by the gram
+                  works from. Named parts where one of them cannot be weighed,
+                  because that is the thing to fix. */}
+              <p className="t-nums mt-1 text-xs text-muted">
+                {total.grams === null
+                  ? `Some parts can't be weighed: ${total.unweighed.join(', ')}`
+                  : `About ${Math.round(total.grams)} g in total`}
+              </p>
+            </>
           )}
         </div>
 

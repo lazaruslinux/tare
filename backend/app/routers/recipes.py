@@ -19,7 +19,7 @@ from app import models, schemas
 from app.db import get_db
 from app.deps import require_user
 from app.models import NUTRIENTS, now_utc
-from app.recipes import HEADLINE, own_recipe, per_serving, totals
+from app.recipes import HEADLINE, own_recipe, per_serving, totals, weight
 from app.routers.diary import measure, snapshot
 from app.routers.foods import MAX_NAME, MY_LIST_CAP, last_logged_by, readable_food
 
@@ -98,8 +98,11 @@ def ingredient_row(row: models.RecipeIngredient) -> dict[str, object]:
     return data
 
 
-def recipe_detail(recipe: models.Recipe) -> dict[str, object]:
+def recipe_detail(
+    db: Session, user: models.User, recipe: models.Recipe
+) -> dict[str, object]:
     """The whole recipe: its ingredients, what it makes, and what it comes to."""
+    grams, unweighed = weight(db, user, recipe)
     return {
         "id": recipe.id,
         "name": recipe.name,
@@ -107,6 +110,11 @@ def recipe_detail(recipe: models.Recipe) -> dict[str, object]:
         "ingredients": [ingredient_row(row) for row in recipe.ingredients],
         "totals": totals(recipe),
         "per_serving": per_serving(recipe),
+        # What the parts weigh, the ones nothing can weigh, and what the scale
+        # said when it was done.
+        "weight_g": grams,
+        "unweighed": unweighed,
+        "final_weight_g": recipe.final_weight_g,
     }
 
 
@@ -157,11 +165,12 @@ def create_recipe(
         user_id=user.id,
         name=checked_name(body.name, NO_NAME),
         yield_servings=body.yield_servings,
+        final_weight_g=body.final_weight_g,
         ingredients=build_ingredients(db, user, body.ingredients, {}),
     )
     db.add(recipe)
     db.commit()
-    return recipe_detail(recipe)
+    return recipe_detail(db, user, recipe)
 
 
 @router.get("/{recipe_id}")
@@ -170,7 +179,7 @@ def read_recipe(
     db: Session = Depends(get_db),
     user: models.User = Depends(require_user),
 ) -> dict[str, object]:
-    return recipe_detail(own_recipe(db, user, recipe_id))
+    return recipe_detail(db, user, own_recipe(db, user, recipe_id))
 
 
 @router.put("/{recipe_id}")
@@ -190,10 +199,11 @@ def replace_recipe(
     rows = build_ingredients(db, user, body.ingredients, held_names(recipe))
     recipe.name = checked_name(body.name, NO_NAME)
     recipe.yield_servings = body.yield_servings
+    recipe.final_weight_g = body.final_weight_g
     recipe.ingredients = rows
     recipe.updated_at = now_utc()
     db.commit()
-    return recipe_detail(recipe)
+    return recipe_detail(db, user, recipe)
 
 
 @router.delete("/{recipe_id}", status_code=status.HTTP_204_NO_CONTENT)

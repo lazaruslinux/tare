@@ -86,8 +86,13 @@ function withoutExercise(day: DiaryDay, id: number): DiaryDay {
 }
 
 // The brand and the portion, whichever of them there is. A recipe and a kept
-// meal are counted in servings of themselves rather than measured in anything.
-const counted = (entry: DiaryEntry) => entry.recipe_id !== null || entry.meal_id !== null
+// meal are counted in servings of themselves, unless they were weighed, in
+// which case the row reads in grams like any other portion.
+const counted = (entry: DiaryEntry) => wholeThing(entry) && entry.unit === 'serving'
+
+// A recipe or a kept meal: one line for a whole thing, however it was
+// measured, which is edited in the sheet that counts it.
+const wholeThing = (entry: DiaryEntry) => entry.recipe_id !== null || entry.meal_id !== null
 
 const under = (entry: DiaryEntry) =>
   counted(entry) && entry.amount !== null
@@ -262,7 +267,7 @@ export function Journal({
   }
 
   const openEntry = async (entry: DiaryEntry, slot: Slot) => {
-    if (counted(entry)) {
+    if (wholeThing(entry)) {
       setRefusal('')
       setServings({ entry, slot })
       return
@@ -616,6 +621,10 @@ export function Journal({
           name={servings.entry.name}
           servings={servings.entry.amount ?? 1}
           slot={servings.slot}
+          units={me.units}
+          // Whichever way it was logged is the way it is edited: a row already
+          // in grams has no weight of the whole thing here to switch against.
+          weighing={servings.entry.unit === 'g'}
           error={refusal}
           saving={saving}
           onClose={() => setServings(null)}

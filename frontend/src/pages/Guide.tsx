@@ -24,11 +24,12 @@ const QUESTIONS: { q: string; a: string }[] = [
       'fix it and submit again.',
   },
   {
-    q: 'What is My foods?',
+    q: 'What is Recently used?',
     a:
-      'The foods you made or scanned, plus any shared foods you added from the Tare ' +
-      'database, newest first. Taking a food off the list only changes your list; the ' +
-      'shared food stays in the database and you can add it back.',
+      'The foods you have logged lately, newest first, with the ones you made or ' +
+      'scanned under them. It fills itself in as you eat: nothing is added or taken ' +
+      'off by hand. To keep a food where you can always reach it, open it and tap ' +
+      'Favorite.',
   },
   {
     q: 'Label serving or weigh it?',
