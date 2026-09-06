@@ -666,7 +666,7 @@ export function Fitness({
 
       {connected && summary !== null && (
         <p className="t-note mb-3">
-          Connected ·{' '}
+          Connected · Last sync:{' '}
           {summary.last_sync === null ? 'nothing has arrived yet' : stampText(summary.last_sync)} ·{' '}
           <button type="button" className="t-tap44 text-accent" onClick={onOpenSync}>
             Set up another device

@@ -159,7 +159,8 @@ export function Sharing({
                 onChange={(next) => show('kcal', next)}
               />
               <Switch
-                label="Route line (not GPS location)"
+                label="Route/Activity Maps"
+                note="Tare automatically hides the first 200 meters of the start and end of all activities with route data."
                 checked={shows('route')}
                 onChange={(next) => show('route', next)}
               />
