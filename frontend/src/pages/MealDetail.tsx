@@ -2,11 +2,12 @@ import { Pencil } from 'lucide-react'
 import { useEffect, useState } from 'react'
 
 import { api, errorText, type Meal, type MealLogged, type Me } from '../api'
+import { PartLine } from '../components/FoodRows'
 import { LogSheet } from '../components/LogSheet'
-import { PanelFacts, nutrientText } from '../components/NutritionLabel'
+import { PanelFacts } from '../components/NutritionLabel'
 import { useTopBar } from '../hooks/useTopBar'
 import { SLOT_LABEL, slotByTime, today, type Slot } from '../lib/day'
-import { gramsText, portionText } from '../lib/units'
+import { gramsText } from '../lib/units'
 
 // How long the line saying what was logged stays up.
 const NOTICE = 5000
@@ -114,18 +115,7 @@ export function MealDetail({
           <div className="t-card mb-3">
             <p className="t-micro mb-1">Items / amounts</p>
             {meal.items.map((row) => (
-              <div key={row.id} className="t-row">
-                <span className="min-w-0 flex-1">
-                  <span className="block truncate text-sm">{row.name}</span>
-                  <span className="block truncate text-xs text-muted">
-                    {[row.brand, portionText(row)].filter(Boolean).join(' · ')}
-                  </span>
-                </span>
-                {row.food_id === null && <span className="t-chip shrink-0">food is gone</span>}
-                <span className="t-nums shrink-0 text-sm">
-                  {nutrientText('calories', row.calories)}
-                </span>
-              </div>
+              <PartLine key={row.id} row={row} />
             ))}
           </div>
 
@@ -153,7 +143,6 @@ export function MealDetail({
               name={meal.name}
               servings={1}
               slot={slotByTime(me.timezone)}
-              units={me.units}
               weight={weight}
               error={refusal}
               saving={saving}

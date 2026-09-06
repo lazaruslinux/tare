@@ -1,9 +1,8 @@
 import { Minus, Plus, Scale } from 'lucide-react'
 import { useState } from 'react'
 
-import type { Units } from '../api'
 import { SLOTS, SLOT_LABEL, type Slot } from '../lib/day'
-import { UNIT_TO_BASE, round1 } from '../lib/units'
+import { MASS_UNITS, UNIT_LABEL, UNIT_TO_BASE, round1, type Unit } from '../lib/units'
 import { Sheet } from './Sheet'
 
 // The little a recipe or a kept meal needs before it goes in the diary: how
@@ -20,7 +19,6 @@ export function LogSheet({
   name,
   servings,
   slot,
-  units,
   weight,
   weighing = false,
   error,
@@ -36,13 +34,11 @@ export function LogSheet({
   // Null when there is nothing to count, which is a whole kept meal.
   servings: number | null
   slot: Slot
-  // Which weight this account reads in, for the scale.
-  units: Units
   // What the whole thing weighs in grams, where anything does. Null or absent
   // is nothing to take a share of, so the scale is not offered.
   weight?: number | null
-  // Open on the scale rather than the count, which is how a row already
-  // logged by weight is edited.
+  // Already a weight, which is how a row logged in grams is edited: the field
+  // opens on the grams it holds rather than on zero.
   weighing?: boolean
   error?: string
   saving?: boolean
@@ -51,23 +47,25 @@ export function LogSheet({
   onSubmit: (amount: number | null, slot: Slot, byWeight: boolean) => void
   onDelete?: () => void
 }) {
-  // The scale reads in whichever weight this account reads in, and grams are
-  // what is sent whatever it says.
-  const scaleUnit = units === 'metric' ? 'g' : 'oz'
+  // Only worth offering the two when there is a weight to take a share of.
+  const weighable = typeof weight === 'number' && weight > 0
 
-  const [byWeight, setByWeight] = useState(weighing)
-  // A row already logged by weight opens on what it weighs, said in the unit
-  // this account reads: the amount handed in is always grams.
+  // The scale reads in one of three, starting in grams. Grams are what is sent
+  // whichever it says.
+  const [unit, setUnit] = useState<Unit>('g')
+  // Weigh it first, because weighing it is what this app is for.
+  const [byWeight, setByWeight] = useState(weighing || weighable)
+  // A row already logged by weight opens on the grams it holds. Anything else
+  // opens on zero for the scale, waiting for what it says.
   const [amount, setAmount] = useState(() => {
     if (servings === null) return ''
-    return weighing ? String(round1(servings / UNIT_TO_BASE[scaleUnit])) : String(servings)
+    if (weighing) return String(round1(servings))
+    return weighable ? '0' : String(servings)
   })
   const [meal, setMeal] = useState<Slot>(slot)
   const typed = Number(amount.trim())
   const counting = servings !== null || byWeight
   const valid = !counting || (Number.isFinite(typed) && typed > 0)
-  // Only worth offering the two when there is a weight to take a share of.
-  const weighable = typeof weight === 'number' && weight > 0
 
   const step = (by: number) => {
     const from = Number.isFinite(typed) && typed > 0 ? typed : 1
@@ -76,9 +74,9 @@ export function LogSheet({
 
   // Switching never rewrites the number as the same portion said another way:
   // two servings is not two grams, and a field that rewrites itself is a field
-  // nobody trusts.
+  // nobody trusts. The scale starts at zero and a count of servings at one.
   const choose = (next: boolean) => {
-    if (next !== byWeight) setAmount(next ? '' : '1')
+    if (next !== byWeight) setAmount(next ? '0' : '1')
     setByWeight(next)
   }
 
@@ -87,8 +85,10 @@ export function LogSheet({
       onSubmit(null, meal, false)
       return
     }
-    // Whole grams, whichever way the scale was read.
-    onSubmit(byWeight ? Math.round(typed * UNIT_TO_BASE[scaleUnit]) : typed, meal, byWeight)
+    // Whole grams, whichever of the three the scale was read in, and never
+    // rounded away to nothing.
+    const grams = Math.max(1, Math.round(typed * UNIT_TO_BASE[unit]))
+    onSubmit(byWeight ? grams : typed, meal, byWeight)
   }
 
   return (
@@ -98,14 +98,8 @@ export function LogSheet({
 
       {weighable && (
         <div className="mt-3 flex flex-wrap gap-2">
-          <button
-            type="button"
-            aria-pressed={!byWeight}
-            className="t-chip aria-pressed:border-accent aria-pressed:text-text"
-            onClick={() => choose(false)}
-          >
-            Servings
-          </button>
+          {/* The scale first, because weighing it is the answer this would
+              rather have. */}
           <button
             type="button"
             aria-pressed={byWeight}
@@ -115,13 +109,21 @@ export function LogSheet({
             <Scale className="h-3.5 w-3.5" strokeWidth={2.5} />
             Weigh it
           </button>
+          <button
+            type="button"
+            aria-pressed={!byWeight}
+            className="t-chip aria-pressed:border-accent aria-pressed:text-text"
+            onClick={() => choose(false)}
+          >
+            Servings
+          </button>
         </div>
       )}
 
       {counting && (
         <>
           <p className="t-micro mt-3 mb-2">{byWeight ? 'Weight' : 'Servings'}</p>
-          <div className="flex items-center gap-2">
+          <div className="flex flex-wrap items-center gap-2">
             {!byWeight && (
               <button
                 type="button"
@@ -138,10 +140,25 @@ export function LogSheet({
               aria-label={byWeight ? 'Weight' : 'Servings'}
               placeholder={byWeight ? '0' : ''}
               value={amount}
+              // The field opens at 0, so typing replaces it rather than
+              // making a weight read 0250.
+              onFocus={(event) => event.currentTarget.select()}
               onChange={(event) => setAmount(event.target.value)}
             />
             {byWeight ? (
-              <span className="text-sm text-muted">{scaleUnit}</span>
+              // The three a scale reads in, beside the field. Switching leaves
+              // the number alone: it is what the scale said, not a conversion.
+              MASS_UNITS.map((option) => (
+                <button
+                  key={option}
+                  type="button"
+                  aria-pressed={unit === option}
+                  className="t-chip aria-pressed:border-accent aria-pressed:text-text"
+                  onClick={() => setUnit(option)}
+                >
+                  {UNIT_LABEL[option]}
+                </button>
+              ))
             ) : (
               <button
                 type="button"

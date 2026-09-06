@@ -103,6 +103,20 @@ def test_a_meal_is_a_list_of_things_to_eat_together(client, breakfast):
     ]
 
 
+def test_an_item_row_carries_the_food_s_picture_and_standing(client, breakfast, toast):
+    """The row is drawn the way a food row is, so it needs what a food row
+    draws: the small picture, and whether the database holds this one."""
+    for row in breakfast["items"]:
+        assert row["thumb_url"] is None
+        assert row["status"] == "custom"
+
+    # Nothing to ask once the food is gone, so the row answers with neither.
+    assert client.delete(f"/api/foods/{toast['id']}").status_code == 204
+    gone = client.get(f"/api/meals/{breakfast['id']}").json()["items"][0]
+    assert gone["name"] == "Sourdough"
+    assert (gone["thumb_url"], gone["status"]) == (None, "")
+
+
 def test_a_meal_is_worth_what_the_things_in_it_are_worth(client, breakfast):
     first, second = breakfast["items"]
     # Two slices of 45 g at 260 calories per 100 g, and 200 mL at 60 per 100.

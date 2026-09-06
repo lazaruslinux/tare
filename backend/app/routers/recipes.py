@@ -21,7 +21,14 @@ from app.deps import require_user
 from app.models import NUTRIENTS, now_utc
 from app.recipes import HEADLINE, own_recipe, per_serving, totals, weight
 from app.routers.diary import measure, snapshot
-from app.routers.foods import MAX_NAME, MY_LIST_CAP, last_logged_by, readable_food
+from app.routers.foods import (
+    MAX_NAME,
+    MY_LIST_CAP,
+    Mark,
+    food_marks,
+    last_logged_by,
+    readable_food,
+)
 
 router = APIRouter(prefix="/recipes", tags=["recipes"])
 
@@ -82,8 +89,13 @@ def held_names(recipe: models.Recipe) -> dict[int, str]:
     return {row.food_id: row.name for row in recipe.ingredients if row.food_id is not None}
 
 
-def ingredient_row(row: models.RecipeIngredient) -> dict[str, object]:
-    """One ingredient: what it is, how much of it, and what that came to."""
+def ingredient_row(row: models.RecipeIngredient, mark: Mark | None) -> dict[str, object]:
+    """One ingredient: what it is, how much of it, and what that came to.
+
+    The name and brand are the recipe's own copy. The picture and the standing
+    come from the live food, so the row reads like the food rows everywhere
+    else, and both are empty once that food is gone.
+    """
     data: dict[str, object] = {
         "id": row.id,
         "food_id": row.food_id,
@@ -92,6 +104,8 @@ def ingredient_row(row: models.RecipeIngredient) -> dict[str, object]:
         "amount": row.amount,
         "unit": row.unit,
         "serving_label": row.serving_label,
+        "thumb_url": None if mark is None else mark.thumb,
+        "status": "" if mark is None else mark.status,
     }
     for field in NUTRIENTS:
         data[field] = getattr(row, field)
@@ -103,11 +117,15 @@ def recipe_detail(
 ) -> dict[str, object]:
     """The whole recipe: its ingredients, what it makes, and what it comes to."""
     grams, unweighed = weight(db, user, recipe)
+    marks = food_marks(db, user, [row.food_id for row in recipe.ingredients])
     return {
         "id": recipe.id,
         "name": recipe.name,
         "yield_servings": recipe.yield_servings,
-        "ingredients": [ingredient_row(row) for row in recipe.ingredients],
+        "ingredients": [
+            ingredient_row(row, marks.get(row.food_id) if row.food_id else None)
+            for row in recipe.ingredients
+        ],
         "totals": totals(recipe),
         "per_serving": per_serving(recipe),
         # What the parts weigh, the ones nothing can weigh, and what the scale

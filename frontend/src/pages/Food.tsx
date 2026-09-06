@@ -717,7 +717,6 @@ export function FoodTab({
           food={autoEdit.food}
           date={today(me.timezone)}
           slot={autoEdit.row.slot}
-          units={me.units}
           onClose={() => setAutoEdit(null)}
           onDone={() => setAutoEdit(null)}
           autoLog={{

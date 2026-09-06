@@ -606,7 +606,6 @@ export function Journal({
           food={editing.food}
           date={date}
           slot={editing.slot}
-          units={me.units}
           entry={editing.entry}
           onClose={() => setEditing(null)}
           onDone={reload}
@@ -621,7 +620,6 @@ export function Journal({
           name={servings.entry.name}
           servings={servings.entry.amount ?? 1}
           slot={servings.slot}
-          units={me.units}
           // Whichever way it was logged is the way it is edited: a row already
           // in grams has no weight of the whole thing here to switch against.
           weighing={servings.entry.unit === 'g'}

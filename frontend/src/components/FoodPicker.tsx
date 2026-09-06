@@ -266,7 +266,6 @@ export function FoodPicker({
         food={chosen}
         date={day}
         slot={meal}
-        units={me.units}
         onClose={() => setChosen(null)}
         onDone={() => onLogged?.()}
         onPick={onPick}

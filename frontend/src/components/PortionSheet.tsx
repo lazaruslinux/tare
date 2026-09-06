@@ -8,10 +8,10 @@ import {
   type DiaryEntry,
   type Food,
   type Headline,
-  type Units,
 } from '../api'
 import { SLOTS, SLOT_LABEL, type Slot } from '../lib/day'
 import {
+  MASS_UNITS,
   UNIT_GROUPS,
   UNIT_LABEL,
   UNIT_TO_BASE,
@@ -20,6 +20,7 @@ import {
   crossesFamily,
   pickToBase,
   portionText,
+  round1,
   scale,
   servingsText,
   type Pick,
@@ -93,10 +94,13 @@ function autoChoice(food: Food, row: AutoLog): string | null {
   return row.unit in UNIT_TO_BASE ? row.unit : null
 }
 
-// One of a serving, a hundred of the food's own base unit, and one of anything
-// else: nobody's portion is a hundred ounces.
-const startingAmount = (food: Food, choice: string): string =>
-  choice.startsWith(SERVING) || choice !== food.base_unit ? '1' : '100'
+// Whether a choice is the scale: one of the three weights, and not a serving or
+// something poured.
+const isWeight = (choice: string): boolean => MASS_UNITS.includes(choice as Unit)
+
+// One of a serving, and zero of anything measured out: the field waits for what
+// the scale says rather than guessing a portion nobody weighed.
+const startingAmount = (choice: string): string => (choice.startsWith(SERVING) ? '1' : '0')
 
 function opening(
   food: Food | null,
@@ -112,15 +116,24 @@ function opening(
     const choice = entryChoice(food, entry)
     if (choice !== null) return { amount: String(entry.amount ?? 1), choice }
   }
-  const choice = keptChoice(food) ?? (food.servings.length > 0 ? `${SERVING}0` : food.base_unit)
-  return { amount: startingAmount(food, choice), choice }
+  // Weigh it first, because weighing it is what this app is for. What somebody
+  // chose last for this food still wins, whichever of the three it was.
+  const choice = keptChoice(food) ?? 'g'
+  return { amount: startingAmount(choice), choice }
+}
+
+// What a scale reads: whole grams, and one decimal in ounces or pounds. The
+// field keeps what was typed; only the number that is sent is rounded, and it
+// never rounds down to nothing.
+function scaleAmount(pick: Pick, typed: number): number {
+  if (pick.kind === 'serving' || !isWeight(pick.unit)) return typed
+  return pick.unit === 'g' ? Math.max(1, Math.round(typed)) : Math.max(0.1, round1(typed))
 }
 
 export function PortionSheet({
   food,
   date,
   slot,
-  units,
   entry,
   onClose,
   onDone,
@@ -133,7 +146,6 @@ export function PortionSheet({
   food: Food | null
   date: string
   slot: Slot
-  units: Units
   entry?: DiaryEntry
   onClose: () => void
   onDone: () => void
@@ -158,20 +170,22 @@ export function PortionSheet({
   const [error, setError] = useState('')
   const [saving, setSaving] = useState(false)
 
-  // The chip that turns any food into something on a scale, in whichever unit
-  // this account reads weights in.
-  const weighIn: Unit = units === 'metric' ? 'g' : 'oz'
-
   const typed = Number(amount.trim())
   const valid = Number.isFinite(typed) && typed > 0
   const pick = food && choice ? asPick(choice) : null
-  const baseAmount = food && pick && valid ? pickToBase(food, food.servings, typed, pick) : 0
+  // What the field means once the scale's own rounding is applied. Everything
+  // downstream reads this, so the tiles preview what will actually be logged.
+  const sending = pick !== null && valid ? scaleAmount(pick, typed) : typed
+  // Whether the scale is what is being read, which is what the three weights
+  // are offered for.
+  const weighing = pick?.kind === 'unit' && isWeight(pick.unit)
+  const baseAmount = food && pick && valid ? pickToBase(food, food.servings, sending, pick) : 0
   // The one case where a number on screen rests on something the label never
   // said. It is marked, and then it is explained.
   const assumesWater =
     food !== null && pick?.kind === 'unit' && crossesFamily(food, pick.unit) && !food.density_g_per_ml
   // An entry whose food is gone scales what survived it, and nothing else.
-  const factor = entry?.amount != null && valid ? typed / entry.amount : 1
+  const factor = entry?.amount != null && valid ? sending / entry.amount : 1
 
   const needsAmount = food !== null || entry?.amount != null
 
@@ -186,10 +200,13 @@ export function PortionSheet({
 
   // Switching measurement never rewrites the number as the same portion said
   // another way: two of something is not two grams of it, and a field that
-  // rewrites itself is a field nobody trusts. A serving starts at one, and a
-  // weight starts empty, waiting for what the scale says.
+  // rewrites itself is a field nobody trusts. A serving starts at one and a
+  // measured amount at zero, waiting for what the scale says. Swapping one
+  // weight for another leaves the number alone: 8 oz reads as 8 lb, not as
+  // the half pound eight ounces happens to be.
   const choose = (next: string) => {
-    if (food !== null && next !== choice) setAmount(next.startsWith(SERVING) ? '1' : '')
+    const swap = isWeight(choice) && isWeight(next)
+    if (food !== null && next !== choice && !swap) setAmount(startingAmount(next))
     setChoice(next)
   }
 
@@ -199,7 +216,7 @@ export function PortionSheet({
   const baseLine = (row: Food): string => {
     if (!valid) return `- ${row.base_unit}`
     const weighed = `${amountText(baseAmount, row.base_unit)} ${row.base_unit}`
-    return pick?.kind === 'serving' ? `${servingsText(typed)} = ${weighed}` : weighed
+    return pick?.kind === 'serving' ? `${servingsText(sending)} = ${weighed}` : weighed
   }
 
   // Choosing a portion for something else rather than logging one.
@@ -209,10 +226,10 @@ export function PortionSheet({
     if (food !== null && pick !== null) {
       const unit = chosenUnit(food, pick)
       return entry
-        ? { slot: meal, amount: typed, unit }
-        : { date, slot: meal, food_id: food.id, amount: typed, unit }
+        ? { slot: meal, amount: sending, unit }
+        : { date, slot: meal, food_id: food.id, amount: sending, unit }
     }
-    return entry?.amount != null ? { slot: meal, amount: typed } : { slot: meal }
+    return entry?.amount != null ? { slot: meal, amount: sending } : { slot: meal }
   }
 
   const save = async () => {
@@ -222,7 +239,7 @@ export function PortionSheet({
     }
     if (picking && food !== null && pick !== null && onPick) {
       keep(food, choice)
-      onPick(food, typed, chosenUnit(food, pick))
+      onPick(food, sending, chosenUnit(food, pick))
       return
     }
     if (autoLog && food !== null && pick !== null) {
@@ -234,7 +251,7 @@ export function PortionSheet({
           method: standing === null ? 'POST' : 'PATCH',
           body: {
             ...(standing === null ? { food_id: food.id } : {}),
-            amount: typed,
+            amount: sending,
             unit: chosenUnit(food, pick),
             slot: meal,
           },
@@ -304,13 +321,16 @@ export function PortionSheet({
       )}
 
       {needsAmount && (
-        <div className="mt-3 mb-3 flex gap-2">
+        <div className="mt-3 mb-3 flex flex-wrap items-center gap-2">
           <input
             className="t-input t-nums w-24 text-right"
             inputMode="decimal"
             aria-label="Amount"
             placeholder="0"
             value={amount}
+            // The field opens at 0, so typing replaces it rather than making
+            // the first weight of the day read 0250.
+            onFocus={(event) => event.currentTarget.select()}
             onChange={(event) => setAmount(event.target.value)}
           />
           {food === null ? (
@@ -319,7 +339,9 @@ export function PortionSheet({
             </span>
           ) : (
             <select
-              className="t-input min-w-0 flex-1"
+              // Wide enough to read a serving's name. The three weights beside
+              // it wrap to their own line rather than squeezing it.
+              className="t-input min-w-28 flex-1"
               aria-label="Unit"
               value={choice}
               onChange={(event) => choose(event.target.value)}
@@ -344,6 +366,20 @@ export function PortionSheet({
               ))}
             </select>
           )}
+          {/* The three a scale reads in, beside the field. Switching leaves
+              the number alone: it is what the scale said, not a conversion. */}
+          {weighing &&
+            MASS_UNITS.map((unit) => (
+              <button
+                key={unit}
+                type="button"
+                aria-pressed={choice === unit}
+                className="t-chip aria-pressed:border-accent aria-pressed:text-text"
+                onClick={() => choose(unit)}
+              >
+                {UNIT_LABEL[unit]}
+              </button>
+            ))}
         </div>
       )}
 
@@ -354,9 +390,11 @@ export function PortionSheet({
               serving, whatever the label calls it. */}
           <button
             type="button"
-            aria-pressed={choice === weighIn}
+            aria-pressed={weighing}
             className="t-chip aria-pressed:border-accent aria-pressed:text-text"
-            onClick={() => choose(weighIn)}
+            onClick={() => {
+              if (!weighing) choose('g')
+            }}
           >
             <Scale className="h-3.5 w-3.5" strokeWidth={2.5} />
             Weigh it

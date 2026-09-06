@@ -128,6 +128,20 @@ def test_a_nutrient_one_ingredient_lacks_is_unknown_rather_than_smaller(client, 
     assert porridge["per_serving"]["fat_g"] is not None
 
 
+def test_an_ingredient_row_carries_the_food_s_picture_and_standing(client, porridge, oats):
+    """The row is drawn the way a food row is, so it needs what a food row
+    draws: the small picture, and whether the database holds this one."""
+    for row in porridge["ingredients"]:
+        assert row["thumb_url"] is None
+        assert row["status"] == "custom"
+
+    # Nothing to ask once the food is gone, so the row answers with neither.
+    assert client.delete(f"/api/foods/{oats['id']}").status_code == 204
+    gone = client.get(f"/api/recipes/{porridge['id']}").json()["ingredients"][0]
+    assert gone["name"] == "Rolled oats"
+    assert (gone["thumb_url"], gone["status"]) == (None, "")
+
+
 def test_a_recipe_is_logged_by_the_serving(client, porridge):
     logged = log_recipe(client, porridge, 1.5)
     assert logged.status_code == 201

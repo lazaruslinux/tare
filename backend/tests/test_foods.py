@@ -340,12 +340,28 @@ def test_a_shared_food_eaten_by_somebody_else_is_not_in_my_list(
     assert client.get("/api/foods/mine").json() == []
 
 
-def test_the_list_stops_at_the_cap(client, monkeypatch, signed_in):
-    assert foods_router.MY_LIST_CAP == 1000
-    monkeypatch.setattr(foods_router, "MY_LIST_CAP", 2)
-    for index in range(3):
-        create(client, name=f"Bean number {index}")
-    assert len(client.get("/api/foods/mine").json()) == 2
+def test_recently_used_stops_at_ten(client, signed_in):
+    """Ten rows and no more, newest eaten first. The eleventh is something
+    somebody has stopped reaching for, and searching still finds it."""
+    assert foods_router.RECENT_USED == 10
+    made = [create(client, name=f"Bean number {index}").json() for index in range(12)]
+    for index, food in enumerate(made):
+        logged = client.post(
+            "/api/diary",
+            json={
+                "date": f"2026-09-{index + 1:02d}",
+                "slot": "breakfast",
+                "food_id": food["id"],
+                "amount": 100,
+                "unit": "g",
+            },
+        )
+        assert logged.status_code == 201
+
+    listed = client.get("/api/foods/mine").json()
+    assert [row["name"] for row in listed] == [
+        f"Bean number {index}" for index in range(11, 1, -1)
+    ]
 
 
 def test_search_ranks_the_name_by_where_the_word_sits(client, signed_in):

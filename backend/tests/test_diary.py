@@ -132,6 +132,18 @@ def test_a_unit_goes_through_the_one_conversion(client, chicken):
     assert (made["amount"], made["unit"]) == (4, "oz")
 
 
+def test_the_pound_converts_the_same_way_the_ounce_does(client, chicken):
+    """The third weight the sheet offers. One pound is sixteen ounces, and both
+    go through the one table in app.units."""
+    pound = log(client, food_id=chicken["id"], amount=1, unit="lb").json()
+    ounces = log(client, food_id=chicken["id"], amount=16, unit="oz").json()
+    # A pound is 453.592 g, and 165 per 100 g of that is 748.4268 calories.
+    assert round(pound["calories"], 4) == round(165 * 4.53592, 4)
+    assert (pound["amount"], pound["unit"]) == (1, "lb")
+    assert pound["serving_label"] is None
+    assert round(pound["calories"], 2) == round(ounces["calories"], 2)
+
+
 def test_a_liquid_measured_by_weight_goes_through_its_density(client, oil):
     made = log(client, food_id=oil["id"], amount=100, unit="g").json()
     # 100 g of oil at 0.91 g per mL takes up 109.8901 mL.

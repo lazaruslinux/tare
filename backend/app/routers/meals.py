@@ -28,7 +28,7 @@ from app.routers.diary import (
     snapshot,
     stored_unit,
 )
-from app.routers.foods import MY_LIST_CAP, last_logged_by, readable_food
+from app.routers.foods import MY_LIST_CAP, Mark, food_marks, last_logged_by, readable_food
 from app.routers.recipes import checked_name, part_food
 
 router = APIRouter(prefix="/meals", tags=["meals"])
@@ -167,12 +167,16 @@ def totals(panels: list[dict[str, float | None] | None]) -> dict[str, float | No
 
 
 def item_row(
-    row: models.MealTemplateItem, panel: dict[str, float | None] | None
+    row: models.MealTemplateItem,
+    panel: dict[str, float | None] | None,
+    mark: Mark | None,
 ) -> dict[str, object]:
     """One item. food_id is null once its food is gone, and the name stays.
 
     The four the lists and the form read come with it, and they are null on an
-    item whose food has gone, the same way the row itself says so.
+    item whose food has gone, the same way the row itself says so. The picture
+    and the standing come from the live food, so the row reads like the food
+    rows everywhere else, and both are empty once that food is gone.
     """
     data: dict[str, object] = {
         "id": row.id,
@@ -182,6 +186,8 @@ def item_row(
         "amount": row.amount,
         "unit": row.unit,
         "serving_label": row.serving_label,
+        "thumb_url": None if mark is None else mark.thumb,
+        "status": "" if mark is None else mark.status,
     }
     for field in HEADLINE:
         data[field] = None if panel is None else panel[field]
@@ -191,10 +197,14 @@ def item_row(
 def meal_detail(db: Session, user: models.User, meal: models.MealTemplate) -> dict[str, object]:
     panels, _ = portions(db, user, meal)
     grams, unweighed = weight(db, user, meal)
+    marks = food_marks(db, user, [row.food_id for row in meal.items])
     return {
         "id": meal.id,
         "name": meal.name,
-        "items": [item_row(row, panel) for row, panel in zip(meal.items, panels)],
+        "items": [
+            item_row(row, panel, marks.get(row.food_id) if row.food_id else None)
+            for row, panel in zip(meal.items, panels)
+        ],
         "totals": totals(panels),
         # What the items weigh, the ones nothing can weigh, and what the scale
         # said when it was made up.

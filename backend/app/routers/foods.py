@@ -77,6 +77,10 @@ SEARCH_LIMIT = 25
 RECENT_LIMIT = 10
 RECENT_SCANNED = 50
 
+# How long the Recently used list runs. His cap: ten rows, and the card on the
+# Food tab shows three of them and offers the rest.
+RECENT_USED = 10
+
 # What a private food has to carry to be worth logging. The other six are on
 # the label or they are not, and a food is not useless without them.
 REQUIRED = ("calories", "protein_g", "carbs_g", "fat_g")
@@ -228,6 +232,36 @@ def pictures_for(
         if food_id is not None:
             shown[food_id] = picture_of(photo_id, path)
     return shown
+
+
+class Mark(NamedTuple):
+    """What a row that copied a food's name still has to ask the live food for:
+    the small picture it draws, and whether the database holds it."""
+
+    thumb: str | None
+    status: str
+
+
+def food_marks(db: Session, user: models.User, food_ids: Sequence[int | None]) -> dict[int, Mark]:
+    """The picture and the standing of each of these foods, by id.
+
+    For the recipe and meal rows, which keep a name and a brand of their own and
+    nothing else. One query for the foods and the picture queries behind it, not
+    a lookup per row. A food that is gone is simply not in the answer.
+    """
+    wanted = {food_id for food_id in food_ids if food_id is not None}
+    if not wanted:
+        return {}
+    foods = list(db.execute(select(models.Food).where(models.Food.id.in_(wanted))).scalars())
+    pictures = pictures_for(db, user, foods)
+    marks: dict[int, Mark] = {}
+    for food in foods:
+        picture = pictures.get(food.id)
+        # The address a row actually draws: the small copy, or the whole
+        # picture on a food photographed before there were any.
+        thumb = None if picture is None else (picture.thumb or picture.url)
+        marks[food.id] = Mark(thumb, food.status)
+    return marks
 
 
 def first_servings(
@@ -883,6 +917,10 @@ def list_my_foods(
     Ordered by when each was last eaten, newest first, which is the Journal's
     own order: what somebody ate this morning is what they reach for again.
     Under those, the ones nobody has logged yet, by when each was entered.
+
+    Ten rows, own foods counted in with the rest. Everything a member owns is
+    still found by searching or browsing; this is the short list of what they
+    have been eating, not their whole cupboard.
     """
     logged = last_logged_by(models.DiaryEntry.food_id, user)
     query = (
@@ -901,10 +939,9 @@ def list_my_foods(
             models.Food.created_at.desc(),
             models.Food.id.desc(),
         )
-        # A ceiling rather than paging: this is one person's own list, and the
-        # screen that reads it filters what it was given rather than asking
-        # again.
-        .limit(MY_LIST_CAP)
+        # Ten, not a ceiling nobody reaches: this is Recently used, and an
+        # eleventh row is something somebody has stopped reaching for.
+        .limit(RECENT_USED)
     )
     return food_rows(db, user, list(db.execute(query).scalars()))
 

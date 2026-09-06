@@ -114,7 +114,6 @@ export function ScanFlow({
         food={stage.food}
         date={date ?? today(me.timezone)}
         slot={slot ?? slotByTime(me.timezone)}
-        units={me.units}
         onClose={onClose}
         onDone={() => onLogged?.()}
         onPick={onPick}

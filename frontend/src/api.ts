@@ -536,6 +536,10 @@ export type Part = {
   amount: number
   unit: string
   serving_label: string | null
+  // Read off the live food rather than the copy this row keeps, so the row
+  // draws what a food row draws. Both are empty once that food is gone.
+  thumb_url: string | null
+  status: string
 }
 
 // An ingredient also carries what that much of the food came to, worked out

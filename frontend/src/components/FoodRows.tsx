@@ -1,12 +1,12 @@
 import { BadgeCheck, Camera, X } from 'lucide-react'
 
-import type { Community, FoodRow, MealRow, RecipeRow, RepeatRow } from '../api'
-import { scale, servingsText } from '../lib/units'
+import type { Community, FoodRow, MealRow, Part, RecipeRow, RepeatRow } from '../api'
+import { portionText, scale, servingsText } from '../lib/units'
 import { nutrientText } from './NutritionLabel'
 
-// The three rows a member's own lists are made of, in one place because the
-// Food page's cards and the list screen behind them show the same rows and
-// must not drift apart.
+// The rows a member's own lists are made of, in one place because the Food
+// page's cards, the list screen behind them, and the recipe and meal screens
+// show the same rows and must not drift apart.
 
 // The line under a food's name: who makes it and what it is, whichever of the
 // two it carries. Every list reads it the same way, so a food looks like itself
@@ -57,8 +57,7 @@ export function Verified({ className = 'h-4 w-4' }: { className?: string }) {
 // The small copy where the server has written one, which is the whole picture
 // again on a food photographed before there were any. Loaded lazily, so a list
 // of three hundred rows fetches the dozen somebody is looking at.
-export function PhotoThumb({ row }: { row: FoodRow }) {
-  const url = row.thumb_url ?? row.photo_url
+export function Thumb({ url }: { url: string | null }) {
   if (url === null) {
     return (
       <span className="t-phototile h-10 w-10" aria-hidden="true">
@@ -75,6 +74,10 @@ export function PhotoThumb({ row }: { row: FoodRow }) {
       className="h-10 w-10 shrink-0 rounded-lg border border-line object-cover"
     />
   )
+}
+
+export function PhotoThumb({ row }: { row: FoodRow }) {
+  return <Thumb url={row.thumb_url ?? row.photo_url} />
 }
 
 // What a food is worth, per the thing somebody eats. The label serving where
@@ -174,6 +177,31 @@ export function MealLine({ row, onOpen }: { row: MealRow; onOpen: () => void }) 
         {nutrientText('calories', row.totals.calories)} cal
       </span>
     </button>
+  )
+}
+
+// One thing inside a recipe or a kept meal, drawn the way a food is drawn
+// everywhere else: the same thumb, the same check on a food the database holds,
+// the brand under the name, and on the right how much of it over what it came
+// to. Nothing here opens: the row is a reading, not a way in.
+export function PartLine({ row }: { row: Part & { calories: number | null } }) {
+  const gone = row.food_id === null
+  const under = [row.brand, gone ? 'this food is gone' : ''].filter(Boolean).join(' · ')
+  return (
+    <div className="t-row">
+      <Thumb url={row.thumb_url} />
+      <span className="min-w-0 flex-1">
+        <span className="flex items-center gap-1.5">
+          <span className="truncate text-sm">{row.name}</span>
+          {row.status === 'approved' && <Verified />}
+        </span>
+        {under && <span className="block truncate text-xs text-muted">{under}</span>}
+      </span>
+      <span className="shrink-0 text-right">
+        <span className="t-nums block text-xs text-muted">{portionText(row)}</span>
+        <span className="t-nums block text-sm">{nutrientText('calories', row.calories)}</span>
+      </span>
+    </div>
   )
 }
 

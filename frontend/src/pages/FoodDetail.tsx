@@ -554,7 +554,6 @@ export function FoodDetail({
               food={food}
               date={today(me.timezone)}
               slot={slotByTime(me.timezone)}
-              units={me.units}
               onClose={() => setLogging(false)}
               onDone={() => setLogging(false)}
             />
@@ -564,7 +563,6 @@ export function FoodDetail({
               food={food}
               date={today(me.timezone)}
               slot={slotByTime(me.timezone)}
-              units={me.units}
               onClose={() => setAutoOpen(false)}
               onDone={() => setAutoOpen(false)}
               autoLog={{
