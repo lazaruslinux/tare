@@ -349,7 +349,7 @@ export function FoodDetail({
               {/* The one action that is why the page was opened, so it is
                   reachable without scrolling past the label. */}
               <button
-                className="t-btn t-btn-primary col-start-2 row-start-3 mb-3 w-full self-end @xl:row-start-1 @xl:self-start"
+                className="t-btn t-btn-primary col-start-2 row-start-3 mb-3 w-full self-end @xl:row-start-1 @xl:min-h-10 @xl:self-start @xl:py-2"
                 type="button"
                 onClick={() => setLogging(true)}
               >
@@ -377,7 +377,7 @@ export function FoodDetail({
                   same two to a line under Log in the stack. */}
               <div className="col-span-2 mb-3 flex min-w-0 flex-wrap gap-3 @xl:col-start-2 @xl:col-end-3 @xl:row-start-2">
                 <button
-                  className="t-btn flex-1 basis-[calc(50%-0.375rem)] min-[640px]:flex-none min-[640px]:basis-auto @xl:flex-1 @xl:basis-[calc(50%-0.375rem)] @xl:px-3"
+                  className="t-btn flex-1 basis-[calc(50%-0.375rem)] min-[640px]:flex-none min-[640px]:basis-auto @xl:flex-1 @xl:basis-[calc(50%-0.375rem)] @xl:min-h-9 @xl:px-3 @xl:py-1.5 @xl:text-sm"
                   type="button"
                   aria-pressed={food.pinned}
                   onClick={() => toggleFavorite(food)}
@@ -390,7 +390,7 @@ export function FoodDetail({
                   {food.pinned ? 'Favorited' : 'Favorite'}
                 </button>
                 <button
-                  className="t-btn flex-1 basis-[calc(50%-0.375rem)] min-[640px]:flex-none min-[640px]:basis-auto @xl:flex-1 @xl:basis-[calc(50%-0.375rem)] @xl:px-3"
+                  className="t-btn flex-1 basis-[calc(50%-0.375rem)] min-[640px]:flex-none min-[640px]:basis-auto @xl:flex-1 @xl:basis-[calc(50%-0.375rem)] @xl:min-h-9 @xl:px-3 @xl:py-1.5 @xl:text-sm"
                   type="button"
                   aria-pressed={standing !== null}
                   onClick={() => setAutoOpen(true)}
@@ -400,7 +400,7 @@ export function FoodDetail({
                 </button>
                 {((food.mine && !shared) || (reviews(me) && shared)) && (
                   <button
-                    className="t-btn flex-1 basis-[calc(50%-0.375rem)] min-[640px]:flex-none min-[640px]:basis-auto @xl:flex-1 @xl:basis-[calc(50%-0.375rem)] @xl:px-3"
+                    className="t-btn flex-1 basis-[calc(50%-0.375rem)] min-[640px]:flex-none min-[640px]:basis-auto @xl:flex-1 @xl:basis-[calc(50%-0.375rem)] @xl:min-h-9 @xl:px-3 @xl:py-1.5 @xl:text-sm"
                     type="button"
                     onClick={() => onEdit(food)}
                   >
@@ -412,7 +412,7 @@ export function FoodDetail({
                     open it without going through the editor. */}
                 {reviews(me) && food.label_photo_url && (
                   <button
-                    className="t-btn flex-1 basis-[calc(50%-0.375rem)] min-[640px]:flex-none min-[640px]:basis-auto @xl:flex-1 @xl:basis-[calc(50%-0.375rem)] @xl:px-3"
+                    className="t-btn flex-1 basis-[calc(50%-0.375rem)] min-[640px]:flex-none min-[640px]:basis-auto @xl:flex-1 @xl:basis-[calc(50%-0.375rem)] @xl:min-h-9 @xl:px-3 @xl:py-1.5 @xl:text-sm"
                     type="button"
                     onClick={() => setViewing(food.label_photo_url ?? null)}
                   >
@@ -520,7 +520,7 @@ export function FoodDetail({
                 )}
                 {me.is_admin && shared && (
                   <button
-                    className="t-btn t-btn-danger mb-3 w-full"
+                    className="t-btn t-btn-danger mb-3 w-full @xl:min-h-9 @xl:py-1.5 @xl:text-sm"
                     type="button"
                     onClick={() => {
                       setErasingError('')
