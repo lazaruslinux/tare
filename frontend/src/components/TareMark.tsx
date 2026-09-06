@@ -18,10 +18,10 @@ export function TareMark({
       aria-hidden="true"
       focusable="false"
     >
-      <rect x="466" y="72" width="68" height="760" rx="6" />
-      <rect x="270" y="216" width="460" height="70" rx="8" />
+      <rect x="450" y="60" width="100" height="780" rx="8" />
+      <rect x="270" y="202" width="460" height="100" rx="10" />
       <rect x="128" y="232" width="744" height="40" rx="20" />
-      <g fill="none" stroke="currentColor" strokeWidth="30" strokeLinecap="round" strokeLinejoin="round">
+      <g fill="none" stroke="currentColor" strokeWidth="40" strokeLinecap="round" strokeLinejoin="round">
         <path d="M200 286 L96 560 M200 286 L304 560" />
         <path d="M800 286 L696 560 M800 286 L904 560" />
       </g>
