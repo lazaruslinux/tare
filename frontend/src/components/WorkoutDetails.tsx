@@ -1,8 +1,17 @@
-import { lazy, Suspense, useEffect, useRef, useState } from 'react'
+import {
+  Component,
+  lazy,
+  Suspense,
+  useEffect,
+  useRef,
+  useState,
+  type ErrorInfo,
+  type ReactNode,
+} from 'react'
 
 import { api, errorText, type Me, type WorkoutDetail } from '../api'
 import { useTopBar } from '../hooks/useTopBar'
-import { basemapInstalled } from '../lib/basemap'
+import { basemapInstalled, canDrawMaps } from '../lib/basemap'
 import { dayLabel, today } from '../lib/day'
 import { placesOf, spansOf } from '../lib/route'
 import {
@@ -21,6 +30,28 @@ import { Switch } from './Switch'
 // The map and everything under it, fetched only where the instance has the
 // basemap installed. An instance without it never asks for this chunk.
 const RouteMap = lazy(() => import('./RouteMap'))
+
+// The renderer can still throw on a machine that said it could draw. Rather
+// than let the root boundary blank the app over one card, this catches it and
+// puts the drawn line back in its place.
+class MapGuard extends Component<
+  { children: ReactNode; fallback: ReactNode },
+  { failed: boolean }
+> {
+  state = { failed: false }
+
+  static getDerivedStateFromError() {
+    return { failed: true }
+  }
+
+  componentDidCatch(error: Error, info: ErrorInfo) {
+    console.error(error, info.componentStack)
+  }
+
+  render() {
+    return this.state.failed ? this.props.fallback : this.props.children
+  }
+}
 
 // What another member's sharing left out is absent from the answer, so
 // everything drawn from one is asked whether it is there at all.
@@ -172,9 +203,10 @@ export function WorkoutDetails({
   // none, which is where every workout starts and where a second tap on the
   // same row puts it back.
   const [chosen, setChosen] = useState<number | null>(null)
-  // Whether this instance was given the basemap. Asked once a session with a
-  // request for a single byte, and false until it answers, so the drawn line
-  // is what a slow answer leaves on the screen.
+  // Whether this instance was given the basemap and this browser can draw one.
+  // The archive is asked once a session with a request for a single byte, and
+  // this is false until it answers, so the drawn line is what a slow answer
+  // leaves on the screen.
   const [mapped, setMapped] = useState(false)
   // The way to move the dot along the route line, filled in by the drawing and
   // driven by the graph's cursor.
@@ -193,7 +225,7 @@ export function WorkoutDetails({
 
   useEffect(() => {
     let alive = true
-    void basemapInstalled().then((yes) => alive && setMapped(yes))
+    void basemapInstalled().then((yes) => alive && setMapped(yes && canDrawMaps()))
     return () => {
       alive = false
     }
@@ -295,20 +327,31 @@ export function WorkoutDetails({
         <div className="t-card mb-3">
           <p className="t-micro mb-2">Route</p>
           {mapped ? (
-            <Suspense
+            <MapGuard
+              key={workoutId}
               fallback={
                 <RouteLine
                   points={route}
                   highlight={chosen === null ? null : (spans[chosen] ?? null)}
+                  marker={marker}
                 />
               }
             >
-              <RouteMap
-                points={route}
-                highlight={chosen === null ? null : (spans[chosen] ?? null)}
-                marker={marker}
-              />
-            </Suspense>
+              <Suspense
+                fallback={
+                  <RouteLine
+                    points={route}
+                    highlight={chosen === null ? null : (spans[chosen] ?? null)}
+                  />
+                }
+              >
+                <RouteMap
+                  points={route}
+                  highlight={chosen === null ? null : (spans[chosen] ?? null)}
+                  marker={marker}
+                />
+              </Suspense>
+            </MapGuard>
           ) : (
             <RouteLine
               points={route}

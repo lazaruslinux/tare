@@ -135,6 +135,9 @@ export function DayBars({
   // The word the numbers are in, which is the only part of a tooltip this
   // component cannot work out for itself. No word, no tooltip.
   titleUnit,
+  // The same word where a column is a week, which is an average of the days
+  // in it rather than a count. The day's word where none is given.
+  weekUnit,
   // Whether a column is a week rather than a day, which changes what a
   // tooltip is about and puts the marker on the week being lived in.
   weeks = false,
@@ -152,6 +155,7 @@ export function DayBars({
   highlightToday?: boolean
   label?: (value: number) => string
   titleUnit?: string
+  weekUnit?: string
   weeks?: boolean
   selected?: number | null
   onSelect?: (index: number | null) => void
@@ -264,7 +268,7 @@ export function DayBars({
                 titleUnit === undefined || !row.has
                   ? undefined
                   : weeks
-                    ? `${weekTitle(row.date)}: ${plain(row.value)} of ${plain(row.target)} ${titleUnit} a day`
+                    ? `${weekTitle(row.date)}: ${plain(row.value)} of ${plain(row.target)} ${weekUnit ?? titleUnit}/day avg`
                     : `${dayTitle(row.date)}: ${plain(row.value)} of ${plain(row.target)} ${titleUnit}`
               }
             >

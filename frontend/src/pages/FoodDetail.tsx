@@ -260,250 +260,280 @@ export function FoodDetail({
       {error && <p className="t-error">{error}</p>}
       {food && (
         <>
-          <div className="flex items-start justify-between gap-3">
-            <div className="min-w-0">
-              <div className="flex items-center gap-2">
-                <p className="min-w-0 text-xl font-semibold tracking-tight">{food.name}</p>
-                {shared && <Verified className="h-5 w-5" />}
+          {/* One grid, read two ways, which is a question about the well rather
+              than about the window. On a phone the second column is the room
+              beside the picture, and Log sits at the foot of it. Once the well
+              is wide enough that column becomes the action stack, the identity
+              takes the first, and the facts and the cards run under both. */}
+          <div className="@container">
+            <div className="grid grid-cols-[auto_minmax(0,1fr)] gap-x-3 @xl:grid-cols-[minmax(15rem,1fr)_55%] @xl:items-start @xl:gap-x-4">
+              <div className="contents min-w-0 @xl:block @xl:col-start-1 @xl:row-start-1 @xl:row-end-4">
+                <div className="col-span-2 flex min-w-0 items-start justify-between gap-3">
+                  <div className="min-w-0">
+                    <div className="flex items-center gap-2">
+                      <p className="min-w-0 text-xl font-semibold tracking-tight">{food.name}</p>
+                      {shared && <Verified className="h-5 w-5" />}
+                    </div>
+                    <div className="mb-3 flex items-center gap-2">
+                      <p className="truncate text-sm text-muted">{food.brand || 'No brand'}</p>
+                      {/* Which aisle it is browsed under, on the foods that are
+                          browsed. A private food is nobody else's to find. */}
+                      {shared && (
+                        <span className="t-chip shrink-0">{sectionLabel(food.section)}</span>
+                      )}
+                    </div>
+                  </div>
+                  {food.status === 'pending' && <span className="t-chip shrink-0">pending</span>}
+                </div>
+
+                <div className="mb-3 contents items-center gap-3 @xl:flex">
+                  {food.photo_url ? (
+                    // A picture on file opens big. Swapping it is the edit form's job.
+                    <button
+                      type="button"
+                      className="row-span-2 mb-3 block h-24 shrink-0 @xl:mb-0"
+                      aria-label="See the front picture"
+                      onClick={() => setViewing(food.photo_url)}
+                    >
+                      <img
+                        src={food.photo_url}
+                        alt={`The front of ${food.name}`}
+                        className="h-24 w-24 rounded-xl border border-line object-cover"
+                      />
+                    </button>
+                  ) : (
+                    <>
+                      <label
+                        className="t-phototile row-span-2 mb-3 h-24 w-24 cursor-pointer rounded-xl @xl:mb-0"
+                        htmlFor="detail-photo"
+                      >
+                        <Camera className="h-6 w-6" strokeWidth={1.75} />
+                        <span className="sr-only">
+                          {food.mine ? 'Add a photo of the front' : 'Submit a photo of the front'}
+                        </span>
+                      </label>
+                      <input
+                        id="detail-photo"
+                        className="sr-only"
+                        type="file"
+                        accept="image/*"
+                        capture="environment"
+                        disabled={sending}
+                        onChange={(event) => takePhoto(event, food)}
+                      />
+                    </>
+                  )}
+                  {food.description && (
+                    <p className="col-start-2 row-start-2 line-clamp-2 min-w-0 flex-1 self-start text-sm @xl:line-clamp-none @xl:self-auto">
+                      {food.description}
+                    </p>
+                  )}
+                </div>
+                {offered && (
+                  <p className="col-span-2 mb-3 flex min-w-0 items-center gap-1.5 text-xs text-muted">
+                    <ThumbsUp className="h-4 w-4 text-accent" strokeWidth={2.25} aria-hidden="true" />
+                    You created this item
+                  </p>
+                )}
+                {/* Who the shared database has it from, for everybody but them. The
+                    line above is the same fact said to the person who offered it. */}
+                {!offered && food.submitted_by !== null && (
+                  <p className="col-span-2 mb-3 flex min-w-0 items-center gap-1.5 text-xs text-muted">
+                    <UserRound className="h-4 w-4 text-muted" strokeWidth={2.25} aria-hidden="true" />
+                    Submitted by {food.submitted_by}
+                    <RoleMark role={food.submitted_by_role} />
+                  </p>
+                )}
               </div>
-              <div className="mb-3 flex items-center gap-2">
-                <p className="truncate text-sm text-muted">{food.brand || 'No brand'}</p>
-                {/* Which aisle it is browsed under, on the foods that are
-                    browsed. A private food is nobody else's to find. */}
-                {shared && (
-                  <span className="t-chip shrink-0">{sectionLabel(food.section)}</span>
+
+              {/* The one action that is why the page was opened, so it is
+                  reachable without scrolling past the label. */}
+              <button
+                className="t-btn t-btn-primary col-start-2 row-start-3 mb-3 w-full self-end @xl:row-start-1 @xl:self-start"
+                type="button"
+                onClick={() => setLogging(true)}
+              >
+                Log
+              </button>
+
+              <div className="col-span-2 min-w-0 @xl:row-start-4">
+                <NutritionLabel food={food}>
+                  {/* What is in it, as the package prints it. A food in the shared
+                      database says so even when nobody has typed it yet; a private
+                      one of your own does not ask you for it. */}
+                  {(food.ingredients_text !== '' || shared) && (
+                    <Fold label="Ingredients">
+                      <p className="text-sm whitespace-pre-line">
+                        {food.ingredients_text || 'No ingredients listed.'}
+                      </p>
+                    </Fold>
+                  )}
+                </NutritionLabel>
+              </div>
+
+              {/* Across the whole card rather than the capped row every other
+                  screen uses: these belong to the panel above them. Two to a line
+                  on a phone, because four labels do not fit across 390, and the
+                  same two to a line under Log in the stack. */}
+              <div className="col-span-2 mb-3 flex min-w-0 flex-wrap gap-3 @xl:col-start-2 @xl:col-end-3 @xl:row-start-2">
+                <button
+                  className="t-btn flex-1 basis-[calc(50%-0.375rem)] min-[640px]:flex-none min-[640px]:basis-auto @xl:flex-1 @xl:basis-[calc(50%-0.375rem)] @xl:px-3"
+                  type="button"
+                  aria-pressed={food.pinned}
+                  onClick={() => toggleFavorite(food)}
+                >
+                  <Star
+                    className="h-4 w-4"
+                    strokeWidth={2}
+                    fill={food.pinned ? 'currentColor' : 'none'}
+                  />
+                  {food.pinned ? 'Favorited' : 'Favorite'}
+                </button>
+                <button
+                  className="t-btn flex-1 basis-[calc(50%-0.375rem)] min-[640px]:flex-none min-[640px]:basis-auto @xl:flex-1 @xl:basis-[calc(50%-0.375rem)] @xl:px-3"
+                  type="button"
+                  aria-pressed={standing !== null}
+                  onClick={() => setAutoOpen(true)}
+                >
+                  <CalendarSync className="h-4 w-4" strokeWidth={2} />
+                  {standing === null ? 'Auto-log' : 'Auto-logging'}
+                </button>
+                {((food.mine && !shared) || (reviews(me) && shared)) && (
+                  <button
+                    className="t-btn flex-1 basis-[calc(50%-0.375rem)] min-[640px]:flex-none min-[640px]:basis-auto @xl:flex-1 @xl:basis-[calc(50%-0.375rem)] @xl:px-3"
+                    type="button"
+                    onClick={() => onEdit(food)}
+                  >
+                    <Pencil className="h-4 w-4" strokeWidth={2} />
+                    Edit
+                  </button>
+                )}
+                {/* The label picture is served to admins alone; this is where they
+                    open it without going through the editor. */}
+                {reviews(me) && food.label_photo_url && (
+                  <button
+                    className="t-btn flex-1 basis-[calc(50%-0.375rem)] min-[640px]:flex-none min-[640px]:basis-auto @xl:flex-1 @xl:basis-[calc(50%-0.375rem)] @xl:px-3"
+                    type="button"
+                    onClick={() => setViewing(food.label_photo_url ?? null)}
+                  >
+                    <ReceiptText className="h-4 w-4" strokeWidth={2} />
+                    {/* The verb goes at desktop, where the label shares a row
+                        with Edit and would wrap under the icon. */}
+                    <span className="@xl:hidden">View nutrition label</span>
+                    <span className="hidden @xl:inline">Nutrition label</span>
+                  </button>
+                )}
+              </div>
+
+              <div className="col-span-2 min-w-0 @xl:row-start-5">
+                {shared && !reviews(me) && (
+                  <div className="t-card mb-3">
+                    <p className="t-micro mb-2">Help improve Tare</p>
+                    <div className="t-actions">
+                      <button
+                        className="t-btn flex-1"
+                        type="button"
+                        disabled={sending || reported !== undefined}
+                        onClick={() => {
+                          setIssue('')
+                          setReporting(true)
+                        }}
+                      >
+                        {reported === undefined ? 'Report an issue' : 'Reported'}
+                      </button>
+                    </div>
+                  </div>
+                )}
+
+                {food.mine && (food.status === 'custom' || food.status === 'pending') && (
+                  <div className="t-card mb-3">
+                    <p className="t-micro mb-1">Submissions</p>
+                    {food.submissions.length === 0 ? (
+                      <p className="mb-3 text-sm text-muted">Not submitted yet.</p>
+                    ) : (
+                      food.submissions.map((row) => (
+                        <div key={row.id}>
+                          <div className="t-row min-h-9 text-sm">
+                            <span className="min-w-0 flex-1">
+                              {KIND_LABEL[row.kind] ?? row.kind} ·{' '}
+                              {dayLabel(dayOf(me.timezone, row.created_at), today(me.timezone))}
+                            </span>
+                            <span className="t-chip shrink-0">
+                              {statusLabel(row.status, row.edited, row.kind)}
+                            </span>
+                          </div>
+                          {row.changes.length > 0 && (
+                            <p className="mb-2 text-xs text-muted">{changeLine(row.changes)}</p>
+                          )}
+                          {row.status === 'rejected' && row.decision_note && (
+                            <p className="mb-2 text-xs text-muted">Reason: {row.decision_note}</p>
+                          )}
+                        </div>
+                      ))
+                    )}
+                    {waiting === undefined ? (
+                      <button
+                        className="t-btn t-btn-primary w-full"
+                        type="button"
+                        disabled={sending}
+                        onClick={() => onEdit(food, { submitDefault: true })}
+                      >
+                        {latest === undefined || latest.status !== 'rejected'
+                          ? 'Submit to Tare database'
+                          : 'Resubmit'}
+                      </button>
+                    ) : (
+                      <button
+                        className="t-btn w-full"
+                        type="button"
+                        disabled={sending}
+                        onClick={() => void withdraw(food, waiting.id)}
+                      >
+                        Withdraw
+                      </button>
+                    )}
+                  </div>
+                )}
+
+                {food.mine && food.status === 'pending' && (
+                  <p className="mb-3 text-sm text-muted">
+                    This is waiting for approval. It is still yours to log in the meantime.
+                  </p>
+                )}
+              </div>
+
+              <div className="col-span-2 min-w-0 @xl:col-start-2 @xl:col-end-3 @xl:row-start-3">
+                {/* Quiet, and out of the way: last on the page in one column and
+                    the last row of the stack in two. Deleting a food is a thing
+                    somebody comes here to do, not one they meet on the way. */}
+                {food.mine && food.status === 'custom' && (
+                  <button
+                    className="mb-3 flex min-h-11 w-full items-center text-sm text-danger"
+                    type="button"
+                    onClick={() => {
+                      setErasingError('')
+                      setErasing(true)
+                    }}
+                  >
+                    Delete this food
+                  </button>
+                )}
+                {me.is_admin && shared && (
+                  <button
+                    className="t-btn t-btn-danger mb-3 w-full"
+                    type="button"
+                    onClick={() => {
+                      setErasingError('')
+                      setErasing(true)
+                    }}
+                  >
+                    <Trash2 className="h-4 w-4" strokeWidth={2} />
+                    Delete from the Tare database
+                  </button>
                 )}
               </div>
             </div>
-            {food.status === 'pending' && <span className="t-chip shrink-0">pending</span>}
           </div>
-
-          <div className="mb-3 flex items-center gap-3">
-            {food.photo_url ? (
-              // A picture on file opens big. Swapping it is the edit form's job.
-              <button
-                type="button"
-                className="block shrink-0"
-                aria-label="See the front picture"
-                onClick={() => setViewing(food.photo_url)}
-              >
-                <img
-                  src={food.photo_url}
-                  alt={`The front of ${food.name}`}
-                  className="h-24 w-24 rounded-xl border border-line object-cover"
-                />
-              </button>
-            ) : (
-              <>
-                <label className="t-phototile h-24 w-24 cursor-pointer rounded-xl" htmlFor="detail-photo">
-                  <Camera className="h-6 w-6" strokeWidth={1.75} />
-                  <span className="sr-only">
-                    {food.mine ? 'Add a photo of the front' : 'Submit a photo of the front'}
-                  </span>
-                </label>
-                <input
-                  id="detail-photo"
-                  className="sr-only"
-                  type="file"
-                  accept="image/*"
-                  capture="environment"
-                  disabled={sending}
-                  onChange={(event) => takePhoto(event, food)}
-                />
-              </>
-            )}
-            {food.description && (
-              <p className="min-w-0 flex-1 text-sm">{food.description}</p>
-            )}
-          </div>
-          {offered && (
-            <p className="mb-3 flex items-center gap-1.5 text-xs text-muted">
-              <ThumbsUp className="h-4 w-4 text-accent" strokeWidth={2.25} aria-hidden="true" />
-              You created this item
-            </p>
-          )}
-          {/* Who the shared database has it from, for everybody but them. The
-              line above is the same fact said to the person who offered it. */}
-          {!offered && food.submitted_by !== null && (
-            <p className="mb-3 flex items-center gap-1.5 text-xs text-muted">
-              <UserRound className="h-4 w-4 text-muted" strokeWidth={2.25} aria-hidden="true" />
-              Submitted by {food.submitted_by}
-              <RoleMark role={food.submitted_by_role} />
-            </p>
-          )}
-
-          <NutritionLabel food={food}>
-            {/* What is in it, as the package prints it. A food in the shared
-                database says so even when nobody has typed it yet; a private
-                one of your own does not ask you for it. */}
-            {(food.ingredients_text !== '' || shared) && (
-              <Fold label="Ingredients">
-                <p className="text-sm whitespace-pre-line">
-                  {food.ingredients_text || 'No ingredients listed.'}
-                </p>
-              </Fold>
-            )}
-          </NutritionLabel>
-
-          {/* One row across the whole card rather than the capped one every
-              other screen uses: these belong to the panel above them. Two to a
-              line on a phone, because four labels do not fit across 390. */}
-          <div className="mb-3 flex flex-wrap gap-3">
-            <button
-              className="t-btn t-btn-primary w-full min-[640px]:w-auto min-[640px]:flex-1"
-              type="button"
-              onClick={() => setLogging(true)}
-            >
-              Log
-            </button>
-            <button
-              className="t-btn flex-1 basis-[calc(50%-0.375rem)] min-[640px]:flex-none min-[640px]:basis-auto"
-              type="button"
-              aria-pressed={food.pinned}
-              onClick={() => toggleFavorite(food)}
-            >
-              <Star
-                className="h-4 w-4"
-                strokeWidth={2}
-                fill={food.pinned ? 'currentColor' : 'none'}
-              />
-              {food.pinned ? 'Favorited' : 'Favorite'}
-            </button>
-            <button
-              className="t-btn flex-1 basis-[calc(50%-0.375rem)] min-[640px]:flex-none min-[640px]:basis-auto"
-              type="button"
-              aria-pressed={standing !== null}
-              onClick={() => setAutoOpen(true)}
-            >
-              <CalendarSync className="h-4 w-4" strokeWidth={2} />
-              {standing === null ? 'Auto-log' : 'Auto-logging'}
-            </button>
-            {((food.mine && !shared) || (reviews(me) && shared)) && (
-              <button
-                className="t-btn flex-1 basis-[calc(50%-0.375rem)] min-[640px]:flex-none min-[640px]:basis-auto"
-                type="button"
-                onClick={() => onEdit(food)}
-              >
-                <Pencil className="h-4 w-4" strokeWidth={2} />
-                Edit
-              </button>
-            )}
-            {/* The label picture is served to admins alone; this is where they
-                open it without going through the editor. */}
-            {reviews(me) && food.label_photo_url && (
-              <button
-                className="t-btn flex-1 basis-[calc(50%-0.375rem)] min-[640px]:flex-none min-[640px]:basis-auto"
-                type="button"
-                onClick={() => setViewing(food.label_photo_url ?? null)}
-              >
-                <ReceiptText className="h-4 w-4" strokeWidth={2} />
-                View nutrition label
-              </button>
-            )}
-          </div>
-
-          {shared && !reviews(me) && (
-            <div className="t-card mb-3">
-              <p className="t-micro mb-2">Help improve Tare</p>
-              <div className="t-actions">
-                <button
-                  className="t-btn flex-1"
-                  type="button"
-                  disabled={sending || reported !== undefined}
-                  onClick={() => {
-                    setIssue('')
-                    setReporting(true)
-                  }}
-                >
-                  {reported === undefined ? 'Report an issue' : 'Reported'}
-                </button>
-              </div>
-            </div>
-          )}
-
-          {food.mine && (food.status === 'custom' || food.status === 'pending') && (
-            <div className="t-card mb-3">
-              <p className="t-micro mb-1">Submissions</p>
-              {food.submissions.length === 0 ? (
-                <p className="mb-3 text-sm text-muted">Not submitted yet.</p>
-              ) : (
-                food.submissions.map((row) => (
-                  <div key={row.id}>
-                    <div className="t-row min-h-9 text-sm">
-                      <span className="min-w-0 flex-1">
-                        {KIND_LABEL[row.kind] ?? row.kind} ·{' '}
-                        {dayLabel(dayOf(me.timezone, row.created_at), today(me.timezone))}
-                      </span>
-                      <span className="t-chip shrink-0">
-                        {statusLabel(row.status, row.edited, row.kind)}
-                      </span>
-                    </div>
-                    {row.changes.length > 0 && (
-                      <p className="mb-2 text-xs text-muted">{changeLine(row.changes)}</p>
-                    )}
-                    {row.status === 'rejected' && row.decision_note && (
-                      <p className="mb-2 text-xs text-muted">Reason: {row.decision_note}</p>
-                    )}
-                  </div>
-                ))
-              )}
-              {waiting === undefined ? (
-                <button
-                  className="t-btn t-btn-primary w-full"
-                  type="button"
-                  disabled={sending}
-                  onClick={() => onEdit(food, { submitDefault: true })}
-                >
-                  {latest === undefined || latest.status !== 'rejected'
-                    ? 'Submit to Tare database'
-                    : 'Resubmit'}
-                </button>
-              ) : (
-                <button
-                  className="t-btn w-full"
-                  type="button"
-                  disabled={sending}
-                  onClick={() => void withdraw(food, waiting.id)}
-                >
-                  Withdraw
-                </button>
-              )}
-            </div>
-          )}
-
-          {food.mine && food.status === 'pending' && (
-            <p className="mb-3 text-sm text-muted">
-              This is waiting for approval. It is still yours to log in the meantime.
-            </p>
-          )}
-
-          {/* Last on the page and quiet with it: deleting a food is a thing
-              somebody comes here to do, not a thing they meet on the way. */}
-          {food.mine && food.status === 'custom' && (
-            <button
-              className="mb-3 flex min-h-11 w-full items-center text-sm text-danger"
-              type="button"
-              onClick={() => {
-                setErasingError('')
-                setErasing(true)
-              }}
-            >
-              Delete this food
-            </button>
-          )}
-          {me.is_admin && shared && (
-            <button
-              className="t-btn t-btn-danger mb-3 w-full"
-              type="button"
-              onClick={() => {
-                setErasingError('')
-                setErasing(true)
-              }}
-            >
-              <Trash2 className="h-4 w-4" strokeWidth={2} />
-              Delete from the Tare database
-            </button>
-          )}
 
           {notice && (
             <div className="pointer-events-none fixed inset-x-0 bottom-24 z-30 px-4">

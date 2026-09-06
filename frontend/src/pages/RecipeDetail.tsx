@@ -5,6 +5,7 @@ import { api, errorText, type Me, type Recipe } from '../api'
 import { PartLine } from '../components/FoodRows'
 import { LogSheet } from '../components/LogSheet'
 import { PanelFacts } from '../components/NutritionLabel'
+import { Sheet } from '../components/Sheet'
 import { useTopBar } from '../hooks/useTopBar'
 import { SLOT_LABEL, slotByTime, today, type Slot } from '../lib/day'
 import { gramsText, servingsText } from '../lib/units'
@@ -40,6 +41,8 @@ export function RecipeDetail({
   const [perServing, setPerServing] = useState(true)
   const [logging, setLogging] = useState(false)
   const [saving, setSaving] = useState(false)
+  // Asked before it goes, because there is no copy of a recipe anywhere else.
+  const [erasing, setErasing] = useState(false)
   const [refusal, setRefusal] = useState('')
   const [notice, setNotice] = useState('')
 
@@ -145,10 +148,36 @@ export function RecipeDetail({
               <Pencil className="h-4 w-4" strokeWidth={2} />
               Edit
             </button>
-            <button className="t-btn text-danger" type="button" onClick={() => onDelete(recipe)}>
+            <button className="t-btn text-danger" type="button" onClick={() => setErasing(true)}>
               Delete
             </button>
           </div>
+
+          <Sheet
+            center
+            open={erasing}
+            label={`Delete ${recipe.name}?`}
+            onClose={() => setErasing(false)}
+          >
+            <p className="text-base font-semibold tracking-tight text-danger">
+              Delete {recipe.name}?
+            </p>
+            <p className="mt-2 text-sm text-muted">
+              This recipe is private to you and cannot be recovered.
+            </p>
+            <div className="mt-4 flex gap-3">
+              <button
+                type="button"
+                className="t-btn t-btn-danger flex-1"
+                onClick={() => onDelete(recipe)}
+              >
+                Delete
+              </button>
+              <button type="button" className="t-btn" onClick={() => setErasing(false)}>
+                Cancel
+              </button>
+            </div>
+          </Sheet>
 
           {logging && (
             <LogSheet

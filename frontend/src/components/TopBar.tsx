@@ -69,10 +69,12 @@ export function TopBar({
           </div>
         )}
         {/* Nothing on the left of the day chooser; this keeps the middle in
-            the middle while the right slot holds a button. */}
+            the middle while the right slot holds a button. Dropped on a narrow
+            bar, where the mirror is the width the day itself needs: the
+            chooser sits left of the pill rather than under it. */}
         {kind === 'pager' &&
           Array.from({ length: buttons }, (_, slot) => (
-            <span key={slot} className="w-11" aria-hidden="true" />
+            <span key={slot} className="hidden w-11 min-[480px]:block" aria-hidden="true" />
           ))}
       </div>
       {kind === 'pager' ? (
@@ -111,23 +113,27 @@ export function TopBar({
         {mark !== null && (
           <button
             type="button"
-            className={`t-topbar-icon ${mark.done ? 'text-accent' : 'text-muted'}`}
+            className={`t-chip t-tap44 shrink-0 ${
+              mark.done ? 'border-accent text-accent' : ''
+            }`}
             aria-label={mark.label}
             aria-pressed={mark.done}
             onClick={onToggleMark}
           >
             {/* The same check either way: hollow while the day is open, a
-                filled green disc once it is complete. */}
+                filled green disc once it is complete. The word beside it says
+                what the check is about, which the check alone never did. */}
             {mark.done ? (
               <CircleCheck
-                className="h-5 w-5"
+                className="h-4 w-4"
                 strokeWidth={2.5}
                 fill="currentColor"
                 stroke="var(--bg)"
               />
             ) : (
-              <CircleCheck className="h-5 w-5" strokeWidth={2.5} />
+              <CircleCheck className="h-4 w-4" strokeWidth={2.5} />
             )}
+            {mark.done ? 'Completed' : 'Complete'}
           </button>
         )}
         {action !== null && (

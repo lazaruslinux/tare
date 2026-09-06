@@ -25,3 +25,20 @@ export function basemapInstalled(): Promise<boolean> {
     .catch(() => false)
   return asked
 }
+
+let drawable: boolean | undefined
+
+// Whether this browser can hand out a WebGL context at all. A renderer throws
+// from its own constructor where it cannot, and the throw lands in the root
+// boundary, so the answer is settled here first and kept for the session.
+export function canDrawMaps(): boolean {
+  if (drawable !== undefined) return drawable
+  drawable = false
+  try {
+    const canvas = document.createElement('canvas')
+    drawable = canvas.getContext('webgl2') !== null || canvas.getContext('webgl') !== null
+  } catch {
+    drawable = false
+  }
+  return drawable
+}

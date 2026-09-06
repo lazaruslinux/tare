@@ -1092,7 +1092,7 @@ export function Dashboard({
     return {
       parts: [
         `Week of ${monthDay(monday)}`,
-        `${calText(mean(kept.map((row) => row.calories)))} cal a day`,
+        `${calText(mean(kept.map((row) => row.calories)))} calories/day avg`,
         ...macroParts(
           mean(kept.map((row) => row.protein_g)),
           mean(kept.map((row) => row.carbs_g)),
@@ -1137,9 +1137,9 @@ export function Dashboard({
     const kcal = average((row) => row.active_kcal)
     const sessions = week.reduce((count, row) => count + row.workouts.length, 0)
     const said: string[] = []
-    if (steps !== null) said.push(`${calText(steps)} steps a day`)
-    if (minutes !== null) said.push(`${Math.round(minutes)} min a day`)
-    if (kcal !== null) said.push(`${calText(kcal)} cal a day`)
+    if (steps !== null) said.push(`${calText(steps)} steps/day avg`)
+    if (minutes !== null) said.push(`${Math.round(minutes)} min/day avg`)
+    if (kcal !== null) said.push(`${calText(kcal)} calories/day avg`)
     if (sessions > 0) said.push(sessions === 1 ? '1 workout' : `${sessions} workouts`)
     return said.length === 0
       ? { parts: [NOTHING] }
@@ -1407,8 +1407,10 @@ export function Dashboard({
 
       {/* One switch over every card that reads a run of days, standing where
           the heading was: the control says what the cards are of, so none of
-          them says it again. The range wraps under it on a phone. */}
-      <div className="mb-2 mt-1 flex flex-wrap items-center gap-2 px-1">
+          them says it again. The range wraps under it on a phone. It stays
+          under the bar as the cards go by, on the page's own ground and bled
+          to the well's edges so they pass behind it rather than beside it. */}
+      <div className="sticky top-[calc(48px_+_env(safe-area-inset-top))] z-10 -mx-3.5 mb-2 mt-1 flex flex-wrap items-center gap-2 bg-bg px-4.5 py-2 min-[900px]:-mx-6 min-[900px]:px-7">
         {SPANS.map((row) => (
           <button
             key={row.days}
@@ -1458,6 +1460,7 @@ export function Dashboard({
           weeks={weeks}
           label={labelled ? calText : undefined}
           titleUnit="cal"
+          weekUnit="calories"
           selected={foodPick}
           onSelect={setFoodPick}
         />
