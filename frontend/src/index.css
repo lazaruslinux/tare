@@ -46,9 +46,12 @@
 
 [data-theme='light'] {
   color-scheme: light;
-  --bg: #f7f4ec;
-  --surface: #fffdf7;
-  --surface-2: #f1ede2;
+  /* Cream with a breath of green in it rather than paper: the cards sit on
+     something that belongs to the same plant as the accent. Every ink below
+     was measured again on the three grounds; the tint lifted each one. */
+  --bg: #f4f7f1;
+  --surface: #fcfdfa;
+  --surface-2: #edf1ea;
   --line: rgba(46, 79, 63, 0.12);
   --line-strong: rgba(46, 79, 63, 0.24);
   --track: rgba(46, 79, 63, 0.11);
