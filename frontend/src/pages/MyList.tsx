@@ -1,7 +1,7 @@
 import { X } from 'lucide-react'
 import { useEffect, useRef, useState } from 'react'
 
-import type { MealRow, MyFoodRow, RecipeRow } from '../api'
+import type { FoodRow, MealRow, MyFoodRow, RecipeRow, RepeatRow } from '../api'
 import { FoodLine, MealLine, RecipeLine } from '../components/FoodRows'
 
 // Everything a member has of one kind, in a sheet over the Food tab. The page
@@ -10,10 +10,11 @@ import { FoodLine, MealLine, RecipeLine } from '../components/FoodRows'
 // Nothing here asks the server anything: the page above has already read the
 // list, and a filter that goes back over the network is a filter that stutters.
 
-export type ListKind = 'foods' | 'meals' | 'recipes'
+export type ListKind = 'foods' | 'favorites' | 'meals' | 'recipes'
 
 export const LIST_TITLE: Record<ListKind, string> = {
   foods: 'My foods (recently used)',
+  favorites: 'Favorites',
   meals: 'My meals',
   recipes: 'My recipes',
 }
@@ -40,6 +41,7 @@ const PAGE = 30
 // so the kind decides the row and the filters alike.
 export type Listed =
   | { kind: 'foods'; rows: MyFoodRow[] }
+  | { kind: 'favorites'; rows: RepeatRow[] }
   | { kind: 'meals'; rows: MealRow[] }
   | { kind: 'recipes'; rows: RecipeRow[] }
 
@@ -57,12 +59,12 @@ export function MyList({
   listed: Listed
   onClose: () => void
   onOpen: (id: number) => void
-  // Taking a shared food off My foods, the same way the card above does it.
-  // Absent on the lists where a row is not taken off anything.
-  onRemove?: (row: MyFoodRow) => void
+  // Taking a row off the list, the same way the card above does it. Absent on
+  // the lists where a row is not taken off anything.
+  onRemove?: (row: FoodRow) => void
   // The same thing the card's plus does, in the header of the sheet that grew
-  // out of that card.
-  onAdd: () => void
+  // out of that card. Absent where the card has no plus.
+  onAdd?: () => void
 }) {
   const [query, setQuery] = useState('')
   const [chip, setChip] = useState<Chip>('all')
@@ -73,6 +75,9 @@ export function MyList({
     if (window.matchMedia(ROOMY).matches) box.current?.focus()
   }, [])
 
+  // Two of the four lists are made of foods, and read the same way.
+  const foodish = listed.kind === 'foods' || listed.kind === 'favorites'
+
   const needle = folded(query)
   // In the order the card above shows them, which is what was eaten last. One
   // list, one order: a catalog that reshuffled what the card led with would be
@@ -82,10 +87,9 @@ export function MyList({
     const name = folded(row.name)
     // Only a food has a brand and a description, and a search reads both as
     // part of the name.
-    const about =
-      listed.kind === 'foods'
-        ? folded(`${(row as MyFoodRow).brand} ${(row as MyFoodRow).description}`)
-        : ''
+    const about = foodish
+      ? folded(`${(row as FoodRow).brand} ${(row as FoodRow).description}`)
+      : ''
     if (needle && !name.includes(needle) && !about.includes(needle)) return false
     if (listed.kind === 'foods' && chip !== 'all') {
       return (row as MyFoodRow).community === chip
@@ -115,9 +119,11 @@ export function MyList({
         <p className="min-w-0 flex-1 truncate text-base font-semibold">
           {LIST_TITLE[listed.kind]}
         </p>
-        <button type="button" className="t-tap44 shrink-0 text-accent" onClick={onAdd}>
-          Add
-        </button>
+        {onAdd && (
+          <button type="button" className="t-tap44 shrink-0 text-accent" onClick={onAdd}>
+            Add
+          </button>
+        )}
         <button
           type="button"
           className="t-tap44 shrink-0 text-muted"
@@ -159,16 +165,22 @@ export function MyList({
       <div className="t-card mb-3 min-[900px]:grid min-[900px]:grid-cols-2 min-[900px]:gap-x-6">
         {drawn.length === 0 ? (
           <p className="text-sm text-muted">{nothing}</p>
-        ) : listed.kind === 'foods' ? (
-          (drawn as MyFoodRow[]).map((row) => (
+        ) : foodish ? (
+          (drawn as FoodRow[]).map((row) => (
             <FoodLine
               key={row.id}
               row={row}
               onOpen={() => onOpen(row.id)}
+              // A food of their own comes off My foods by being deleted on its
+              // own page; a favorite is unstarred wherever it is read.
               onRemove={
-                onRemove !== undefined && row.status === 'approved'
+                onRemove !== undefined &&
+                (listed.kind === 'favorites' || row.status === 'approved')
                   ? () => onRemove(row)
                   : undefined
+              }
+              removeLabel={
+                listed.kind === 'favorites' ? `Remove ${row.name} from Favorites` : undefined
               }
             />
           ))

@@ -4,9 +4,8 @@ import {
   CalendarSync,
   Camera,
   Pencil,
-  Pin,
   ReceiptText,
-  PinOff,
+  Star,
   ThumbsUp,
   Trash2,
   UserRound,
@@ -69,8 +68,9 @@ export function FoodDetail({
   // worth asking again.
   onSeen: () => void
   // Something about this food changed that a screen behind this one shows too.
-  // Quick add is the one that does: pinning puts a food on it and unpinning
-  // takes it off, and the list was read once when that screen opened.
+  // Favorites is the one that does: starring a food puts it on that card and
+  // unstarring takes it off, and the list was read once when that screen
+  // opened.
   onChanged?: () => void
 }) {
   const [food, setFood] = useState<Food | null>(null)
@@ -139,12 +139,13 @@ export function FoodDetail({
       .catch(() => {})
   }, [unread, id, onSeen])
 
-  const togglePin = async (current: Food) => {
-    // Shown as done before it is: pinning is idempotent both ways, so a request
-    // that fails leaves nothing to reconcile beyond the next read.
+  const toggleFavorite = async (current: Food) => {
+    // Shown as done before it is: favoriting is idempotent both ways, so a
+    // request that fails leaves nothing to reconcile beyond the next read.
     setFood({ ...current, pinned: !current.pinned })
     try {
       await api(`/foods/${current.id}/pin`, { method: current.pinned ? 'DELETE' : 'POST' })
+      setNotice(current.pinned ? 'Removed from Favorites.' : 'Added to Favorites.')
       onChanged?.()
     } catch (failure) {
       setFood(current)
@@ -153,7 +154,7 @@ export function FoodDetail({
   }
 
   // Put a shared food on this account's list of foods, or take it off again.
-  // Shown as done before it is, like the pin: both ways are idempotent, so a
+  // Shown as done before it is, like the star: both ways are idempotent, so a
   // request that fails leaves nothing to reconcile beyond the next read.
   const toggleKeep = async (current: Food) => {
     setFood({ ...current, kept: !current.kept })
@@ -375,14 +376,14 @@ export function FoodDetail({
               className="t-btn flex-1 basis-[calc(50%-0.375rem)] min-[640px]:flex-none min-[640px]:basis-auto"
               type="button"
               aria-pressed={food.pinned}
-              onClick={() => togglePin(food)}
+              onClick={() => toggleFavorite(food)}
             >
-              {food.pinned ? (
-                <PinOff className="h-4 w-4" strokeWidth={2} />
-              ) : (
-                <Pin className="h-4 w-4" strokeWidth={2} />
-              )}
-              {food.pinned ? 'Unpin' : 'Pin to Quick add'}
+              <Star
+                className="h-4 w-4"
+                strokeWidth={2}
+                fill={food.pinned ? 'currentColor' : 'none'}
+              />
+              {food.pinned ? 'Favorited' : 'Favorite'}
             </button>
             <button
               className="t-btn flex-1 basis-[calc(50%-0.375rem)] min-[640px]:flex-none min-[640px]:basis-auto"

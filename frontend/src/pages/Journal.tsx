@@ -183,7 +183,7 @@ export function Journal({
           action: locked
             ? undefined
             : {
-                label: 'Add food',
+                label: 'Add item',
                 onAct: () => setPicking(slotByTime(me.timezone)),
               },
         }

@@ -362,8 +362,9 @@ export type Food = FoodRow & {
   added_sugars_g: number | null
 }
 
-// A food offered before anybody searches: kept on purpose, or eaten lately.
-export type RepeatRow = FoodRow & { pinned: boolean }
+// A food offered before anybody searches: favorited on purpose, or eaten
+// lately. The day it was last eaten is null on one nobody has logged.
+export type RepeatRow = FoodRow & { pinned: boolean; last_logged: string | null }
 
 // The panel every food shape carries, per 100 of its base unit. Null is what a
 // label never said rather than none of it.

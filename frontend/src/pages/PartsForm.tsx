@@ -34,7 +34,7 @@ const WORDS = {
   meal: {
     heading: { fresh: 'New meal', edit: 'Edit meal' },
     group: 'Foods',
-    add: 'Add food',
+    add: 'Add item',
     path: '/meals',
     empty: 'Nothing in it yet. Add the first food.',
   },

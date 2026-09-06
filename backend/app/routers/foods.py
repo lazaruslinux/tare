@@ -942,20 +942,43 @@ def repeat_foods(
             .order_by(models.SavedFood.created_at.desc(), models.SavedFood.id.desc())
         ).scalars()
     )
+    # When each of them was last eaten. The order here stays the pin's own; the
+    # day is carried so a screen that reads them by hand can lead with what
+    # somebody actually reaches for.
+    eaten = {
+        row.food_id: row.day
+        for row in db.execute(
+            select(
+                models.DiaryEntry.food_id,
+                func.max(models.DiaryEntry.date_for).label("day"),
+            )
+            .where(
+                models.DiaryEntry.user_id == user.id,
+                models.DiaryEntry.food_id.in_([food.id for food in pinned]),
+            )
+            .group_by(models.DiaryEntry.food_id)
+        ).all()
+    }
     rows: list[dict[str, object]] = [
-        {**row, "pinned": True} for row in food_rows(db, user, pinned)
+        {**row, "pinned": True, "last_logged": eaten.get(food.id)}
+        for row, food in zip(food_rows(db, user, pinned), pinned, strict=True)
     ]
     kept = {food.id for food in pinned}
 
     # Ordered by the newest entry each food appears in, which is what "recent"
     # means here: when it was last eaten, not how often.
     logged = db.execute(
-        select(models.DiaryEntry.food_id, func.max(models.DiaryEntry.id).label("last"))
+        select(
+            models.DiaryEntry.food_id,
+            func.max(models.DiaryEntry.id).label("last"),
+            func.max(models.DiaryEntry.date_for).label("day"),
+        )
         .where(models.DiaryEntry.user_id == user.id, models.DiaryEntry.food_id.is_not(None))
         .group_by(models.DiaryEntry.food_id)
         .order_by(func.max(models.DiaryEntry.id).desc())
         .limit(RECENT_SCANNED)
     ).all()
+    days = {row.food_id: row.day for row in logged}
     # Taken off the list on purpose, and eating it again does not put it back.
     off = hidden_ids(db, user)
     wanted = [row.food_id for row in logged if row.food_id not in kept and row.food_id not in off]
@@ -981,6 +1004,7 @@ def repeat_foods(
                     food, pictures.get(food.id), states[food.id], servings.get(food.id)
                 ),
                 "pinned": False,
+                "last_logged": days.get(food.id),
             }
         )
         if len(rows) - len(kept) == RECENT_LIMIT:

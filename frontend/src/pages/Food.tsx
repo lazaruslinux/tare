@@ -2,13 +2,12 @@ import {
   CalendarSync,
   ChevronRight,
   CookingPot,
-  Pin,
   Plus,
-  Repeat,
   Sandwich,
   Library,
   ScanBarcode,
   Search,
+  Star,
   X,
 } from 'lucide-react'
 import { useEffect, useRef, useState } from 'react'
@@ -19,6 +18,7 @@ import {
   foodPhoto,
   type AutoLog,
   type Food as FoodItem,
+  type FoodRow,
   type Meal,
   type MealRow,
   type Me,
@@ -30,12 +30,11 @@ import {
 import { FoodForm } from '../components/FoodForm'
 import { FoodPicker } from '../components/FoodPicker'
 import {
-  Calories,
   FoodLine,
   MealLine,
   RecipeLine,
   RemoveKeptSheet,
-  subline,
+  favoritesOf,
 } from '../components/FoodRows'
 import { PortionSheet } from '../components/PortionSheet'
 import { Sheet } from '../components/Sheet'
@@ -125,7 +124,7 @@ export function FoodTab({
   const [meals, setMeals] = useState<MealRow[]>([])
   const [repeat, setRepeat] = useState<RepeatRow[]>([])
   const [autos, setAutos] = useState<AutoLog[]>([])
-  // The food a quick add row is being logged at, which is the picker's own
+  // The food a favorite row is being logged at, which is the picker's own
   // sheet.
   const [logging, setLogging] = useState<FoodItem | null>(null)
   // The standing auto-log open in the same sheet, with the food it is about.
@@ -229,16 +228,13 @@ export function FoodTab({
       onChanged()
     })
 
-  // Off the list at once; pinned rows unpin, the rest are kept off for good.
-  const removeRepeat = (row: RepeatRow) => {
+  // Off the card at once, and the star comes off when the undo window closes.
+  const removeFavorite = (row: FoodRow) => {
     setRepeat((rows) => rows.filter((item) => item.id !== row.id))
     hold({
-      message: row.pinned ? `Unpinned ${row.name}.` : `Took ${row.name} off Quick add.`,
+      message: 'Removed from Favorites.',
       commit: () => {
-        api(`/foods/${row.id}/${row.pinned ? 'pin' : 'repeat'}`, { method: 'DELETE' }).then(
-          onChanged,
-          () => {}
-        )
+        api(`/foods/${row.id}/pin`, { method: 'DELETE' }).then(onChanged, () => {})
       },
       revert: () => void loadRepeat(),
     })
@@ -315,9 +311,8 @@ export function FoodTab({
     hold(waiting)
   }
 
-  // A quick add row is logged the way the picker logs one, at the portion
-  // sheet.
-  const openRepeat = async (id: number) => {
+  // A favorite is logged the way the picker logs one, at the portion sheet.
+  const openFavorite = async (id: number) => {
     setError('')
     try {
       setLogging(await api<FoodItem>(`/foods/${id}`))
@@ -335,6 +330,10 @@ export function FoodTab({
       setError(errorText(failure))
     }
   }
+
+  // The card and the catalog over it read the same starred foods, in the same
+  // order.
+  const favorites = favoritesOf(repeat)
 
   const putBack = () => {
     const waiting = undoRef.current
@@ -514,7 +513,7 @@ export function FoodTab({
           onClick={() => setSearching(true)}
         >
           <Search className="h-4 w-4 shrink-0" strokeWidth={2} />
-          Search Tare database
+          <span className="truncate">Search items, like Great Value cheese</span>
         </button>
         <button
           type="button"
@@ -679,44 +678,28 @@ export function FoodTab({
 
       <div className="t-card mb-3">
         <p className="t-section mb-1">
-          <Repeat className="h-4 w-4" strokeWidth={2} />
-          Quick add
+          <Star className="h-4 w-4" strokeWidth={2} />
+          Favorites
         </p>
-        {repeat.length === 0 ? (
+        {favorites.length === 0 ? (
           <p className="text-sm text-muted">
-            The foods you pin and the ones you log will show up here.
+            The foods you favorite on their own page show up here.
           </p>
         ) : (
-          repeat.map((row) => (
-            <div key={row.id} className="t-row">
-              <button
-                type="button"
-                className="flex min-w-0 flex-1 items-center gap-3 text-left"
-                onClick={() => openRepeat(row.id)}
-              >
-                <span className="min-w-0 flex-1">
-                  <span className="flex items-center gap-1.5">
-                    {row.pinned && (
-                      <Pin className="h-3 w-3 shrink-0 text-accent" strokeWidth={2.5} />
-                    )}
-                    <span className="truncate text-sm">{row.name}</span>
-                  </span>
-                  {subline(row) && (
-                    <span className="block truncate text-xs text-muted">{subline(row)}</span>
-                  )}
-                </span>
-                <Calories row={row} />
-              </button>
-              <button
-                type="button"
-                className="t-tap44 shrink-0 text-muted"
-                aria-label={row.pinned ? `Unpin ${row.name}` : `Take ${row.name} off Quick add`}
-                onClick={() => removeRepeat(row)}
-              >
-                <X className="h-4 w-4" strokeWidth={2.5} />
-              </button>
-            </div>
-          ))
+          <>
+            {favorites.slice(0, SHOWN).map((row) => (
+              <FoodLine
+                key={row.id}
+                row={row}
+                onOpen={() => openFavorite(row.id)}
+                onRemove={() => removeFavorite(row)}
+                removeLabel={`Remove ${row.name} from Favorites`}
+              />
+            ))}
+            {favorites.length > SHOWN && (
+              <SeeAll count={favorites.length} onOpen={() => setCatalog('favorites')} />
+            )}
+          </>
         )}
       </div>
 
@@ -817,13 +800,32 @@ export function FoodTab({
             listed={
               catalog === 'foods'
                 ? { kind: catalog, rows: foods }
-                : catalog === 'meals'
-                  ? { kind: catalog, rows: meals }
-                  : { kind: catalog, rows: recipes }
+                : catalog === 'favorites'
+                  ? { kind: catalog, rows: favorites }
+                  : catalog === 'meals'
+                    ? { kind: catalog, rows: meals }
+                    : { kind: catalog, rows: recipes }
             }
             onClose={() => setCatalog(null)}
-            onRemove={catalog === 'foods' ? removeKept : undefined}
+            // Unstarring from in here closes the catalog with it: the undo bar
+            // belongs to the page under this sheet, and a sheet over it is a
+            // sheet nobody can reach it through.
+            onRemove={
+              catalog === 'foods'
+                ? removeKept
+                : catalog === 'favorites'
+                  ? (row) => {
+                      setCatalog(null)
+                      removeFavorite(row)
+                    }
+                  : undefined
+            }
             onOpen={(id) => {
+              if (catalog === 'favorites') {
+                setCatalog(null)
+                void openFavorite(id)
+                return
+              }
               setCatalog(null)
               setView(
                 catalog === 'foods'
@@ -833,16 +835,22 @@ export function FoodTab({
                     : { at: 'recipe', id, from: { at: 'list' } }
               )
             }}
-            onAdd={() => {
-              setCatalog(null)
-              setView(
-                catalog === 'foods'
-                  ? { at: 'form', food: null }
-                  : catalog === 'meals'
-                    ? { at: 'mealForm', meal: null }
-                    : { at: 'recipeForm', recipe: null }
-              )
-            }}
+            // Nothing is added to Favorites from a list of them: a food is
+            // starred on its own page.
+            onAdd={
+              catalog === 'favorites'
+                ? undefined
+                : () => {
+                    setCatalog(null)
+                    setView(
+                      catalog === 'foods'
+                        ? { at: 'form', food: null }
+                        : catalog === 'meals'
+                          ? { at: 'mealForm', meal: null }
+                          : { at: 'recipeForm', recipe: null }
+                    )
+                  }
+            }
           />
         </Sheet>
       )}

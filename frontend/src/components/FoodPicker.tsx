@@ -1,10 +1,10 @@
-import { ChevronLeft, Pin, ScanLine } from 'lucide-react'
+import { ScanLine, Star, Zap } from 'lucide-react'
 import { useEffect, useState, type FormEvent } from 'react'
 
 import { api, errorText, type Food, type FoodRow, type Me, type RepeatRow } from '../api'
 import { slotByTime, today, type Slot } from '../lib/day'
 import { BrowseList } from './BrowseList'
-import { Calories, PhotoThumb, Verified, subline } from './FoodRows'
+import { Calories, PhotoThumb, Verified, favoritesOf, subline } from './FoodRows'
 import { PortionSheet } from './PortionSheet'
 import { Sheet } from './Sheet'
 
@@ -16,6 +16,10 @@ const MIN_QUERY = 2
 // somebody has to scroll past to reach anything is a list nobody reads.
 const PAGE = 30
 
+// What the box is for, in the words of the thing being looked for. The heading
+// above it says which screen this is; this says what to type.
+const SEARCH_HINT = 'Search items, like Great Value cheese'
+
 // A typed field as a number, or nothing. An empty box is a figure nobody gave,
 // which is not the same as zero of it.
 function num(raw: string): number | null {
@@ -25,13 +29,26 @@ function num(raw: string): number | null {
   return Number.isFinite(parsed) ? parsed : null
 }
 
+// The same, rounded: a quick add is somebody reading a number off a packet, and
+// Tare states every one of them whole.
+function whole(raw: string): number | null {
+  const value = num(raw)
+  return value === null ? null : Math.round(value)
+}
+
 function Row({ row, onOpen }: { row: FoodRow & { pinned?: boolean }; onOpen: () => void }) {
   return (
     <button type="button" className="t-row w-full text-left" onClick={onOpen}>
       <PhotoThumb row={row} />
       <span className="min-w-0 flex-1">
         <span className="flex items-center gap-1.5">
-          {row.pinned && <Pin className="h-3 w-3 shrink-0 text-accent" strokeWidth={2.5} />}
+          {row.pinned && (
+            <Star
+              className="h-3 w-3 shrink-0 text-accent"
+              strokeWidth={2.5}
+              fill="currentColor"
+            />
+          )}
           <span className="truncate text-sm">{row.name}</span>
           {row.status === 'approved' && <Verified />}
         </span>
@@ -50,12 +67,12 @@ function Row({ row, onOpen }: { row: FoodRow & { pinned?: boolean }; onOpen: () 
 function QuickAdd({
   date,
   slot,
-  onBack,
+  onCancel,
   onLogged,
 }: {
   date: string
   slot: Slot
-  onBack: () => void
+  onCancel: () => void
   onLogged: () => void
 }) {
   const [name, setName] = useState('')
@@ -76,10 +93,10 @@ function QuickAdd({
           date,
           slot,
           name,
-          calories: panel.calories.trim() === '' ? null : Math.round(num(panel.calories) ?? 0),
-          protein_g: num(panel.protein_g),
-          carbs_g: num(panel.carbs_g),
-          fat_g: num(panel.fat_g),
+          calories: whole(panel.calories),
+          protein_g: whole(panel.protein_g),
+          carbs_g: whole(panel.carbs_g),
+          fat_g: whole(panel.fat_g),
         },
       })
       onLogged()
@@ -90,61 +107,64 @@ function QuickAdd({
   }
 
   return (
-    <form onSubmit={submit}>
-      <button type="button" className="t-micro mb-2 flex items-center gap-1" onClick={onBack}>
-        <ChevronLeft className="h-3.5 w-3.5" strokeWidth={2.5} />
-        Back
-      </button>
+    <Sheet center open label="Quick add" onClose={onCancel}>
+      <form onSubmit={submit}>
+        <p className="mb-3 text-base font-semibold tracking-tight">Quick add</p>
 
-      <div className="mb-3">
-        <label className="t-label" htmlFor="quick-name">
-          Name
-        </label>
-        <input
-          id="quick-name"
-          className="t-input"
-          value={name}
-          onChange={(event) => setName(event.target.value)}
-        />
-      </div>
-
-      <div className="t-row">
-        <label className="flex-1 text-sm" htmlFor="quick-calories">
-          Calories
-        </label>
-        <input
-          id="quick-calories"
-          className="t-input t-nums max-w-[40%] text-right"
-          inputMode="numeric"
-          value={panel.calories}
-          onChange={(event) => set('calories', event.target.value)}
-        />
-      </div>
-      {(['protein_g', 'carbs_g', 'fat_g'] as const).map((key, index) => (
-        <div key={key} className="t-row">
-          <label className="flex-1 text-sm" htmlFor={`quick-${key}`}>
-            {['Protein', 'Carbs', 'Fat'][index]} <span className="text-muted">(g)</span>
+        <div className="mb-3">
+          <label className="t-label" htmlFor="quick-name">
+            Item name
           </label>
           <input
-            id={`quick-${key}`}
-            className="t-input t-nums max-w-[40%] text-right"
-            inputMode="decimal"
-            value={panel[key]}
-            onChange={(event) => set(key, event.target.value)}
+            id="quick-name"
+            className="t-input"
+            value={name}
+            onChange={(event) => setName(event.target.value)}
           />
         </div>
-      ))}
-      <p className="mt-2 text-xs text-muted">
-        This only logs a journal entry and is not added to your foods. Only a name and
-        calories are required.
-      </p>
 
-      {error && <p className="t-error mt-3">{error}</p>}
+        <div className="t-row">
+          <label className="flex-1 text-sm" htmlFor="quick-calories">
+            Calories
+          </label>
+          <input
+            id="quick-calories"
+            className="t-input t-nums max-w-[40%] text-right"
+            inputMode="numeric"
+            value={panel.calories}
+            onChange={(event) => set('calories', event.target.value)}
+          />
+        </div>
+        {(['protein_g', 'carbs_g', 'fat_g'] as const).map((key, index) => (
+          <div key={key} className="t-row">
+            <label className="flex-1 text-sm" htmlFor={`quick-${key}`}>
+              {['Protein', 'Carbs', 'Fat'][index]} <span className="text-muted">(g)</span>
+            </label>
+            <input
+              id={`quick-${key}`}
+              className="t-input t-nums max-w-[40%] text-right"
+              inputMode="numeric"
+              value={panel[key]}
+              onChange={(event) => set(key, event.target.value)}
+            />
+          </div>
+        ))}
+        <p className="mt-2 text-xs text-muted">
+          Quick add only logs a journal entry and is not added to My foods.
+        </p>
 
-      <button className="t-btn t-btn-primary mt-4 w-full" type="submit" disabled={saving}>
-        Log
-      </button>
-    </form>
+        {error && <p className="t-error mt-3">{error}</p>}
+
+        <div className="mt-4 flex gap-3">
+          <button className="t-btn t-btn-primary flex-1" type="submit" disabled={saving}>
+            Log
+          </button>
+          <button className="t-btn" type="button" disabled={saving} onClick={onCancel}>
+            Cancel
+          </button>
+        </div>
+      </form>
+    </Sheet>
   )
 }
 
@@ -198,7 +218,7 @@ export function FoodPicker({
 
   useEffect(() => {
     // Not asked for when the sheet is the shared database: nothing there shows
-    // the quick add list.
+    // the favorites or the lately eaten.
     if (browsing) return
     let alive = true
     api<RepeatRow[]>('/foods/repeat')
@@ -250,98 +270,109 @@ export function FoodPicker({
   }
 
   // What this sheet is, in one phrase, used as its name and above its box.
-  const title = browsing ? 'Search Tare database' : onPick ? 'Choose a food' : 'Add food'
+  const title = browsing ? 'Search Tare database' : onPick ? 'Choose a food' : 'Add to Journal'
+  // A food typed in by hand is logged and forgotten, so there is nothing in it
+  // to put in a recipe or a kept meal, and nothing to look up.
+  const quickable = !onPick && !browsing
+  // The starred foods, and under them the ones lately eaten that are not
+  // already starred.
+  const favorites = favoritesOf(repeat)
+  const recent = repeat.filter((row) => !row.pinned)
 
   return (
-    <Sheet open tall={browsing} label={title} onClose={onClose}>
-      {quick ? (
+    <>
+      <Sheet open tall={browsing} label={title} onClose={onClose}>
+        <p className="t-micro mb-2">{title}</p>
+        <input
+          className="t-input mb-3"
+          type="search"
+          placeholder={SEARCH_HINT}
+          aria-label={title}
+          value={query}
+          onChange={(event) => setQuery(event.target.value)}
+        />
+
+        {error && <p className="t-error mb-3">{error}</p>}
+
+        {results !== null ? (
+          results.length === 0 ? (
+            <p className="text-sm text-muted">Nothing here goes by that name.</p>
+          ) : (
+            <>
+              {results.slice(0, shown).map((row) => (
+                <Row
+                  key={row.id}
+                  row={row}
+                  onOpen={() => (browse ? browse.onOpen(row.id) : open(row.id))}
+                />
+              ))}
+              {results.length > shown && (
+                <button
+                  type="button"
+                  className="t-btn mt-3 w-full"
+                  onClick={() => setShown(shown + PAGE)}
+                >
+                  Show more
+                </button>
+              )}
+            </>
+          )
+        ) : browse ? (
+          // Nothing typed yet, so the sheet is the shared database itself.
+          <BrowseList refresh={browse.refresh} onOpen={browse.onOpen} onScan={browse.onScan} />
+        ) : favorites.length === 0 && recent.length === 0 ? (
+          <p className="text-sm text-muted">
+            The foods you favorite and the ones you log will show up here.
+          </p>
+        ) : (
+          <>
+            {favorites.length > 0 && (
+              <>
+                <p className="t-micro mb-1">Favorites</p>
+                {favorites.map((row) => (
+                  <Row key={row.id} row={row} onOpen={() => open(row.id)} />
+                ))}
+              </>
+            )}
+            {recent.length > 0 && (
+              <>
+                <p className="t-micro mt-3 mb-1">Recently used</p>
+                {recent.map((row) => (
+                  <Row key={row.id} row={row} onOpen={() => open(row.id)} />
+                ))}
+              </>
+            )}
+          </>
+        )}
+
+        {/* The two ways past a database that does not have it: the packet in
+            somebody's hand, or the numbers off it typed once. */}
+        {(onScan || quickable) && (
+          <div className="mt-3 flex gap-3">
+            {onScan && (
+              <button type="button" className="t-btn flex-1" onClick={onScan}>
+                <ScanLine className="h-4 w-4" strokeWidth={2} />
+                Scan item
+              </button>
+            )}
+            {quickable && (
+              <button type="button" className="t-btn flex-1" onClick={() => setQuick(true)}>
+                <Zap className="h-4 w-4" strokeWidth={2} />
+                Quick add
+              </button>
+            )}
+          </div>
+        )}
+      </Sheet>
+
+      {quick && (
         <QuickAdd
           date={day}
           slot={meal}
-          onBack={() => setQuick(false)}
+          onCancel={() => setQuick(false)}
           onLogged={() => onLogged?.()}
         />
-      ) : (
-        <>
-          <p className="t-micro mb-2">{title}</p>
-          <input
-            className="t-input mb-3"
-            type="search"
-            placeholder={title}
-            aria-label={title}
-            value={query}
-            onChange={(event) => setQuery(event.target.value)}
-          />
-
-          {error && <p className="t-error mb-3">{error}</p>}
-
-          {results !== null ? (
-            results.length === 0 ? (
-              <p className="text-sm text-muted">Nothing here goes by that name.</p>
-            ) : (
-              <>
-                {results.slice(0, shown).map((row) => (
-                  <Row
-                    key={row.id}
-                    row={row}
-                    onOpen={() => (browse ? browse.onOpen(row.id) : open(row.id))}
-                  />
-                ))}
-                {results.length > shown && (
-                  <button
-                    type="button"
-                    className="t-btn mt-3 w-full"
-                    onClick={() => setShown(shown + PAGE)}
-                  >
-                    Show more
-                  </button>
-                )}
-              </>
-            )
-          ) : browse ? (
-            // Nothing typed yet, so the sheet is the shared database itself.
-            <BrowseList
-              refresh={browse.refresh}
-              onOpen={browse.onOpen}
-              onScan={browse.onScan}
-            />
-          ) : (
-            <>
-              <p className="t-micro mb-1">Quick add</p>
-              {repeat.length === 0 ? (
-                <p className="text-sm text-muted">
-                  The foods you pin and the ones you log will show up here.
-                </p>
-              ) : (
-                repeat.map((row) => <Row key={row.id} row={row} onOpen={() => open(row.id)} />)
-              )}
-            </>
-          )}
-
-          {onScan && (
-            <button
-              type="button"
-              className="t-row w-full text-left text-sm"
-              onClick={onScan}
-            >
-              <ScanLine className="h-4 w-4 shrink-0 text-accent" strokeWidth={2} />
-              Scan food
-            </button>
-          )}
-
-          {/* A typed-in food is logged and forgotten, so there is nothing in
-              it to put in a recipe or a kept meal, and nothing to look up. */}
-          {!onPick && !browsing && (
-            <button
-              type="button"
-              className="t-row w-full text-left text-sm text-muted"
-              onClick={() => setQuick(true)}
-            >
-              Type in a food
-            </button>
-          )}
-        </>
       )}
-    </Sheet>
+    </>
   )
 }

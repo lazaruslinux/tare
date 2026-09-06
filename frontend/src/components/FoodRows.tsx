@@ -1,7 +1,14 @@
 import { BadgeCheck, Camera, X } from 'lucide-react'
 import { useState } from 'react'
 
-import { errorText, type Community, type FoodRow, type MealRow, type RecipeRow } from '../api'
+import {
+  errorText,
+  type Community,
+  type FoodRow,
+  type MealRow,
+  type RecipeRow,
+  type RepeatRow,
+} from '../api'
 import { scale, servingsText } from '../lib/units'
 import { nutrientText } from './NutritionLabel'
 import { Sheet } from './Sheet'
@@ -95,10 +102,24 @@ export function Calories({ row }: { row: FoodRow }) {
   )
 }
 
+// The starred foods out of everything the repeat list offers, in the order
+// somebody reaches for them: what was eaten most recently, then by name for the
+// ones nobody has logged yet.
+export function favoritesOf(rows: RepeatRow[]): RepeatRow[] {
+  return rows
+    .filter((row) => row.pinned)
+    .sort(
+      (one, two) =>
+        (two.last_logged ?? '').localeCompare(one.last_logged ?? '') ||
+        one.name.localeCompare(two.name)
+    )
+}
+
 export function FoodLine({
   row,
   onOpen,
   onRemove,
+  removeLabel,
 }: {
   row: FoodRow
   onOpen: () => void
@@ -106,6 +127,9 @@ export function FoodLine({
   // offers. The X sits beside the row rather than inside it, so opening the
   // food and taking it off are two targets and not one.
   onRemove?: () => void
+  // What the X says it does, for a list where taking a row off is not taking
+  // it off My foods.
+  removeLabel?: string
 }) {
   const line = (
     <>
@@ -142,7 +166,7 @@ export function FoodLine({
       <button
         type="button"
         className="t-tap44 shrink-0 text-muted"
-        aria-label={`Take ${row.name} off My foods`}
+        aria-label={removeLabel ?? `Take ${row.name} off My foods`}
         onClick={onRemove}
       >
         <X className="h-4 w-4" strokeWidth={2.5} />

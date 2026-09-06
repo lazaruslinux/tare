@@ -49,8 +49,8 @@ export function PlusSheet({
 }) {
   const reduced = useReducedMotion()
   const rows = [
-    { label: 'Scan food', onPick: onScan },
-    { label: 'Add food', onPick: onAddFood },
+    { label: 'Scan item', onPick: onScan },
+    { label: 'Add to Journal', onPick: onAddFood },
     { label: 'Biometrics', onPick: onMeasure },
     { label: 'Manual exercise', onPick: onExercise },
   ]
