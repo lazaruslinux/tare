@@ -1,6 +1,16 @@
 import { AnimatePresence, motion, useReducedMotion } from 'framer-motion'
 import { useEffect, useRef, type ReactNode } from 'react'
 
+// How many sheets are up. The page behind them is held still while any is
+// open and let go when the last one closes, so a confirm over an edit sheet
+// does not free the page early.
+let openSheets = 0
+
+function holdPage(hold: boolean) {
+  const roots = [document.documentElement, document.body]
+  for (const root of roots) root.style.overflow = hold ? 'hidden' : ''
+}
+
 // The one thing that opens over a page. Everything that does uses this, so the
 // backdrop, the corner, the safe area and the motion are decided once instead
 // of drifting apart across three screens.
@@ -48,6 +58,18 @@ export function Sheet({
   const box = useRef<HTMLDivElement>(null)
   // Escape closes the sheet on top and only that one, so two layers peel one
   // at a time.
+  // On a phone a finger on a sheet that cannot scroll, or on the dimmed page
+  // around it, would scroll the page underneath instead. Held still while the
+  // sheet is up.
+  useEffect(() => {
+    if (!open) return
+    openSheets += 1
+    if (openSheets === 1) holdPage(true)
+    return () => {
+      openSheets -= 1
+      if (openSheets === 0) holdPage(false)
+    }
+  }, [open])
   useEffect(() => {
     if (!open) return
     const onKey = (event: KeyboardEvent) => {
@@ -64,7 +86,7 @@ export function Sheet({
     <AnimatePresence>
       {open && (
         <motion.div
-          className={`fixed inset-0 z-40 flex justify-center bg-black/50 ${
+          className={`fixed inset-0 z-40 flex touch-none justify-center bg-black/50 ${
             center ? 'items-center px-4' : top ? 'items-start min-[900px]:items-center' : 'items-end min-[900px]:items-center'
           }`}
           initial={{ opacity: 0 }}
@@ -81,10 +103,10 @@ export function Sheet({
             // controls at the bottom off the screen.
             className={
               full
-                ? 'flex h-[100svh] w-full flex-col overflow-hidden border-t border-line bg-surface px-4 pt-4 pb-[calc(1rem+env(safe-area-inset-bottom))] min-[900px]:h-[86svh] min-[900px]:max-w-3xl min-[900px]:rounded-2xl min-[900px]:border min-[900px]:pb-4'
+                ? 'flex h-[100svh] w-full touch-pan-y flex-col overflow-hidden overscroll-contain border-t border-line bg-surface px-4 pt-4 pb-[calc(1rem+env(safe-area-inset-bottom))] min-[900px]:h-[86svh] min-[900px]:max-w-3xl min-[900px]:rounded-2xl min-[900px]:border min-[900px]:pb-4'
                 : center
-                ? 'w-full max-w-sm overflow-y-auto rounded-2xl border border-line bg-surface p-4 max-h-[86svh]'
-                : `w-full max-w-md overflow-y-auto border-line bg-surface px-4 min-[900px]:rounded-2xl min-[900px]:border min-[900px]:pt-4 min-[900px]:pb-4 ${
+                ? 'w-full max-w-sm touch-pan-y overflow-y-auto overscroll-contain rounded-2xl border border-line bg-surface p-4 max-h-[86svh]'
+                : `w-full max-w-md touch-pan-y overflow-y-auto overscroll-contain border-line bg-surface px-4 min-[900px]:rounded-2xl min-[900px]:border min-[900px]:pt-4 min-[900px]:pb-4 ${
                     top
                       ? 'rounded-b-2xl border-b pt-[calc(1rem+env(safe-area-inset-top))] pb-4'
                       : 'rounded-t-2xl border-t pt-4 pb-[calc(1rem+env(safe-area-inset-bottom))]'
