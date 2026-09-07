@@ -33,7 +33,14 @@ export default defineConfig({
         // instance that installed the basemap, and putting a megabyte of it
         // into every member's phone on the chance they open a route is the
         // opposite of what splitting it out was for.
-        globIgnores: ['**/mapgl-*.js', '**/mapgl-*.css', '**/maplibre-gl-worker-*.js'],
+        // The screenshots on the invite and About are not precached either:
+        // they are looked at once, by somebody deciding whether to join.
+        globIgnores: [
+          '**/mapgl-*.js',
+          '**/mapgl-*.css',
+          '**/maplibre-gl-worker-*.js',
+          '**/screenshots/**',
+        ],
       },
     }),
   ],

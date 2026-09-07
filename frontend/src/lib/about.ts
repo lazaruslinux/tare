@@ -1,33 +1,60 @@
 // What Tare is, in one paragraph and one place. The About screen says it and
 // so does the invite, and the two must never drift apart.
 export const WHAT_TARE_IS =
-  'Tare is a community-driven weight management, nutrition tracker & fitness journal. ' +
-  'Members contribute to Tare by scanning food items and their labels into the Tare ' +
-  'database. Every submitted item is checked by a real human being and, if approved, ' +
-  'permanently added to the Tare database for others to use & track in their journals. ' +
-  'The more people contribute, Tare becomes more accurate, faster & easier to use.'
+  'Tare is a community-managed food & ingredient database, fitness journal, & nutrition ' +
+  'tracker. Members contribute to Tare by scanning barcodes and uploading food items into ' +
+  'the Tare database. Every submitted item is reviewed by a real human being and, if ' +
+  'approved, added to Tare for others to use & track in their journals, or add to personal ' +
+  'recipes. The more items that get scanned, Tare becomes more accurate, faster & easier to ' +
+  'use. Tare can also identify foods that are high in added sugars, artificial ingredients ' +
+  '& dyes, or other harmful additives, based on publicly available research.'
 
-// What is inside, one line each, for the About screen alone.
-export const WHAT_TARE_DOES: [string, string][] = [
-  [
-    'Community Food Database',
-    'A growing index of scanned food items, their nutrition values, and ingredients.',
-  ],
-  ['Goal weight', 'Pick the weight you are aiming for and how fast you want to get there.'],
-  ['Goal forecast', 'The date you would reach it at your pace, updated as you weigh in.'],
-  [
-    'Daily calorie budget',
-    'Built for you from your details, your activity level and your goal, or typed in yourself.',
-  ],
-  ['Journal', 'Log what you eat, what you did and what you weigh, then mark the day complete.'],
-  ['Dashboard', 'This week at a glance, and trends over months.'],
-  [
-    'Fitness',
-    'Sync your phone to get insights + steps and workout calories added to your journal.',
-  ],
-  [
-    'Community Feed',
-    'Workouts, finished journals and weight lost, as members choose to share them.',
-  ],
-  ['Recipes & Meals', 'Combine multiple food items into recipes for faster journal entries.'],
+// Which set of screenshots sits under an entry. The manifest in
+// lib/screenshots.ts is keyed by these.
+export type GalleryKey = 'food' | 'plan' | 'journal' | 'fitness' | 'feed' | 'platform'
+
+// What is inside, said the way somebody arriving on an invite would ask it.
+export const WHAT_YOU_CAN_DO: { name: string; what: string; gallery: GalleryKey }[] = [
+  {
+    name: 'Community Food Database',
+    what: 'A growing index of food items submitted by you. Photos, Nutrition labels & ingredients.',
+    gallery: 'food',
+  },
+  {
+    name: 'Weight Loss Plan',
+    what:
+      'Pick a goal weight and a goal rate. Choose your daily activity level, and Tare will ' +
+      'calculate your daily calorie budget, an estimated goal date, and macro targets ' +
+      'specific to your needs.',
+    gallery: 'plan',
+  },
+  {
+    name: 'Journal',
+    what:
+      'Quickly log your biometrics (weight, body fat %, other smart scale options), your ' +
+      'breakfast, lunch, dinner, snacks, view your macro breakdowns & calorie deficit. ' +
+      'Workouts are automatically added via Device Sync and your calories are adjusted.',
+    gallery: 'journal',
+  },
+  {
+    name: 'Fitness + Device Sync',
+    what:
+      'Upload your Apple Health or Health Connect workouts & health metrics to receive full ' +
+      'insights. Full instructions inside. (Requires use of a free & simple export app)',
+    gallery: 'fitness',
+  },
+  {
+    name: 'Community Feed',
+    what: 'Member milestones, activities & accomplishments. Forums coming in the future.',
+    gallery: 'feed',
+  },
 ]
+
+export const PLATFORMS =
+  'Tare is built for both Desktop and mobile devices. As this is a private web-app, it is ' +
+  "not available in the iOS or Play Store. Instead, add a shortcut to Tare on your phone's " +
+  'home screen to treat it as a phone app.'
+
+export const DATA_PRIVACY =
+  'This project is hosted on a private server. There are no trackers on this web-app and ' +
+  'your data will never be sold or used for anything other than what you see in Tare.'
