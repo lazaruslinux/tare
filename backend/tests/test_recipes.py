@@ -5,8 +5,13 @@ that are weighed but measured out by the cup, which is the case that needs a
 density, and milk that is poured and whose label never gave its sodium.
 """
 
-import pytest
+import io
+import os
 
+import pytest
+from PIL import Image
+
+from app import models, photos
 from app.routers.diary import (
     BOTH_KINDS,
     GRAMS_NEED_A_RECIPE,
@@ -16,6 +21,7 @@ from app.routers.diary import (
     RECIPE_SERVINGS,
 )
 from app.routers.foods import MISSING_FOOD
+from app.routers.photos import MISSING_PHOTO_TO_ATTACH
 from app.recipes import MISSING_RECIPE
 from tests.conftest import PASSWORD
 
@@ -506,3 +512,121 @@ def test_a_row_logged_by_weight_is_edited_by_the_gram(client, flapjack):
     assert changed.status_code == 200
     assert (changed.json()["amount"], changed.json()["unit"]) == (200, "g")
     assert round(changed.json()["calories"], 4) == round(made["calories"] * 2, 4)
+
+
+# ---- The picture of the finished dish ----
+
+
+def dish_photo(client):
+    """One upload taken for a dish, and the id it answers with."""
+    out = io.BytesIO()
+    Image.new("RGB", (240, 180), (150, 120, 90)).save(out, format="JPEG")
+    return client.post(
+        "/api/photos",
+        files={"file": ("dinner.jpg", out.getvalue(), "image/jpeg")},
+        data={"purpose": "dish"},
+    ).json()["photo_id"]
+
+
+def attach(client, recipe, photo_id):
+    return client.post(f"/api/recipes/{recipe['id']}/photo", json={"photo_id": photo_id})
+
+
+def test_a_recipe_carries_the_picture_of_what_it_made(client, porridge):
+    assert (porridge["photo_url"], porridge["thumb_url"]) == (None, None)
+    photo_id = dish_photo(client)
+    assert attach(client, porridge, photo_id).status_code == 204
+
+    read = client.get(f"/api/recipes/{porridge['id']}").json()
+    assert read["photo_url"] == f"/api/photos/{photo_id}.webp"
+    assert read["thumb_url"] == f"/api/photos/{photo_id}.thumb.webp"
+    # And the list row draws the same two.
+    listed = client.get("/api/recipes").json()[0]
+    assert (listed["photo_url"], listed["thumb_url"]) == (
+        read["photo_url"],
+        read["thumb_url"],
+    )
+    # Both addresses answer, which is what the screen actually asks for.
+    assert client.get(read["photo_url"]).status_code == 200
+    assert client.get(read["thumb_url"]).status_code == 200
+
+
+def test_a_second_picture_replaces_the_first_file_and_all(client, db_session, porridge):
+    first = dish_photo(client)
+    attach(client, porridge, first)
+    gone = db_session.get(models.FoodPhoto, first).path
+
+    second = dish_photo(client)
+    assert attach(client, porridge, second).status_code == 204
+    assert db_session.get(models.FoodPhoto, first) is None
+    assert not os.path.isfile(photos.path_for(gone))
+    assert (
+        client.get(f"/api/recipes/{porridge['id']}").json()["photo_url"]
+        == f"/api/photos/{second}.webp"
+    )
+
+
+def test_taking_the_picture_off_clears_the_row_and_the_file(client, db_session, porridge):
+    photo_id = dish_photo(client)
+    attach(client, porridge, photo_id)
+    stored = db_session.get(models.FoodPhoto, photo_id).path
+
+    assert client.delete(f"/api/recipes/{porridge['id']}/photo").status_code == 204
+    assert db_session.get(models.FoodPhoto, photo_id) is None
+    assert not os.path.isfile(photos.path_for(stored))
+    assert client.get(f"/api/recipes/{porridge['id']}").json()["photo_url"] is None
+
+
+def test_a_picture_of_the_wrong_kind_or_somebody_else_s_is_not_attached(
+    client, make_user, porridge
+):
+    out = io.BytesIO()
+    Image.new("RGB", (240, 180), (90, 90, 90)).save(out, format="JPEG")
+    front = client.post(
+        "/api/photos",
+        files={"file": ("front.jpg", out.getvalue(), "image/jpeg")},
+        data={"purpose": "front"},
+    ).json()["photo_id"]
+    refused = attach(client, porridge, front)
+    assert refused.status_code == 400
+    assert refused.json()["detail"] == MISSING_PHOTO_TO_ATTACH
+
+    make_user("stranger")
+    sign_in(client, "stranger")
+    theirs = dish_photo(client)
+    sign_in(client, "member")
+    assert attach(client, porridge, theirs).status_code == 400
+
+
+def test_a_picture_already_on_one_recipe_does_not_go_on_a_second(client, oats, porridge):
+    photo_id = dish_photo(client)
+    attach(client, porridge, photo_id)
+    second = client.post(
+        "/api/recipes",
+        json={
+            "name": "Overnight oats",
+            "yield_servings": 1,
+            "ingredients": [{"food_id": oats["id"], "amount": 1, "unit": "cup"}],
+        },
+    ).json()
+    assert attach(client, second, photo_id).status_code == 400
+
+
+def test_somebody_else_s_recipe_takes_no_picture(client, make_user, porridge):
+    make_user("stranger")
+    sign_in(client, "stranger")
+    photo_id = dish_photo(client)
+    refused = attach(client, porridge, photo_id)
+    assert refused.status_code == 404
+    assert refused.json()["detail"] == MISSING_RECIPE
+    assert client.delete(f"/api/recipes/{porridge['id']}/photo").status_code == 404
+
+
+def test_a_dish_photo_is_nobody_s_but_the_member_who_took_it(client, admin, porridge):
+    """Nothing publishes one and no request carries one, so not even an
+    administrator is served it."""
+    photo_id = dish_photo(client)
+    attach(client, porridge, photo_id)
+
+    sign_in(client, "admin")
+    assert client.get(f"/api/photos/{photo_id}.webp").status_code == 404

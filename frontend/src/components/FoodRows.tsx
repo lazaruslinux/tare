@@ -1,6 +1,14 @@
-import { BadgeCheck, Camera, X } from 'lucide-react'
+import { BadgeCheck, Camera, CookingPot, UtensilsCrossed, X } from 'lucide-react'
 
-import type { Community, FoodRow, MealRow, Part, RecipeRow, RepeatRow } from '../api'
+import type {
+  Community,
+  FoodRow,
+  LabelServing,
+  MealRow,
+  Part,
+  RecipeRow,
+  RepeatRow,
+} from '../api'
 import { portionText, scale, servingsText } from '../lib/units'
 import { nutrientText } from './NutritionLabel'
 
@@ -10,8 +18,8 @@ import { nutrientText } from './NutritionLabel'
 
 // The line under a food's name: who makes it and what it is, whichever of the
 // two it carries. Every list reads it the same way, so a food looks like itself
-// wherever it turns up.
-export function subline(row: FoodRow): string {
+// wherever it turns up, a row still being filled in included.
+export function subline(row: { brand: string; description: string }): string {
   return [row.brand, row.description].filter(Boolean).join(' \u00b7 ')
 }
 
@@ -80,6 +88,49 @@ export function PhotoThumb({ row }: { row: FoodRow }) {
   return <Thumb url={row.thumb_url ?? row.photo_url} />
 }
 
+// What a recipe and a kept meal are drawn with wherever one is not a food: a
+// pot for something cooked, a plate for a list of things eaten together. The
+// colour is the second cue and never the only one, so the icon carries it.
+export const DISH_ICON = { recipe: CookingPot, meal: UtensilsCrossed }
+export const DISH_LABEL = { recipe: 'Recipe', meal: 'Meal' }
+export const DISH_TINT = { recipe: 'text-accent', meal: 'text-orange' }
+
+type Dish = 'recipe' | 'meal'
+
+// The picture beside a recipe or a meal in a list, or the empty tile with its
+// own icon where nobody has photographed it yet.
+export function DishThumb({ kind, url }: { kind: Dish; url: string | null }) {
+  const Icon = DISH_ICON[kind]
+  if (url === null) {
+    return (
+      <span className="t-phototile h-10 w-10" aria-hidden="true">
+        <Icon className="h-4 w-4" strokeWidth={1.75} />
+      </span>
+    )
+  }
+  return (
+    <img
+      src={url}
+      alt=""
+      loading="lazy"
+      decoding="async"
+      className="h-10 w-10 shrink-0 rounded-lg border border-line object-cover"
+    />
+  )
+}
+
+// What a row is, said where the Tare check sits on a food: the icon and the
+// word, so nobody has to read the colour to know which of the three this is.
+export function KindMark({ kind }: { kind: Dish }) {
+  const Icon = DISH_ICON[kind]
+  return (
+    <span className={`flex shrink-0 items-center gap-1 ${DISH_TINT[kind]}`}>
+      <Icon className="h-3.5 w-3.5" strokeWidth={2.25} aria-hidden="true" />
+      <span className="text-xs font-semibold">{DISH_LABEL[kind]}</span>
+    </span>
+  )
+}
+
 // What a food is worth, per the thing somebody eats. The label serving where
 // there is one; where there is not, the 100 it is stored in, named as the
 // serving it stands in for rather than as the way the row is kept.
@@ -89,11 +140,17 @@ export function Calories({ row }: { row: FoodRow }) {
   return (
     <span className="shrink-0 text-right">
       <span className="t-nums block text-sm">{nutrientText('calories', value)} cal</span>
-      <span className="block text-xs text-muted">
-        {serving === null ? `per serving (100 ${row.base_unit})` : `per ${serving.name}`}
-      </span>
+      <span className="block text-xs text-muted">{per(row, serving)}</span>
     </span>
   )
+}
+
+// What the figure above is per. A recipe row is already one serving of it and a
+// meal row is the whole meal, so neither reads as a hundred of anything.
+function per(row: FoodRow, serving: LabelServing | null): string {
+  if (row.kind === 'recipe') return 'per serving'
+  if (row.kind === 'meal') return 'whole meal'
+  return serving === null ? `per serving (100 ${row.base_unit})` : `per ${serving.name}`
 }
 
 // The starred foods out of everything the repeat list offers, in the order
@@ -171,6 +228,7 @@ export function FoodLine({
 export function MealLine({ row, onOpen }: { row: MealRow; onOpen: () => void }) {
   return (
     <button type="button" className="t-row w-full text-left" onClick={onOpen}>
+      <DishThumb kind="meal" url={row.thumb_url ?? row.photo_url} />
       <span className="min-w-0 flex-1 truncate text-sm">{row.name}</span>
       <span className="t-nums shrink-0 text-xs text-muted">
         {row.items === 1 ? '1 food' : `${row.items} foods`} ·{' '}
@@ -186,7 +244,9 @@ export function MealLine({ row, onOpen }: { row: MealRow; onOpen: () => void }) 
 // to. Nothing here opens: the row is a reading, not a way in.
 export function PartLine({ row }: { row: Part & { calories: number | null } }) {
   const gone = row.food_id === null
-  const under = [row.brand, gone ? 'this food is gone' : ''].filter(Boolean).join(' · ')
+  const under = [row.brand, row.description, gone ? 'this food is gone' : '']
+    .filter(Boolean)
+    .join(' · ')
   return (
     <div className="t-row">
       <Thumb url={row.thumb_url} />
@@ -208,6 +268,7 @@ export function PartLine({ row }: { row: Part & { calories: number | null } }) {
 export function RecipeLine({ row, onOpen }: { row: RecipeRow; onOpen: () => void }) {
   return (
     <button type="button" className="t-row w-full text-left" onClick={onOpen}>
+      <DishThumb kind="recipe" url={row.thumb_url ?? row.photo_url} />
       <span className="min-w-0 flex-1">
         <span className="block truncate text-sm">{row.name}</span>
         <span className="block truncate text-xs text-muted">

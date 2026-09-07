@@ -486,7 +486,7 @@ def replace_queue_photo(
     of a correction is a picture nothing is showing yet, so it waits with the
     correction and is published when that is.
     """
-    if body.purpose not in models.PHOTO_PURPOSES:
+    if body.purpose not in models.FOOD_PHOTO_PURPOSES:
         raise HTTPException(status.HTTP_400_BAD_REQUEST, BAD_PURPOSE)
     submission = adjustable(db, submission_id)
 
@@ -528,7 +528,7 @@ def remove_queue_photo(
     reviewer: models.User = Depends(require_reviewer),
 ) -> None:
     """Take a picture off a waiting request, row and file both."""
-    if purpose not in models.PHOTO_PURPOSES:
+    if purpose not in models.FOOD_PHOTO_PURPOSES:
         raise HTTPException(status.HTTP_400_BAD_REQUEST, BAD_PURPOSE)
     submission = adjustable(db, submission_id)
 

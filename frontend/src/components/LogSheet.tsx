@@ -21,11 +21,13 @@ export function LogSheet({
   slot,
   weight,
   weighing = false,
+  counted = false,
   error,
   saving,
   onClose,
   onSubmit,
   onDelete,
+  deleteLabel = 'Delete',
 }: {
   // The quiet line at the top, and what the button says.
   title: string
@@ -40,12 +42,17 @@ export function LogSheet({
   // Already a weight, which is how a row logged in grams is edited: the field
   // opens on the grams it holds rather than on zero.
   weighing?: boolean
+  // Already a count, which is how a standing auto-log set in servings is read
+  // back: the scale would otherwise be offered first and the number lost.
+  counted?: boolean
   error?: string
   saving?: boolean
   onClose: () => void
   // The amount, and whether it is grams rather than servings.
   onSubmit: (amount: number | null, slot: Slot, byWeight: boolean) => void
   onDelete?: () => void
+  // What the button beside the action says, where "Delete" is not the word.
+  deleteLabel?: string
 }) {
   // Only worth offering the two when there is a weight to take a share of.
   const weighable = typeof weight === 'number' && weight > 0
@@ -53,13 +60,14 @@ export function LogSheet({
   // The scale reads in one of three, starting in grams. Grams are what is sent
   // whichever it says.
   const [unit, setUnit] = useState<Unit>('g')
-  // Weigh it first, because weighing it is what this app is for.
-  const [byWeight, setByWeight] = useState(weighing || weighable)
-  // A row already logged by weight opens on the grams it holds. Anything else
-  // opens on zero for the scale, waiting for what it says.
+  // Weigh it first, because weighing it is what this app is for, unless what
+  // is being read back was already set as a count.
+  const [byWeight, setByWeight] = useState(counted ? false : weighing || weighable)
+  // A row already logged by weight or already counted opens on the number it
+  // holds. Anything else opens on zero for the scale, waiting for what it says.
   const [amount, setAmount] = useState(() => {
     if (servings === null) return ''
-    if (weighing) return String(round1(servings))
+    if (weighing || counted) return String(round1(servings))
     return weighable ? '0' : String(servings)
   })
   const [meal, setMeal] = useState<Slot>(slot)
@@ -201,7 +209,7 @@ export function LogSheet({
         </button>
         {onDelete ? (
           <button type="button" className="t-btn text-danger" onClick={onDelete}>
-            Delete
+            {deleteLabel}
           </button>
         ) : (
           <button type="button" className="t-btn" onClick={onClose}>

@@ -10,6 +10,8 @@ is nobody special here.
 from __future__ import annotations
 
 import datetime as dt
+from collections.abc import Sequence
+from typing import NamedTuple
 
 from fastapi import APIRouter, Depends, HTTPException, status
 from sqlalchemy import func, select
@@ -51,7 +53,14 @@ BAD_SLOT = "That is not a meal."
 # One auto-log that is not there and one that is somebody else's read the same,
 # and the refusal for a second one on the same food and meal.
 MISSING_AUTO_LOG = "There is no such auto-log."
-AUTO_LOG_CLASH = "That food already auto-logs at {slot}."
+AUTO_LOG_CLASH = "That {kind} already auto-logs at {slot}."
+# An auto-log is about one thing, and there are three it could be.
+ONE_AUTO_LOG_KIND = "An auto-log is for a food, a recipe or a meal, and one of them."
+# A recipe or a meal is counted in servings or taken off the scale, and there
+# is no third way to say how much of one.
+AUTO_LOG_DISH_UNIT = "A recipe or a meal auto-logs in servings or in grams."
+# Said where grams are asked for and there is nothing to take a share of.
+NO_DISH_WEIGHT = "Add a final weight first, or count servings."
 BAD_UNIT = "That is not a unit this can measure in."
 NO_AMOUNT = "Say how much of it you had."
 NO_QUICK_ADD = "A quick add needs an item name and its calories."
@@ -387,21 +396,207 @@ def serving_names(db: Session, standing: list[models.AutoLog]) -> dict[int, str]
     return {row_id: names[serving_id] for row_id, serving_id in wanted.items() if serving_id in names}
 
 
-def auto_log_row(row: models.AutoLog, food: models.Food, label: str | None) -> dict[str, object]:
+class Thing(NamedTuple):
+    """What one auto-log is about, as its row reads it: which of the three it
+    is, what it is called, and the small picture beside the name."""
+
+    kind: str
+    name: str
+    brand: str
+    thumb: str | None
+
+
+# Which column on an auto-log and which on a diary entry each kind is held in,
+# so the clash rule and the already-eaten rule read the same for all three.
+AUTO_LOG_COLUMNS = {
+    "food": (models.AutoLog.food_id, models.DiaryEntry.food_id),
+    "recipe": (models.AutoLog.recipe_id, models.DiaryEntry.recipe_id),
+    "meal": (models.AutoLog.meal_id, models.DiaryEntry.meal_id),
+}
+
+
+def auto_log_kind(row: models.AutoLog | schemas.AutoLogIn) -> str:
+    """Which of the three an auto-log is about. Exactly one column is set, so
+    the first one that is answers it."""
+    if row.food_id is not None:
+        return "food"
+    return "recipe" if row.recipe_id is not None else "meal"
+
+
+def auto_log_things(
+    db: Session, user: models.User, standing: Sequence[models.AutoLog]
+) -> dict[int, Thing]:
+    """What each of these auto-logs is about, by auto-log id.
+
+    A few queries for the whole list rather than a lookup a row, the same way
+    the serving names beside it are read. One whose thing has gone is simply
+    not in the answer, and the list leaves that row out.
+    """
+    from app.routers.foods import dish_pictures, dish_thumb, pictures_for
+
+    foods = list(
+        db.execute(
+            select(models.Food).where(
+                models.Food.id.in_({row.food_id for row in standing if row.food_id})
+            )
+        ).scalars()
+    )
+    recipes = {
+        recipe.id: recipe
+        for recipe in db.execute(
+            select(models.Recipe).where(
+                models.Recipe.id.in_({row.recipe_id for row in standing if row.recipe_id})
+            )
+        ).scalars()
+    }
+    meals = {
+        meal.id: meal
+        for meal in db.execute(
+            select(models.MealTemplate).where(
+                models.MealTemplate.id.in_({row.meal_id for row in standing if row.meal_id})
+            )
+        ).scalars()
+    }
+    shots = pictures_for(db, user, foods)
+    dishes = dish_pictures(
+        db,
+        [recipe.photo_id for recipe in recipes.values()]
+        + [meal.photo_id for meal in meals.values()],
+    )
+
+    things: dict[int, Thing] = {}
+    for row in standing:
+        if row.food_id is not None:
+            food = next((one for one in foods if one.id == row.food_id), None)
+            if food is not None:
+                shot = shots.get(food.id)
+                thumb = None if shot is None else (shot.thumb or shot.url)
+                things[row.id] = Thing("food", food.name, food.brand, thumb)
+        elif row.recipe_id is not None:
+            recipe = recipes.get(row.recipe_id)
+            if recipe is not None:
+                things[row.id] = Thing(
+                    "recipe", recipe.name, "", dish_thumb(dishes, recipe.photo_id)
+                )
+        elif row.meal_id is not None:
+            meal = meals.get(row.meal_id)
+            if meal is not None:
+                things[row.id] = Thing(
+                    "meal", meal.name, "", dish_thumb(dishes, meal.photo_id)
+                )
+    return things
+
+
+def auto_log_row(row: models.AutoLog, thing: Thing, label: str | None) -> dict[str, object]:
     """One standing auto-log as its list reads it: what, how much, which meal."""
     return {
         "id": row.id,
+        "kind": thing.kind,
         "food_id": row.food_id,
-        "name": food.name,
-        "brand": food.brand,
+        "recipe_id": row.recipe_id,
+        "meal_id": row.meal_id,
+        "name": thing.name,
+        "brand": thing.brand,
+        # The small picture the row draws, of the food or of the finished dish.
+        "thumb_url": thing.thumb,
         "amount": row.amount,
         # The portion as it was set, which is what the sheet opens on again.
         "unit": row.unit,
-        # The name of the serving it counts in, or null when it is measured.
+        # The name of the serving it counts in. Null where it is measured, and
+        # null on every recipe and meal: those count in servings of themselves.
         "serving_label": label,
         "slot": row.slot,
         "started_on": row.started_on.isoformat(),
     }
+
+
+def dish_weight(
+    db: Session, user: models.User, dish: models.Recipe | models.MealTemplate
+) -> float | None:
+    """What a share by weight of a recipe or a meal is worked out from: the
+    scale where somebody typed a figure, and what the parts come to otherwise."""
+    from app.routers.meals import weight as meal_weight
+
+    if isinstance(dish, models.Recipe):
+        return settled_weight(dish.final_weight_g, weight(db, user, dish)[0])
+    return settled_weight(dish.final_weight_g, meal_weight(db, user, dish)[0])
+
+
+def checked_dish_portion(
+    db: Session, user: models.User, dish: models.Recipe | models.MealTemplate, unit: str
+) -> None:
+    """A recipe or a meal counts in servings or comes off the scale, and grams
+    are a share of something, so there has to be something to share out."""
+    if unit not in (SERVING_UNIT, "g"):
+        raise HTTPException(status.HTTP_400_BAD_REQUEST, AUTO_LOG_DISH_UNIT)
+    if unit == "g" and dish_weight(db, user, dish) is None:
+        raise HTTPException(status.HTTP_400_BAD_REQUEST, NO_DISH_WEIGHT)
+
+
+Loggable = models.Food | models.Recipe | models.MealTemplate
+
+
+def auto_log_target(db: Session, user: models.User, body: schemas.AutoLogIn) -> Loggable:
+    """The thing a new auto-log is about, with its portion checked.
+
+    Measured once here so a portion that cannot be worked out is refused now,
+    rather than at a fill-in nobody is watching.
+    """
+    from app.routers.meals import own_meal
+
+    given = [body.food_id, body.recipe_id, body.meal_id]
+    if sum(one is not None for one in given) != 1:
+        raise HTTPException(status.HTTP_400_BAD_REQUEST, ONE_AUTO_LOG_KIND)
+    if body.food_id is not None:
+        food = readable_food(db, user, body.food_id)
+        measure(food, body.amount, body.unit)
+        return food
+    if body.recipe_id is not None:
+        recipe = own_recipe(db, user, body.recipe_id)
+        checked_dish_portion(db, user, recipe, body.unit)
+        return recipe
+    # The check above leaves the meal and nothing else. The fallback id is
+    # never reached: it is there because a type cannot say that.
+    meal = own_meal(db, user, body.meal_id or 0)
+    checked_dish_portion(db, user, meal, body.unit)
+    return meal
+
+
+def standing_target(db: Session, row: models.AutoLog) -> Loggable:
+    """The thing a standing auto-log is about. One whose thing has gone answers
+    exactly what an auto-log that was never there answers."""
+    found: Loggable | None
+    if row.food_id is not None:
+        found = db.get(models.Food, row.food_id)
+    elif row.recipe_id is not None:
+        found = db.get(models.Recipe, row.recipe_id)
+    else:
+        found = db.get(models.MealTemplate, row.meal_id)
+    if found is None:
+        raise HTTPException(status.HTTP_404_NOT_FOUND, MISSING_AUTO_LOG)
+    return found
+
+
+def auto_entry(
+    db: Session, user: models.User, row: models.AutoLog, day: dt.date, thing: Loggable
+) -> models.DiaryEntry:
+    """The entry one auto-log owes for one day.
+
+    Built by the same code a manual log of that thing uses, so a day filled in
+    and the same portion logged by hand cannot come out different.
+    """
+    from app.routers.meals import log_entry
+
+    if isinstance(thing, models.Food):
+        return log_food(user, day, row.slot, thing, row.amount, row.unit)
+    if isinstance(thing, models.Recipe):
+        if row.unit == SERVING_UNIT:
+            return log_recipe(user, day, row.slot, thing, row.amount)
+        weighs = dish_weight(db, user, thing)
+        if weighs is None:
+            raise HTTPException(status.HTTP_400_BAD_REQUEST, NO_DISH_WEIGHT)
+        return log_recipe_by_weight(user, day, row.slot, thing, row.amount, weighs)
+    return log_entry(db, user, thing, day, row.slot, row.amount, row.unit != SERVING_UNIT)[0]
 
 
 def standing_auto_logs(db: Session, user: models.User) -> list[models.AutoLog]:
@@ -459,25 +654,50 @@ def fill_auto_logs(db: Session, user: models.User, first: dt.date, last: dt.date
     foods = {
         food.id: food
         for food in db.execute(
-            select(models.Food).where(models.Food.id.in_({row.food_id for row in standing}))
+            select(models.Food).where(
+                models.Food.id.in_({row.food_id for row in standing if row.food_id})
+            )
+        ).scalars()
+    }
+    recipes = {
+        recipe.id: recipe
+        for recipe in db.execute(
+            select(models.Recipe).where(
+                models.Recipe.id.in_({row.recipe_id for row in standing if row.recipe_id})
+            )
+        ).scalars()
+    }
+    meals = {
+        meal.id: meal
+        for meal in db.execute(
+            select(models.MealTemplate).where(
+                models.MealTemplate.id.in_({row.meal_id for row in standing if row.meal_id})
+            )
         ).scalars()
     }
 
     added = False
     for row in standing:
-        food = foods.get(row.food_id)
-        if food is None:
+        thing: Loggable | None = None
+        if row.food_id is not None:
+            thing = foods.get(row.food_id)
+        elif row.recipe_id is not None:
+            thing = recipes.get(row.recipe_id)
+        elif row.meal_id is not None:
+            thing = meals.get(row.meal_id)
+        if thing is None:
             continue
         day = max(first, row.started_on)
         while day <= last:
             if day not in marked and (row.id, day) not in written:
                 try:
-                    entry = log_food(user, day, row.slot, food, row.amount, row.unit)
+                    entry = auto_entry(db, user, row, day, thing)
                 except HTTPException:
                     # The portion no longer resolves, which is a serving that
-                    # has been deleted since. Nothing is written rather than
-                    # something nobody chose, and the list still shows the row
-                    # so it can be set again or taken off.
+                    # has been deleted since, or a dish that can no longer be
+                    # weighed. Nothing is written rather than something nobody
+                    # chose, and the list still shows the row so it can be set
+                    # again or taken off.
                     break
                 entry.auto_log_id = row.id
                 db.add(entry)
@@ -500,21 +720,16 @@ def read_auto_logs(
     db: Session = Depends(get_db),
     user: models.User = Depends(require_user),
 ) -> list[dict[str, object]]:
-    """Every food this account has set to log itself, oldest first."""
+    """Everything this account has set to log itself, oldest first."""
     standing = standing_auto_logs(db, user)
     if not standing:
         return []
-    foods = {
-        food.id: food
-        for food in db.execute(
-            select(models.Food).where(models.Food.id.in_({row.food_id for row in standing}))
-        ).scalars()
-    }
+    things = auto_log_things(db, user, standing)
     labels = serving_names(db, standing)
     return [
-        auto_log_row(row, food, labels.get(row.id))
+        auto_log_row(row, thing, labels.get(row.id))
         for row in standing
-        if (food := foods.get(row.food_id)) is not None
+        if (thing := things.get(row.id)) is not None
     ]
 
 
@@ -524,26 +739,30 @@ def add_auto_log(
     db: Session = Depends(get_db),
     user: models.User = Depends(require_user),
 ) -> dict[str, object]:
-    """Set a food to log itself into the same meal every day from today on."""
+    """Set a food, a recipe or a kept meal to log itself into the same meal
+    every day from today on."""
     slot = checked_slot(body.slot)
-    food = readable_food(db, user, body.food_id)
-    # Measured once here so a portion that cannot be worked out is refused now,
-    # rather than at a fill-in nobody is watching.
-    measure(food, body.amount, body.unit)
+    thing = auto_log_target(db, user, body)
+    kind = auto_log_kind(body)
+    standing, logged = AUTO_LOG_COLUMNS[kind]
     clash = db.execute(
         select(models.AutoLog).where(
             models.AutoLog.user_id == user.id,
-            models.AutoLog.food_id == food.id,
+            standing == thing.id,
             models.AutoLog.slot == slot,
         )
     ).scalar_one_or_none()
     if clash is not None:
-        raise HTTPException(status.HTTP_409_CONFLICT, AUTO_LOG_CLASH.format(slot=slot))
+        raise HTTPException(
+            status.HTTP_409_CONFLICT, AUTO_LOG_CLASH.format(kind=kind, slot=slot)
+        )
 
     today = clock.user_today(user)
     row = models.AutoLog(
         user_id=user.id,
-        food_id=food.id,
+        food_id=body.food_id,
+        recipe_id=body.recipe_id,
+        meal_id=body.meal_id,
         amount=body.amount,
         unit=body.unit,
         slot=slot,
@@ -552,19 +771,21 @@ def add_auto_log(
     db.add(row)
     db.flush()
     # Setting this up after eating the thing is not eating it twice: a meal
-    # that already holds this food today has had its turn.
+    # that already holds it today has had its turn.
     eaten = db.execute(
         select(models.DiaryEntry.id).where(
             models.DiaryEntry.user_id == user.id,
             models.DiaryEntry.date_for == today,
             models.DiaryEntry.slot == slot,
-            models.DiaryEntry.food_id == food.id,
+            logged == thing.id,
         )
     ).first()
     if eaten is not None:
         db.add(models.AutoLogDay(auto_log_id=row.id, date=today))
     db.commit()
-    return auto_log_row(row, food, serving_names(db, [row]).get(row.id))
+    return auto_log_row(
+        row, auto_log_things(db, user, [row])[row.id], serving_names(db, [row]).get(row.id)
+    )
 
 
 @router.patch("/auto-logs/{auto_log_id}")
@@ -578,30 +799,36 @@ def update_auto_log(
     an instruction about the days to come."""
     row = own_auto_log(db, user, auto_log_id)
     sent = body.model_fields_set
-    food = db.get(models.Food, row.food_id)
-    if food is None:
-        raise HTTPException(status.HTTP_404_NOT_FOUND, MISSING_AUTO_LOG)
+    thing = standing_target(db, row)
+    kind = auto_log_kind(row)
 
     slot = checked_slot(body.slot) if "slot" in sent else row.slot
     amount = body.amount if body.amount is not None else row.amount
     unit = body.unit if "unit" in sent and body.unit else row.unit
-    measure(food, amount, unit)
+    if isinstance(thing, models.Food):
+        measure(thing, amount, unit)
+    else:
+        checked_dish_portion(db, user, thing, unit)
     if slot != row.slot:
         clash = db.execute(
             select(models.AutoLog).where(
                 models.AutoLog.user_id == user.id,
-                models.AutoLog.food_id == row.food_id,
+                AUTO_LOG_COLUMNS[kind][0] == thing.id,
                 models.AutoLog.slot == slot,
             )
         ).scalar_one_or_none()
         if clash is not None:
-            raise HTTPException(status.HTTP_409_CONFLICT, AUTO_LOG_CLASH.format(slot=slot))
+            raise HTTPException(
+                status.HTTP_409_CONFLICT, AUTO_LOG_CLASH.format(kind=kind, slot=slot)
+            )
 
     row.amount = amount
     row.unit = unit
     row.slot = slot
     db.commit()
-    return auto_log_row(row, food, serving_names(db, [row]).get(row.id))
+    return auto_log_row(
+        row, auto_log_things(db, user, [row])[row.id], serving_names(db, [row]).get(row.id)
+    )
 
 
 @router.delete("/auto-logs/{auto_log_id}", status_code=status.HTTP_204_NO_CONTENT)

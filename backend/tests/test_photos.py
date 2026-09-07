@@ -220,10 +220,12 @@ def test_a_photo_is_of_the_front_unless_it_says_otherwise(client, db_session, si
     assert db_session.get(models.FoodPhoto, label).purpose == "label"
 
 
-def test_a_purpose_that_is_not_one_of_the_two_is_refused(client, signed_in):
+def test_a_purpose_that_is_not_one_of_the_three_is_refused(client, signed_in):
     response = upload(client, purpose="sideways")
     assert response.status_code == 400
-    assert response.json() == {"detail": "A photo is of the front or of the label."}
+    assert response.json() == {
+        "detail": "A photo is of the front, of the label, or of a finished dish."
+    }
 
 
 def test_a_label_photo_is_the_uploader_s_and_the_reviewer_s_and_nobody_else_s(
@@ -402,6 +404,49 @@ def test_the_panel_a_shared_food_keeps_is_never_swept_up(client, db_session, sig
     upload(client)
 
     assert db_session.get(models.FoodPhoto, kept_id) is not None
+
+
+def test_a_picture_a_recipe_or_a_meal_is_holding_is_never_swept_up(
+    client, db_session, signed_in
+):
+    """A dish photo never reaches a food, so the sweep has to be told that
+    something else is holding it."""
+    recipe = models.Recipe(user_id=signed_in.id, name="Porridge", yield_servings=4)
+    meal = models.MealTemplate(user_id=signed_in.id, name="Usual breakfast")
+    db_session.add_all([recipe, meal])
+    db_session.commit()
+
+    for dish in (recipe, meal):
+        kept_id = upload(client, purpose="dish").json()["photo_id"]
+        db_session.get(models.FoodPhoto, kept_id).created_at = now_utc() - dt.timedelta(
+            hours=25
+        )
+        dish.photo_id = kept_id
+        db_session.commit()
+
+        upload(client)
+        assert db_session.get(models.FoodPhoto, kept_id) is not None
+
+
+def test_a_dish_photo_nothing_is_holding_is_swept_up_like_any_other(
+    client, db_session, signed_in
+):
+    orphan_id = upload(client, purpose="dish").json()["photo_id"]
+    orphan = db_session.get(models.FoodPhoto, orphan_id)
+    name = orphan.path
+    orphan.created_at = now_utc() - dt.timedelta(hours=25)
+    db_session.commit()
+
+    upload(client)
+    assert db_session.get(models.FoodPhoto, orphan_id) is None
+    assert not on_disk(name)
+
+
+def test_a_dish_photo_is_stored_with_a_small_copy_beside_it(client, db_session, signed_in):
+    """A recipe row draws the small one the way a food row does."""
+    response = upload(client, picture(size=(400, 200)), purpose="dish")
+    row = db_session.get(models.FoodPhoto, response.json()["photo_id"])
+    assert on_disk(photos.thumb_name(row.path))
 
 
 def test_a_member_may_only_upload_so_many_pictures_in_one_day(client, db_session, signed_in):

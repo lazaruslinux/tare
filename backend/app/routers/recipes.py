@@ -12,7 +12,7 @@ what an id that was never used answers.
 from __future__ import annotations
 
 from fastapi import APIRouter, Depends, HTTPException, status
-from sqlalchemy import select, update
+from sqlalchemy import delete, select, update
 from sqlalchemy.orm import Session, selectinload
 
 from app import models, schemas
@@ -25,10 +25,13 @@ from app.routers.foods import (
     MAX_NAME,
     MY_LIST_CAP,
     Mark,
+    dish_pictures,
+    dish_urls,
     food_marks,
     last_logged_by,
     readable_food,
 )
+from app.routers.photos import set_dish_photo
 
 router = APIRouter(prefix="/recipes", tags=["recipes"])
 
@@ -92,9 +95,10 @@ def held_names(recipe: models.Recipe) -> dict[int, str]:
 def ingredient_row(row: models.RecipeIngredient, mark: Mark | None) -> dict[str, object]:
     """One ingredient: what it is, how much of it, and what that came to.
 
-    The name and brand are the recipe's own copy. The picture and the standing
-    come from the live food, so the row reads like the food rows everywhere
-    else, and both are empty once that food is gone.
+    The name and brand are the recipe's own copy. The picture, the few words
+    under the name and the standing come from the live food, so the row reads
+    like the food rows everywhere else, and all three are empty once that food
+    is gone.
     """
     data: dict[str, object] = {
         "id": row.id,
@@ -105,6 +109,7 @@ def ingredient_row(row: models.RecipeIngredient, mark: Mark | None) -> dict[str,
         "unit": row.unit,
         "serving_label": row.serving_label,
         "thumb_url": None if mark is None else mark.thumb,
+        "description": "" if mark is None else mark.description,
         "status": "" if mark is None else mark.status,
     }
     for field in NUTRIENTS:
@@ -122,6 +127,7 @@ def recipe_detail(
         "id": recipe.id,
         "name": recipe.name,
         "yield_servings": recipe.yield_servings,
+        **dish_urls(dish_pictures(db, [recipe.photo_id]), recipe.photo_id),
         "ingredients": [
             ingredient_row(row, marks.get(row.food_id) if row.food_id else None)
             for row in recipe.ingredients
@@ -158,8 +164,10 @@ def list_recipes(
         )
         .limit(MY_LIST_CAP)
     )
+    found = db.execute(query).all()
+    pictures = dish_pictures(db, [recipe.photo_id for recipe, _ in found])
     rows = []
-    for recipe, stamp in db.execute(query).all():
+    for recipe, stamp in found:
         each = per_serving(recipe)
         rows.append(
             {
@@ -168,6 +176,7 @@ def list_recipes(
                 "yield_servings": recipe.yield_servings,
                 "per_serving": {field: each[field] for field in HEADLINE},
                 "last_logged": stamp,
+                **dish_urls(pictures, recipe.photo_id),
             }
         )
     return rows
@@ -224,6 +233,32 @@ def replace_recipe(
     return recipe_detail(db, user, recipe)
 
 
+@router.post("/{recipe_id}/photo", status_code=status.HTTP_204_NO_CONTENT)
+def attach_recipe_photo(
+    recipe_id: int,
+    body: schemas.DishPhotoIn,
+    db: Session = Depends(get_db),
+    user: models.User = Depends(require_user),
+) -> None:
+    """Put a picture of the finished dish on one of your own recipes.
+
+    Attached rather than offered: a recipe is private, so nothing about the
+    picture on it is anybody else's business. A second one replaces the first,
+    file and all.
+    """
+    set_dish_photo(db, user, own_recipe(db, user, recipe_id), body.photo_id)
+
+
+@router.delete("/{recipe_id}/photo", status_code=status.HTTP_204_NO_CONTENT)
+def remove_recipe_photo(
+    recipe_id: int,
+    db: Session = Depends(get_db),
+    user: models.User = Depends(require_user),
+) -> None:
+    """Take the picture off, row and file both."""
+    set_dish_photo(db, user, own_recipe(db, user, recipe_id), None)
+
+
 @router.delete("/{recipe_id}", status_code=status.HTTP_204_NO_CONTENT)
 def delete_recipe(
     recipe_id: int,
@@ -239,6 +274,9 @@ def delete_recipe(
         .where(models.DiaryEntry.recipe_id == recipe.id)
         .values(recipe_id=None)
     )
+    # And an instruction to log a recipe that is gone is nothing, which is what
+    # the cascade on that column says.
+    db.execute(delete(models.AutoLog).where(models.AutoLog.recipe_id == recipe.id))
     # Through the session rather than in SQL, so the ingredients go with it on
     # SQLite too, where the foreign key is only enforced when it is asked for.
     db.delete(recipe)

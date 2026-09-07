@@ -8,8 +8,10 @@ without qualification, and somebody else's answers what an unused id answers.
 
 from __future__ import annotations
 
+import datetime as dt
+
 from fastapi import APIRouter, Depends, HTTPException, status
-from sqlalchemy import select, update
+from sqlalchemy import delete, select, update
 from sqlalchemy.orm import Session, selectinload
 
 from app import clock, models, schemas, units
@@ -25,7 +27,16 @@ from app.routers.diary import (
     snapshot,
     stored_unit,
 )
-from app.routers.foods import MY_LIST_CAP, Mark, food_marks, last_logged_by, readable_food
+from app.routers.foods import (
+    MY_LIST_CAP,
+    Mark,
+    dish_pictures,
+    dish_urls,
+    food_marks,
+    last_logged_by,
+    readable_food,
+)
+from app.routers.photos import set_dish_photo
 from app.routers.recipes import checked_name, part_food
 
 router = APIRouter(prefix="/meals", tags=["meals"])
@@ -171,9 +182,10 @@ def item_row(
     """One item. food_id is null once its food is gone, and the name stays.
 
     The four the lists and the form read come with it, and they are null on an
-    item whose food has gone, the same way the row itself says so. The picture
-    and the standing come from the live food, so the row reads like the food
-    rows everywhere else, and both are empty once that food is gone.
+    item whose food has gone, the same way the row itself says so. The picture,
+    the few words under the name and the standing come from the live food, so
+    the row reads like the food rows everywhere else, and all three are empty
+    once that food is gone.
     """
     data: dict[str, object] = {
         "id": row.id,
@@ -184,6 +196,7 @@ def item_row(
         "unit": row.unit,
         "serving_label": row.serving_label,
         "thumb_url": None if mark is None else mark.thumb,
+        "description": "" if mark is None else mark.description,
         "status": "" if mark is None else mark.status,
     }
     for field in HEADLINE:
@@ -198,6 +211,7 @@ def meal_detail(db: Session, user: models.User, meal: models.MealTemplate) -> di
     return {
         "id": meal.id,
         "name": meal.name,
+        **dish_urls(dish_pictures(db, [meal.photo_id]), meal.photo_id),
         "items": [
             item_row(row, panel, marks.get(row.food_id) if row.food_id else None)
             for row, panel in zip(meal.items, panels)
@@ -234,6 +248,8 @@ def list_meals(
         )
         .limit(MY_LIST_CAP)
     )
+    found = db.execute(query).all()
+    pictures = dish_pictures(db, [meal.photo_id for meal, _ in found])
     return [
         {
             "id": meal.id,
@@ -244,8 +260,9 @@ def list_meals(
             # same food back to every meal that holds it.
             "totals": totals(portions(db, user, meal)[0]),
             "last_logged": stamp,
+            **dish_urls(pictures, meal.photo_id),
         }
-        for meal, stamp in db.execute(query).all()
+        for meal, stamp in found
     ]
 
 
@@ -294,6 +311,28 @@ def replace_meal(
     return meal_detail(db, user, meal)
 
 
+@router.post("/{meal_id}/photo", status_code=status.HTTP_204_NO_CONTENT)
+def attach_meal_photo(
+    meal_id: int,
+    body: schemas.DishPhotoIn,
+    db: Session = Depends(get_db),
+    user: models.User = Depends(require_user),
+) -> None:
+    """Put a picture of the plate on one of your own meals, as a recipe takes
+    one. A second one replaces the first, file and all."""
+    set_dish_photo(db, user, own_meal(db, user, meal_id), body.photo_id)
+
+
+@router.delete("/{meal_id}/photo", status_code=status.HTTP_204_NO_CONTENT)
+def remove_meal_photo(
+    meal_id: int,
+    db: Session = Depends(get_db),
+    user: models.User = Depends(require_user),
+) -> None:
+    """Take the picture off, row and file both."""
+    set_dish_photo(db, user, own_meal(db, user, meal_id), None)
+
+
 @router.delete("/{meal_id}", status_code=status.HTTP_204_NO_CONTENT)
 def delete_meal(
     meal_id: int,
@@ -309,46 +348,46 @@ def delete_meal(
         .where(models.DiaryEntry.meal_id == meal.id)
         .values(meal_id=None)
     )
+    # And an instruction to log a meal that is gone is nothing, which is what
+    # the cascade on that column says.
+    db.execute(delete(models.AutoLog).where(models.AutoLog.meal_id == meal.id))
     # Through the session, so the items go with it on SQLite too, where the
     # foreign key is only enforced when it is asked for.
     db.delete(meal)
     db.commit()
 
 
-@router.post("/{meal_id}/log", status_code=status.HTTP_201_CREATED)
-def log_meal(
-    meal_id: int,
-    body: schemas.MealLogIn,
-    db: Session = Depends(get_db),
-    user: models.User = Depends(require_user),
-) -> dict[str, object]:
-    """Log the whole meal as one line: what all of it comes to, that often.
+def log_entry(
+    db: Session,
+    user: models.User,
+    meal: models.MealTemplate,
+    day: dt.date,
+    slot: str,
+    amount: float,
+    by_weight: bool,
+) -> tuple[models.DiaryEntry, list[str]]:
+    """One entry from a whole kept meal, and the items left out of it.
 
-    A breakfast is one thing somebody ate, so it reads as one row in the day
-    rather than five. An item whose food has gone is left out and named rather
-    than holding up the rest, because the other four things really were eaten.
+    The one place a meal becomes a row, so a meal logged by hand and one a
+    standing auto-log writes cannot come out different. An item whose food has
+    gone is left out and named rather than holding up the rest, because the
+    other four things really were eaten.
     """
-    meal = own_meal(db, user, meal_id)
-    day = body.date or clock.user_today(user)
-    refuse_if_complete(db, user, day)
-    slot = checked_slot(body.slot)
-
     panels, skipped = portions(db, user, meal)
     whole = totals(panels)
-    amount: float
     unit: str
     label: str | None
     # Weighed rather than counted where somebody says what came off the scale:
     # the share of the meal those grams are, against what it all weighs.
-    if body.grams is None:
-        share = body.servings
-        amount, unit, label = body.servings, SERVING_UNIT, SERVING_UNIT
+    if not by_weight:
+        share = amount
+        unit, label = SERVING_UNIT, SERVING_UNIT
     else:
         weighs = settled_weight(meal.final_weight_g, weight(db, user, meal)[0])
         if weighs is None:
             raise HTTPException(status.HTTP_400_BAD_REQUEST, NO_WEIGHT)
-        share = body.grams / weighs
-        amount, unit, label = body.grams, "g", None
+        share = amount / weighs
+        unit, label = "g", None
     entry = models.DiaryEntry(
         user_id=user.id,
         date_for=day,
@@ -363,6 +402,35 @@ def log_meal(
     for field in NUTRIENTS:
         value = whole[field]
         setattr(entry, field, None if value is None else value * share)
+    return entry, skipped
+
+
+@router.post("/{meal_id}/log", status_code=status.HTTP_201_CREATED)
+def log_meal(
+    meal_id: int,
+    body: schemas.MealLogIn,
+    db: Session = Depends(get_db),
+    user: models.User = Depends(require_user),
+) -> dict[str, object]:
+    """Log the whole meal as one line: what all of it comes to, that often.
+
+    A breakfast is one thing somebody ate, so it reads as one row in the day
+    rather than five.
+    """
+    meal = own_meal(db, user, meal_id)
+    day = body.date or clock.user_today(user)
+    refuse_if_complete(db, user, day)
+    slot = checked_slot(body.slot)
+
+    entry, skipped = log_entry(
+        db,
+        user,
+        meal,
+        day,
+        slot,
+        body.servings if body.grams is None else body.grams,
+        body.grams is not None,
+    )
     db.add(entry)
     db.commit()
     return {"entry": entry_row(entry), "skipped": skipped}

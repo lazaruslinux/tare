@@ -11,7 +11,14 @@ import datetime as dt
 import pytest
 
 from app import models
-from app.routers.diary import AUTO_LOG_CLASH, BAD_SLOT, MISSING_AUTO_LOG
+from app.routers.diary import (
+    AUTO_LOG_CLASH,
+    AUTO_LOG_DISH_UNIT,
+    BAD_SLOT,
+    MISSING_AUTO_LOG,
+    NO_DISH_WEIGHT,
+    ONE_AUTO_LOG_KIND,
+)
 from app.routers.foods import MISSING_FOOD
 from tests.conftest import PASSWORD
 
@@ -125,7 +132,7 @@ def test_a_second_auto_log_for_the_same_food_and_meal_is_refused(client, signed_
     assert set_auto(client, oats).status_code == 201
     clash = set_auto(client, oats)
     assert clash.status_code == 409
-    assert clash.json()["detail"] == AUTO_LOG_CLASH.format(slot="breakfast")
+    assert clash.json()["detail"] == AUTO_LOG_CLASH.format(kind="food", slot="breakfast")
     # Another meal is another instruction, and that one is allowed.
     assert set_auto(client, oats, slot="dinner").status_code == 201
 
@@ -238,3 +245,205 @@ def test_somebody_elses_auto_log_and_food_are_both_absent(
     )
     assert hidden.status_code == 404
     assert hidden.json()["detail"] == MISSING_FOOD
+
+
+# ---- The same instruction about a recipe or a kept meal ----
+
+
+@pytest.fixture()
+def porridge(client, oats):
+    """Four servings out of 200 g of oats, so the whole pot weighs itself."""
+    return client.post(
+        "/api/recipes",
+        json={
+            "name": "Porridge",
+            "yield_servings": 4,
+            "ingredients": [{"food_id": oats["id"], "amount": 200, "unit": "g"}],
+        },
+    ).json()
+
+
+@pytest.fixture()
+def plate(client, oats):
+    """One kept meal, weighable because its only item is weighed."""
+    return client.post(
+        "/api/meals",
+        json={
+            "name": "Oat plate",
+            "items": [{"food_id": oats["id"], "amount": 250, "unit": "g"}],
+        },
+    ).json()
+
+
+def set_dish(client, key, dish, *, amount=1, unit="serving", slot="breakfast"):
+    return client.post(
+        "/api/diary/auto-logs",
+        json={key: dish["id"], "amount": amount, "unit": unit, "slot": slot},
+    )
+
+
+def test_a_recipe_auto_logs_by_the_serving(client, porridge):
+    created = set_dish(client, "recipe_id", porridge, amount=2)
+    assert created.status_code == 201
+    assert created.json()["kind"] == "recipe"
+    assert created.json()["recipe_id"] == porridge["id"]
+    assert created.json()["name"] == "Porridge"
+    assert created.json()["serving_label"] is None
+
+    written = entries(day(client))[0]
+    assert written["recipe_id"] == porridge["id"]
+    assert (written["amount"], written["unit"]) == (2, "serving")
+    # Two of four servings is half the pot.
+    assert written["calories"] == pytest.approx(porridge["totals"]["calories"] / 2)
+
+
+def test_a_recipe_auto_logs_by_the_gram(client, porridge):
+    assert set_dish(client, "recipe_id", porridge, amount=100, unit="g").status_code == 201
+    written = entries(day(client))[0]
+    assert (written["amount"], written["unit"], written["serving_label"]) == (100, "g", None)
+    weighs = porridge["weight_g"]
+    assert written["calories"] == pytest.approx(
+        porridge["totals"]["calories"] * 100 / weighs
+    )
+
+
+def test_a_meal_auto_logs_by_the_serving_and_by_the_gram(client, plate):
+    created = set_dish(client, "meal_id", plate)
+    assert created.status_code == 201
+    assert (created.json()["kind"], created.json()["meal_id"]) == ("meal", plate["id"])
+    whole = entries(day(client))[0]
+    assert whole["meal_id"] == plate["id"]
+    assert whole["calories"] == pytest.approx(plate["totals"]["calories"])
+
+    weighed = set_dish(client, "meal_id", plate, amount=125, unit="g", slot="dinner")
+    assert weighed.status_code == 201
+    row = entries(day(client), "dinner")[0]
+    assert (row["amount"], row["unit"]) == (125, "g")
+    assert row["calories"] == pytest.approx(
+        plate["totals"]["calories"] * 125 / plate["weight_g"]
+    )
+
+
+def test_grams_are_refused_where_there_is_no_weight_to_share_out(client, oats):
+    """A cup of oats is a volume nothing has weighed, so nothing can be a share
+    of the pot."""
+    poured = client.post(
+        "/api/foods",
+        json={
+            "name": "Milk",
+            "base_unit": "ml",
+            "calories": 42,
+            "protein_g": 3.4,
+            "carbs_g": 5,
+            "fat_g": 1,
+        },
+    ).json()
+    soup = client.post(
+        "/api/meals",
+        json={
+            "name": "Warm milk",
+            "items": [{"food_id": poured["id"], "amount": 200, "unit": "ml"}],
+        },
+    ).json()
+    assert soup["weight_g"] is None
+
+    refused = set_dish(client, "meal_id", soup, amount=100, unit="g")
+    assert refused.status_code == 400
+    assert refused.json()["detail"] == NO_DISH_WEIGHT
+
+    # Counted in servings it is fine, and then asking for grams is refused too.
+    standing = set_dish(client, "meal_id", soup).json()
+    changed = client.patch(f"/api/diary/auto-logs/{standing['id']}", json={"unit": "g"})
+    assert changed.status_code == 400
+    assert changed.json()["detail"] == NO_DISH_WEIGHT
+
+
+def test_a_dish_counts_in_servings_or_weighs_and_nothing_else(client, porridge):
+    refused = set_dish(client, "recipe_id", porridge, unit="cup")
+    assert refused.status_code == 400
+    assert refused.json()["detail"] == AUTO_LOG_DISH_UNIT
+
+
+def test_an_auto_log_is_about_exactly_one_thing(client, oats, porridge):
+    neither = client.post(
+        "/api/diary/auto-logs", json={"amount": 1, "unit": "serving", "slot": "breakfast"}
+    )
+    assert neither.status_code == 400
+    assert neither.json()["detail"] == ONE_AUTO_LOG_KIND
+
+    both = client.post(
+        "/api/diary/auto-logs",
+        json={
+            "food_id": oats["id"],
+            "recipe_id": porridge["id"],
+            "amount": 1,
+            "unit": "g",
+            "slot": "breakfast",
+        },
+    )
+    assert both.status_code == 400
+    assert both.json()["detail"] == ONE_AUTO_LOG_KIND
+
+
+def test_a_second_auto_log_for_the_same_recipe_and_meal_is_refused(client, porridge):
+    assert set_dish(client, "recipe_id", porridge).status_code == 201
+    clash = set_dish(client, "recipe_id", porridge)
+    assert clash.status_code == 409
+    assert clash.json()["detail"] == AUTO_LOG_CLASH.format(kind="recipe", slot="breakfast")
+
+
+def test_eating_the_recipe_today_already_means_it_is_not_written_again(client, porridge):
+    client.post(
+        "/api/diary",
+        json={
+            "date": iso(TODAY),
+            "slot": "breakfast",
+            "recipe_id": porridge["id"],
+            "amount": 1,
+        },
+    )
+    set_dish(client, "recipe_id", porridge)
+    assert len(entries(day(client))) == 1
+
+
+def test_the_portion_on_a_standing_dish_can_be_changed(client, porridge):
+    created = set_dish(client, "recipe_id", porridge).json()
+    changed = client.patch(f"/api/diary/auto-logs/{created['id']}", json={"amount": 3})
+    assert changed.status_code == 200
+    assert changed.json()["amount"] == 3
+    assert changed.json()["kind"] == "recipe"
+
+
+def test_the_list_says_which_of_the_three_each_row_is(client, oats, porridge, plate):
+    set_auto(client, oats)
+    set_dish(client, "recipe_id", porridge, slot="lunch")
+    set_dish(client, "meal_id", plate, slot="dinner")
+
+    listed = client.get("/api/diary/auto-logs").json()
+    assert [(row["kind"], row["name"]) for row in listed] == [
+        ("food", "Porridge oats"),
+        ("recipe", "Porridge"),
+        ("meal", "Oat plate"),
+    ]
+    # Nothing has been photographed, so no row draws a picture yet.
+    assert [row["thumb_url"] for row in listed] == [None, None, None]
+
+
+def test_a_deleted_recipe_takes_its_auto_log_with_it(client, porridge):
+    set_dish(client, "recipe_id", porridge)
+    assert len(client.get("/api/diary/auto-logs").json()) == 1
+
+    assert client.delete(f"/api/recipes/{porridge['id']}").status_code == 204
+    assert client.get("/api/diary/auto-logs").json() == []
+    # And tomorrow is not written either.
+    assert entries(day(client, TODAY + dt.timedelta(days=1))) == []
+
+
+def test_somebody_elses_recipe_and_meal_are_both_absent(client, make_user, porridge, plate):
+    make_user("other")
+    assert (
+        client.post("/api/auth/login", json={"username": "other", "password": PASSWORD})
+    ).status_code == 200
+
+    assert set_dish(client, "recipe_id", porridge).status_code == 404
+    assert set_dish(client, "meal_id", plate).status_code == 404

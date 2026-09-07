@@ -2,7 +2,14 @@ import { X } from 'lucide-react'
 import { useEffect, useRef, useState } from 'react'
 
 import type { FoodRow, MealRow, MyFoodRow, RecipeRow, RepeatRow } from '../api'
-import { FoodLine, MealLine, RecipeLine } from '../components/FoodRows'
+import {
+  DISH_ICON,
+  DISH_LABEL,
+  FoodLine,
+  MealLine,
+  RecipeLine,
+} from '../components/FoodRows'
+import { servingsText } from '../lib/units'
 
 // Everything a member has of one kind, in a sheet over the Food tab. The page
 // shows the few they are most likely to want; this is where the other three
@@ -37,6 +44,76 @@ const ROOMY = '(min-width: 900px)'
 // already here: this is about how much of it lands on the screen at once.
 const PAGE = 30
 
+// Which way the recipes and the meals are read, remembered between visits. A
+// cookbook is looked through by its pictures and a list is read by its names,
+// and which of the two somebody wants is theirs to say.
+const VIEW_KEY = 'tare.dishes.view'
+type View = 'list' | 'grid'
+
+function keptView(): View | null {
+  try {
+    const kept = window.localStorage.getItem(VIEW_KEY)
+    return kept === 'list' || kept === 'grid' ? kept : null
+  } catch {
+    // A browser that will not store anything is a browser that reads the list
+    // the way this screen would have opened it anyway.
+    return null
+  }
+}
+
+function keepView(view: View): void {
+  try {
+    window.localStorage.setItem(VIEW_KEY, view)
+  } catch {
+    // Nothing to do about it, and nothing worth saying on screen.
+  }
+}
+
+// One cell of the catalog: the square picture or the empty tile with its own
+// icon, the name under it, and what it is in a corner. The tint is the second
+// cue and never the only one.
+function DishCell({
+  kind,
+  name,
+  under,
+  url,
+  onOpen,
+}: {
+  kind: 'recipe' | 'meal'
+  name: string
+  under: string
+  url: string | null
+  onOpen: () => void
+}) {
+  const Icon = DISH_ICON[kind]
+  const frame = kind === 'recipe' ? 'border-accent/40' : 'border-orange/40'
+  return (
+    <button type="button" className="min-w-0 text-left" onClick={onOpen}>
+      <span className="relative block">
+        {url === null ? (
+          <span
+            className={`t-phototile aspect-square w-full rounded-xl border ${frame}`}
+            aria-hidden="true"
+          >
+            <Icon className="h-7 w-7" strokeWidth={1.5} />
+          </span>
+        ) : (
+          <img
+            src={url}
+            alt=""
+            loading="lazy"
+            decoding="async"
+            className={`aspect-square w-full rounded-xl border object-cover ${frame}`}
+          />
+        )}
+        <span className="t-chip absolute top-1.5 left-1.5 text-xs">{DISH_LABEL[kind]}</span>
+      </span>
+      <span className="mt-1 block truncate text-sm">{name}</span>
+      <span className="block truncate text-xs text-muted">{under}</span>
+    </button>
+  )
+}
+
 // The rows, told apart by which list this is. One shape at a time on screen,
 // so the kind decides the row and the filters alike.
 export type Listed =
@@ -70,6 +147,20 @@ export function MyList({
   const [chip, setChip] = useState<Chip>('all')
   const [page, setPage] = useState(PAGE)
   const box = useRef<HTMLInputElement>(null)
+  // Only the recipes and the meals are read two ways. What somebody chose last
+  // wins; failing that, a catalog where there is anything to look at.
+  const dishes = listed.kind === 'meals' || listed.kind === 'recipes'
+  const [view, setView] = useState<View>(
+    () =>
+      keptView() ??
+      (listed.rows.some((row) => ((row as MealRow).thumb_url ?? row.photo_url) !== null)
+        ? 'grid'
+        : 'list')
+  )
+  const choose = (next: View) => {
+    setView(next)
+    keepView(next)
+  }
 
   useEffect(() => {
     if (window.matchMedia(ROOMY).matches) box.current?.focus()
@@ -144,6 +235,22 @@ export function MyList({
         onChange={(event) => setQuery(event.target.value)}
       />
 
+      {dishes && (
+        <div className="mb-3 flex justify-end gap-2">
+          {(['list', 'grid'] as View[]).map((one) => (
+            <button
+              key={one}
+              type="button"
+              className="t-chip aria-pressed:border-accent aria-pressed:text-text"
+              aria-pressed={view === one}
+              onClick={() => choose(one)}
+            >
+              {one === 'list' ? 'List' : 'Grid'}
+            </button>
+          ))}
+        </div>
+      )}
+
       {listed.kind === 'foods' && (
         <div className="t-strip mb-3">
           {CHIPS.map((one) => (
@@ -162,9 +269,32 @@ export function MyList({
 
       {/* Two columns where there is room for two, because a catalog somebody
           is looking a name up in reads across as well as down. */}
-      <div className="t-card mb-3 min-[900px]:grid min-[900px]:grid-cols-2 min-[900px]:gap-x-6">
+      <div
+        className={
+          dishes && view === 'grid'
+            ? 't-card mb-3 grid grid-cols-2 gap-3 min-[640px]:grid-cols-3'
+            : 't-card mb-3 min-[900px]:grid min-[900px]:grid-cols-2 min-[900px]:gap-x-6'
+        }
+      >
         {drawn.length === 0 ? (
           <p className="text-sm text-muted">{nothing}</p>
+        ) : dishes && view === 'grid' ? (
+          (drawn as (MealRow | RecipeRow)[]).map((row) => (
+            <DishCell
+              key={row.id}
+              kind={listed.kind === 'meals' ? 'meal' : 'recipe'}
+              name={row.name}
+              under={
+                'items' in row
+                  ? row.items === 1
+                    ? '1 food'
+                    : `${row.items} foods`
+                  : `Makes ${servingsText(row.yield_servings)}`
+              }
+              url={row.thumb_url ?? row.photo_url}
+              onOpen={() => onOpen(row.id)}
+            />
+          ))
         ) : foodish ? (
           (drawn as FoodRow[]).map((row) => (
             <FoodLine

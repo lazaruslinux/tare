@@ -33,9 +33,9 @@ Image.MAX_IMAGE_PIXELS = MAX_PIXELS
 
 # How large a stored picture is allowed to be, by what it is for. A label has
 # small print somebody has to read, so it keeps its detail; a front is a pack
-# on a shelf at thumbnail size and does not. Beyond this is bytes nobody looks
-# at.
-MAX_EDGES = {"front": 1200, "label": 1600, "avatar": 512}
+# on a shelf at thumbnail size and does not. A dish is looked at the way a
+# front is. Beyond this is bytes nobody looks at.
+MAX_EDGES = {"front": 1200, "label": 1600, "dish": 1200, "avatar": 512}
 QUALITY = 78
 
 # The small copy of a front photo, written beside it. A list of forty rows
@@ -47,8 +47,8 @@ THUMB_QUALITY = 70
 THUMB_SUFFIX = ".thumb.webp"
 
 # Which kinds get one. A label is read at full size and an avatar is already
-# small, so only the front photo a list shows is worth a second file.
-THUMBED = ("front",)
+# small, so it is the kinds a list draws in a row that are worth a second file.
+THUMBED = ("front", "dish")
 
 # What is stored as a square, cropped to the middle of whatever arrived. An
 # avatar is drawn in a square box everywhere it appears, so the shape is

@@ -1,10 +1,28 @@
 import { ScanLine, Star, X, Zap } from 'lucide-react'
 import { useEffect, useState, type FormEvent } from 'react'
 
-import { api, errorText, type Food, type FoodRow, type Me, type RepeatRow } from '../api'
+import {
+  api,
+  errorText,
+  type Food,
+  type FoodRow,
+  type Meal,
+  type Me,
+  type Recipe,
+  type RepeatRow,
+} from '../api'
 import { slotByTime, today, type Slot } from '../lib/day'
 import { BrowseList } from './BrowseList'
-import { Calories, PhotoThumb, Verified, favoritesOf, subline } from './FoodRows'
+import {
+  Calories,
+  DishThumb,
+  KindMark,
+  PhotoThumb,
+  Verified,
+  favoritesOf,
+  subline,
+} from './FoodRows'
+import { LogSheet } from './LogSheet'
 import { PortionSheet } from './PortionSheet'
 import { Sheet } from './Sheet'
 
@@ -44,7 +62,13 @@ function whole(raw: string): number | null {
 function Row({ row, onOpen }: { row: FoodRow & { pinned?: boolean }; onOpen: () => void }) {
   return (
     <button type="button" className="t-row w-full text-left" onClick={onOpen}>
-      <PhotoThumb row={row} />
+      {/* A recipe and a meal keep their own empty tile, so a row with no
+          picture still says which of the three it is. */}
+      {row.kind === 'food' ? (
+        <PhotoThumb row={row} />
+      ) : (
+        <DishThumb kind={row.kind} url={row.thumb_url ?? row.photo_url} />
+      )}
       <span className="min-w-0 flex-1">
         <span className="flex items-center gap-1.5">
           {row.pinned && (
@@ -56,6 +80,7 @@ function Row({ row, onOpen }: { row: FoodRow & { pinned?: boolean }; onOpen: () 
           )}
           <span className="truncate text-sm">{row.name}</span>
           {row.status === 'approved' && <Verified />}
+          {row.kind !== 'food' && <KindMark kind={row.kind} />}
         </span>
         {subline(row) && (
           <span className="block truncate text-xs text-muted">{subline(row)}</span>
@@ -210,11 +235,19 @@ export function FoodPicker({
   // Whether this sheet is the Food page's way into the shared database, which
   // decides what a row does and what sits under the box before anybody types.
   const browsing = browse !== undefined
+  // Whether a food is being chosen for a recipe or a kept meal, which is the
+  // one case that narrows what the search may answer with.
+  const parts = onPick !== undefined
   const [query, setQuery] = useState('')
   // Null is not an empty result: it is a box nobody has typed two letters into.
   const [results, setResults] = useState<FoodRow[] | null>(null)
   const [repeat, setRepeat] = useState<RepeatRow[]>([])
   const [chosen, setChosen] = useState<Food | null>(null)
+  // A recipe or a kept meal picked out of the results, logged in its own sheet.
+  const [dish, setDish] = useState<{ kind: 'recipe' | 'meal'; row: Recipe | Meal } | null>(
+    null
+  )
+  const [saving, setSaving] = useState(false)
   const [quick, setQuick] = useState(false)
   const [error, setError] = useState('')
   // How many results are drawn. Back to the first page whenever the results
@@ -242,20 +275,62 @@ export function FoodPicker({
       return
     }
     const timer = window.setTimeout(() => {
-      api<FoodRow[]>(`/foods/search?q=${encodeURIComponent(needle)}`)
+      // A part of a recipe or a kept meal is always a food, so a builder asks
+      // for those alone.
+      const kinds = parts ? '&kinds=food' : ''
+      api<FoodRow[]>(`/foods/search?q=${encodeURIComponent(needle)}${kinds}`)
         .then(setResults)
         .catch(() => setResults([]))
     }, DEBOUNCE)
     return () => window.clearTimeout(timer)
-  }, [query])
+    // A boolean rather than the callback itself: the caller passes a fresh
+    // arrow every render, and a search that restarts on every render never
+    // fires.
+  }, [query, parts])
 
-  const open = async (id: number) => {
+  const open = async (row: FoodRow) => {
     setError('')
     try {
-      setChosen(await api<Food>(`/foods/${id}`))
+      if (row.kind === 'food') {
+        setChosen(await api<Food>(`/foods/${row.id}`))
+        return
+      }
+      const path = row.kind === 'recipe' ? 'recipes' : 'meals'
+      setDish({ kind: row.kind, row: await api<Recipe | Meal>(`/${path}/${row.id}`) })
     } catch (failure) {
       setError(errorText(failure))
     }
+  }
+
+  // A recipe goes into the diary the way its own page logs it, and a meal
+  // through the route that writes it as one line.
+  const logDish = async (amount: number | null, slot: Slot, byWeight: boolean) => {
+    if (dish === null || amount === null) return
+    setSaving(true)
+    setError('')
+    try {
+      if (dish.kind === 'recipe') {
+        await api('/diary', {
+          method: 'POST',
+          body: {
+            date: day,
+            slot,
+            recipe_id: dish.row.id,
+            ...(byWeight ? { grams: amount } : { amount }),
+          },
+        })
+      } else {
+        await api(`/meals/${dish.row.id}/log`, {
+          method: 'POST',
+          body: { date: day, slot, ...(byWeight ? { grams: amount } : { servings: amount }) },
+        })
+      }
+      setDish(null)
+      onLogged?.()
+    } catch (failure) {
+      setError(errorText(failure))
+    }
+    setSaving(false)
   }
 
   // One sheet at a time: picking a food replaces this with the portion it is
@@ -269,6 +344,25 @@ export function FoodPicker({
         onClose={() => setChosen(null)}
         onDone={() => onLogged?.()}
         onPick={onPick}
+      />
+    )
+  }
+
+  // A recipe or a kept meal is counted in servings or weighed, which is the
+  // sheet its own page opens.
+  if (dish !== null) {
+    return (
+      <LogSheet
+        title="Log"
+        action="Log"
+        name={dish.row.name}
+        servings={1}
+        slot={meal}
+        weight={dish.row.final_weight_g ?? dish.row.weight_g}
+        error={error}
+        saving={saving}
+        onClose={() => setDish(null)}
+        onSubmit={(amount, slot, byWeight) => void logDish(amount, slot, byWeight)}
       />
     )
   }
@@ -320,9 +414,9 @@ export function FoodPicker({
               <div className={browsing ? 'min-[900px]:grid min-[900px]:grid-cols-2 min-[900px]:gap-x-6' : ''}>
                 {results.slice(0, shown).map((row) => (
                   <Row
-                    key={row.id}
+                    key={`${row.kind}-${row.id}`}
                     row={row}
-                    onOpen={() => (browse ? browse.onOpen(row.id) : open(row.id))}
+                    onOpen={() => (browse ? browse.onOpen(row.id) : open(row))}
                   />
                 ))}
               </div>
@@ -350,7 +444,7 @@ export function FoodPicker({
               <>
                 <p className="t-micro mb-1">Favorites</p>
                 {favorites.map((row) => (
-                  <Row key={row.id} row={row} onOpen={() => open(row.id)} />
+                  <Row key={row.id} row={row} onOpen={() => open(row)} />
                 ))}
               </>
             )}
@@ -358,7 +452,7 @@ export function FoodPicker({
               <>
                 <p className="t-micro mt-3 mb-1">Recently used</p>
                 {recent.map((row) => (
-                  <Row key={row.id} row={row} onOpen={() => open(row.id)} />
+                  <Row key={row.id} row={row} onOpen={() => open(row)} />
                 ))}
               </>
             )}

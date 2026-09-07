@@ -12,6 +12,7 @@ import {
   type Recipe,
 } from '../api'
 import { FoodPicker } from '../components/FoodPicker'
+import { Thumb, Verified, subline } from '../components/FoodRows'
 import { HEADLINE, nutrientText } from '../components/NutritionLabel'
 import { ScanFlow } from '../components/ScanFlow'
 import { useTopBar } from '../hooks/useTopBar'
@@ -57,6 +58,11 @@ type Draft = Record<Headline, number | null> & {
   unit: string | null
   name: string
   brand: string
+  // The three a saved row already draws, carried here so a row being filled in
+  // reads like the row it is about to become.
+  description: string
+  thumb_url: string | null
+  status: string
   amount: number
   serving_label: string | null
   // What this much of it weighs, or null when nothing says so.
@@ -74,6 +80,9 @@ function drafted(food: Food, amount: number, unit: string): Draft {
     unit,
     name: food.name,
     brand: food.brand,
+    description: food.description,
+    thumb_url: food.thumb_url ?? food.photo_url,
+    status: food.status,
     amount,
     serving_label: serving?.name ?? null,
     grams: toGrams(food, amount, unit, baseAmount),
@@ -111,6 +120,9 @@ async function sendable(part: Saved): Promise<Draft> {
     unit: part.food_id === null ? null : part.unit,
     name: part.name,
     brand: part.brand,
+    description: part.description,
+    thumb_url: part.thumb_url,
+    status: part.status,
     amount: part.amount,
     serving_label: part.serving_label,
     grams: null,
@@ -285,8 +297,15 @@ export function PartsForm({
           ) : (
             rows.map((row, index) => (
               <div key={index} className="t-row">
+                <Thumb url={row.thumb_url} />
                 <span className="min-w-0 flex-1">
-                  <span className="block truncate text-sm">{row.name}</span>
+                  <span className="flex items-center gap-1.5">
+                    <span className="truncate text-sm">{row.name}</span>
+                    {row.status === 'approved' && <Verified />}
+                  </span>
+                  {subline(row) && (
+                    <span className="block truncate text-xs text-muted">{subline(row)}</span>
+                  )}
                   <span className="block truncate text-xs text-muted">
                     {row.unit === null
                       ? 'This food is gone. Take it out.'

@@ -273,8 +273,11 @@ export type Activity = {
 // turned down.
 export type Community = 'none' | 'pending' | 'approved' | 'rejected'
 
-// A food as a list reads it: enough to pick it out and nothing else.
+// A food as a list reads it: enough to pick it out and nothing else. A search
+// answers with a member's own recipes and meals in this same shape, which is
+// what kind says: a food carries a brand and a serving and those do not.
 export type FoodRow = {
+  kind: 'food' | 'recipe' | 'meal'
   id: number
   name: string
   brand: string
@@ -557,8 +560,9 @@ export type Part = {
   unit: string
   serving_label: string | null
   // Read off the live food rather than the copy this row keeps, so the row
-  // draws what a food row draws. Both are empty once that food is gone.
+  // draws what a food row draws. All three are empty once that food is gone.
   thumb_url: string | null
+  description: string
   status: string
 }
 
@@ -573,6 +577,14 @@ export type RecipeRow = {
   yield_servings: number
   per_serving: Record<Headline, number | null>
   last_logged: string | null
+} & Pictured
+
+// The picture of the finished dish, where whoever made it took one. Null is
+// nobody having photographed it, not a picture that failed to load.
+export type Pictured = {
+  photo_url: string | null
+  // The same picture at the size a row draws it.
+  thumb_url: string | null
 }
 
 // The whole recipe. The totals are for all of it and the per-serving figures
@@ -584,7 +596,8 @@ export type Recipe = {
   ingredients: RecipeIngredient[]
   totals: Panel
   per_serving: Panel
-} & Weighed
+} & Weighed &
+  Pictured
 
 // What something made of parts weighs. weight_g is what the parts come to,
 // null the moment one of them cannot be weighed, and those are named in
@@ -604,7 +617,7 @@ export type MealRow = {
   items: number
   totals: Panel
   last_logged: string | null
-}
+} & Pictured
 
 // One thing in a kept meal, with what that much of its food comes to. The four
 // are null once the food is gone, which is what the row itself says too.
@@ -617,7 +630,8 @@ export type Meal = {
   name: string
   items: MealItem[]
   totals: Panel
-} & Weighed
+} & Weighed &
+  Pictured
 
 // What logging a whole meal came to: one line, and the names of anything left
 // out because the food behind it is gone.
@@ -647,14 +661,21 @@ export type DiaryEntry = {
   fat_g: number | null
 }
 
-// A food set to log itself into the same meal every day. The unit is the
-// portion as the diary takes it: a measure, or "serving:<id>" for one of the
-// food's own, with the serving's name beside it for the row to read.
+// A food, a recipe or a kept meal set to log itself into the same meal every
+// day. The unit is the portion as the diary takes it: a measure, or
+// "serving:<id>" for one of the food's own, with the serving's name beside it
+// for the row to read. A recipe or a meal counts in servings or weighs in
+// grams, and has no serving to name.
 export type AutoLog = {
   id: number
-  food_id: number
+  kind: 'food' | 'recipe' | 'meal'
+  food_id: number | null
+  recipe_id: number | null
+  meal_id: number | null
   name: string
   brand: string
+  // The small picture of the food or of the finished dish, where there is one.
+  thumb_url: string | null
   amount: number
   unit: string
   serving_label: string | null
@@ -773,7 +794,9 @@ export async function api<T>(path: string, options: Options = {}): Promise<T> {
 // What a picture is for. A front photo is the pack on a shelf and one per food
 // is published; a label photo is the nutrition panel, offered as evidence for a
 // request, and nobody but its uploader and an administrator is ever served one.
-export type PhotoPurpose = 'front' | 'label'
+// A dish photo is what somebody cooked, on a recipe or a kept meal of their
+// own, and nobody but them is ever served one.
+export type PhotoPurpose = 'front' | 'label' | 'dish'
 
 export async function upload<T>(
   path: string,
@@ -797,6 +820,19 @@ export function foodPhoto(
   return photoId === null
     ? api(`/foods/${foodId}/photo?purpose=${purpose}`, { method: 'DELETE' })
     : api(`/foods/${foodId}/photo`, { method: 'POST', body: { photo_id: photoId, purpose } })
+}
+
+// The picture of the finished dish on a recipe or a kept meal: an id puts one
+// on, null takes the standing one off. Both go, file and all.
+export function dishPhoto(
+  kind: 'recipe' | 'meal',
+  id: number,
+  photoId: number | null
+): Promise<unknown> {
+  const path = `/${kind === 'recipe' ? 'recipes' : 'meals'}/${id}/photo`
+  return photoId === null
+    ? api(path, { method: 'DELETE' })
+    : api(path, { method: 'POST', body: { photo_id: photoId } })
 }
 
 // A file and nothing else, which is what the health export upload sends.

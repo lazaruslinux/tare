@@ -2,6 +2,7 @@ import { Pencil } from 'lucide-react'
 import { useEffect, useState } from 'react'
 
 import { api, errorText, type Meal, type MealLogged, type Me } from '../api'
+import { DishAutoLog, DishPhoto } from '../components/Dish'
 import { PartLine } from '../components/FoodRows'
 import { LogSheet } from '../components/LogSheet'
 import { PanelFacts } from '../components/NutritionLabel'
@@ -46,6 +47,10 @@ export function MealDetail({
   const [left, setLeft] = useState('')
 
   useTopBar({ title: meal?.name ?? 'Meal', back: { label: backLabel, onBack } })
+
+  const reload = async () => {
+    setMeal(await api<Meal>(`/meals/${id}`))
+  }
 
   useEffect(() => {
     let alive = true
@@ -111,6 +116,13 @@ export function MealDetail({
               {gramsText(weight)}
             </p>
           )}
+          <DishPhoto
+            kind="meal"
+            id={meal.id}
+            name={meal.name}
+            url={meal.photo_url}
+            onChanged={reload}
+          />
           <div className="t-card mb-3">
             <PanelFacts values={meal.totals} />
           </div>
@@ -130,6 +142,14 @@ export function MealDetail({
             >
               Log
             </button>
+            <DishAutoLog
+              kind="meal"
+              id={meal.id}
+              name={meal.name}
+              weight={weight}
+              timezone={me.timezone}
+              onChanged={onLogged}
+            />
             <button className="t-btn" type="button" onClick={() => onEdit(meal)}>
               <Pencil className="h-4 w-4" strokeWidth={2} />
               Edit

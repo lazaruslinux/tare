@@ -410,6 +410,97 @@ def test_search_wants_two_characters(client, signed_in):
     assert len(client.get("/api/foods/search", params={"q": "ch"}).json()) == 1
 
 
+def test_search_answers_with_your_own_recipes_and_meals_too(client, signed_in):
+    """One box finds all three, and each row says which it is."""
+    food = create(client, name="Chicken soup").json()
+    recipe = client.post(
+        "/api/recipes",
+        json={
+            "name": "Chicken pie",
+            "yield_servings": 4,
+            "ingredients": [{"food_id": food["id"], "amount": 100, "unit": "g"}],
+        },
+    ).json()
+    meal = client.post(
+        "/api/meals",
+        json={
+            "name": "Chicken plate",
+            "items": [{"food_id": food["id"], "amount": 200, "unit": "g"}],
+        },
+    ).json()
+
+    found = client.get("/api/foods/search", params={"q": "chicken"}).json()
+    by_kind = {row["kind"]: row for row in found}
+    assert set(by_kind) == {"food", "recipe", "meal"}
+    assert by_kind["recipe"]["id"] == recipe["id"]
+    assert by_kind["meal"]["id"] == meal["id"]
+    # A recipe row reads per serving and a meal row reads the whole meal, which
+    # is what the Food tab already shows for each.
+    assert round(by_kind["recipe"]["calories"], 4) == round(
+        recipe["per_serving"]["calories"], 4
+    )
+    assert round(by_kind["meal"]["calories"], 4) == round(meal["totals"]["calories"], 4)
+    # Nothing a food has that these do not is filled in with a stand-in, and
+    # neither is ever in the shared database.
+    for kind in ("recipe", "meal"):
+        row = by_kind[kind]
+        assert (row["brand"], row["description"], row["section"]) == ("", "", "")
+        assert (row["status"], row["community"], row["serving"]) == ("", "none", None)
+        assert (row["photo_url"], row["thumb_url"]) == (None, None)
+
+
+def test_a_recipe_is_ranked_by_where_the_word_sits_like_a_food(client, signed_in):
+    food = create(client, name="Roast chicken").json()
+    for name in ("Unchicken pie", "Chicken pie"):
+        client.post(
+            "/api/recipes",
+            json={
+                "name": name,
+                "yield_servings": 4,
+                "ingredients": [{"food_id": food["id"], "amount": 100, "unit": "g"}],
+            },
+        )
+    found = client.get("/api/foods/search", params={"q": "chicken"}).json()
+    assert [row["name"] for row in found] == [
+        "Chicken pie",
+        "Roast chicken",
+        "Unchicken pie",
+    ]
+
+
+def test_a_builder_asks_for_foods_alone(client, signed_in):
+    food = create(client, name="Chicken breast").json()
+    client.post(
+        "/api/meals",
+        json={
+            "name": "Chicken plate",
+            "items": [{"food_id": food["id"], "amount": 200, "unit": "g"}],
+        },
+    )
+    parts = client.get("/api/foods/search", params={"q": "chicken", "kinds": "food"}).json()
+    assert [row["kind"] for row in parts] == ["food"]
+
+    refused = client.get("/api/foods/search", params={"q": "chicken", "kinds": "pudding"})
+    assert refused.status_code == 400
+    assert refused.json()["detail"] == foods_router.BAD_KIND
+
+
+def test_somebody_else_s_recipes_are_never_in_your_search(client, make_user, signed_in):
+    food = create(client, name="Chicken breast").json()
+    client.post(
+        "/api/recipes",
+        json={
+            "name": "Chicken pie",
+            "yield_servings": 4,
+            "ingredients": [{"food_id": food["id"], "amount": 100, "unit": "g"}],
+        },
+    )
+    make_user("stranger")
+    sign_in(client, "stranger")
+    found = client.get("/api/foods/search", params={"q": "chicken"}).json()
+    assert [row["kind"] for row in found] == []
+
+
 def test_search_stops_at_twenty_five(client, signed_in):
     for n in range(30):
         create(client, name=f"Bean number {n}")

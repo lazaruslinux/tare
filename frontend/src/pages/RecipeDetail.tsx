@@ -2,6 +2,7 @@ import { Pencil } from 'lucide-react'
 import { useEffect, useState } from 'react'
 
 import { api, errorText, type Me, type Recipe } from '../api'
+import { DishAutoLog, DishPhoto } from '../components/Dish'
 import { PartLine } from '../components/FoodRows'
 import { LogSheet } from '../components/LogSheet'
 import { PanelFacts } from '../components/NutritionLabel'
@@ -47,6 +48,10 @@ export function RecipeDetail({
   const [notice, setNotice] = useState('')
 
   useTopBar({ title: recipe?.name ?? 'Recipe', back: { label: backLabel, onBack } })
+
+  const reload = async () => {
+    setRecipe(await api<Recipe>(`/recipes/${id}`))
+  }
 
   useEffect(() => {
     let alive = true
@@ -105,6 +110,13 @@ export function RecipeDetail({
             {weight !== null &&
               ` · ${recipe.final_weight_g === null ? '' : 'Final weight '}${gramsText(weight)}`}
           </p>
+          <DishPhoto
+            kind="recipe"
+            id={recipe.id}
+            name={recipe.name}
+            url={recipe.photo_url}
+            onChanged={reload}
+          />
 
           <div className="t-card mb-3">
             <div className="mb-3 flex flex-wrap items-center gap-2">
@@ -144,6 +156,14 @@ export function RecipeDetail({
             >
               Log
             </button>
+            <DishAutoLog
+              kind="recipe"
+              id={recipe.id}
+              name={recipe.name}
+              weight={weight}
+              timezone={me.timezone}
+              onChanged={onLogged}
+            />
             <button className="t-btn" type="button" onClick={() => onEdit(recipe)}>
               <Pencil className="h-4 w-4" strokeWidth={2} />
               Edit

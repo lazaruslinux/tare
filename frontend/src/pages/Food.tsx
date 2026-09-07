@@ -29,14 +29,22 @@ import {
 } from '../api'
 import { FoodForm } from '../components/FoodForm'
 import { FoodPicker } from '../components/FoodPicker'
-import { FoodLine, MealLine, RecipeLine, favoritesOf } from '../components/FoodRows'
+import {
+  DishThumb,
+  FoodLine,
+  KindMark,
+  MealLine,
+  RecipeLine,
+  Thumb,
+  favoritesOf,
+} from '../components/FoodRows'
 import { MemberView } from '../components/MemberView'
 import { PortionSheet } from '../components/PortionSheet'
 import { Sheet } from '../components/Sheet'
 import { useTopBar } from '../hooks/useTopBar'
 import { SLOT_LABEL, today } from '../lib/day'
 import { reviews } from '../lib/roles'
-import { portionText } from '../lib/units'
+import { gramsText, portionText, servingsText } from '../lib/units'
 import { FoodDetail } from './FoodDetail'
 import { MealDetail } from './MealDetail'
 import { MyList, LIST_TITLE, type ListKind } from './MyList'
@@ -50,6 +58,14 @@ const SHOWN = 3
 // How long something taken back can be put back. Short enough that nobody is
 // waiting on it, long enough to notice the mistake.
 const UNDO = 6000
+
+// How much of it goes in every day, in the words the diary row of that kind
+// reads back in: a food is the portion it was measured out as, and a recipe or
+// a meal is counted in servings of itself or taken off the scale.
+function autoAmount(row: AutoLog): string {
+  if (row.kind === 'food') return portionText(row)
+  return row.unit === 'g' ? gramsText(row.amount) : servingsText(row.amount)
+}
 
 // Where going back from something lands. Everything on this tab is opened
 // from the tab's own list, the catalogs and the search sheet included, so
@@ -287,8 +303,17 @@ export function FoodTab({
   }
 
   // The same sheet the food page opens, on the food this instruction is about.
+  // A recipe or a meal is set from its own page, so tapping one opens that.
   const openAuto = async (row: AutoLog) => {
     setError('')
+    if (row.recipe_id !== null) {
+      setView({ at: 'recipe', id: row.recipe_id, from: { at: 'list' } })
+      return
+    }
+    if (row.meal_id !== null) {
+      setView({ at: 'meal', id: row.meal_id, from: { at: 'list' } })
+      return
+    }
     try {
       setAutoEdit({ food: await api<FoodItem>(`/foods/${row.food_id}`), row })
     } catch (failure) {
@@ -693,10 +718,18 @@ export function FoodTab({
                 className="flex min-w-0 flex-1 items-center gap-3 text-left"
                 onClick={() => openAuto(row)}
               >
+                {row.kind === 'food' ? (
+                  <Thumb url={row.thumb_url} />
+                ) : (
+                  <DishThumb kind={row.kind} url={row.thumb_url} />
+                )}
                 <span className="min-w-0 flex-1">
-                  <span className="block truncate text-sm">{row.name}</span>
+                  <span className="flex items-center gap-1.5">
+                    <span className="truncate text-sm">{row.name}</span>
+                    {row.kind !== 'food' && <KindMark kind={row.kind} />}
+                  </span>
                   <span className="block truncate text-xs text-muted">
-                    {portionText(row)} · {SLOT_LABEL[row.slot]}
+                    {autoAmount(row)} · {SLOT_LABEL[row.slot]}
                   </span>
                 </span>
               </button>

@@ -403,7 +403,13 @@ SUBMISSION_STATUSES = ("pending", "approved", "rejected")
 #           against something. It belongs to the request rather than the food
 #           until a shared food keeps it, and until then nobody but its
 #           uploader and an administrator is ever served it.
-PHOTO_PURPOSES = ("front", "label")
+# Those two are the only ones a food ever carries.
+FOOD_PHOTO_PURPOSES = ("front", "label")
+
+#   dish    the finished thing, on somebody's own recipe or kept meal. It never
+#           reaches a food and it never goes near the review queue, so only the
+#           member who took it is ever served one.
+PHOTO_PURPOSES = (*FOOD_PHOTO_PURPOSES, "dish")
 
 
 class FoodPhoto(Base):
@@ -659,31 +665,54 @@ class DiaryEntry(Base):
     created_at: Mapped[dt.datetime] = mapped_column(UtcDateTime, nullable=False, default=now_utc)
 
 
+# What exactly one of the three columns on an auto-log being set reads as in
+# SQL. Counted rather than added as booleans, which Postgres will not do.
+ONE_AUTO_LOG_KIND = (
+    "(CASE WHEN food_id IS NULL THEN 0 ELSE 1 END"
+    " + CASE WHEN recipe_id IS NULL THEN 0 ELSE 1 END"
+    " + CASE WHEN meal_id IS NULL THEN 0 ELSE 1 END) = 1"
+)
+
+
 class AutoLog(Base):
-    """A food somebody eats every day, set once so it logs itself.
+    """Something somebody eats every day, set once so it logs itself.
 
     It holds a portion and a meal and nothing about any particular day: what it
     has already written down lives in auto_log_days beside it, so a day whose
     entry was deleted is a day that stays deleted.
+
+    What it is about is a food, a recipe or a kept meal, and exactly one of the
+    three, which the check constraint is what holds.
     """
 
     __tablename__ = "auto_logs"
     __table_args__ = (
         UniqueConstraint("user_id", "food_id", "slot", name="uq_auto_logs_user_food_slot"),
+        UniqueConstraint("user_id", "recipe_id", "slot", name="uq_auto_logs_user_recipe_slot"),
+        UniqueConstraint("user_id", "meal_id", "slot", name="uq_auto_logs_user_meal_slot"),
+        CheckConstraint(ONE_AUTO_LOG_KIND, name="ck_auto_logs_one_kind"),
     )
 
     id: Mapped[int] = mapped_column(Integer, primary_key=True)
     user_id: Mapped[int] = mapped_column(
         ForeignKey("users.id", ondelete="CASCADE"), nullable=False, index=True
     )
-    # CASCADE, like a pin: an instruction to log a food that is gone is nothing.
-    food_id: Mapped[int] = mapped_column(
-        ForeignKey("foods.id", ondelete="CASCADE"), nullable=False
+    # CASCADE all three, like a pin: an instruction to log something that is
+    # gone is nothing.
+    food_id: Mapped[int | None] = mapped_column(
+        ForeignKey("foods.id", ondelete="CASCADE"), nullable=True
+    )
+    recipe_id: Mapped[int | None] = mapped_column(
+        ForeignKey("recipes.id", ondelete="CASCADE"), nullable=True
+    )
+    meal_id: Mapped[int | None] = mapped_column(
+        ForeignKey("meal_templates.id", ondelete="CASCADE"), nullable=True
     )
     amount: Mapped[float] = mapped_column(Float, nullable=False)
     # The portion as the diary route takes it: a unit from a measure family, or
     # "serving:<id>" for one of the food's own. Kept that way so a fill-in is
-    # measured by exactly the code a manual log is.
+    # measured by exactly the code a manual log is. A recipe or a meal counts in
+    # servings or weighs in grams, so it carries one of those two words.
     unit: Mapped[str] = mapped_column(String(24), nullable=False)
     slot: Mapped[str] = mapped_column(
         Enum(*DIARY_SLOTS, name="diary_slot", native_enum=False), nullable=False
@@ -748,6 +777,11 @@ class Recipe(Base):
     # How many servings the whole recipe makes, which is what every per-serving
     # figure is divided by.
     yield_servings: Mapped[float] = mapped_column(Float, nullable=False, default=1.0)
+    # A picture of the finished dish, taken by whoever cooked it. SET NULL like
+    # a food's panel: a picture swept off the disk leaves the recipe standing.
+    photo_id: Mapped[int | None] = mapped_column(
+        ForeignKey("food_photos.id", ondelete="SET NULL"), nullable=True
+    )
     # What the scale said when it was done, where somebody weighed it. Null is
     # nobody having weighed it, and then the parts are what it weighs.
     final_weight_g: Mapped[float | None] = mapped_column(Float, nullable=True)
@@ -811,6 +845,10 @@ class MealTemplate(Base):
     name: Mapped[str] = mapped_column(String(200), nullable=False)
     # What the scale said when it was made up, where somebody weighed it.
     final_weight_g: Mapped[float | None] = mapped_column(Float, nullable=True)
+    # A picture of the plate as it is put together, the same as a recipe's.
+    photo_id: Mapped[int | None] = mapped_column(
+        ForeignKey("food_photos.id", ondelete="SET NULL"), nullable=True
+    )
     created_at: Mapped[dt.datetime] = mapped_column(UtcDateTime, nullable=False, default=now_utc)
     updated_at: Mapped[dt.datetime] = mapped_column(UtcDateTime, nullable=False, default=now_utc)
 

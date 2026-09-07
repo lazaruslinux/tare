@@ -5,8 +5,12 @@ when the numbers are worked out: at the moment the meal is read or logged,
 from the foods as they stand then.
 """
 
-import pytest
+import io
 
+import pytest
+from PIL import Image
+
+from app import models, photos
 from app.routers.diary import BAD_SLOT
 from app.routers.foods import MISSING_FOOD
 from app.routers.meals import MISSING_MEAL, NO_WEIGHT
@@ -99,6 +103,9 @@ def test_a_meal_is_a_list_of_things_to_eat_together(client, breakfast):
             "totals": breakfast["totals"],
             # Nothing has been eaten yet, so there is no date to read.
             "last_logged": None,
+            # Nobody has photographed it either.
+            "photo_url": None,
+            "thumb_url": None,
         }
     ]
 
@@ -390,3 +397,56 @@ def test_a_meal_nothing_can_weigh_refuses_to_be_logged_by_weight(client, breakfa
     refused = log_meal(client, breakfast, grams=100)
     assert refused.status_code == 400
     assert refused.json()["detail"] == NO_WEIGHT
+
+
+# ---- The picture of the plate ----
+
+
+def dish_photo(client):
+    """One upload taken for a dish, and the id it answers with."""
+    out = io.BytesIO()
+    Image.new("RGB", (240, 180), (150, 120, 90)).save(out, format="JPEG")
+    return client.post(
+        "/api/photos",
+        files={"file": ("plate.jpg", out.getvalue(), "image/jpeg")},
+        data={"purpose": "dish"},
+    ).json()["photo_id"]
+
+
+def test_a_meal_carries_the_picture_of_the_plate(client, breakfast):
+    assert (breakfast["photo_url"], breakfast["thumb_url"]) == (None, None)
+    photo_id = dish_photo(client)
+    attached = client.post(
+        f"/api/meals/{breakfast['id']}/photo", json={"photo_id": photo_id}
+    )
+    assert attached.status_code == 204
+
+    read = client.get(f"/api/meals/{breakfast['id']}").json()
+    assert read["photo_url"] == f"/api/photos/{photo_id}.webp"
+    assert read["thumb_url"] == f"/api/photos/{photo_id}.thumb.webp"
+    listed = client.get("/api/meals").json()[0]
+    assert listed["thumb_url"] == read["thumb_url"]
+
+
+def test_taking_the_plate_picture_off_clears_the_row_and_the_file(
+    client, db_session, breakfast
+):
+    photo_id = dish_photo(client)
+    client.post(f"/api/meals/{breakfast['id']}/photo", json={"photo_id": photo_id})
+    stored = db_session.get(models.FoodPhoto, photo_id).path
+
+    assert client.delete(f"/api/meals/{breakfast['id']}/photo").status_code == 204
+    assert db_session.get(models.FoodPhoto, photo_id) is None
+    assert not photos.stored(stored)
+    assert client.get(f"/api/meals/{breakfast['id']}").json()["photo_url"] is None
+
+
+def test_somebody_else_s_meal_takes_no_picture(client, make_user, breakfast):
+    make_user("stranger")
+    sign_in(client, "stranger")
+    photo_id = dish_photo(client)
+    refused = client.post(
+        f"/api/meals/{breakfast['id']}/photo", json={"photo_id": photo_id}
+    )
+    assert refused.status_code == 404
+    assert refused.json()["detail"] == MISSING_MEAL

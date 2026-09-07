@@ -114,6 +114,16 @@ class FoodPhotoIn(BaseModel):
     purpose: str = "front"
 
 
+class DishPhotoIn(BaseModel):
+    """A picture of the finished dish, put on a recipe or a kept meal.
+
+    No purpose to say: there is one kind of picture a dish carries, and it is
+    private to the member who took it.
+    """
+
+    photo_id: int
+
+
 class SubmitIn(BaseModel):
     """One food already kept privately, offered as it stands."""
 
@@ -232,14 +242,18 @@ class DiaryIn(BaseModel):
 
 
 class AutoLogIn(BaseModel):
-    """A food set to log itself into the same meal every day.
+    """A food, a recipe or a kept meal set to log itself every day.
 
-    The portion arrives the way one on a diary entry does, because it is
-    measured by the same code: a unit from a measure family, or "serving:<id>"
-    for one of the food's own.
+    Exactly one of the three, which is the route's rule with a sentence of its
+    own: a type cannot say "one of these, and not two". A food's portion
+    arrives the way one on a diary entry does, because it is measured by the
+    same code: a unit from a measure family, or "serving:<id>" for one of the
+    food's own. A recipe or a meal counts in servings or weighs in grams.
     """
 
-    food_id: int
+    food_id: int | None = None
+    recipe_id: int | None = None
+    meal_id: int | None = None
     amount: float = Field(gt=0)
     unit: str = Field(max_length=MAX_UNIT)
     slot: str

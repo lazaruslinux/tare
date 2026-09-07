@@ -15,8 +15,19 @@ from collections.abc import Sequence
 from typing import NamedTuple
 
 from fastapi import APIRouter, Depends, HTTPException, status
-from sqlalchemy import Select, Subquery, and_, case, delete, func, or_, select, update
-from sqlalchemy.orm import InstrumentedAttribute, Session
+from sqlalchemy import (
+    ColumnElement,
+    Select,
+    Subquery,
+    and_,
+    case,
+    delete,
+    func,
+    or_,
+    select,
+    update,
+)
+from sqlalchemy.orm import InstrumentedAttribute, Session, selectinload
 
 from app import models, photos, profiles, schemas, units
 from app.db import get_db
@@ -70,6 +81,12 @@ ALREADY_SHARED = "This barcode is already in the Tare database."
 # and tells nobody anything.
 MIN_QUERY = 2
 SEARCH_LIMIT = 25
+
+# What a search may answer with. A caller that can only use one of the three
+# asks for it by name, which is a recipe or a meal builder: a part is always a
+# food.
+SEARCH_KINDS = ("food", "recipe", "meal")
+BAD_KIND = "That is not something Tare searches."
 
 # How many recently eaten foods the repeat list offers under the pinned ones,
 # and how far back it looks for them. Distinct foods, not entries, so a week of
@@ -137,6 +154,40 @@ def picture_of(photo_id: int, path: str) -> Picture:
         photo_url(photo_id),
         thumb_url(photo_id) if photos.stored(photos.thumb_name(path)) else None,
     )
+
+
+def dish_pictures(db: Session, photo_ids: Sequence[int | None]) -> dict[int, Picture]:
+    """The picture each of these recipes or meals carries, by photo id.
+
+    One query for a whole list rather than a lookup a row. A dish photo belongs
+    to whoever took it and is only ever read back to them, so there is nothing
+    to work out about who may see it.
+    """
+    wanted = {photo_id for photo_id in photo_ids if photo_id is not None}
+    if not wanted:
+        return {}
+    rows = db.execute(
+        select(models.FoodPhoto.id, models.FoodPhoto.path).where(
+            models.FoodPhoto.id.in_(wanted)
+        )
+    ).all()
+    return {photo_id: picture_of(photo_id, path) for photo_id, path in rows}
+
+
+def dish_urls(pictures: dict[int, Picture], photo_id: int | None) -> dict[str, str | None]:
+    """The two addresses a recipe or a meal carries, null where it has none."""
+    picture = None if photo_id is None else pictures.get(photo_id)
+    return {
+        "photo_url": None if picture is None else picture.url,
+        "thumb_url": None if picture is None else picture.thumb,
+    }
+
+
+def dish_thumb(pictures: dict[int, Picture], photo_id: int | None) -> str | None:
+    """The address a row draws: the small copy, or the whole picture where none
+    was written."""
+    picture = None if photo_id is None else pictures.get(photo_id)
+    return None if picture is None else (picture.thumb or picture.url)
 
 
 def write_cursor(has_photo: int, food_id: int) -> str:
@@ -236,9 +287,11 @@ def pictures_for(
 
 class Mark(NamedTuple):
     """What a row that copied a food's name still has to ask the live food for:
-    the small picture it draws, and whether the database holds it."""
+    the small picture it draws, the few words under its name, and whether the
+    database holds it."""
 
     thumb: str | None
+    description: str
     status: str
 
 
@@ -260,7 +313,7 @@ def food_marks(db: Session, user: models.User, food_ids: Sequence[int | None]) -
         # The address a row actually draws: the small copy, or the whole
         # picture on a food photographed before there were any.
         thumb = None if picture is None else (picture.thumb or picture.url)
-        marks[food.id] = Mark(thumb, food.status)
+        marks[food.id] = Mark(thumb, food.description, food.status)
     return marks
 
 
@@ -301,6 +354,9 @@ def food_row(
 ) -> dict[str, object]:
     """A food as it reads in a list: enough to pick it out, nothing else."""
     return {
+        # Which of the three things a row stands for, because a search answers
+        # with a member's own recipes and meals in this same shape.
+        "kind": "food",
         "id": food.id,
         "name": food.name,
         "brand": food.brand,
@@ -857,18 +913,147 @@ def check_barcode(db: Session, user: models.User, code: str) -> None:
         raise HTTPException(status.HTTP_400_BAD_REQUEST, ALREADY_MINE)
 
 
+def name_rank(name: str, brand: str, needle: str) -> int:
+    """The ladder the search below ranks on, said again in Python.
+
+    Recipes and meals are ranked and merged here rather than in the database,
+    so all three kinds are ordered by one rule. Neither of them has a brand, so
+    the two brand rungs are simply never reached by one.
+    """
+    name = name.lower()
+    brand = brand.lower()
+    if name.startswith(needle):
+        return 0
+    if f" {needle}" in name:
+        return 1
+    if brand.startswith(needle):
+        return 2
+    if f" {needle}" in brand:
+        return 3
+    return 4
+
+
+def dish_row(
+    kind: str,
+    dish: models.Recipe | models.MealTemplate,
+    calories: float | None,
+    picture: Picture | None,
+) -> dict[str, object]:
+    """A recipe or a kept meal in the shape a food row has.
+
+    One row is drawn for all three kinds, so everything that row reads has to
+    be here. What only a food has is empty rather than filled with a stand-in,
+    and the standing is never "approved": these are one member's own, and no
+    reviewer has ever seen one.
+    """
+    return {
+        "kind": kind,
+        "id": dish.id,
+        "name": dish.name,
+        "brand": "",
+        "description": "",
+        "section": "",
+        "calories": calories,
+        # What a dish is weighed in: a meal comes off the scale in grams, and a
+        # share of a pot is worked out in them.
+        "base_unit": "g",
+        "status": "",
+        "photo_url": None if picture is None else picture.url,
+        "thumb_url": None if picture is None else picture.thumb,
+        "community": "none",
+        # No label to read a serving off. A recipe row is already per serving
+        # and a meal row is the whole meal.
+        "serving": None,
+    }
+
+
+def matching_names(column: InstrumentedAttribute[str], needle: str) -> list[ColumnElement[bool]]:
+    """Every word of the query somewhere in that name, in one clause each."""
+    lowered = func.lower(column)
+    return [
+        lowered.like(f"%{like_literal(word)}%", escape="\\") for word in needle.split()
+    ]
+
+
+def own_dishes(
+    db: Session, user: models.User, needle: str, kinds: Sequence[str]
+) -> list[dict[str, object]]:
+    """This account's own recipes and kept meals whose name holds every word.
+
+    Their calories are the figure the Food tab already shows for each: what one
+    serving of a recipe is worth, and what a whole meal is. Imported here
+    because both of those modules read this one.
+    """
+    from app.recipes import per_serving
+    from app.routers.meals import portions
+    from app.routers.meals import totals as meal_totals
+
+    rows: list[dict[str, object]] = []
+    if "recipe" in kinds:
+        recipes = list(
+            db.execute(
+                select(models.Recipe)
+                .options(selectinload(models.Recipe.ingredients))
+                .where(
+                    models.Recipe.user_id == user.id,
+                    *matching_names(models.Recipe.name, needle),
+                )
+                .limit(SEARCH_LIMIT)
+            ).scalars()
+        )
+        pictures = dish_pictures(db, [recipe.photo_id for recipe in recipes])
+        rows += [
+            dish_row(
+                "recipe",
+                recipe,
+                per_serving(recipe)["calories"],
+                pictures.get(recipe.photo_id) if recipe.photo_id else None,
+            )
+            for recipe in recipes
+        ]
+    if "meal" in kinds:
+        meals = list(
+            db.execute(
+                select(models.MealTemplate)
+                .options(selectinload(models.MealTemplate.items))
+                .where(
+                    models.MealTemplate.user_id == user.id,
+                    *matching_names(models.MealTemplate.name, needle),
+                )
+                .limit(SEARCH_LIMIT)
+            ).scalars()
+        )
+        pictures = dish_pictures(db, [meal.photo_id for meal in meals])
+        rows += [
+            dish_row(
+                "meal",
+                meal,
+                meal_totals(portions(db, user, meal)[0])["calories"],
+                pictures.get(meal.photo_id) if meal.photo_id else None,
+            )
+            for meal in meals
+        ]
+    return rows
+
+
 @router.get("/search")
 def search_foods(
     q: str = "",
+    kinds: str = ",".join(SEARCH_KINDS),
     db: Session = Depends(get_db),
     user: models.User = Depends(require_user),
 ) -> list[dict[str, object]]:
-    """Foods matching a word: the shared database, plus this account's own.
+    """What goes by that name: shared foods, this account's own, its recipes
+    and its kept meals.
 
     Too short a query answers with nothing rather than a refusal. The box types
     as somebody types, and the first letter of every search is not a mistake to
-    be told about.
+    be told about. A caller that can only use one of the three says so, which
+    is a builder choosing a part: a part is always a food.
     """
+    wanted = [word.strip() for word in kinds.split(",") if word.strip()]
+    if any(word not in SEARCH_KINDS for word in wanted):
+        raise HTTPException(status.HTTP_400_BAD_REQUEST, BAD_KIND)
     needle = q.strip().lower()
     if len(needle) < MIN_QUERY:
         return []
@@ -906,7 +1091,17 @@ def search_foods(
         .order_by(rank, func.length(models.Food.name), models.Food.brand, models.Food.id)
         .limit(SEARCH_LIMIT)
     )
-    return food_rows(db, user, list(db.execute(query).scalars()))
+    found = food_rows(db, user, list(db.execute(query).scalars())) if "food" in wanted else []
+    found += own_dishes(db, user, needle, wanted)
+
+    def place(row: dict[str, object]) -> tuple[int, int]:
+        title = str(row["name"])
+        return name_rank(title, str(row["brand"]), needle), len(title)
+
+    # One order over the three kinds, and a stable sort, so the foods keep the
+    # order the database put them in wherever a dish ties with one.
+    found.sort(key=place)
+    return found[:SEARCH_LIMIT]
 
 
 @router.get("/mine")
@@ -1176,7 +1371,7 @@ def attach_food_photo(
     """
     from app.routers.photos import discard, front_photo
 
-    if body.purpose not in models.PHOTO_PURPOSES:
+    if body.purpose not in models.FOOD_PHOTO_PURPOSES:
         raise HTTPException(status.HTTP_400_BAD_REQUEST, BAD_PURPOSE)
     # A reviewer may also swap the picture on a shared food: the rows
     # everybody eats out of are theirs to keep right, photograph included.
@@ -1237,7 +1432,7 @@ def remove_food_photo(
     """
     from app.routers.photos import discard, published
 
-    if purpose not in models.PHOTO_PURPOSES:
+    if purpose not in models.FOOD_PHOTO_PURPOSES:
         raise HTTPException(status.HTTP_400_BAD_REQUEST, BAD_PURPOSE)
     food = changeable_food(db, user, food_id, (), ("approved",), reviewers=True)
 

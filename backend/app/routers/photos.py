@@ -16,7 +16,7 @@ import re
 
 from fastapi import APIRouter, Depends, File, Form, HTTPException, UploadFile, status
 from fastapi.responses import FileResponse
-from sqlalchemy import Select, or_, select, update
+from sqlalchemy import CompoundSelect, Select, or_, select, update
 from sqlalchemy.orm import Session
 
 from app import caps, models, photos
@@ -29,7 +29,10 @@ router = APIRouter(prefix="/photos", tags=["photos"])
 MISSING_PHOTO = "There is no such photo."
 NO_FILE = "Choose a picture to attach."
 TOO_LARGE = "A photo must be at most 10 MB."
-BAD_PURPOSE = "A photo is of the front or of the label."
+BAD_PURPOSE = "A photo is of the front, of the label, or of a finished dish."
+# The same sentence the food router gives, for the same reason: an upload that
+# is not this member's, or is already on something, is simply absent.
+MISSING_PHOTO_TO_ATTACH = "That photo is not there to attach."
 
 # What a stored file is named, which is the only shape this router will look
 # for on disk. An avatar is read by its file name rather than by an id, so the
@@ -76,7 +79,12 @@ def readable_photo(db: Session, user: models.User, photo_id: int) -> models.Food
     photo = db.get(models.FoodPhoto, photo_id)
     if photo is None:
         raise HTTPException(status.HTTP_404_NOT_FOUND, MISSING_PHOTO)
-    if photo.uploaded_by_id == user.id or reviews(user):
+    if photo.uploaded_by_id == user.id:
+        return photo
+    # A dish photo is a member's own picture of what they cooked. Nothing
+    # publishes one and no request carries one, so not even a reviewer is
+    # served it.
+    if photo.purpose != "dish" and reviews(user):
         return photo
     if photo.purpose == "front" and photo.status == "approved":
         return photo
@@ -146,6 +154,14 @@ def discard(db: Session, photo: models.FoodPhoto) -> None:
         .where(models.Food.label_photo_id == photo.id)
         .values(label_photo_id=None)
     )
+    db.execute(
+        update(models.Recipe).where(models.Recipe.photo_id == photo.id).values(photo_id=None)
+    )
+    db.execute(
+        update(models.MealTemplate)
+        .where(models.MealTemplate.photo_id == photo.id)
+        .values(photo_id=None)
+    )
     db.delete(photo)
     photos.remove(name)
 
@@ -157,6 +173,63 @@ def kept_by_a_food() -> Select[tuple[int | None]]:
     correction against, so it outlives every request that ever carried it.
     """
     return select(models.Food.label_photo_id).where(models.Food.label_photo_id.is_not(None))
+
+
+def kept_by_a_dish() -> CompoundSelect:
+    """The pictures a recipe or a kept meal is holding.
+
+    A dish photo never reaches a food, so without this the sweep below would
+    take it for an upload nobody ever sent.
+    """
+    return (
+        select(models.Recipe.photo_id)
+        .where(models.Recipe.photo_id.is_not(None))
+        .union(
+            select(models.MealTemplate.photo_id).where(
+                models.MealTemplate.photo_id.is_not(None)
+            )
+        )
+    )
+
+
+def set_dish_photo(
+    db: Session,
+    user: models.User,
+    dish: models.Recipe | models.MealTemplate,
+    photo_id: int | None,
+) -> None:
+    """Put a picture of the finished dish on a recipe or a kept meal, or take
+    off the one it has.
+
+    The picture has to be this member's own, taken for a dish, and not already
+    on something. Whatever was there goes, file and all: a dish shows one
+    picture, and a stack of replaced attempts is a directory nobody empties.
+    """
+    photo = None
+    if photo_id is not None:
+        photo = db.get(models.FoodPhoto, photo_id)
+        already = db.execute(
+            select(models.FoodPhoto.id).where(
+                models.FoodPhoto.id == photo_id,
+                models.FoodPhoto.id.in_(kept_by_a_dish()),
+            )
+        ).first()
+        if (
+            photo is None
+            or photo.uploaded_by_id != user.id
+            or photo.purpose != "dish"
+            or photo.food_id is not None
+            or already is not None
+        ):
+            raise HTTPException(status.HTTP_400_BAD_REQUEST, MISSING_PHOTO_TO_ATTACH)
+    standing = None if dish.photo_id is None else db.get(models.FoodPhoto, dish.photo_id)
+    dish.photo_id = None if photo is None else photo.id
+    # Flushed before the old one goes, so the discard is not undoing the row
+    # that now points at its replacement.
+    db.flush()
+    if standing is not None and (photo is None or standing.id != photo.id):
+        discard(db, standing)
+    db.commit()
 
 
 def _spent_labels(db: Session) -> list[models.FoodPhoto]:
@@ -218,6 +291,7 @@ def _sweep(db: Session) -> None:
             # A panel an administrator put straight on a shared food never
             # reaches a food_id either, and the food is what holds it.
             models.FoodPhoto.id.not_in(kept_by_a_food()),
+            models.FoodPhoto.id.not_in(kept_by_a_dish()),
         )
     ).scalars().all()
     for photo in stale:
