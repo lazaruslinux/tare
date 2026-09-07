@@ -219,7 +219,7 @@ export function DishAutoLog({
         }}
       >
         <CalendarSync className="h-4 w-4" strokeWidth={2} />
-        {standing === null ? 'Auto-log' : 'Auto-logging'}
+        Auto-log
       </button>
 
       {open && (
