@@ -1,26 +1,10 @@
 """The Android dialect, written out as the one the reader already speaks.
 
-Android has no Health Auto Export. What it has is a bridge that reads Health
-Connect, where a Pixel watch, a Fitbit or Samsung Health leaves its readings,
-and posts a flat envelope of arrays: sessions in one list, heart rate in
-another, steps and calories and distance in three more.
-
-That is a different description of the same morning, so rather than teach every
-reader downstream a second dialect, one is turned into the other here and
-app.ingest_hae stays the only thing that knows what a reading is.
-
-Two things the translation has to do that renaming fields would not. The arrays
-are independent of the sessions, so a session's detail is the slice of each
-array that falls inside its own window. And a bridge sends readings at whatever
-resolution it feels like, while the minute rows keep the first reading they see
-for each minute, so readings are folded into minutes here instead.
-
-Times arrive as UTC. They are moved onto the member's own clock before anything
-else, because an evening walk in the west is not tomorrow's walk.
-
-Two gaps, accepted and written down: Health Connect exports no route, so an
-Android workout gets no line, and it usually carries no energy per session, so
-that workout's calories are blank rather than nil.
+Android has no Health Auto Export, so a bridge reads Health Connect and posts a
+flat envelope of arrays rather than one shape per workout. This turns that into
+the shape app.ingest_hae already reads, so there is one reader and not two: a
+session's detail is the slice of each array inside its own window, folded to one
+reading a minute, on the member's own clock rather than UTC.
 """
 
 from __future__ import annotations
@@ -184,6 +168,8 @@ def _session(
     workout["end"] = _stamp(end, zone)
     workout["duration"] = seconds if seconds is not None else (end - start).total_seconds()
 
+    # Distance but no path: Health Connect exports no route, so an Android
+    # workout draws no line.
     metres = quantity(entry.get("distance_meters"))
     if metres is not None:
         workout["distance"] = {"qty": metres, "units": "m"}
@@ -200,6 +186,8 @@ def _session(
             "max": max(beats),
         }
 
+    # Health Connect usually sends no energy for a session, so a workout
+    # without any keeps its calories blank rather than claiming nil.
     burned = _window(energy, start, end)
     calories = [value for _, item in burned if (value := quantity(item.get("calories")))]
     if calories:

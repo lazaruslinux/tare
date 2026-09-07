@@ -1,13 +1,8 @@
 // Which ground the app is drawn on. Kept per browser rather than per account:
 // a phone in bed at night and a desktop by a window are not the same room, and
-// one account is used from both.
-//
-// The choice is written onto the root element, where the stylesheet's light
-// block looks for it. That has to happen before anything renders, so this
-// module is imported first in main.tsx and does its work on the way in. It
-// cannot happen any earlier: the only thing that beats the bundle is an inline
-// script in the page head, and the content security policy refuses those. The
-// cost is one dark frame on a cold load for somebody on light.
+// one account is used from both. The choice is written onto the root element,
+// where the stylesheet's light block looks for it, and it has to be there
+// before anything renders, so main.tsx imports this module first.
 
 import { useSyncExternalStore } from 'react'
 

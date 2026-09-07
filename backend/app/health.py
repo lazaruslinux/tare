@@ -34,15 +34,17 @@ GAIN_STEPS = (0.25, 0.45)
 KCAL_PER_LB = 3500.0
 KCAL_PER_DAY_PER_KG_WEEK = KCAL_PER_LB / KG_PER_LB / 7.0
 
-# Decision 17: how far over maintenance a gaining budget may sit. The deficit
-# cap that used to bound losing (decision 14) is retired: the steps ask for
-# what they ask for, and the floor below is the one wall.
+# How far over maintenance a gaining budget may sit. Losing has no cap of its
+# own: the steps ask for what they ask for, and FLOOR below is the one wall
+# (decision 17).
 SURPLUS_CAP = 0.20
 
-# Decision 15.
+# The lowest daily calorie budget tare will set, by sex, whatever the goal
+# (decision 15).
 FLOOR = {"female": 1200.0, "male": 1500.0}
 
-# Decision 22.
+# The body mass index below which a goal is warned about, and the one at or
+# above which the app says to talk to a clinician (decision 22).
 UNDERWEIGHT_BMI = 18.5
 CLINICIAN_BMI = 40.0
 
@@ -64,7 +66,9 @@ HIGH_BMI = 30.0
 # page says one sentence.
 CARBS_LOW_G = 130.0
 
-# Decision 12.
+# The fibre to aim at, set per thousand calories, and three of the figures to
+# stay under: saturated fat as a share of the budget, sodium and cholesterol as
+# fixed amounts (decision 12).
 FIBER_G_PER_1000 = 14.0
 SATURATED_FAT_SHARE = 0.10
 SODIUM_MG_MAX = 2300.0
@@ -98,16 +102,19 @@ KCAL_PER_G_PROTEIN = 4.0
 KCAL_PER_G_CARBS = 4.0
 KCAL_PER_G_FAT = 9.0
 
-# Decision 19.
+# How heavily the newest weigh-in pulls the smoothed weight line (decision 19).
 TREND_ALPHA = 0.1
 
-# Decision 20.
+# What a calorie correction needs before it is offered: days of trend, days of
+# logged food, how far the weight has to have drifted, and what a kilogram of
+# body mass costs (decision 20).
 REESTIMATE_DAYS = 28
 REESTIMATE_LOGGED_DAYS = 20
 REESTIMATE_DRIFT = 0.5
 KCAL_PER_KG = 7700.0
 
-# Decision 26.
+# Unit conversions, so the arithmetic stays metric wherever a member is not
+# (decision 26).
 KG_PER_LB = 0.45359237
 CM_PER_INCH = 2.54
 
@@ -383,9 +390,9 @@ def activity_options(resting: float | None) -> tuple[ActivityOption, ...]:
 def exercise_kcal(met: float, kg: float, minutes: float) -> float:
     """Decision 7: what a workout adds back, over and above resting.
 
-    The one MET taken off is tare's own step, not the Compendium's: it removes
-    the energy the body would have spent lying still, which the resting
-    estimate already holds.
+    The one MET taken off is tare's own step, not part of the published MET
+    table: it removes the energy the body would have spent lying still, which
+    the resting estimate already holds.
     """
     return (met - 1.0) * MET_ML_PER_KG_MIN * kg / ML_O2_PER_KCAL * minutes
 

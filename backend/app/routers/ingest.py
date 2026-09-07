@@ -1,24 +1,9 @@
 """The two addresses a health export arrives at.
 
-The order the checks run in is the whole design of this file, so it is written
-out once here and followed exactly below.
-
-The body cap comes first, in the middleware, before a single byte is held.
-Then the rate limiter, keyed by address, inside the dependency and ahead of the
-token: guessing keys has to cost the same allowance as syncing does, or the
-limiter protects nothing. Then the token. Only then is the body read, so an
-unauthorised caller never gets this server to parse fifteen megabytes for them.
-
-After that, one row at a time inside its own savepoint. A sync carrying a
-thousand days and one unreadable line writes the thousand days.
-
-The second address takes the same export as a file, picked by somebody already
-signed in, behind their session rather than a key. Same order, same caps, same
-import, same answer. It carries three things the first does not, because a
-file is handed over by a person rather than posted by a phone: it can be
-turned off for the whole instance, it is counted per account as well as per
-address, and every row it writes is stamped as having come from a file so that
-one act can take all of them back out again.
+The order the checks run in is the design of this file: the body cap in the
+middleware, then the rate limiter by address, then the sync token or, for a
+file, the session, and only last the body itself. Read any earlier and an
+unauthorised caller could make this server parse megabytes for them.
 """
 
 from __future__ import annotations

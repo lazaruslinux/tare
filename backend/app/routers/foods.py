@@ -915,18 +915,11 @@ def list_my_foods(
 ) -> list[dict[str, object]]:
     """What this account has been eating lately, and its own foods.
 
-    Nothing is put here by hand and nothing is taken off: a shared food is on
-    the list because it was logged, and it drops down the list as other things
-    are. A food of their own is here from the moment it is entered, because
-    they made it and it is theirs to find.
-
     Ordered by when each was last eaten, newest first, which is the Journal's
     own order: what somebody ate this morning is what they reach for again.
-    Under those, the ones nobody has logged yet, by when each was entered.
-
-    Ten rows, own foods counted in with the rest. Everything a member owns is
-    still found by searching or browsing; this is the short list of what they
-    have been eating, not their whole cupboard.
+    Under those sit the ones nobody has logged yet, a food of their own among
+    them from the moment it is entered. Ten rows, because the rest of a cupboard
+    is found by searching.
     """
     logged = last_logged_by(models.DiaryEntry.food_id, user)
     query = (
@@ -1050,17 +1043,11 @@ def browse_foods(
 ) -> dict[str, object]:
     """The shared database, a page at a time, the photographed ones first.
 
-    Paged by where the last page stopped rather than by an offset. A food
-    approved while somebody is scrolling shifts every offset after it, which
-    shows one row twice and hides another; a marker naming the last row read
-    cannot do either.
-
-    Given a letter it is the same database read the other way: everything
-    starting with that letter, in alphabetical order, which is how somebody
-    looks for a food they cannot spell the middle of.
-
-    A section is the same list read the way somebody shops, and the two narrow
-    it together: the frozen things beginning with P are both at once.
+    Paged by where the last page stopped rather than by an offset: a food
+    approved while somebody is scrolling shifts every offset after it, showing
+    one row twice and hiding another, and a marker naming the last row read
+    cannot do either. A letter reads the same list alphabetically and a section
+    reads it the way somebody shops; the two narrow it together.
     """
     if letter and not (len(letter) == 1 and letter.isascii() and letter.isalpha()):
         raise HTTPException(status.HTTP_400_BAD_REQUEST, BAD_LETTER)
@@ -1183,12 +1170,9 @@ def attach_food_photo(
     """Put a picture of the front of the pack on one of your own foods.
 
     Attached rather than offered, because until this food is shared it is
-    nobody else's business. It rides along if the food is ever submitted.
+    nobody else's business, and it rides along if the food is ever submitted.
     Attaching a second one replaces the first, file and all: a food shows one
     picture, and a stack of replaced attempts is a directory nobody empties.
-
-    The panel is the other case, and it is an administrator's: a food everybody
-    eats out of keeps one, so whoever corrects it next has the label to read.
     """
     from app.routers.photos import discard, front_photo
 
@@ -1199,6 +1183,8 @@ def attach_food_photo(
     food = changeable_food(
         db, user, food_id, ("custom", "pending"), ("approved",), reviewers=True
     )
+    # The panel is a reviewer's case: a food everybody eats out of keeps one,
+    # so whoever corrects it next has the label to read.
     if body.purpose == "label" and not (reviews(user) and food.status == "approved"):
         raise HTTPException(status.HTTP_403_FORBIDDEN, NOT_YOURS)
     photo = db.get(models.FoodPhoto, body.photo_id)

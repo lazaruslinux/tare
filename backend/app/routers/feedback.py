@@ -1,9 +1,9 @@
 """What a member has to say about tare, appended to one file.
 
 A file rather than a table: this is prose an administrator reads start to
-finish, nothing in the app queries it, and it outlives a database that is
-dropped between rounds. Every block carries the time in the member's own zone
-and in UTC, so a report can be lined up with a log.
+finish, nothing in the app queries it, and it survives the database being
+dropped and rebuilt. Every block carries the time in the member's own zone and
+in UTC, so a report can be lined up with a log.
 """
 
 from __future__ import annotations

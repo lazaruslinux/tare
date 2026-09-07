@@ -159,16 +159,11 @@ def reset_limiters() -> None:
 def client_address(request: Request) -> str:
     """The caller's address, read from the right of X-Forwarded-For.
 
-    That header is a list the caller gets to start writing, and a proxy appends
-    what it saw rather than replacing what arrived: a request sent with
-    "X-Forwarded-For: 1.2.3.4" reaches us as "1.2.3.4, <real caller>". Reading
-    from the left reads the value the caller chose, which lets anyone pick
-    their own bucket and walk past the limiter. The right-most entries are the
-    ones our own proxies wrote.
-
-    trusted_proxy_hops says how many of those there are. Setting it higher than
-    the number really in front hands the choice of bucket back to the caller,
-    which is the hole this exists to close.
+    A proxy appends what it saw rather than replacing what arrived, so the
+    entries on the right are the ones our own proxies wrote and the ones on the
+    left are whatever the caller chose to send. trusted_proxy_hops says how many
+    of ours there are; set higher than the number really in front, it hands the
+    choice of bucket back to the caller.
     """
     forwarded = request.headers.get("x-forwarded-for", "")
     entries = [part.strip() for part in reversed(forwarded.split(","))]

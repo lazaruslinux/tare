@@ -1,14 +1,10 @@
 // The arithmetic behind the route line: where a share of the way along it
 // falls, and which share of it a minute or a split belongs to.
 //
-// Nothing here draws anything and nothing here asks anybody for anything. The
-// points are already on the page, and every figure below is worked out from
-// them alone.
-//
-// The stored line has 200 m thrown away at each end, so a share of the
-// session's distance lands a little early or late on it. That is accepted: the
-// ends are hidden on purpose, and no arithmetic here can put back what was
-// never sent.
+// Nothing here draws anything or asks for anything: the points are already on
+// the page. The stored line has 200 m thrown away at each end, so a share of
+// the session's distance lands a little early or late on it, which is accepted
+// because the ends are hidden on purpose.
 
 import type { WorkoutSample } from '../api'
 import type { Split } from './splits'

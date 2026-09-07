@@ -1,14 +1,9 @@
 """The one place this server talks to the internet.
 
-Text search never leaves the instance. A barcode is the single exception: a code
-nobody here has entered yet is asked about elsewhere, and what comes back is a
-suggestion for somebody to correct, not a food. Nothing in this module writes a
-row, reads a session, or knows what an account is; it takes a barcode and hands
-back a normalised reading, so the routes stay thin and the tests can put a fake
-transport under it instead of a network.
-
-One source. Open Food Facts needs no key, covers the whole world, and is what
-every install here reads from.
+Text search never leaves the instance. A barcode nobody here has entered yet is
+the one exception, and what comes back is a suggestion for somebody to correct
+rather than a food. Nothing here writes a row or knows what an account is, so
+the routes stay thin and a test can put a fake transport under it.
 """
 
 from __future__ import annotations
@@ -262,21 +257,18 @@ class Measured:
 def measured_serving(size: object, unit: object, text: str) -> Measured:
     """How a product is measured, how big its serving is, and what it weighs.
 
-    Both sources routinely stamp a liquid serving with a mass unit: a cream at
-    "2 tbsp (30 ml)" arrives with its unit field saying grams. So a volume the
-    phrase states outright beats the fields, the fields beat a phrase that only
-    hints at one, and a product that gives nothing measurable stays in grams
-    with no serving amount at all.
-
-    A label that names the same serving both ways has also given up the food's
-    density, which is what lets it be logged in either family of units. That
-    reading is taken alongside and never instead: it does not move the base unit
-    the lines above settled on.
+    A volume the serving phrase states outright beats the unit fields, the
+    fields beat a phrase that only hints at one, and a product that gives
+    nothing measurable stays in grams with no serving amount. A label naming the
+    same serving both ways has given up the food's density, which is read
+    alongside and never instead of the base unit.
     """
     structured = _structured_serving(size, unit)
     grams, stated, hinted = _phrase_readings(text)
 
     found = Measured()
+    # Both sources routinely stamp a liquid serving with a mass unit: a cream
+    # at "2 tbsp (30 ml)" arrives with its unit field saying grams.
     if stated is not None:
         found = Measured(base_unit="ml", amount=stated)
     elif structured is not None:

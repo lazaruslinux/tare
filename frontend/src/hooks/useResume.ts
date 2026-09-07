@@ -1,14 +1,10 @@
 import { useEffect, useRef } from 'react'
 
-// Coming back to the app. A phone leaves a tab open for days, and what it is
-// showing when somebody looks at it again is whatever was true when they put
-// it down. This says the moment they are looking again, so the screen can read
-// the server rather than argue with an old answer.
-//
-// Three events for one thing, because no single one of them fires everywhere:
-// a tab uncovered gives visibilitychange, a window brought forward gives focus,
-// and a page restored from the back-forward cache gives pageshow. iOS gives all
-// three at once, so they are held to one call in a short window.
+// Coming back to the app. A phone leaves a tab open for days, so what it shows
+// is whatever was true when it was put down, and this says the moment somebody
+// is looking again so the screen can read the server instead. Three events,
+// because no single one of them fires everywhere, held to one call in a short
+// window because iOS sends all three at once.
 const QUIET = 5000
 
 export function useResume(onResume: () => void) {

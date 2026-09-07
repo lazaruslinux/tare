@@ -1,13 +1,9 @@
 """What a recipe is worth, and whose it is.
 
 The screens that keep recipes and the diary that eats them both need these
-answers, and neither route should have to import the other to get them, so
-they live here on their own.
-
-A total is stricter about a missing figure than a day is. A day with one
-unlabelled coffee in it is still a day, so a nutrient nobody gave counts as
-nothing; a recipe with one ingredient nobody has the sodium for has an unknown
-amount of sodium in it, not a smaller one.
+answers, so they live here rather than in either route. A total is stricter
+than a day about a missing figure: a recipe with one ingredient nobody has the
+sodium for has an unknown amount of sodium in it, not a smaller one.
 """
 
 from __future__ import annotations

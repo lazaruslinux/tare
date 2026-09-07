@@ -1,10 +1,10 @@
 """A serving remembers the unit it was typed in.
 
-The base amount stays what every sum is worked out from. What it never held is
-the words somebody used: "1 block" is a pound of cheese, and reading it back as
-453.592 g is arithmetic nobody asked for. So the two columns beside it are the
-amount as typed and the unit it was typed in, and rows written before this take
-the base amount and their food's own base unit, which is exactly what they meant.
+Two columns on food_servings: the amount as somebody typed it, and the unit
+they typed it in. The base amount is left alone because every sum is worked out
+from it; "1 block" is a pound of cheese, and reading that back as 453.592 g is
+arithmetic nobody asked for. Rows written before this take the base amount and
+their food's own base unit.
 
 Revision ID: 0014_serving_unit
 Revises: 0013_activity_goals

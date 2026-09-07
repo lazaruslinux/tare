@@ -1,21 +1,9 @@
 """Asking for something to change in the shared database, and taking it back.
 
 Three kinds of request, and one rule under all of them: nothing here publishes
-anything. A new food waits as its submitter's own; a correction waits as a
-copy nobody else can see; a picture waits attached to the food it is for and
-unpublished. Only the review queue changes what everybody reads.
-
-Offering a new food makes it 'pending', which is still that person's own food:
-they can log it today, and it stays private until an administrator says
-otherwise. That is the whole point of the arrangement. The alternative is a
-database that fills up with whatever the first person to scan something
-happened to type.
-
-What a submission is held to is one thing more than what a private food is held
-to: a serving. Both need the four numbers anybody reads, and neither needs the
-other six. A box left empty is a number the label did not give, and a person
-holding the packet is worth more than a form that will not send until they
-invent one. A reviewer sees the blanks and fills them in or asks.
+anything. A new food waits as its submitter's own, a correction waits as a copy
+nobody else can see, and a picture waits attached to its food, unpublished. Only
+the review queue changes what everybody reads.
 """
 
 from __future__ import annotations
@@ -326,16 +314,14 @@ def suggest_edit(
 ) -> dict[str, object]:
     """A correction to a food everybody eats out of, offered as a whole panel.
 
-    A reviewer's route now. A member reports what is wrong with a shared food
-    instead; the answer to a bad row is an administrator fixing it, not a
-    second version of it written by whoever noticed.
-
     The proposal is written down as a food of its own, owned by whoever wrote
-    it, rather than held as a patch on the shared row. It is the same shape a
+    it, rather than held as a patch on the shared row: it is the shape a
     reviewer already reads, it can be corrected in place before it is decided,
-    and nothing about the shared food changes until somebody says so. That is
-    what still decides the corrections already waiting in the queue.
+    and nothing about the shared food changes until somebody says so.
     """
+    # A reviewer's route. A member reports what is wrong with a shared food
+    # instead, because the answer to a bad row is a reviewer fixing it rather
+    # than a second version written by whoever noticed.
     if not user.is_admin:
         raise HTTPException(status.HTTP_403_FORBIDDEN, MEMBER_MAY_NOT_EDIT)
     caps.check_submissions(db, user)

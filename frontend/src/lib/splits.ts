@@ -30,24 +30,11 @@ export const stepOf = (units: 'imperial' | 'metric'): number =>
 
 /** The splits of a session, out of its per-minute rows.
  *
- * The minutes are added up rather than read as a running total, and a minute
- * that carries a boundary is divided at it: the seconds either side are shared
- * out in the proportion the distance was, which is the best a per-minute export
- * can say about where a mile actually ended. A fast minute can cross more than
- * one boundary, so the loop closes as many splits as it crossed. A minute that
- * covered nothing still spends its seconds on the split it happened in, because
- * standing at a crossing is part of the mile it happened in.
- *
- * A row is a wall-clock minute, and the session's own duration is no help in
- * timing it: a phone leaves the minutes it paused for out of its duration
- * without saying which minutes those were. So a minute that recorded any
- * movement counts whole, a minute that recorded none adds nothing (a pause, or
- * a heart reading stamped after the finish), and the last moving minute is
- * given the share of a minute its distance suggests against the minute before
- * it, because a session rarely ends on the stroke of one.
- *
- * A session with no distance at all has no splits, which is the honest answer
- * for a swim on a watch that measured only the heart.
+ * The minutes are added up rather than read as a running total, because a row
+ * is a wall-clock minute and the session's own duration leaves out the minutes
+ * it paused for without saying which ones. A minute that carries a boundary is
+ * divided at it, in the proportion its distance was, which is the best a
+ * per-minute export can say about where a mile ended.
  */
 export function splitsOf(samples: WorkoutSample[], units: 'imperial' | 'metric'): Split[] {
   const step = stepOf(units)
@@ -64,7 +51,11 @@ export function splitsOf(samples: WorkoutSample[], units: 'imperial' | 'metric')
 
   for (const row of samples) {
     let left = Math.max(0, row.distance_m ?? 0)
+    // A minute that recorded movement counts whole; one that recorded none
+    // adds nothing, being a pause or a reading stamped after the finish.
     let time = moved(row) ? MINUTE_S : 0
+    // A session rarely ends on the stroke of a minute, so the last moving one
+    // takes the share its distance suggests against the minute before it.
     if (row === lastMoving && beforeLast !== undefined && (beforeLast.distance_m ?? 0) > 0) {
       time = Math.min(MINUTE_S, MINUTE_S * (left / (beforeLast.distance_m ?? 1)))
     }

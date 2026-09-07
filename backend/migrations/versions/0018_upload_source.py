@@ -1,12 +1,10 @@
 """Where a fitness row came from, and how large the file was.
 
-Everything a phone has posted so far came from a phone, so the backfill is the
-default: 'sync' on every row already here. What an upload writes from now on
-says so, and that is what makes it possible to take an upload back out again
-without touching a number anybody's watch sent.
-
-The two enums are widened rather than replaced. Both are non-native, so each is
-a varchar the length of its longest word, and 'upload' is longer than 'hae'.
+A source column on the two fitness tables, a via on weight entries and a byte
+count on the log. Everything posted so far came from a phone, so the rows
+already there are backfilled as 'sync' and only an upload says otherwise, which
+is what lets an upload be taken back out without touching a number anybody's
+watch sent.
 
 Revision ID: 0018_upload_source
 Revises: 0017_fitness

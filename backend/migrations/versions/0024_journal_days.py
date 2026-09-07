@@ -1,12 +1,10 @@
 """A day somebody marked complete, and whether saying so reaches the feed.
 
 The table holds nothing but the fact: one row a member a day, and the row
-existing is what "complete" means. Unlocking deletes it rather than setting a
-flag back, so there is no third state to reason about.
-
-The switch beside it is off for everybody who is already here. A day's eating
-is the most private thing in the app, and a column added under people cannot
-start by announcing it.
+existing is what "complete" means, so unlocking deletes it rather than setting a
+flag back. The switch beside it is off for everybody already here, because a
+column added under people cannot start by announcing the most private thing in
+the app.
 
 Revision ID: 0024_journal_days
 Revises: 0023_food_section

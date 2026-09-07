@@ -1,14 +1,11 @@
 """The member's own numbers: the profile behind them, the measurements they are
 read from, the workouts credited against them, and the targets that come out.
 
-Everything here is private without qualification. There is no id in any of
-these addresses that belongs to somebody else, and the one that takes an id
-answers for a stranger's row exactly what an id that was never used answers.
-An administrator is nobody special here (decision 27).
-
-The arithmetic is not in this file. It is in app.health, which knows no session
-and no account, and this router is what feeds it and what turns its keys into
-the sentences docs/HEALTH-MATH.md asks for.
+Everything here is private without qualification: no address takes an id
+belonging to somebody else, and an administrator is nobody special (decision
+27). The arithmetic is in app.health, which knows no session and no account,
+and this router feeds it and turns its keys into the sentences
+docs/HEALTH-MATH.md asks for.
 """
 
 from __future__ import annotations
@@ -902,8 +899,8 @@ def read_targets(
         )
         * 10,
         "activity_level": profile.activity_level,
-        # The way the two weights point, which is what the old stored goal
-        # used to say. The key is kept so the screens read the same word.
+        # The way the two weights point. Called "goal" because that is the
+        # word the screens read.
         "goal": state.direction,
         "rate_kg_per_week": (
             None

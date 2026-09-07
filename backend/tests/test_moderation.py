@@ -1,15 +1,8 @@
 """Changing what is already shared: corrections, pictures, and who sees what.
 
-The rules being held to here are the ones a shared database lives or dies by. A
-correction is written down as a copy nobody else can see, so nothing everybody
-eats out of changes until a person says so. A picture replaces the one before
-it, file and all, because two published pictures of one food is a state nothing
-can render. And approving either of them never reaches back into a diary: the
-day somebody already ate is theirs, not the database's.
-
-A correction is a reviewer's tool. A member who finds something wrong with a
-shared food reports it, which is a sentence and not a second panel, so the
-cases below write one as whoever would be deciding it.
+A correction is a reviewer's tool, and a member reports a bad shared food
+instead, so the cases below write a correction as whoever would be deciding
+it.
 """
 
 import datetime as dt

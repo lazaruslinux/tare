@@ -1,21 +1,10 @@
 """The review queue: the only way anything reaches the shared database.
 
-Approving a new food does two things and no more. It changes the row's status
-and lets go of its owner, so what was one person's becomes everybody's, and it
-deletes the cached lookup for that barcode, so the next scan of the packet is
-answered out of this database rather than off somebody else's server.
-
-The other two kinds change something that is already shared. A correction is
-copied onto the food it is about and its working copy is thrown away; a picture
-replaces whatever the food was showing, row and file both.
-
-What none of them does is touch a diary. An entry keeps the numbers it was
-logged with, worked out from the food as it stood at that moment, and a decision
-made afterwards does not reach back and rewrite anybody's day. The submitter's
-entries keep pointing at the same food, which is now the shared one.
-
-Beside the queue, the two lists that only an administrator has any use for: the
-invite links that are out, and who is on the instance.
+No decision here touches a diary. An entry keeps the numbers it was logged
+with, worked out from the food as it stood at that moment, so a decision made
+afterwards never rewrites anybody's day. Beside the queue are the two lists only
+an administrator has a use for: the invite links that are out, and who is on the
+instance.
 """
 
 from __future__ import annotations
@@ -828,14 +817,11 @@ def read_users(
 ) -> dict[str, object]:
     """One page of everybody with an account, newest first.
 
-    A page with a box above it rather than the whole table: every row carries
-    an address and a tally, and a list that draws all of them is a list that
-    gets slower every time somebody joins. Newest first because the account an
-    administrator has come here about is nearly always a recent one.
-
-    The counts are one grouped query rather than three per person, scoped to
-    the ids on this page: a list that scales by asking once is the one worth
-    writing.
+    A page and a search box rather than the whole table: every row carries an
+    address and a tally, and a list that draws all of them slows as people join.
+    Newest first, because the account being asked about is nearly always a
+    recent one. The counts are one grouped query scoped to this page's ids
+    rather than three per person.
     """
     query = select(models.User)
     if q.strip():

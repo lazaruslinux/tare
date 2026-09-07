@@ -35,8 +35,8 @@ services:
     volumes:
       - api-data:/data
     # Asked with the interpreter that is already in the image: this is a slim
-    # Python base with no curl and no wget in it. The version address is the
-    # one route that answers without a session.
+    # Python base with no curl and no wget in it. The version address needs no
+    # account and touches no database rows.
     healthcheck:
       test:
         [

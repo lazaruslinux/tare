@@ -1,13 +1,10 @@
 """A food that logs itself into the same meal every day.
 
-Two tables and one column. The auto-log holds the standing instruction: a
-portion, a meal, and the first day it counts from. The days table is what it
-has already done, one row a day, so an entry somebody deleted is not written
-again tomorrow morning and a day read twice is not logged twice.
-
-The column on the entries says which instruction wrote a row, and it lets go
-rather than cascading: turning an auto-log off stops the days to come and
-leaves the days already eaten exactly as they were.
+Two tables and one column: the standing instruction, being a portion, a meal
+and the first day it counts from; the days it has already written, so an entry
+somebody deleted is not written again tomorrow; and a mark on the entry saying
+which instruction wrote it. The mark lets go rather than cascading, so turning
+an auto-log off leaves the days already eaten as they were.
 
 Revision ID: 0025_auto_logs
 Revises: 0024_journal_days

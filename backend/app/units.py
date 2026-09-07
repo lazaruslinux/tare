@@ -1,14 +1,11 @@
 """How much of a food an amount is, whatever it was measured in.
 
-A food is measured in one of two families: mass, whose base unit is the gram,
-and volume, whose base unit is the millilitre. A food declares which one it
-lives in and its nutrition is stored per 100 of that base, so a liquid labelled
-in millilitres never has to pretend it knows its own weight.
-
-Crossing the two families needs a density. Labels that state a serving both ways
-give one up, and to_base falls back on water when they did not. Every surface
-that turns an amount into nutrition comes through here, so one amount can never
-resolve two ways.
+A food declares one family, mass or volume, and its nutrition is stored per 100
+of that family's base unit, the gram or the millilitre, so a liquid labelled in
+millilitres never has to pretend it knows its own weight. Crossing the families
+needs a density, which to_base takes from the label or, failing that, from
+water. Every amount turned into nutrition comes through here, so one amount
+cannot resolve two ways.
 """
 
 from __future__ import annotations

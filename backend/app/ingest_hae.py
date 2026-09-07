@@ -2,21 +2,9 @@
 
 The shape is the one the iPhone exporter posts: {"data": {"metrics": [...],
 "workouts": [...]}}. The Android dialect is turned into the same shape before it
-gets here (app.ingest_hc), so there is one reader rather than two.
-
-Three rules run through the whole file.
-
-Every metric is kept, whether or not anything draws it. What is thrown away on
-the way in can never be shown later, and the point of this round is that the
-data is on disk when a screen for it is written.
-
-Nothing is refused for looking wrong. A reading past what a body does is stored
-and counted as flagged; only a reading that cannot be read at all is skipped.
-The phone is reporting what it measured, and this app is not the arbiter of
-whether somebody's morning happened.
-
-A weigh-in somebody typed in always wins its day. The sync fills days that are
-empty and blanks that are blank, and overwrites nothing.
+gets here (app.ingest_hc), so there is one reader rather than two. Every metric
+is kept whether or not anything draws it, because what is thrown away on the way
+in can never be shown later.
 """
 
 from __future__ import annotations

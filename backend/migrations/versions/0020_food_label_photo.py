@@ -1,12 +1,10 @@
 """The nutrition panel a shared food keeps.
 
-A label photo used to belong to the request that carried it and to nothing
-else, so a reviewer correcting a shared food a year later had whatever the last
-request still held, or nothing. Now the food itself points at one: approval
-hands the panel to the food, and it stays there for the life of the row.
-
-The existing shared foods are given the newest panel any request about them
-still carries, which is the same picture the food page was already showing.
+One column on foods, pointing at the photo that is its panel: approval hands
+the panel to the food, and it stays there for the life of the row, so a reviewer
+correcting a shared food a year later has it. The shared foods already here take
+the newest panel any request about them still carries, which is the picture the
+food page shows anyway.
 
 Revision ID: 0020_food_label_photo
 Revises: 0019_reports

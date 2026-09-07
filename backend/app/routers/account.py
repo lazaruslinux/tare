@@ -168,17 +168,15 @@ def set_email(
 ) -> dict[str, object]:
     """Put an address on this account, or move it to a different one.
 
-    Not behind the wall: an account whose address is missing or was typed
-    wrongly has no way past it otherwise. The address is never believed on the
-    strength of this call. An account with none takes the new one unverified;
-    an account with one keeps the address it has and holds the new one aside
-    until the link sent there is opened, so a typo cannot lock anybody out of
-    their own mail.
-
-    Counted against the resend allowance and keyed by the address rather than
-    the caller, because what this spends is somebody else's inbox.
+    Reachable without a verified address, since an account whose address is
+    missing or mistyped has no other way past. An account with none takes the
+    new one unverified; an account with one holds the new one aside until the
+    link sent there is opened, so a typo cannot lock anybody out of their own
+    mail.
     """
     address = clean_email(body.email)
+    # Counted against the resend allowance and keyed by the address rather than
+    # the caller, because what this spends is somebody else's inbox.
     if throttle.resend_limiter.hit(address):
         raise HTTPException(status.HTTP_429_TOO_MANY_REQUESTS, throttle.TOO_MANY)
     if address_taken(db, address, user.id):

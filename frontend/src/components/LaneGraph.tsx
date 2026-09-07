@@ -1,14 +1,7 @@
 // The session minute by minute: heart rate and pace as two lanes over one
-// time axis, with one cursor across both.
-//
-// Each lane keeps its own true scale. A beat and a pace are two different
-// measurements, and the only honest way to stack them is to give each one its
-// own axis and share nothing but the minutes underneath.
-//
-// The cursor is written straight onto the drawing rather than rendered: the
-// rule's x and the readout's words are set as attributes through refs, because
-// a position worked out per pointer event should not cost a render a frame. The
-// dot on the route line is moved the same way and for the same reason.
+// time axis, with one cursor across both. Each lane keeps its own true scale,
+// because a beat and a pace are different measurements and share nothing but
+// the minutes underneath.
 
 import { useRef, useState, type PointerEvent, type RefObject } from 'react'
 
@@ -67,14 +60,11 @@ function laneY(value: number, low: number, high: number, inverted: boolean): num
   return PLOT_H - INSET - up * (PLOT_H - INSET * 2)
 }
 
-// The stretch of readings a lane's axis is worth setting to. A minute spent
-// nearly stopped is a true reading and it is still drawn, but sixty seconds
-// over a few metres is an hour and a half a mile, and an axis stretched far
-// enough to name that leaves every honest minute pressed into one flat line at
-// the top. So the ends come from the readings within a third and three times
-// the middle one, and a reading outside them hangs off the lane where the
-// drawing clips it. Only when the readings are all outliers of one another is
-// there no typical to find, and the plain ends are the truest thing there is.
+// The stretch of readings a lane's axis is worth setting to. Sixty seconds
+// over a few metres is a true minute and an hour and a half a mile, and an axis
+// stretched far enough to name it leaves every other minute pressed into one
+// flat line, so the ends come from the readings within a third and three times
+// the middle one and anything outside them hangs off the lane.
 function typicalBounds(values: number[]): [number, number] {
   if (values.length === 0) return [0, 1]
   const plain: [number, number] = [Math.min(...values), Math.max(...values)]
@@ -204,6 +194,9 @@ export function LaneGraph({
   route: [number, number][] | null
 }) {
   const [shown, setShown] = useState<Record<LaneKey, boolean>>({ hr: true, pace: true })
+  // The cursor is written straight onto the drawing rather than rendered: the
+  // rule's x and the readout's words are set as attributes through these refs,
+  // because a position worked out per pointer event should not cost a render.
   const plots = useRef(new Map<LaneKey, SVGSVGElement>())
   const rules = useRef(new Map<LaneKey, SVGLineElement>())
   const readout = useRef<HTMLParagraphElement>(null)

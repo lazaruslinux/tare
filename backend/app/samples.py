@@ -1,16 +1,9 @@
 """What an export says about a workout minute by minute.
 
 A workout entry carries an array per reading it took during the session: how
-far and how many steps in each minute, what the heart was doing, what it
-burned. The workout row keeps the session's own numbers, and this is where the
-rest of it is read.
-
-None of it changes a single figure. Every reading here is something to look at
-on a screen: no budget, no credit and no target reads any of it.
-
-Nothing here may raise into a sync, for the reason the route module says the
-same thing about a trace. The detail is decoration on a workout, and a workout
-that happened must never fail to arrive because its arrays were odd.
+far, how many steps, what the heart was doing, what it burned. This folds them
+into one row a minute. Every reading here is something to look at on a screen:
+no budget, no credit and no target reads any of it.
 """
 
 from __future__ import annotations
@@ -128,14 +121,11 @@ def _heart(fields: dict[str, Any], name: str) -> int | None:
 def minutes_of(entry: dict[str, Any], zone: dt.tzinfo) -> list[Sample]:
     """The entry's arrays merged into one row per minute.
 
-    The arrays are read against each other rather than side by side. They start
-    at different moments, skip minutes the phone was not recording, and come in
-    different lengths, so each reading is placed by the moment it names, counted
-    in whole minutes from the earliest moment any of them names. Only a reading
-    with no readable moment at all falls back to its position in its own array.
-
-    A minute already described is left as it was found: one reading per minute
-    is what an export sends, and a second is the export repeating itself.
+    The arrays are read against each other rather than one at a time: they
+    start at different moments, skip minutes the phone was not recording, and
+    come in different lengths, so each reading is placed by the moment it names
+    rather than by its position, counted in whole minutes from the earliest
+    moment any of them names.
     """
     arrays = _arrays(entry)
     if not arrays:
@@ -161,6 +151,9 @@ def minutes_of(entry: dict[str, Any], zone: dt.tzinfo) -> list[Sample]:
             )
             if minute < 0:
                 continue
+            # A minute already described is left as it was found: one reading
+            # a minute is what an export sends, and a second is it repeating
+            # itself.
             row = rows.setdefault(minute, Sample(minute=minute))
             if name == "distance":
                 if row.distance_m is None:

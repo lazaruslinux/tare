@@ -1,12 +1,10 @@
 """What a phone knows about a body, and the sessions it recorded.
 
-Six tables. One of them, fitness_daily, is deliberately shaped to hold a metric
-nothing draws yet: a phone exports sleep, oxygen, variability and a dozen more,
-and a reading dropped on the way in can never be shown later, so every one of
-them is written under the name the exporter used.
-
-ingest_tokens is not touched. It has been there since the first migration and
-this is simply the round that starts using it.
+Six tables. fitness_daily is deliberately shaped to hold metrics nothing draws
+yet, because a reading dropped on the way in can never be shown later, so a
+phone's sleep, oxygen and variability are written under the exporter's own
+names. ingest_tokens is not touched: it has been in place since the first
+migration.
 
 Revision ID: 0017_fitness
 Revises: 0016_review_edits

@@ -1,13 +1,10 @@
 """What a reviewer changed before saying yes, and whether it has been read.
 
-A decision used to be one word. It is three things now: the word, whether the
-reviewer corrected the proposal on the way through, and the list of what they
-corrected, so the submitter reads what happened to their food rather than
-guessing at it. The read marker is the last of them, and it is what the badge
-counts: a decision nobody has looked at yet.
-
-The two that are never null get their default for the rows already there, and
-the default comes straight back off: a submission is written whole from here on.
+Three columns on food_submissions: whether the reviewer corrected the proposal
+on the way through, the list of what they corrected, and when the submitter
+looked at the decision, which is what the badge counts. The two that are never
+null take a default so the rows already there have something, and the default
+comes straight back off.
 
 Revision ID: 0016_review_edits
 Revises: 0015_food_description

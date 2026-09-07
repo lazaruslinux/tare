@@ -1,12 +1,9 @@
 """Kept meals: the foods somebody eats together, logged as one line.
 
-A meal holds no numbers of its own. It is a list of things, and each of them
-takes its panel from the food as that food stands at the moment the meal is
-read or eaten, through the very code path a single food goes through. Nothing
-here is a recipe: a recipe is cooked and shared out, a meal is a shortcut.
-
-A meal is private without qualification. Somebody else's answers exactly what
-an id that was never used answers.
+A meal holds no numbers of its own: it is a list of things, and each takes its
+panel from the food as that food stands at the moment the meal is read or eaten.
+Nothing here is a recipe, which is cooked and shared out. A meal is private
+without qualification, and somebody else's answers what an unused id answers.
 """
 
 from __future__ import annotations
@@ -328,13 +325,8 @@ def log_meal(
     """Log the whole meal as one line: what all of it comes to, that often.
 
     A breakfast is one thing somebody ate, so it reads as one row in the day
-    rather than five, the way a recipe already did. An item whose food has gone
-    is left out and named rather than holding up the rest of the meal, because
-    the other four things really were eaten.
-
-    Weighed instead of counted where somebody says what came off the scale: the
-    share of the whole meal that many grams is, worked out from what the scale
-    said it all weighed, or from what the items come to when nobody weighed it.
+    rather than five. An item whose food has gone is left out and named rather
+    than holding up the rest, because the other four things really were eaten.
     """
     meal = own_meal(db, user, meal_id)
     day = body.date or clock.user_today(user)
@@ -346,6 +338,8 @@ def log_meal(
     amount: float
     unit: str
     label: str | None
+    # Weighed rather than counted where somebody says what came off the scale:
+    # the share of the meal those grams are, against what it all weighs.
     if body.grams is None:
         share = body.servings
         amount, unit, label = body.servings, SERVING_UNIT, SERVING_UNIT

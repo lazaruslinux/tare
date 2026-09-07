@@ -1,16 +1,10 @@
 """Resolving a scanned barcode, which is the one thing here that goes online.
 
-The order matters more than anything else in this module. A code is answered
-from the shared database if it is there, then from the caller's own foods, then
-from what this instance already fetched, and only then from somebody else's
-server. So a product that has been through the queue once is never looked up
-again: the second scan of an approved food never leaves the machine.
-
-What comes back from a lookup is kept as a food row with status 'cache'. That is
-a note this instance made, not a food: it belongs to nobody, it is never
-searched, and it never appears in a list. It exists so that two people scanning
-the same shelf do not make the same request twice, and so that a form can be
-filled in from it.
+A code is answered from the shared database, then from the caller's own foods,
+then from what this instance already fetched, and only then from somebody else's
+server, so the second scan of an approved food never leaves the machine. What
+comes back is kept as a food row with status 'cache': a note this instance made
+rather than a food, belonging to nobody and never searched or listed.
 """
 
 from __future__ import annotations

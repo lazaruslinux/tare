@@ -1,13 +1,9 @@
 """The line a workout drew: reading it, throwing its ends away, thinning it.
 
-Privacy is why this module has the shape it does. A raw trace starts and ends
-where somebody lives, so the first thing done to one is to drop both ends; what
-is stored can never point at a front door. Everything after that is size: a real
-run carries a couple of thousand fixes and the drawing is a few hundred pixels
-wide.
-
-Nothing here may raise into a sync. A route is decoration on a workout, and a
-workout that happened must never fail to arrive because its trace was odd.
+A raw trace starts and ends where somebody lives, so both ends are dropped on
+the way in and what is stored can never point at a front door. What is left is
+thinned, because a real run carries a couple of thousand fixes and the drawing
+is a few hundred pixels wide.
 """
 
 from __future__ import annotations

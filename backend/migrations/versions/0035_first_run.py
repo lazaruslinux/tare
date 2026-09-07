@@ -1,11 +1,10 @@
 """The first-run screen is answered once, and the account remembers it.
 
-Whether somebody had seen the questions Tare asks on the way in was never
-written down: the app worked it out from the door they came through, so a new
+One column on users: the moment the screen is answered or skipped. Written down
+rather than worked out from the door somebody came through, which cannot tell a
 member who registered, met the verification screen and came back through the
-mailed link had already been counted as settled and never saw them. The account
-carries the moment instead, set when the screen is answered or skipped, and
-every account that exists today is past it.
+mailed link from one who has already answered. Every account that exists is
+stamped as past it.
 
 Revision ID: 0035_first_run
 Revises: 0034_invite_seats

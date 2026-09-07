@@ -1,10 +1,9 @@
 """An invite link holds seats, and who came in through one is on the member.
 
-A link let exactly one person in and then stopped being a link at all: the row
-carried the account that spent it. It carries a count of seats now, so one link
-posted to a group chat lets that many people in, and the record of who came
-through it moves onto the account, where several accounts can point at the same
-link. The two columns that only made sense for a single use go with it.
+A count of seats and a count of those spent, so one link posted to a group chat
+lets that many people in, and an invite_id on the account, where several
+accounts can point at one link. Every link already out there gets a single seat,
+and each member is backfilled from the link that named them.
 
 Revision ID: 0034_invite_seats
 Revises: 0033_favorites_one_list

@@ -1,17 +1,11 @@
 """The exporter's vocabulary: what a metric is called, what it is measured in,
-how a day of it adds up, and how to read one point of it.
+and how a day of it adds up.
 
-Two jobs. The first is the four readings the Fitness screen draws, which need a
-stable key of their own because the exporter's name for one of them is an Apple
-word and the screen's is a plain one.
-
-The second is everything else, which is most of it. A phone exports sleep,
-oxygen, variability, breathing rate, blood pressure and a dozen more, and none
-of that is drawn this round. It is all stored anyway, under the exporter's own
-name, because a reading thrown away on the way in can never be shown later. So
-what is needed for the rest is not a list of names, it is a rule for reading a
-name nobody wrote down: the unit says whether a day's points are added up or
-averaged, and a point that is not a single number keeps its fields as they came.
+Four readings get a key of their own, because the Fitness screen draws them and
+the exporter's name for one is an Apple word. Every other metric is stored under
+the exporter's own name, since a reading thrown away on the way in can never be
+shown later, and is read by its unit: the unit says whether a day of points is
+added up or averaged.
 """
 
 from __future__ import annotations

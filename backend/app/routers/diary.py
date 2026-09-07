@@ -1,13 +1,10 @@
 """The diary: what was eaten, when, and what it was worth.
 
-An entry keeps its own numbers. They are worked out once, from the food as it
-stood at that moment, and nothing afterwards rewrites them behind somebody's
-back: correcting a food corrects the food, and deleting one leaves every meal it
-was part of standing, with its name, its portion and its calories intact.
-
-A diary is private without qualification. Somebody else's entry answers exactly
-what an id that was never used answers, and an administrator is nobody special
-here.
+An entry keeps its own numbers, worked out once from the food as it stood at
+that moment, so correcting a food corrects the food and deleting one leaves
+every day it was part of standing. A diary is private without qualification:
+somebody else's entry answers what an unused id answers, and an administrator
+is nobody special here.
 """
 
 from __future__ import annotations
@@ -706,12 +703,9 @@ def read_days(
     """A run of days ending today: what was consumed against what was budgeted.
 
     One row per calendar day rather than one per day that was logged, because
-    the point of it is the days nobody logged. Two grouped queries and not one
-    per day: a month of days is one answer, not a month of round trips.
-
-    The budget is today's, the same one the day view reads a past day against
-    (Reckoning takes no date). A day-by-day history of somebody's profile is
-    not kept, so a past day is read against what is true now.
+    the point of it is the days nobody logged. The budget is today's: no
+    day-by-day history of a profile is kept, so a past day is read against what
+    is true now.
     """
     span = max(1, min(days, MAX_HISTORY))
     today = clock.user_today(user)

@@ -433,7 +433,7 @@ def test_the_visceral_rating_is_gone(client, member):
         f"/api/health/measurements/{TODAY.isoformat()}",
         json={"weight_kg": 80, "visceral_fat": 12},
     )
-    # Nothing reads it any more, so it is ignored rather than refused.
+    # Nothing reads it, so it is dropped rather than refused.
     assert saved.status_code == 200
     assert "visceral_fat" not in saved.json()
     listed = client.get("/api/health/measurements").json()

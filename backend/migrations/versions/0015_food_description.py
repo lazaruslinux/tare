@@ -1,12 +1,9 @@
 """A few words for what a food is, beside its name and its brand.
 
 A name and a brand do not tell two rows apart when the difference is the size
-of the bar or which fruit it was made with. This is that line: "King Size",
-"Blueberry flavor", short enough that it reads as part of a list row rather
-than as a paragraph nobody finishes.
-
-Empty rather than null, so nothing has to ask which kind of nothing it is, and
-the default comes off once the existing rows have their empty string.
+of the bar or which fruit it was made with. One short column on foods, empty
+rather than null so nothing has to ask which kind of nothing it is; the default
+comes off once the rows already there have their empty string.
 
 Revision ID: 0015_food_description
 Revises: 0014_serving_unit

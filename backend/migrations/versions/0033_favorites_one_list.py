@@ -1,11 +1,9 @@
 """Favorites is the one saved list, and a recipe or a meal can be weighed.
 
-Two lists said the same thing: a food kept on your own list, and a food
-starred. Everything kept becomes a favorite, and the kept table goes. The copy
-skips a food that is already starred, so nobody ends up with it twice.
-
-The weight columns come with it: what the scale said when the pot was done,
-which is what lets a recipe or a meal be logged by the gram.
+The kept list and the starred list say one thing, so every kept food is copied
+into the saved ones, skipping a food already starred so nobody ends up with it
+twice, and the kept table goes. A weight column on recipes and on meals holds
+what the scale said when the pot was done, which lets one be logged by the gram.
 
 Revision ID: 0033_favorites_one_list
 Revises: 0032_reviewers

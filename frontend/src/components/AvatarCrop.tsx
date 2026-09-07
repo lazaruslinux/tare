@@ -6,11 +6,6 @@ import { Sheet } from './Sheet'
 // is inside the square is what everybody else sees. The member crops rather
 // than the server, so nobody's head ends up outside the box a middle crop
 // would have kept.
-//
-// The maths is one transform. The picture is laid out at its natural size with
-// the origin at its top left corner, so what is on screen is the rectangle
-// (tx, ty, width * s, height * s), and the piece to export is simply
-// (-tx / s, -ty / s, V / s, V / s).
 
 // The square somebody frames in, in css pixels. Wide enough to work with and
 // still inside a 390px phone.
@@ -158,6 +153,9 @@ export function AvatarCrop({
       setError(NO_BLOB)
       return
     }
+    // The picture is laid out at its natural size from its top left corner, so
+    // what is on screen is (tx, ty, width * s, height * s) and the piece to
+    // export is (-tx / s, -ty / s, V / s, V / s).
     paper.drawImage(
       image,
       -frame.tx / frame.s,

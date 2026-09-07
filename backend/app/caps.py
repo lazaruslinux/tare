@@ -1,12 +1,9 @@
 """How much one member may add to the shared database in a day.
 
-Not a rate limiter. These are day counts held in the database, because what
-they guard against is not a burst: it is somebody scanning a shelf of toys into
-the review queue, or filling the disk with pictures, at whatever speed. A
-sliding window in memory forgets, and a day count does not.
-
-Administrators are not counted. The queue is theirs to work through, and the
-person who empties it is the last person to hold up.
+Day counts held in the database rather than a sliding window in memory, because
+what they guard against is not a burst: it is somebody scanning a shelf of toys
+into the review queue at whatever speed, and a window in memory forgets.
+Administrators are not counted, the queue being theirs to work through.
 """
 
 from __future__ import annotations
