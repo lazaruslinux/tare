@@ -5,7 +5,15 @@ import { SHOTS } from '../lib/screenshots'
 // What Tare is, what is inside it, what it does with your details, and a look
 // at it, in one place. The invite screen shows it and so does About, so the two cannot
 // drift apart.
-export function TareStory({ onBack }: { onBack?: () => void }) {
+export function TareStory({
+  onBack,
+  gallery = true,
+}: {
+  onBack?: () => void
+  // The invite shows the screenshots; About does not, because a member reading
+  // About is already looking at the app.
+  gallery?: boolean
+}) {
   return (
     <>
       <div className="t-card mb-3">
@@ -37,10 +45,12 @@ export function TareStory({ onBack }: { onBack?: () => void }) {
       </div>
 
       {/* One gallery for the whole story, at the end, read sideways. */}
-      <div className="t-card mb-3">
-        <p className="t-micro mb-2">Screenshots</p>
-        <Gallery shots={SHOTS} />
-      </div>
+      {gallery && (
+        <div className="t-card mb-3">
+          <p className="t-micro mb-2">Screenshots</p>
+          <Gallery shots={SHOTS} />
+        </div>
+      )}
 
       {onBack && (
         <button className="t-btn" type="button" onClick={onBack}>

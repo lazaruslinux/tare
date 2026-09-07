@@ -35,7 +35,7 @@ export function About({ onOpenGuide }: { onOpenGuide: () => void }) {
         {version !== '' && <p className="mt-1 text-sm text-muted">Version {version}</p>}
       </div>
 
-      <TareStory />
+      <TareStory gallery={false} />
 
       <div className="t-card mb-3">
         <p className="t-micro mb-2">How it works</p>
@@ -63,7 +63,8 @@ export function About({ onOpenGuide }: { onOpenGuide: () => void }) {
           >
             Lazarus Labs
           </a>
-          . This web-app was built by a human using Claude Code, an agentic coding platform.
+          . This project was built with Claude Code, an agentic coding platform, through hundreds of
+          human iterations and thousands of prompts.
         </p>
         <p className="t-note mt-3">Tare is open-source under the AGPL-3.0 license.</p>
       </div>

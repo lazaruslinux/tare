@@ -730,7 +730,7 @@ def test_uploads_can_be_turned_off_without_closing_the_sync(
     response = pick(client, json.dumps({"data": {"metrics": []}}).encode())
 
     assert response.status_code == 404
-    assert response.json() == {"detail": "Uploads are turned off on this instance."}
+    assert response.json() == {"detail": "File uploads are turned off."}
     assert client.get("/api/account/ingest-token").json()["uploads"] is False
     # A phone is unaffected: the switch is about files somebody hands over.
     assert post(client, token, {"data": {"metrics": []}}).status_code == 200

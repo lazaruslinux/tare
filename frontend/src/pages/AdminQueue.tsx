@@ -330,8 +330,8 @@ export function AdminQueue({
   const [adjusting, setAdjusting] = useState<{ food: Food; item: QueueItem | null } | null>(
     null
   )
-  // The request an approval is being confirmed for. His decision: yes is the
-  // one answer here that cannot be taken back, so it is asked twice.
+  // The request an approval is being confirmed for. Yes is the one answer here
+  // that cannot be taken back, so it is asked twice.
   const [approving, setApproving] = useState<QueueItem | null>(null)
   // Which row is open. The queue is a list of line items; one card at a time
   // is read out of it.

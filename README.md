@@ -1,12 +1,14 @@
 # Tare
 
-Tare is a self-hosted food journal and health tracker for a small group of people sharing one instance. Its food database starts completely empty. Every food in it is one that somebody on the instance entered, and those entries are shared, so the database is worth more the longer the instance has been running and the less it resembles a generic product catalogue.
+Tare is a food journal and health tracker with a community-built food database. The database starts completely empty. Every food in it was entered by a member and checked by a person before it was published, so the database grows more useful the longer Tare has been running and the less it resembles a generic product catalogue.
 
-The only lookup that leaves the server is by barcode. Scanning a code that nobody has entered yet asks an online source for that product, and what comes back waits for an administrator to approve it before it joins the shared database. Nothing enters the database without a person deciding it should.
+The only lookup that leaves the server is by barcode. Scanning a code that nobody has entered yet asks an online source for that product, and what comes back waits for a reviewer to approve it before it joins the shared database. Nothing enters the database without a person deciding it should.
 
-Beside the journal, Tare records weight, exercise, and the step and workout data a phone sends in, and shows a read-only feed of what other people on the instance have logged. Accounts are created by invitation, so an instance stays the group it was set up for.
+Beside the journal, Tare records weight, exercise, and the step and workout data a phone sends in, and shows a read-only feed of what other members have chosen to share. Accounts are created by invitation.
 
-Tare is built with Claude Code.
+Tare is open source under the AGPL and can be self-hosted; see Running it below.
+
+This project was built with Claude Code, an agentic coding platform, through hundreds of human iterations and thousands of prompts.
 
 ## Status
 

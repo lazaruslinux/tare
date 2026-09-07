@@ -51,8 +51,8 @@ const SUBMIT_HELP =
 // the tiles are rather than at the bottom with everything else.
 const PHOTOS_NEEDED = 'Photos are required to submit to Tare.'
 
-// What somebody is asked before their food stays their own. His decision: the
-// one place in tare a question stands between a person and a save.
+// What somebody is asked before their food stays their own: the one place in
+// tare a question stands between a person and a save.
 const KEEP_PRIVATE_ASK =
   "Are you sure you don't want to submit your item to the Tare database? This " +
   'makes Tare smarter, faster, and better for everyone using it.'

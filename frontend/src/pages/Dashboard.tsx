@@ -507,7 +507,7 @@ function LineChips({ lines, onPick }: { lines: Lines; onPick: (next: Lines) => v
   )
 }
 
-// What a point with nothing behind it says. His words.
+// What a point with nothing behind it says.
 const NOTHING = 'No data for this selection'
 
 // One point read off a chart, standing where the card's own headline stands

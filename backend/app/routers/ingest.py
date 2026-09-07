@@ -42,7 +42,7 @@ router = APIRouter(prefix="/ingest", tags=["ingest"])
 BAD_BODY = "Body must be JSON."
 NO_FILE = "Choose a file to upload."
 NOT_AN_EXPORT = "This file is not a health export."
-UPLOADS_OFF = "Uploads are turned off on this instance."
+UPLOADS_OFF = "File uploads are turned off."
 
 # What a health export may look like before this server reads it properly.
 # A file is the one thing here somebody hands over by hand, and a hand can hand

@@ -77,8 +77,8 @@ SEARCH_LIMIT = 25
 RECENT_LIMIT = 10
 RECENT_SCANNED = 50
 
-# How long the Recently used list runs. His cap: ten rows, and the card on the
-# Food tab shows three of them and offers the rest.
+# How long the Recently used list runs: ten rows. The card on the Food tab
+# shows three of them and offers the rest.
 RECENT_USED = 10
 
 # What a private food has to carry to be worth logging. The other six are on

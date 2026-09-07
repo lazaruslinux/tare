@@ -75,8 +75,8 @@ export const ACKNOWLEDGE_FROM = 2
 export const READ_THE_REVIEW =
   'Check this box to indicate that you have read the goal rate review above.'
 
-// What the review note says about each step. His words, one for the first
-// step, one for the second, and one shared by the three fastest.
+// What the review note says about each step: one for the first step, one for
+// the second, and one shared by the three fastest.
 const LOSE_REVIEW = [
   'This rate is often easier to maintain over time. Many people find it supports ' +
     'consistency and nourishment, without needing to push or restrict further.',

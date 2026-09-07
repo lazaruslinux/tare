@@ -11,18 +11,18 @@ Items marked UNVERIFIED were not confirmed against a primary source at the time 
 ### Where it lives and what it looks like
 
 1. The library is a card on the Fitness screen, "Stretches and moves", which opens a list screen of the same name. No triage, no questions. The list has two groups, Stretches and Bodyweight moves, and a row of filter chips by place: All, Back, Neck, Shoulders, Hips, Legs, Feet, Hands. A chip narrows both groups.
-   Why: his 2026-09-03 call. The earlier "What hurts? How?" design and its per-place warning cards are withdrawn; the app is not to fill up with emergency wording.
+   Why: a product decision of 2026-09-03. The earlier "What hurts? How?" design and its per-place warning cards are withdrawn; the app is not to fill up with emergency wording.
 
 2. One sentence sits above the list, muted, and appears nowhere else: "Go gently. Stop if anything hurts, and a sharp or sudden pain, or one after a fall, is for a clinician, not a stretch." That is the whole safety copy.
    Why: the services that publish these moves say to stop if pain worsens or new pain appears, [9][10] and not to stretch an injury. One sentence carries that.
 
-3. Each item is a row: name, place chip, and a one-line "For". Tapping opens a detail: the steps as a numbered list, a "How much" line (hold or count, and how many times), the "For" line, and one "Skip it if" line only where the source gives a specific caution. No photo yet; a photo slot is reserved at the top of the detail for later (his call: photos come later).
+3. Each item is a row: name, place chip, and a one-line "For". Tapping opens a detail: the steps as a numbered list, a "How much" line (hold or count, and how many times), the "For" line, and one "Skip it if" line only where the source gives a specific caution. No photo yet; a photo slot is reserved at the top of the detail for later.
 
 4. Plain words lead, and the medical term follows in parentheses on first mention where it helps: "the back of your thigh (hamstring)", "the band under the foot (plantar fascia)". The steps themselves stay plain; the term rides the "For" line. Plain-language table at the end.
-   Why: his 2026-09-03 call. Someone who knows the term finds it; someone who does not is not made to learn it.
+   Why: a product decision of 2026-09-03. Someone who knows the term finds it; someone who does not is not made to learn it.
 
 5. No logging, no streak, no reminder, no timer in this version. The screen remembers only the last filter chip. Photos, a timer, and "add to today" are later decisions.
-   Why: his 2026-09-02 call ("no logging in v1") and the no-medals, no-XP rule.
+   Why: a product decision of 2026-09-02 (no logging in the first version) and the no-medals, no-XP rule.
 
 ### How much
 
@@ -146,7 +146,7 @@ Items marked UNVERIFIED were not confirmed against a primary source at the time 
 
 ## Open questions
 
-- Photos: one per item, a reserved slot at the top of the detail. His call on source and style when the time comes.
+- Photos: one per item, a reserved slot at the top of the detail. Source and style are undecided.
 - Whether a short "Five-minute morning" and "Five-minute evening" set should sit above the list as two buttons that open a fixed sequence. Not in the first version.
 - Upper back, elbows and ankles have no items yet. Add with the same shape once a source is chosen for each.
 

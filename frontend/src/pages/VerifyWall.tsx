@@ -116,7 +116,7 @@ export function VerifyWall({
           <p className="text-sm text-muted">
             {sentTo === null
               ? 'Tare sends a link to this address to finish signing in.'
-              : `We sent a link to ${sentTo}. Open it to finish signing in.`}
+              : `Tare sent a link to ${sentTo}. Open it to finish signing in.`}
           </p>
 
           {sentTo !== null && (

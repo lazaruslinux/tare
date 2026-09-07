@@ -89,14 +89,11 @@ function summed(rows: Draft[], key: Headline): number | null {
   return rows.reduce((total, row) => total + (row[key] ?? 0), 0)
 }
 
-// What the lot weighs, by the same rule, and the parts nothing can weigh.
-function weighed(rows: Draft[]): { grams: number | null; unweighed: string[] } {
-  const unweighed = rows.filter((row) => row.grams === null).map((row) => row.name)
-  return {
-    grams:
-      unweighed.length > 0 ? null : rows.reduce((total, row) => total + (row.grams ?? 0), 0),
-    unweighed,
-  }
+// What the lot weighs, by the same rule: unknown while any part is measured by
+// volume, which the Final weight field answers instead.
+function weighed(rows: Draft[]): number | null {
+  if (rows.some((row) => row.grams === null)) return null
+  return rows.reduce((total, row) => total + (row.grams ?? 0), 0)
 }
 
 // A row as it comes back from the server: an ingredient or an item in a meal,
@@ -279,9 +276,6 @@ export function PartsForm({
               onChange={(event) => setFinalWeight(event.target.value)}
             />
           </div>
-          <p className="mt-1 text-xs text-muted">
-            What the scale says when it's done, if that differs.
-          </p>
         </div>
 
         <div className="t-card mb-3">
@@ -334,14 +328,14 @@ export function PartsForm({
                 {nutrientText('carbs_g', summed(rows, 'carbs_g'))}g carbs ·{' '}
                 {nutrientText('fat_g', summed(rows, 'fat_g'))}g fat
               </p>
-              {/* What it all weighs, which is what logging it by the gram
-                  works from. Named parts where one of them cannot be weighed,
-                  because that is the thing to fix. */}
-              <p className="t-nums mt-1 text-xs text-muted">
-                {total.grams === null
-                  ? `Some parts can't be weighed: ${total.unweighed.join(', ')}`
-                  : `About ${Math.round(total.grams)} g in total`}
-              </p>
+              {/* What it all weighs, which is what logging it by the gram works
+                  from. Left out while a part is measured by volume: the Final
+                  weight field is how that meal gets weighed. */}
+              {total !== null && (
+                <p className="t-nums mt-1 text-xs text-muted">
+                  About {Math.round(total)} g in total
+                </p>
+              )}
             </>
           )}
         </div>
