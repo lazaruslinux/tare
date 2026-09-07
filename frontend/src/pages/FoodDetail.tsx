@@ -428,9 +428,10 @@ export function FoodDetail({
                     Edit
                   </button>
                 )}
-                {/* The label picture is served to admins alone; this is where they
-                    open it without going through the editor. */}
-                {reviews(me) && food.label_photo_url && (
+                {/* The panel the numbers were read off, for anybody the server
+                    sends it to: a shared food publishes it, one still waiting
+                    goes to its reviewer. */}
+                {food.label_photo_url && (
                   <button
                     className="t-btn flex-1 basis-[calc(50%-0.375rem)] min-[640px]:flex-none min-[640px]:basis-auto @xl:flex-1 @xl:basis-[calc(50%-0.375rem)] @xl:min-h-9 @xl:px-3 @xl:py-1.5 @xl:text-sm"
                     type="button"

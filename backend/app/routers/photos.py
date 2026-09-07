@@ -7,10 +7,11 @@ claims it. The ones no submission ever claims are swept up here.
 
 Two kinds, and they are not read by the same rule. A front photo is the pack on
 a shelf: one per food is published and anybody signed in may read it. A label
-photo is the nutrition panel, offered as evidence for a request, and it is
-never served to anybody but the person who took it and an administrator. That
-is the whole of the difference, and it is enforced here rather than trusted to
-the screens.
+photo is the nutrition panel, offered as evidence for a request: while the
+request is still being weighed up it is served to the person who took it and to
+an administrator alone, and it is published only once a food in the shared
+database is holding it as its own panel. That is the whole of the difference,
+and it is enforced here rather than trusted to the screens.
 
 A photo somebody may not see answers exactly what an id that was never used
 answers.
@@ -55,14 +56,34 @@ ORPHAN_HOURS = 24
 LABEL_KEEP_DAYS = 30
 
 
+def labelled_food_is_shared(db: Session, photo_id: int) -> bool:
+    """Whether a food in the shared database keeps this photo as its panel.
+
+    The food is what publishes a label. A picture still sitting under a request
+    is held by the submission instead, and answers nobody.
+    """
+    return (
+        db.execute(
+            select(models.Food.id).where(
+                models.Food.label_photo_id == photo_id,
+                models.Food.status == "approved",
+            )
+        ).scalars().first()
+        is not None
+    )
+
+
 def readable_photo(db: Session, user: models.User, photo_id: int) -> models.FoodPhoto:
     """The picture, or the answer a wrong id gets.
 
-    A label photo is the narrow case and it is checked first: whatever its
-    status, only the person who took it and somebody who reviews are ever
-    served one. Nothing publishes a label photo, so this is a second lock on a
-    door that should already be shut. A reviewer is served it because reading
-    the panel against the numbers is the whole of what reviewing is.
+    A label photo is the narrow case. The person who took it and anybody who
+    reviews are served one whatever its status, because reading the panel
+    against the numbers is the whole of what reviewing is. Everybody else is
+    served it once a shared food is holding it: the label is published with the
+    food, because a member who can read the numbers should be able to read the
+    panel they came from and report a mismatch. The panel under a request
+    nobody has answered, under one that was turned down, or on somebody's
+    private food, stays shut.
     """
     photo = db.get(models.FoodPhoto, photo_id)
     if photo is None:
@@ -70,6 +91,8 @@ def readable_photo(db: Session, user: models.User, photo_id: int) -> models.Food
     if photo.uploaded_by_id == user.id or reviews(user):
         return photo
     if photo.purpose == "front" and photo.status == "approved":
+        return photo
+    if photo.purpose == "label" and labelled_food_is_shared(db, photo.id):
         return photo
     raise HTTPException(status.HTTP_404_NOT_FOUND, MISSING_PHOTO)
 

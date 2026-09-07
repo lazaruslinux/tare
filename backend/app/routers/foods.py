@@ -557,11 +557,14 @@ def food_detail(db: Session, food: models.Food, user: models.User) -> dict[str, 
         "submitted_by_role": submitted_by_role,
         # Which account that name belongs to, so it opens their member page.
         "submitted_by_id": submitted_by_id,
-        # The nutrition label on file, for a reviewer correcting a shared food
-        # to check the numbers against. Nobody else is served it.
+        # The nutrition label on file. It is published with a shared food:
+        # whoever reads the numbers should be able to read the panel they came
+        # from and say so if the two disagree. On a food that is not shared
+        # yet, only the reviewer weighing it up is served it.
         "label_photo_url": (
             photo_url(food.label_photo_id)
-            if reviews(user) and food.label_photo_id is not None
+            if food.label_photo_id is not None
+            and (food.status == "approved" or reviews(user))
             else None
         ),
         "density_g_per_ml": food.density_g_per_ml,

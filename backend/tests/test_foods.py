@@ -476,6 +476,53 @@ def test_an_approved_food_is_visible_to_everybody(client, db_session, signed_in)
     assert client.get("/api/foods/mine").json() == []
 
 
+def a_label(db, owner=None):
+    """A stored panel, put in by hand: uploading one is tested elsewhere."""
+    photo = models.FoodPhoto(
+        uploaded_by_id=None if owner is None else owner.id,
+        path="00000000000000000000000000000000.webp",
+        status="pending",
+        purpose="label",
+    )
+    db.add(photo)
+    db.commit()
+    return photo
+
+
+def test_a_shared_food_shows_its_panel_to_the_member_reading_it(
+    client, db_session, signed_in
+):
+    """The label is published with the food, so whoever reads the numbers can
+    hold them against the panel they came off and say if the two disagree."""
+    label = a_label(db_session)
+    shared = put_food(db_session, None, name="Shared oats", status="approved")
+    shared.label_photo_id = label.id
+    db_session.commit()
+
+    read = client.get(f"/api/foods/{shared.id}").json()
+    assert read["label_photo_url"] == f"/api/photos/{label.id}.webp"
+
+
+def test_the_panel_of_a_food_still_waiting_is_the_reviewer_s_alone(
+    client, db_session, make_user, signed_in
+):
+    """Nothing is shared yet, so the panel is still evidence for a request
+    rather than something published beside a set of numbers."""
+    label = a_label(db_session, signed_in)
+    offered = put_food(db_session, signed_in, name="Offered oats", status="pending")
+    offered.label_photo_id = label.id
+    db_session.commit()
+
+    # Its own owner is offering this food rather than reading a shared one, and
+    # the page they get does not carry the panel.
+    assert client.get(f"/api/foods/{offered.id}").json()["label_photo_url"] is None
+
+    make_user("reviewer", admin=True)
+    sign_in(client, "reviewer")
+    read = client.get(f"/api/foods/{offered.id}").json()
+    assert read["label_photo_url"] == f"/api/photos/{label.id}.webp"
+
+
 def test_foods_need_a_session(client):
     assert client.get("/api/foods/search", params={"q": "chicken"}).status_code == 401
     assert client.get("/api/foods/mine").status_code == 401

@@ -231,7 +231,8 @@ def test_a_label_photo_is_the_uploader_s_and_the_reviewer_s_and_nobody_else_s(
 ):
     photo_id = upload(client, purpose="label").json()["photo_id"]
     # Published by hand, which nothing in the app does to a label photo. Even
-    # then it is not everybody's: what a panel is for is checking, not showing.
+    # then it is not everybody's: no shared food is holding it, so there is
+    # nothing it was published beside.
     db_session.get(models.FoodPhoto, photo_id).status = "approved"
     db_session.commit()
 
@@ -246,6 +247,57 @@ def test_a_label_photo_is_the_uploader_s_and_the_reviewer_s_and_nobody_else_s(
     make_user("reviewer", admin=True)
     sign_in(client, "reviewer")
     assert client.get(f"/api/photos/{photo_id}.webp").status_code == 200
+
+
+def test_the_panel_a_shared_food_holds_is_read_by_anybody_signed_in(
+    client, db_session, make_user, signed_in
+):
+    """A food publishes its panel. Somebody reading the numbers should be able
+    to read the label they came off and report a mismatch."""
+    photo_id = upload(client, purpose="label").json()["photo_id"]
+    food = models.Food(status="approved", name="A bar", base_unit="g")
+    db_session.add(food)
+    db_session.commit()
+    food.label_photo_id = photo_id
+    db_session.commit()
+
+    make_user("stranger")
+    sign_in(client, "stranger")
+    assert client.get(f"/api/photos/{photo_id}.webp").status_code == 200
+
+
+def test_a_panel_no_shared_food_holds_stays_shut(client, db_session, make_user, signed_in):
+    """Evidence under a request nobody has answered, and the panel on somebody's
+    own food, are published by nothing and read by nobody else."""
+    waiting_id = upload(client, purpose="label").json()["photo_id"]
+    private_id = upload(client, purpose="label").json()["photo_id"]
+    offered = models.Food(
+        status="pending", owner_id=signed_in.id, name="A bar", base_unit="g"
+    )
+    mine = models.Food(
+        status="custom", owner_id=signed_in.id, name="My bar", base_unit="g"
+    )
+    db_session.add_all([offered, mine])
+    db_session.commit()
+    db_session.add(
+        models.FoodSubmission(
+            kind="new",
+            status="pending",
+            food_id=offered.id,
+            label_photo_id=waiting_id,
+            submitted_by_id=signed_in.id,
+        )
+    )
+    offered.label_photo_id = waiting_id
+    mine.label_photo_id = private_id
+    db_session.commit()
+
+    make_user("stranger")
+    sign_in(client, "stranger")
+    for photo_id in (waiting_id, private_id):
+        absent = client.get(f"/api/photos/{photo_id}.webp")
+        assert absent.status_code == 404
+        assert absent.json() == {"detail": "There is no such photo."}
 
 
 def test_a_label_photo_a_request_still_needs_is_not_swept_up(

@@ -1334,10 +1334,13 @@ def test_an_administrator_swaps_the_front_of_a_shared_food_and_sees_the_label_on
     food.label_photo_id = label_id
     db_session.commit()
 
-    # A member is refused the swap and is not shown the label.
+    # A member is refused the swap. The panel itself is published with the
+    # shared food, so they are shown it: reading it is not changing it.
     mine = a_photo(client)
     assert client.post(f"/api/foods/{food.id}/photo", json={"photo_id": mine}).status_code == 403
-    assert client.get(f"/api/foods/{food.id}").json()["label_photo_url"] is None
+    assert client.get(f"/api/foods/{food.id}").json()["label_photo_url"] == (
+        f"/api/photos/{label_id}.webp"
+    )
 
     sign_in(client, "reviewer")
     first = a_photo(client)

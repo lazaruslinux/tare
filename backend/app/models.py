@@ -307,9 +307,10 @@ class Food(Base):
 
     ingredients_text: Mapped[str] = mapped_column(Text, nullable=False, default="")
     # The nutrition panel this food keeps, once a reviewer has approved
-    # something that carried one. One file for the life of the food, served to
-    # administrators and nobody else. use_alter because food_photos points back
-    # at foods: the two tables are a cycle, and create_all has to be told.
+    # something that carried one. One file for the life of the food, and it is
+    # published with a shared food so anybody reading the numbers can check
+    # them. use_alter because food_photos points back at foods: the two tables
+    # are a cycle, and create_all has to be told.
     label_photo_id: Mapped[int | None] = mapped_column(
         ForeignKey("food_photos.id", ondelete="SET NULL", use_alter=True), nullable=True
     )
@@ -372,9 +373,9 @@ SUBMISSION_STATUSES = ("pending", "approved", "rejected")
 #   front   the pack as it looks on a shelf. One of these per food is
 #           published, and everybody signed in can read it.
 #   label   the nutrition panel, offered so a reviewer can check the numbers
-#           against something. It belongs to the request rather than the food,
-#           it is never published, and nobody but its uploader and an
-#           administrator is ever served it.
+#           against something. It belongs to the request rather than the food
+#           until a shared food keeps it, and until then nobody but its
+#           uploader and an administrator is ever served it.
 PHOTO_PURPOSES = ("front", "label")
 
 
