@@ -13,7 +13,7 @@ import {
 } from '../api'
 import { ActivityIcon } from './ActivityIcon'
 import { clockText, dateText, useClock } from '../lib/clock'
-import { dayLabel, today } from '../lib/day'
+import { dayLabel, dayOf, today } from '../lib/day'
 import { distanceCompact, hmsText, weightCompact } from '../lib/units'
 
 // What the members of this instance are doing, read only. Four kinds of row:
@@ -111,8 +111,10 @@ function JoinedRow({
           <span className="block text-sm">
             <Name row={row} onOpenMember={onOpenMember} /> joined Tare. Welcome!
           </span>
+          {/* Arriving is a moment, not a day of theirs: the day is read in the
+              reader's zone, the same one the clock beside it uses. */}
           <span className="block text-xs text-muted">
-            {dayText(row.date, todayIso)} {clockText(row.at, me.timezone)}
+            {dayText(dayOf(me.timezone, row.at), todayIso)} {clockText(row.at, me.timezone)}
           </span>
         </span>
       </span>
