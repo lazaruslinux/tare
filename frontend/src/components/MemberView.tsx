@@ -3,9 +3,9 @@ import { useEffect, useState, type ReactNode } from 'react'
 import { api, errorText, type MemberView as Member } from '../api'
 import { useTopBar } from '../hooks/useTopBar'
 import { Avatar } from './Avatar'
+import { ConfirmSheet } from './ConfirmSheet'
 import { Verified } from './FoodRows'
 import { RoleMark } from './RoleMark'
-import { Sheet } from './Sheet'
 import { roleLabel } from '../lib/roles'
 
 // One member, as another member sees them, and the one control over whether
@@ -188,25 +188,18 @@ export function MemberView({
         )}
       </div>
 
-      <Sheet open={removing} label="Remove friend" center onClose={() => setRemoving(false)}>
-        <p className="text-base font-semibold">Remove {member.display_name} as a friend?</p>
-        <p className="mt-2 text-sm text-muted">They will not receive a notification.</p>
-        <div className="mt-4 flex gap-3">
-          <button
-            type="button"
-            className="t-btn t-btn-danger flex-1"
-            onClick={() => {
-              setRemoving(false)
-              void act(`/feed/friends/${userId}`, 'DELETE')
-            }}
-          >
-            Remove
-          </button>
-          <button type="button" className="t-btn" onClick={() => setRemoving(false)}>
-            Cancel
-          </button>
-        </div>
-      </Sheet>
+      <ConfirmSheet
+        open={removing}
+        label="Remove friend"
+        question={`Remove ${member.display_name} as a friend?`}
+        note="They will not receive a notification."
+        verb="Remove"
+        onConfirm={() => {
+          setRemoving(false)
+          void act(`/feed/friends/${userId}`, 'DELETE')
+        }}
+        onClose={() => setRemoving(false)}
+      />
     </>
   )
 }

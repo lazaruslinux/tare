@@ -26,6 +26,7 @@ import {
   type Pick,
   type Unit,
 } from '../lib/units'
+import { ConfirmSheet } from './ConfirmSheet'
 import { Verified } from './FoodRows'
 import { HEADLINE, nutrientText } from './NutritionLabel'
 import { Sheet } from './Sheet'
@@ -172,6 +173,8 @@ export function PortionSheet({
   const [meal, setMeal] = useState<Slot>(slot)
   const [error, setError] = useState('')
   const [saving, setSaving] = useState(false)
+  // Whether the question about stopping this standing auto-log is up.
+  const [stopping, setStopping] = useState(false)
   // A change to a row an auto-log wrote is meant for the days to come as well
   // unless somebody says otherwise, which is what the day off looks like.
   const [follow, setFollow] = useState(true)
@@ -325,220 +328,235 @@ export function PortionSheet({
   const brand = food?.brand ?? entry?.brand ?? ''
 
   return (
-    <Sheet
-      open
-      label={
-        autoLog ? 'Auto-log' : picking ? 'Choose a portion' : entry ? 'Edit entry' : 'Log food'
-      }
-      onClose={onClose}
-    >
-      <p className="t-micro mb-1">
-        {autoLog ? 'Auto-log' : picking ? 'How much' : entry ? 'Edit' : 'Log'}
-      </p>
-      {/* A food the shared database holds wears the same check it wears in every
-          list, and says so in words: a scan that lands here has found a food
-          Tare already knows. */}
-      <p className="flex items-center gap-1.5 text-base font-semibold tracking-tight">
-        <span className="min-w-0">{name}</span>
-        {food?.status === 'approved' && <Verified className="h-4 w-4" />}
-      </p>
-      {brand && <p className="text-xs text-muted">{brand}</p>}
-      {food?.status === 'approved' && <p className="text-xs text-muted">In Tare database</p>}
-      {food?.status === 'pending' && (
-        // Theirs to log today, and not anybody else's until it is approved.
-        <span className="t-chip mt-2">Waiting for approval</span>
-      )}
+    <>
+      <Sheet
+        open
+        label={
+          autoLog ? 'Auto-log' : picking ? 'Choose a portion' : entry ? 'Edit entry' : 'Log food'
+        }
+        onClose={onClose}
+      >
+        <p className="t-micro mb-1">
+          {autoLog ? 'Auto-log' : picking ? 'How much' : entry ? 'Edit' : 'Log'}
+        </p>
+        {/* A food the shared database holds wears the same check it wears in every
+            list, and says so in words: a scan that lands here has found a food
+            Tare already knows. */}
+        <p className="flex items-center gap-1.5 text-base font-semibold tracking-tight">
+          <span className="min-w-0">{name}</span>
+          {food?.status === 'approved' && <Verified className="h-4 w-4" />}
+        </p>
+        {brand && <p className="text-xs text-muted">{brand}</p>}
+        {food?.status === 'approved' && <p className="text-xs text-muted">In Tare database</p>}
+        {food?.status === 'pending' && (
+          // Theirs to log today, and not anybody else's until it is approved.
+          <span className="t-chip mt-2">Waiting for approval</span>
+        )}
 
-      {needsAmount && (
-        <div className="mt-3 mb-3 flex flex-wrap items-center gap-2">
-          <input
-            className="t-input t-nums w-24 text-right"
-            inputMode="decimal"
-            aria-label="Amount"
-            placeholder="0"
-            value={amount}
-            // The field opens at 0, so typing replaces it rather than making
-            // the first weight of the day read 0250.
-            onFocus={(event) => event.currentTarget.select()}
-            onChange={(event) => setAmount(event.target.value)}
-          />
-          {food === null ? (
-            <span className="flex min-h-11 flex-1 items-center text-sm text-muted">
-              {entry ? portionText({ ...entry, amount: 1 }) : ''}
-            </span>
-          ) : (
-            <select
-              // Wide enough to read a serving's name. The three weights beside
-              // it wrap to their own line rather than squeezing it.
-              className="t-input min-w-28 flex-1"
-              aria-label="Unit"
-              value={choice}
-              onChange={(event) => choose(event.target.value)}
-            >
-              {food.servings.length > 0 && (
-                <optgroup label="Servings">
-                  {food.servings.map((row, index) => (
-                    <option key={row.id} value={`${SERVING}${index}`}>
-                      {row.name}, {amountText(row.amount, row.unit)} {UNIT_LABEL[row.unit]}
-                    </option>
-                  ))}
-                </optgroup>
-              )}
-              {UNIT_GROUPS.map((group) => (
-                <optgroup key={group.label} label={group.label}>
-                  {group.units.map((unit) => (
-                    <option key={unit} value={unit}>
-                      {UNIT_LABEL[unit]}
-                    </option>
-                  ))}
-                </optgroup>
-              ))}
-            </select>
-          )}
-          {/* The three a scale reads in, beside the field. Switching leaves
-              the number alone: it is what the scale said, not a conversion. */}
-          {weighing &&
-            MASS_UNITS.map((unit) => (
-              <button
-                key={unit}
-                type="button"
-                aria-pressed={choice === unit}
-                className="t-chip aria-pressed:border-accent aria-pressed:text-text"
-                onClick={() => choose(unit)}
+        {needsAmount && (
+          <div className="mt-3 mb-3 flex flex-wrap items-center gap-2">
+            <input
+              className="t-input t-nums w-24 text-right"
+              inputMode="decimal"
+              aria-label="Amount"
+              placeholder="0"
+              value={amount}
+              // The field opens at 0, so typing replaces it rather than making
+              // the first weight of the day read 0250.
+              onFocus={(event) => event.currentTarget.select()}
+              onChange={(event) => setAmount(event.target.value)}
+            />
+            {food === null ? (
+              <span className="flex min-h-11 flex-1 items-center text-sm text-muted">
+                {entry ? portionText({ ...entry, amount: 1 }) : ''}
+              </span>
+            ) : (
+              <select
+                // Wide enough to read a serving's name. The three weights beside
+                // it wrap to their own line rather than squeezing it.
+                className="t-input min-w-28 flex-1"
+                aria-label="Unit"
+                value={choice}
+                onChange={(event) => choose(event.target.value)}
               >
-                {UNIT_LABEL[unit]}
+                {food.servings.length > 0 && (
+                  <optgroup label="Servings">
+                    {food.servings.map((row, index) => (
+                      <option key={row.id} value={`${SERVING}${index}`}>
+                        {row.name}, {amountText(row.amount, row.unit)} {UNIT_LABEL[row.unit]}
+                      </option>
+                    ))}
+                  </optgroup>
+                )}
+                {UNIT_GROUPS.map((group) => (
+                  <optgroup key={group.label} label={group.label}>
+                    {group.units.map((unit) => (
+                      <option key={unit} value={unit}>
+                        {UNIT_LABEL[unit]}
+                      </option>
+                    ))}
+                  </optgroup>
+                ))}
+              </select>
+            )}
+            {/* The three a scale reads in, beside the field. Switching leaves
+                the number alone: it is what the scale said, not a conversion. */}
+            {weighing &&
+              MASS_UNITS.map((unit) => (
+                <button
+                  key={unit}
+                  type="button"
+                  aria-pressed={choice === unit}
+                  className="t-chip aria-pressed:border-accent aria-pressed:text-text"
+                  onClick={() => choose(unit)}
+                >
+                  {UNIT_LABEL[unit]}
+                </button>
+              ))}
+          </div>
+        )}
+
+        {food !== null && (
+          <div className="mb-3 flex flex-wrap gap-2">
+            {/* The scale first, because weighing it is the answer this would
+                rather have. The label serving is offered as what it is, one
+                serving, whatever the label calls it. */}
+            <button
+              type="button"
+              aria-pressed={weighing}
+              className="t-chip aria-pressed:border-accent aria-pressed:text-text"
+              onClick={() => {
+                if (!weighing) choose('g')
+              }}
+            >
+              <Scale className="h-3.5 w-3.5" strokeWidth={2.5} />
+              Weigh it
+            </button>
+            {food.servings.map((row, index) => (
+              <button
+                key={row.id}
+                type="button"
+                aria-pressed={choice === `${SERVING}${index}`}
+                className="t-chip aria-pressed:border-accent aria-pressed:text-text"
+                onClick={() => choose(`${SERVING}${index}`)}
+              >
+                {index === 0 ? '1 serving' : row.name}
               </button>
             ))}
-        </div>
-      )}
+          </div>
+        )}
 
-      {food !== null && (
-        <div className="mb-3 flex flex-wrap gap-2">
-          {/* The scale first, because weighing it is the answer this would
-              rather have. The label serving is offered as what it is, one
-              serving, whatever the label calls it. */}
-          <button
-            type="button"
-            aria-pressed={weighing}
-            className="t-chip aria-pressed:border-accent aria-pressed:text-text"
-            onClick={() => {
-              if (!weighing) choose('g')
-            }}
-          >
-            <Scale className="h-3.5 w-3.5" strokeWidth={2.5} />
-            Weigh it
-          </button>
-          {food.servings.map((row, index) => (
-            <button
-              key={row.id}
-              type="button"
-              aria-pressed={choice === `${SERVING}${index}`}
-              className="t-chip aria-pressed:border-accent aria-pressed:text-text"
-              onClick={() => choose(`${SERVING}${index}`)}
-            >
-              {index === 0 ? '1 serving' : row.name}
-            </button>
+        <div className="grid grid-cols-4 gap-2">
+          {HEADLINE.map((fact) => (
+            <div key={fact.key}>
+              <span className="t-nums block text-lg font-semibold">
+                {assumesWater && '≈'}
+                {nutrientText(fact.key, value(fact.key))}
+                {fact.unit && <span className="text-sm font-normal text-muted">{fact.unit}</span>}
+              </span>
+              <span className="block text-xs text-muted">{fact.label}</span>
+            </div>
           ))}
         </div>
-      )}
 
-      <div className="grid grid-cols-4 gap-2">
-        {HEADLINE.map((fact) => (
-          <div key={fact.key}>
-            <span className="t-nums block text-lg font-semibold">
-              {assumesWater && '≈'}
-              {nutrientText(fact.key, value(fact.key))}
-              {fact.unit && <span className="text-sm font-normal text-muted">{fact.unit}</span>}
-            </span>
-            <span className="block text-xs text-muted">{fact.label}</span>
-          </div>
-        ))}
-      </div>
-
-      {food !== null && (
-        <p className="mt-2 text-xs text-muted">
-          {assumesWater && '≈ '}
-          {baseLine(food)}
-          {assumesWater && `. ${WATER_HINT}`}
-        </p>
-      )}
-      {food === null && (
-        <p className="mt-2 text-xs text-muted">
-          This food is gone. The numbers move with the amount and nothing else.
-        </p>
-      )}
-
-      {!picking && (
-        <>
-          <p className="t-micro mt-3 mb-2">Meal</p>
-          <div className="flex flex-wrap gap-2">
-            {SLOTS.map((option) => (
-              <button
-                key={option}
-                type="button"
-                aria-pressed={meal === option}
-                className="t-chip aria-pressed:border-accent aria-pressed:text-text"
-                onClick={() => chooseMeal(option)}
-              >
-                {SLOT_LABEL[option]}
-              </button>
-            ))}
-          </div>
-        </>
-      )}
-
-      {entry?.auto_log_id != null && (
-        <div className="mt-3">
-          <Switch
-            label="Also change the auto-log"
-            note="For the days to come as well: this mealtime and this amount."
-            checked={follow}
-            onChange={setFollow}
-          />
-        </div>
-      )}
-
-      {error && <p className="t-error mt-3">{error}</p>}
-
-      <div className="mt-4 flex gap-3">
-        <button
-          type="button"
-          className="t-btn t-btn-primary flex-1"
-          disabled={saving || (needsAmount && !valid)}
-          onClick={save}
-        >
-          {autoLog ? 'Auto-log every day' : picking ? 'Add' : entry ? 'Save' : 'Log'}
-        </button>
-        {entry && onDelete ? (
-          <button type="button" className="t-btn text-danger" onClick={() => onDelete(entry)}>
-            Delete
-          </button>
-        ) : (
-          !autoLog && (
-            <button type="button" className="t-btn" onClick={onClose}>
-              Cancel
-            </button>
-          )
+        {food !== null && (
+          <p className="mt-2 text-xs text-muted">
+            {assumesWater && '≈ '}
+            {baseLine(food)}
+            {assumesWater && `. ${WATER_HINT}`}
+          </p>
         )}
-      </div>
-      {autoLog !== undefined && (
-        <div className="mt-3 flex gap-3">
-          {standing === null ? (
-            <button type="button" className="t-btn flex-1" onClick={onClose}>
-              Cancel
+        {food === null && (
+          <p className="mt-2 text-xs text-muted">
+            This food is gone. The numbers move with the amount and nothing else.
+          </p>
+        )}
+
+        {!picking && (
+          <>
+            <p className="t-micro mt-3 mb-2">Meal</p>
+            <div className="flex flex-wrap gap-2">
+              {SLOTS.map((option) => (
+                <button
+                  key={option}
+                  type="button"
+                  aria-pressed={meal === option}
+                  className="t-chip aria-pressed:border-accent aria-pressed:text-text"
+                  onClick={() => chooseMeal(option)}
+                >
+                  {SLOT_LABEL[option]}
+                </button>
+              ))}
+            </div>
+          </>
+        )}
+
+        {entry?.auto_log_id != null && (
+          <div className="mt-3">
+            <Switch
+              label="Also change the auto-log"
+              note="For the days to come as well: this mealtime and this amount."
+              checked={follow}
+              onChange={setFollow}
+            />
+          </div>
+        )}
+
+        {error && <p className="t-error mt-3">{error}</p>}
+
+        <div className="mt-4 flex gap-3">
+          <button
+            type="button"
+            className="t-btn t-btn-primary flex-1"
+            disabled={saving || (needsAmount && !valid)}
+            onClick={save}
+          >
+            {autoLog ? 'Auto-log every day' : picking ? 'Add' : entry ? 'Save' : 'Log'}
+          </button>
+          {entry && onDelete ? (
+            <button type="button" className="t-btn text-danger" onClick={() => onDelete(entry)}>
+              Delete
             </button>
           ) : (
-            <button
-              type="button"
-              className="t-btn flex-1 text-danger"
-              disabled={saving}
-              onClick={() => void stop()}
-            >
-              Stop auto-logging
-            </button>
+            !autoLog && (
+              <button type="button" className="t-btn" onClick={onClose}>
+                Cancel
+              </button>
+            )
           )}
         </div>
-      )}
-    </Sheet>
+        {autoLog !== undefined && (
+          <div className="mt-3 flex gap-3">
+            {standing === null ? (
+              <button type="button" className="t-btn flex-1" onClick={onClose}>
+                Cancel
+              </button>
+            ) : (
+              <button
+                type="button"
+                className="t-btn flex-1 text-danger"
+                disabled={saving}
+                onClick={() => setStopping(true)}
+              >
+                Stop auto-logging
+              </button>
+            )}
+          </div>
+        )}
+      </Sheet>
+      <ConfirmSheet
+        open={stopping}
+        label="Stop auto-logging"
+        question={`Stop auto-logging ${name} at ${SLOT_LABEL[meal]}?`}
+        note="Days already written keep their entries."
+        verb="Stop"
+        busy={saving}
+        onConfirm={() => {
+          setStopping(false)
+          void stop()
+        }}
+        onClose={() => setStopping(false)}
+      />
+    </>
   )
 }

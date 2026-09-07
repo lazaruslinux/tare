@@ -3,7 +3,7 @@ import { useEffect, useState, type ChangeEvent } from 'react'
 
 import { api, dishPhoto, errorText, upload, type AutoLog } from '../api'
 import { MAX_PHOTO_BYTES, PHOTO_TOO_LARGE } from '../lib/community'
-import { slotByTime, type Slot } from '../lib/day'
+import { SLOT_LABEL, slotByTime, type Slot } from '../lib/day'
 import { DISH_ICON, DISH_LABEL } from './FoodRows'
 import { Lightbox } from './Lightbox'
 import { LogSheet } from './LogSheet'
@@ -258,6 +258,11 @@ export function DishAutoLog({
           onClose={() => setOpen(false)}
           onSubmit={(amount, slot, byWeight) => void save(amount, slot, byWeight)}
           onDelete={(slot) => void stop(slot)}
+          confirmDelete={{
+            question: (slot) => `Stop auto-logging ${name} at ${SLOT_LABEL[slot]}?`,
+            note: 'Days already written keep their entries.',
+            verb: 'Stop',
+          }}
         />
       )}
     </>

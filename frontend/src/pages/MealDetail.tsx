@@ -2,11 +2,11 @@ import { Pencil } from 'lucide-react'
 import { useEffect, useState } from 'react'
 
 import { api, errorText, type Meal, type MealLogged, type Me } from '../api'
+import { ConfirmSheet } from '../components/ConfirmSheet'
 import { DishAutoLog, DishPhoto } from '../components/Dish'
 import { PartLine } from '../components/FoodRows'
 import { LogSheet } from '../components/LogSheet'
 import { PanelFacts } from '../components/NutritionLabel'
-import { Sheet } from '../components/Sheet'
 import { useTopBar } from '../hooks/useTopBar'
 import { SLOT_LABEL, slotByTime, today, type Slot } from '../lib/day'
 import { gramsText } from '../lib/units'
@@ -159,31 +159,16 @@ export function MealDetail({
             </button>
           </div>
 
-          <Sheet
-            center
+          <ConfirmSheet
             open={erasing}
             label={`Delete ${meal.name}?`}
+            question={`Delete ${meal.name}?`}
+            tone="danger"
+            note="This meal is private to you and cannot be recovered."
+            verb="Delete"
+            onConfirm={() => onDelete(meal)}
             onClose={() => setErasing(false)}
-          >
-            <p className="text-base font-semibold tracking-tight text-danger">
-              Delete {meal.name}?
-            </p>
-            <p className="mt-2 text-sm text-muted">
-              This meal is private to you and cannot be recovered.
-            </p>
-            <div className="mt-4 flex gap-3">
-              <button
-                type="button"
-                className="t-btn t-btn-danger flex-1"
-                onClick={() => onDelete(meal)}
-              >
-                Delete
-              </button>
-              <button type="button" className="t-btn" onClick={() => setErasing(false)}>
-                Cancel
-              </button>
-            </div>
-          </Sheet>
+          />
 
           {logging && (
             <LogSheet

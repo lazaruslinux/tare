@@ -2,11 +2,11 @@ import { Pencil } from 'lucide-react'
 import { useEffect, useState } from 'react'
 
 import { api, errorText, type Me, type Recipe } from '../api'
+import { ConfirmSheet } from '../components/ConfirmSheet'
 import { DishAutoLog, DishPhoto } from '../components/Dish'
 import { PartLine } from '../components/FoodRows'
 import { LogSheet } from '../components/LogSheet'
 import { PanelFacts } from '../components/NutritionLabel'
-import { Sheet } from '../components/Sheet'
 import { useTopBar } from '../hooks/useTopBar'
 import { SLOT_LABEL, slotByTime, today, type Slot } from '../lib/day'
 import { gramsText, servingsText } from '../lib/units'
@@ -173,31 +173,16 @@ export function RecipeDetail({
             </button>
           </div>
 
-          <Sheet
-            center
+          <ConfirmSheet
             open={erasing}
             label={`Delete ${recipe.name}?`}
+            question={`Delete ${recipe.name}?`}
+            tone="danger"
+            note="This recipe is private to you and cannot be recovered."
+            verb="Delete"
+            onConfirm={() => onDelete(recipe)}
             onClose={() => setErasing(false)}
-          >
-            <p className="text-base font-semibold tracking-tight text-danger">
-              Delete {recipe.name}?
-            </p>
-            <p className="mt-2 text-sm text-muted">
-              This recipe is private to you and cannot be recovered.
-            </p>
-            <div className="mt-4 flex gap-3">
-              <button
-                type="button"
-                className="t-btn t-btn-danger flex-1"
-                onClick={() => onDelete(recipe)}
-              >
-                Delete
-              </button>
-              <button type="button" className="t-btn" onClick={() => setErasing(false)}>
-                Cancel
-              </button>
-            </div>
-          </Sheet>
+          />
 
           {logging && (
             <LogSheet

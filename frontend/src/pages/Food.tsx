@@ -27,6 +27,7 @@ import {
   type RecipeRow,
   type RepeatRow,
 } from '../api'
+import { ConfirmSheet } from '../components/ConfirmSheet'
 import { FoodForm } from '../components/FoodForm'
 import { FoodPicker } from '../components/FoodPicker'
 import {
@@ -42,7 +43,7 @@ import { MemberView } from '../components/MemberView'
 import { PortionSheet } from '../components/PortionSheet'
 import { Sheet } from '../components/Sheet'
 import { useTopBar } from '../hooks/useTopBar'
-import { SLOT_LABEL, today } from '../lib/day'
+import { SLOTS, SLOT_LABEL, today } from '../lib/day'
 import { reviews } from '../lib/roles'
 import { gramsText, portionText, servingsText } from '../lib/units'
 import { FoodDetail } from './FoodDetail'
@@ -65,6 +66,35 @@ const UNDO = 6000
 function autoAmount(row: AutoLog): string {
   if (row.kind === 'food') return portionText(row)
   return row.unit === 'g' ? gramsText(row.amount) : servingsText(row.amount)
+}
+
+// The Auto-log card is a list of things, not a list of instructions: a food set
+// for three mealtimes is one row that says three, in the order the day runs.
+function autoGroups(rows: AutoLog[]): AutoLog[][] {
+  const groups: AutoLog[][] = []
+  const found = new Map<string, AutoLog[]>()
+  for (const row of rows) {
+    const key = `${row.kind}:${row.food_id ?? row.recipe_id ?? row.meal_id}`
+    const group = found.get(key)
+    if (group === undefined) {
+      const started = [row]
+      found.set(key, started)
+      groups.push(started)
+    } else {
+      group.push(row)
+    }
+  }
+  for (const group of groups) {
+    group.sort((one, other) => SLOTS.indexOf(one.slot) - SLOTS.indexOf(other.slot))
+  }
+  return groups
+}
+
+// The mealtimes of a group as a sentence: "breakfast, lunch and dinner".
+function mealtimeList(group: AutoLog[]): string {
+  const names = group.map((row) => SLOT_LABEL[row.slot].toLowerCase())
+  if (names.length === 1) return names[0]
+  return `${names.slice(0, -1).join(', ')} and ${names[names.length - 1]}`
 }
 
 // Where going back from something lands. Everything on this tab is opened
@@ -140,6 +170,10 @@ export function FoodTab({
   const [autos, setAutos] = useState<AutoLog[]>([])
   // The standing auto-log open in the same sheet, with the food it is about.
   const [autoEdit, setAutoEdit] = useState<{ food: FoodItem; row: AutoLog } | null>(null)
+  // The item being taken off Auto-log, every mealtime of it, while the question
+  // about it is up.
+  const [autoOff, setAutoOff] = useState<AutoLog[] | null>(null)
+  const [autoOffBusy, setAutoOffBusy] = useState(false)
   // The shared database, open over the tab: a box to type in, and the whole
   // database to read under it until somebody does.
   const [searching, setSearching] = useState(false)
@@ -252,16 +286,22 @@ export function FoodTab({
     })
   }
 
-  // Off the list at once, and the request waits out the undo window with it.
-  const removeAuto = (row: AutoLog) => {
-    setAutos((rows) => rows.filter((item) => item.id !== row.id))
-    hold({
-      message: `Took ${row.name} off Auto-log.`,
-      commit: () => {
-        api(`/diary/auto-logs/${row.id}`, { method: 'DELETE' }).then(onChanged, () => {})
-      },
-      revert: () => void loadAutos(),
-    })
+  // Taking an item off the card takes off every mealtime it was set for, which
+  // is one request each, and only after the question below has been answered.
+  const removeAuto = async (group: AutoLog[]) => {
+    setAutoOffBusy(true)
+    setError('')
+    try {
+      for (const row of group) {
+        await api(`/diary/auto-logs/${row.id}`, { method: 'DELETE' })
+      }
+    } catch (failure) {
+      setError(errorText(failure))
+    }
+    setAutoOff(null)
+    setAutoOffBusy(false)
+    await loadAutos()
+    onChanged()
   }
 
   // A list a card holds more of, open as a catalog over the tab. The tab stays
@@ -711,38 +751,46 @@ export function FoodTab({
             Setup Auto-Log on an item's details page.
           </p>
         ) : (
-          autos.map((row) => (
-            <div key={row.id} className="t-row">
-              <button
-                type="button"
-                className="flex min-w-0 flex-1 items-center gap-3 text-left"
-                onClick={() => openAuto(row)}
-              >
-                {row.kind === 'food' ? (
-                  <Thumb url={row.thumb_url} />
-                ) : (
-                  <DishThumb kind={row.kind} url={row.thumb_url} />
-                )}
-                <span className="min-w-0 flex-1">
-                  <span className="flex items-center gap-1.5">
-                    <span className="truncate text-sm">{row.name}</span>
-                    {row.kind !== 'food' && <KindMark kind={row.kind} />}
+          autoGroups(autos).map((group) => {
+            const row = group[0]
+            return (
+              <div key={row.id} className="t-row">
+                <button
+                  type="button"
+                  className="flex min-w-0 flex-1 items-center gap-3 text-left"
+                  onClick={() => openAuto(row)}
+                >
+                  {row.kind === 'food' ? (
+                    <Thumb url={row.thumb_url} />
+                  ) : (
+                    <DishThumb kind={row.kind} url={row.thumb_url} />
+                  )}
+                  <span className="min-w-0 flex-1">
+                    <span className="flex items-center gap-1.5">
+                      <span className="truncate text-sm">{row.name}</span>
+                      {row.kind !== 'food' && <KindMark kind={row.kind} />}
+                      {group.length > 1 && <span className="t-chip">x{group.length}</span>}
+                    </span>
+                    <span className="block truncate text-xs text-muted">
+                      {group.length === 1
+                        ? `${autoAmount(row)} · ${SLOT_LABEL[row.slot]}`
+                        : group
+                            .map((one) => `${SLOT_LABEL[one.slot]} ${autoAmount(one)}`)
+                            .join(' · ')}
+                    </span>
                   </span>
-                  <span className="block truncate text-xs text-muted">
-                    {autoAmount(row)} · {SLOT_LABEL[row.slot]}
-                  </span>
-                </span>
-              </button>
-              <button
-                type="button"
-                className="t-tap44 shrink-0 text-muted"
-                aria-label={`Take ${row.name} off Auto-log at ${SLOT_LABEL[row.slot]}`}
-                onClick={() => removeAuto(row)}
-              >
-                <X className="h-4 w-4" strokeWidth={2.5} />
-              </button>
-            </div>
-          ))
+                </button>
+                <button
+                  type="button"
+                  className="t-tap44 shrink-0 text-muted"
+                  aria-label={`Take ${row.name} off Auto-log`}
+                  onClick={() => setAutoOff(group)}
+                >
+                  <X className="h-4 w-4" strokeWidth={2.5} />
+                </button>
+              </div>
+            )
+          })
         )}
       </div>
 
@@ -783,6 +831,19 @@ export function FoodTab({
           }}
         />
       )}
+
+      <ConfirmSheet
+        open={autoOff !== null}
+        label="Take off Auto-log"
+        question={autoOff === null ? '' : `Take ${autoOff[0].name} off Auto-log?`}
+        note={autoOff === null ? undefined : `It logs itself at ${mealtimeList(autoOff)}.`}
+        verb="Remove"
+        busy={autoOffBusy}
+        onConfirm={() => {
+          if (autoOff !== null) void removeAuto(autoOff)
+        }}
+        onClose={() => setAutoOff(null)}
+      />
 
       {catalog !== null && (
         <Sheet open wide label={LIST_TITLE[catalog]} onClose={() => setCatalog(null)}>

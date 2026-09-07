@@ -5,28 +5,6 @@ import { useEffect, useState, type ReactNode } from 'react'
 import type { DayEnergy } from '../api'
 import { LEVEL_LABEL, calText } from '../lib/targets'
 
-// Whether the fold is open, remembered per device and shared by every card
-// that offers it. A member who wants to see where the number comes from
-// usually wants to see it tomorrow as well.
-const KEY = 'tare.breakdown.open'
-
-function remembered(): boolean {
-  try {
-    return window.localStorage.getItem(KEY) === 'yes'
-  } catch {
-    // A browser that refuses storage still gets the fold, it just forgets.
-    return false
-  }
-}
-
-function keep(open: boolean) {
-  try {
-    window.localStorage.setItem(KEY, open ? 'yes' : 'no')
-  } catch {
-    // Nothing to do about it, and nothing worth saying on screen.
-  }
-}
-
 // One line of it. The value is right-aligned and tabular so the five read as a
 // column of numbers rather than as five sentences.
 function Line({
@@ -77,20 +55,17 @@ export function BreakdownCard({
   reveal?: number
   children: ReactNode
 }) {
-  const [open, setOpen] = useState(remembered)
+  // The fold starts closed every time the card is opened. It is the detail
+  // behind the number, not the number, so it is asked for rather than left up.
+  const [open, setOpen] = useState(false)
   const reduced = useReducedMotion()
 
   useEffect(() => {
     if (reveal === undefined || reveal === 0) return
     setOpen(true)
-    keep(true)
   }, [reveal])
 
-  const toggle = () => {
-    const next = !open
-    setOpen(next)
-    keep(next)
-  }
+  const toggle = () => setOpen(!open)
 
   return (
     <div className="mb-3">

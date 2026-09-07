@@ -11,6 +11,7 @@ import {
 import { useEffect, useState, type ChangeEvent } from 'react'
 
 import { api, errorText, upload, type AutoLog, type Food, type Me } from '../api'
+import { ConfirmSheet } from '../components/ConfirmSheet'
 import { Verified } from '../components/FoodRows'
 import { Fold, NutritionLabel } from '../components/NutritionLabel'
 import { PortionSheet } from '../components/PortionSheet'
@@ -633,41 +634,30 @@ export function FoodDetail({
             />
           )}
           {food !== null && (
-            <Sheet
-              center
+            <ConfirmSheet
               open={erasing}
               label={`Delete ${food.name}?`}
-              onClose={() => setErasing(false)}
-            >
-              <p className="text-base font-semibold tracking-tight text-danger">
-                {shared ? `Delete ${food.name} from the Tare database?` : `Delete ${food.name}?`}
-              </p>
-              <p className="mt-2 text-sm text-muted">
-                {shared
+              question={
+                shared ? `Delete ${food.name} from the Tare database?` : `Delete ${food.name}?`
+              }
+              tone="danger"
+              note={
+                shared
                   ? 'This permanently removes it for every member and cannot be undone. Journal entries that already logged it keep their numbers.'
-                  : 'This food is private to you and cannot be recovered.'}
-              </p>
-              {erasingError && <p className="t-error mt-2">{erasingError}</p>}
-              <div className="mt-4 flex gap-3">
-                <button
-                  type="button"
-                  className="t-btn t-btn-danger flex-1"
-                  disabled={erasingBusy}
-                  onClick={() => {
-                    setErasingBusy(true)
-                    ;(shared ? onDeleteShared : onDelete)(food).catch((failure) => {
-                      setErasingError(errorText(failure))
-                      setErasingBusy(false)
-                    })
-                  }}
-                >
-                  {shared ? 'Delete permanently' : 'Delete'}
-                </button>
-                <button type="button" className="t-btn" onClick={() => setErasing(false)}>
-                  Cancel
-                </button>
-              </div>
-            </Sheet>
+                  : 'This food is private to you and cannot be recovered.'
+              }
+              verb={shared ? 'Delete permanently' : 'Delete'}
+              busy={erasingBusy}
+              error={erasingError}
+              onConfirm={() => {
+                setErasingBusy(true)
+                ;(shared ? onDeleteShared : onDelete)(food).catch((failure) => {
+                  setErasingError(errorText(failure))
+                  setErasingBusy(false)
+                })
+              }}
+              onClose={() => setErasing(false)}
+            />
           )}
           {viewing && (
             <Lightbox

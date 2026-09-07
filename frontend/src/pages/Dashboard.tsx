@@ -55,19 +55,18 @@ const WEEK = 7
 const RUN_DAYS = 28
 
 // The four spans one switch reads every card over, what each is called, and
-// how a change of weight across it is said. The chosen one is remembered on
-// the device: somebody who reads their half year reads it again.
+// how a change of weight across it is said. The screen always opens on the
+// week; a longer span is asked for and lasts as long as the visit.
 // The weight line never reads less than a month: a week holds one weigh-in
 // for most people, and one point is not a trend. Food and steps keep the week.
 const WEIGHT_FLOOR = 30
 
 const SPANS = [
-  { days: WEEK, label: 'Week', over: 'over 30 days' },
+  { days: WEEK, label: 'This week', over: 'over 30 days' },
   { days: 30, label: '30 days', over: 'over 30 days' },
   { days: 90, label: '3 months', over: 'over 3 months' },
   { days: 180, label: '6 months', over: 'over 6 months' },
 ]
-const SPAN_KEY = 'tare.dashboard.span'
 
 // Which lines the chart draws, remembered on the device. Every measured
 // number can have one: the weight in the accent green, the body fat in the
@@ -138,15 +137,6 @@ const DAILY_MAX = 30
 
 // How many weekly bars can carry their number over them on a wide card.
 const MAX_LABELS = 14
-
-function rememberedSpan(): number {
-  try {
-    const kept = Number(window.localStorage.getItem(SPAN_KEY))
-    return SPANS.some((row) => row.days === kept) ? kept : WEEK
-  } catch {
-    return WEEK
-  }
-}
 
 // The ring, drawn by hand: a circle whose stroke is dashed to the share of the
 // day that has been consumed. No library, and nothing that moves.
@@ -759,7 +749,7 @@ export function Dashboard({
   const [bmi, setBmi] = useState<number | null>(null)
   // The span every card is read over, and the weight line for it, which is its
   // own request: a trend over six months is not a trend over a month cut short.
-  const [span, setSpan] = useState(rememberedSpan)
+  const [span, setSpan] = useState(WEEK)
   const [lines, setLines] = useState<Lines>(readLines)
   const [windowed, setWindowed] = useState<Measurements | null>(null)
   // The whole span a day at a time: what was walked, worked and burned, and
@@ -896,15 +886,6 @@ export function Dashboard({
     },
     []
   )
-
-  const pickSpan = (days: number) => {
-    setSpan(days)
-    try {
-      window.localStorage.setItem(SPAN_KEY, String(days))
-    } catch {
-      // A browser that refuses storage still gets the span it picked.
-    }
-  }
 
   const pickLines = (next: Lines) => {
     setLines(next)
@@ -1471,7 +1452,7 @@ export function Dashboard({
             type="button"
             aria-pressed={span === row.days}
             className={`t-chip ${span === row.days ? 'border-accent text-accent' : ''}`}
-            onClick={() => pickSpan(row.days)}
+            onClick={() => setSpan(row.days)}
           >
             {row.label}
           </button>

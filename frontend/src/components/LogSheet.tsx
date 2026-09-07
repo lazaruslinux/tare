@@ -3,6 +3,7 @@ import { useState } from 'react'
 
 import { SLOTS, SLOT_LABEL, type Slot } from '../lib/day'
 import { MASS_UNITS, UNIT_LABEL, UNIT_TO_BASE, round1, type Unit } from '../lib/units'
+import { ConfirmSheet } from './ConfirmSheet'
 import { Sheet } from './Sheet'
 import { Switch } from './Switch'
 
@@ -31,6 +32,7 @@ export function LogSheet({
   onSubmit,
   onDelete,
   deleteLabel = 'Delete',
+  confirmDelete,
 }: {
   // The quiet line at the top, and what the button says.
   title: string
@@ -64,6 +66,9 @@ export function LogSheet({
   onDelete?: (slot: Slot) => void
   // What the button beside the action says, where "Delete" is not the word.
   deleteLabel?: string
+  // Given where taking this away is a removal that has to be asked about
+  // first: the button opens the question and only the answer deletes.
+  confirmDelete?: { question: (slot: Slot) => string; note?: string; verb: string }
 }) {
   // Only worth offering the two when there is a weight to take a share of.
   const weighable = typeof weight === 'number' && weight > 0
@@ -82,6 +87,8 @@ export function LogSheet({
     return weighable ? '0' : String(servings)
   })
   const [meal, setMeal] = useState<Slot>(slot)
+  // Whether the question about taking this away is up.
+  const [asking, setAsking] = useState(false)
   // A change to a row an auto-log wrote is meant for the days to come as well
   // unless somebody says otherwise, which is what the day off looks like.
   const [follow, setFollow] = useState(true)
@@ -128,134 +135,155 @@ export function LogSheet({
   }
 
   return (
-    <Sheet open label={`${title} ${name}`} onClose={onClose}>
-      <p className="t-micro mb-1">{title}</p>
-      <p className="text-base font-semibold tracking-tight">{name}</p>
+    <>
+      <Sheet open label={`${title} ${name}`} onClose={onClose}>
+        <p className="t-micro mb-1">{title}</p>
+        <p className="text-base font-semibold tracking-tight">{name}</p>
 
-      {weighable && (
-        <div className="mt-3 flex flex-wrap gap-2">
-          {/* The scale first, because weighing it is the answer this would
-              rather have. */}
-          <button
-            type="button"
-            aria-pressed={byWeight}
-            className="t-chip aria-pressed:border-accent aria-pressed:text-text"
-            onClick={() => choose(true)}
-          >
-            <Scale className="h-3.5 w-3.5" strokeWidth={2.5} />
-            Weigh it
-          </button>
-          <button
-            type="button"
-            aria-pressed={!byWeight}
-            className="t-chip aria-pressed:border-accent aria-pressed:text-text"
-            onClick={() => choose(false)}
-          >
-            Servings
-          </button>
-        </div>
-      )}
-
-      {counting && (
-        <>
-          <p className="t-micro mt-3 mb-2">{byWeight ? 'Weight' : 'Servings'}</p>
-          <div className="flex flex-wrap items-center gap-2">
-            {!byWeight && (
-              <button
-                type="button"
-                className="t-btn w-12"
-                aria-label="Less"
-                onClick={() => step(-STEP)}
-              >
-                <Minus className="h-4 w-4" strokeWidth={2.5} />
-              </button>
-            )}
-            <input
-              className="t-input t-nums w-24 text-center"
-              inputMode="decimal"
-              aria-label={byWeight ? 'Weight' : 'Servings'}
-              placeholder={byWeight ? '0' : ''}
-              value={amount}
-              // The field opens at 0, so typing replaces it rather than
-              // making a weight read 0250.
-              onFocus={(event) => event.currentTarget.select()}
-              onChange={(event) => setAmount(event.target.value)}
-            />
-            {byWeight ? (
-              // The three a scale reads in, beside the field. Switching leaves
-              // the number alone: it is what the scale said, not a conversion.
-              MASS_UNITS.map((option) => (
-                <button
-                  key={option}
-                  type="button"
-                  aria-pressed={unit === option}
-                  className="t-chip aria-pressed:border-accent aria-pressed:text-text"
-                  onClick={() => setUnit(option)}
-                >
-                  {UNIT_LABEL[option]}
-                </button>
-              ))
-            ) : (
-              <button
-                type="button"
-                className="t-btn w-12"
-                aria-label="More"
-                onClick={() => step(STEP)}
-              >
-                <Plus className="h-4 w-4" strokeWidth={2.5} />
-              </button>
-            )}
+        {weighable && (
+          <div className="mt-3 flex flex-wrap gap-2">
+            {/* The scale first, because weighing it is the answer this would
+                rather have. */}
+            <button
+              type="button"
+              aria-pressed={byWeight}
+              className="t-chip aria-pressed:border-accent aria-pressed:text-text"
+              onClick={() => choose(true)}
+            >
+              <Scale className="h-3.5 w-3.5" strokeWidth={2.5} />
+              Weigh it
+            </button>
+            <button
+              type="button"
+              aria-pressed={!byWeight}
+              className="t-chip aria-pressed:border-accent aria-pressed:text-text"
+              onClick={() => choose(false)}
+            >
+              Servings
+            </button>
           </div>
-        </>
-      )}
-
-      <p className="t-micro mt-3 mb-2">Meal</p>
-      <div className="flex flex-wrap gap-2">
-        {SLOTS.map((option) => (
-          <button
-            key={option}
-            type="button"
-            aria-pressed={meal === option}
-            className="t-chip aria-pressed:border-accent aria-pressed:text-text"
-            onClick={() => chooseMeal(option)}
-          >
-            {SLOT_LABEL[option]}
-          </button>
-        ))}
-      </div>
-
-      {autoLogged && (
-        <div className="mt-3">
-          <Switch
-            label="Also change the auto-log"
-            note="For the days to come as well: this mealtime and this amount."
-            checked={follow}
-            onChange={setFollow}
-          />
-        </div>
-      )}
-
-      {error && <p className="t-error mt-3">{error}</p>}
-
-      <div className="mt-4 flex gap-3">
-        <button
-          type="button"
-          className="t-btn t-btn-primary flex-1"
-          disabled={saving || !valid}
-          onClick={send}
-        >
-          {action}
-        </button>
-        {onDelete !== undefined && removable ? (
-          <button type="button" className="t-btn text-danger" onClick={() => onDelete(meal)}>
-            {deleteLabel}
-          </button>
-        ) : (
-          <button type="button" className="t-btn" onClick={onClose}>
-            Cancel
-          </button>
         )}
-      </div>
-    </Sheet>
+
+        {counting && (
+          <>
+            <p className="t-micro mt-3 mb-2">{byWeight ? 'Weight' : 'Servings'}</p>
+            <div className="flex flex-wrap items-center gap-2">
+              {!byWeight && (
+                <button
+                  type="button"
+                  className="t-btn w-12"
+                  aria-label="Less"
+                  onClick={() => step(-STEP)}
+                >
+                  <Minus className="h-4 w-4" strokeWidth={2.5} />
+                </button>
+              )}
+              <input
+                className="t-input t-nums w-24 text-center"
+                inputMode="decimal"
+                aria-label={byWeight ? 'Weight' : 'Servings'}
+                placeholder={byWeight ? '0' : ''}
+                value={amount}
+                // The field opens at 0, so typing replaces it rather than
+                // making a weight read 0250.
+                onFocus={(event) => event.currentTarget.select()}
+                onChange={(event) => setAmount(event.target.value)}
+              />
+              {byWeight ? (
+                // The three a scale reads in, beside the field. Switching leaves
+                // the number alone: it is what the scale said, not a conversion.
+                MASS_UNITS.map((option) => (
+                  <button
+                    key={option}
+                    type="button"
+                    aria-pressed={unit === option}
+                    className="t-chip aria-pressed:border-accent aria-pressed:text-text"
+                    onClick={() => setUnit(option)}
+                  >
+                    {UNIT_LABEL[option]}
+                  </button>
+                ))
+              ) : (
+                <button
+                  type="button"
+                  className="t-btn w-12"
+                  aria-label="More"
+                  onClick={() => step(STEP)}
+                >
+                  <Plus className="h-4 w-4" strokeWidth={2.5} />
+                </button>
+              )}
+            </div>
+          </>
+        )}
+
+        <p className="t-micro mt-3 mb-2">Meal</p>
+        <div className="flex flex-wrap gap-2">
+          {SLOTS.map((option) => (
+            <button
+              key={option}
+              type="button"
+              aria-pressed={meal === option}
+              className="t-chip aria-pressed:border-accent aria-pressed:text-text"
+              onClick={() => chooseMeal(option)}
+            >
+              {SLOT_LABEL[option]}
+            </button>
+          ))}
+        </div>
+
+        {autoLogged && (
+          <div className="mt-3">
+            <Switch
+              label="Also change the auto-log"
+              note="For the days to come as well: this mealtime and this amount."
+              checked={follow}
+              onChange={setFollow}
+            />
+          </div>
+        )}
+
+        {error && <p className="t-error mt-3">{error}</p>}
+
+        <div className="mt-4 flex gap-3">
+          <button
+            type="button"
+            className="t-btn t-btn-primary flex-1"
+            disabled={saving || !valid}
+            onClick={send}
+          >
+            {action}
+          </button>
+          {onDelete !== undefined && removable ? (
+            <button
+              type="button"
+              className="t-btn text-danger"
+              onClick={() => (confirmDelete === undefined ? onDelete(meal) : setAsking(true))}
+            >
+              {deleteLabel}
+            </button>
+          ) : (
+            <button type="button" className="t-btn" onClick={onClose}>
+              Cancel
+            </button>
+          )}
+        </div>
+      </Sheet>
+      {confirmDelete !== undefined && onDelete !== undefined && (
+        <ConfirmSheet
+          open={asking}
+          label={confirmDelete.question(meal)}
+          question={confirmDelete.question(meal)}
+          note={confirmDelete.note}
+          verb={confirmDelete.verb}
+          busy={saving}
+          onConfirm={() => {
+            setAsking(false)
+            onDelete(meal)
+          }}
+          onClose={() => setAsking(false)}
+        />
+      )}
+    </>
   )
 }
