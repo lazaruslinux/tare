@@ -14,6 +14,7 @@ import logging
 import os
 import secrets
 import tempfile
+import threading
 
 from PIL import Image, ImageOps, UnidentifiedImageError
 
@@ -59,6 +60,11 @@ SQUARE = ("avatar",)
 
 SUFFIX = ".webp"
 MEDIA_TYPE = "image/webp"
+
+# How many uploads may be turned into files at once. Decoding holds the whole
+# picture in memory, so a handful of large uploads arriving together is what
+# fills the machine. A third upload waits its turn; it is never refused.
+_encoding = threading.Semaphore(2)
 
 
 class RejectedImage(Exception):
@@ -151,10 +157,9 @@ def _centred(image: Image.Image) -> Image.Image:
     return image.crop((left, top, left + edge, top + edge))
 
 
-def encode(raw: bytes, max_edge: int, square: bool = False, quality: int = QUALITY) -> bytes:
-    """The webp this server will serve, built from the bytes that arrived."""
-    decoded = _decoded(raw)
-    fitted = _fitted(_centred(decoded) if square else decoded, max_edge)
+def _built(image: Image.Image, max_edge: int, square: bool, quality: int) -> bytes:
+    """The webp this server will serve, built from a picture already decoded."""
+    fitted = _fitted(_centred(image) if square else image, max_edge)
     # Pasted onto a blank canvas rather than converted: a converted image keeps
     # its source's info dictionary and Pillow writes parts of it back out. A
     # fresh canvas has nothing to carry, so the camera model, the timestamp and
@@ -164,6 +169,12 @@ def encode(raw: bytes, max_edge: int, square: bool = False, quality: int = QUALI
     out = io.BytesIO()
     clean.save(out, format="WEBP", quality=quality, method=4)
     return out.getvalue()
+
+
+def encode(raw: bytes, max_edge: int, square: bool = False, quality: int = QUALITY) -> bytes:
+    """The webp this server will serve, built from the bytes that arrived."""
+    with _encoding:
+        return _built(_decoded(raw), max_edge, square, quality)
 
 
 def _write(name: str, data: bytes) -> None:
@@ -188,12 +199,9 @@ def _write(name: str, data: bytes) -> None:
 
 
 def write_thumb(raw: bytes, name: str) -> None:
-    """Write the small square copy of one stored photo, beside it.
-
-    Built from the bytes that arrived rather than from the stored picture: the
-    original has the detail, and a 96 px square cut out of it is sharper than
-    the same square cut out of something already scaled down.
-    """
+    """Write the small square copy of one stored photo, beside it, from the
+    bytes of the picture itself. This is the backfill's way in; an upload gets
+    its thumb inside store() off the decode it has already paid for."""
     _write(thumb_name(name), encode(raw, THUMB_EDGE, square=True, quality=THUMB_QUALITY))
 
 
@@ -204,11 +212,18 @@ def store(raw: bytes, purpose: str) -> str:
     before the row exists, so that an upload this server will not store never
     leaves an id behind.
     """
-    encoded = encode(raw, MAX_EDGES[purpose], purpose in SQUARE)
+    # Decoded once and used twice: the thumb is cut from the full-resolution
+    # picture in memory, so it is the same square a second decode would give.
+    with _encoding:
+        decoded = _decoded(raw)
+        encoded = _built(decoded, MAX_EDGES[purpose], purpose in SQUARE, QUALITY)
+        small = (
+            _built(decoded, THUMB_EDGE, True, THUMB_QUALITY) if purpose in THUMBED else None
+        )
     name = f"{secrets.token_hex(16)}{SUFFIX}"
     _write(name, encoded)
-    if purpose in THUMBED:
-        write_thumb(raw, name)
+    if small is not None:
+        _write(thumb_name(name), small)
     return name
 
 

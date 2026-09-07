@@ -433,6 +433,9 @@ class FoodPhoto(Base):
             postgresql_where=text("status = 'approved'"),
             sqlite_where=text("status = 'approved'"),
         ),
+        # The daily upload cap counts one member's pictures since their
+        # midnight, and this is the order it asks in.
+        Index("ix_food_photos_uploader_created", "uploaded_by_id", "created_at"),
     )
 
     id: Mapped[int] = mapped_column(Integer, primary_key=True)

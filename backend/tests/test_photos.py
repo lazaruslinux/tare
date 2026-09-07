@@ -491,6 +491,16 @@ def test_a_front_photo_is_stored_with_a_small_square_copy_beside_it(
     )
 
 
+def test_a_stored_picture_is_cached_for_good(client, signed_in):
+    """The name is random and a replacement gets a new one, so an address that
+    answers once answers the same thing forever."""
+    photo_id = upload(client).json()["photo_id"]
+    for address in (f"/api/photos/{photo_id}.webp", f"/api/photos/{photo_id}.thumb.webp"):
+        response = client.get(address)
+        assert response.status_code == 200
+        assert response.headers["cache-control"] == "private, max-age=31536000, immutable"
+
+
 def test_a_label_photo_gets_no_small_copy(client, db_session, signed_in):
     response = upload(client, purpose="label")
     row = db_session.get(models.FoodPhoto, response.json()["photo_id"])

@@ -40,6 +40,12 @@ MISSING_PHOTO_TO_ATTACH = "That photo is not there to attach."
 # is joined to a path with it.
 STORED_NAME = re.compile(r"^[0-9a-f]{32}\.webp$")
 
+# What a browser may do with a stored picture. Every name is sixteen random
+# bytes, and replacing a picture mints a new one, so an address never changes
+# what it answers and a copy is never stale. Private: the same address answers
+# differently depending on who is asking, so no shared cache should keep one.
+PHOTO_CACHE = "private, max-age=31536000, immutable"
+
 # How long an upload that was never sent with anything is kept. Long enough
 # that somebody who filled a form in, went away, and came back still has their
 # picture; short enough that the directory is not a graveyard.
@@ -363,7 +369,7 @@ def read_avatar(
     return FileResponse(
         stored,
         media_type=photos.MEDIA_TYPE,
-        headers={"Cache-Control": "private, max-age=3600"},
+        headers={"Cache-Control": PHOTO_CACHE},
     )
 
 
@@ -388,7 +394,7 @@ def read_thumb(
     return FileResponse(
         stored,
         media_type=photos.MEDIA_TYPE,
-        headers={"Cache-Control": "private, max-age=3600"},
+        headers={"Cache-Control": PHOTO_CACHE},
     )
 
 
@@ -408,7 +414,5 @@ def read_photo(
     return FileResponse(
         stored,
         media_type=photos.MEDIA_TYPE,
-        # Private: the same address answers differently depending on who is
-        # asking, so no shared cache should ever keep a copy of it.
-        headers={"Cache-Control": "private, max-age=3600"},
+        headers={"Cache-Control": PHOTO_CACHE},
     )

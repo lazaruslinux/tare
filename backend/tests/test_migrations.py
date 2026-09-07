@@ -152,6 +152,8 @@ def test_upgrade_head_builds_the_identity_schema(tmp_path):
     # so it is worth seeing that the migrations really emitted them.
     assert "uq_foods_barcode_approved" in food_indexes
     assert "uq_food_photos_food_approved" in photo_indexes
+    # And the pair the daily upload cap counts on.
+    assert "ix_food_photos_uploader_created" in photo_indexes
     assert "uq_food_submissions_open" in submission_indexes
     # And the one that holds a person to a single open request of each kind
     # about a food that is already shared.
