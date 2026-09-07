@@ -1,8 +1,9 @@
 """The community feed, and what one member is allowed to learn about another.
 
-Two rules are worth more than the rest here: a workout somebody hid is gone
-for everybody but its owner, and a number somebody held back is absent from
-the answer rather than sent as null.
+Three rules are worth more than the rest here: nothing about a body reaches
+anybody who is not a friend, a workout somebody hid is gone for everybody but
+its owner, and a number somebody held back is absent from the answer rather
+than sent as null.
 """
 
 import datetime as dt
@@ -20,6 +21,14 @@ from tests.test_ingest import export, pick, post, token_for, yesterday
 def sign_in(client, username):
     response = client.post("/api/auth/login", json={"username": username, "password": PASSWORD})
     assert response.status_code == 200
+
+
+def befriend(db_session, one, other):
+    """Two accounts who have already agreed, without the two calls it takes."""
+    db_session.add(
+        models.Friendship(requester_id=one.id, addressee_id=other.id, accepted_at=now_utc())
+    )
+    db_session.commit()
 
 
 def synced(client, db_session, user, day=None):
@@ -60,7 +69,7 @@ def put_workout(db_session, user, minutes_ago, **fields):
 def test_a_shared_workout_reaches_the_other_member(client, db_session, make_user):
     runner = make_user("runner")
     synced(client, db_session, runner)
-    make_user("member")
+    befriend(db_session, runner, make_user("member"))
     sign_in(client, "member")
 
     body = client.get("/api/feed").json()
@@ -77,7 +86,7 @@ def test_a_shared_workout_reaches_the_other_member(client, db_session, make_user
 def test_a_feed_row_never_carries_the_line_itself(client, db_session, make_user):
     runner = make_user("runner")
     synced(client, db_session, runner)
-    make_user("member")
+    befriend(db_session, runner, make_user("member"))
     sign_in(client, "member")
 
     row = client.get("/api/feed").json()["items"][0]
@@ -90,9 +99,8 @@ def test_a_hidden_workout_is_the_owners_alone(client, db_session, make_user):
     runner = make_user("runner")
     workout = synced(client, db_session, runner)
     workout.hidden_from_feed = True
-    db_session.commit()
+    befriend(db_session, runner, make_user("member"))
 
-    make_user("member")
     sign_in(client, "member")
     assert client.get("/api/feed").json()["items"] == []
 
@@ -103,7 +111,7 @@ def test_a_hidden_workout_is_the_owners_alone(client, db_session, make_user):
 
 
 def test_a_workout_out_of_a_file_starts_hidden(client, db_session, make_user):
-    make_user("uploader")
+    uploader = make_user("uploader")
     sign_in(client, "uploader")
     raw = json.dumps(export(yesterday())).encode()
     assert pick(client, raw).status_code == 200
@@ -112,7 +120,7 @@ def test_a_workout_out_of_a_file_starts_hidden(client, db_session, make_user):
     assert len(mine) == 1
     assert mine[0]["hidden"] is True
 
-    make_user("member")
+    befriend(db_session, uploader, make_user("member"))
     sign_in(client, "member")
     assert client.get("/api/feed").json()["items"] == []
 
@@ -121,7 +129,7 @@ def test_the_owner_alone_may_hide_a_workout(client, db_session, make_user):
     runner = make_user("runner")
     workout = synced(client, db_session, runner)
 
-    make_user("member")
+    befriend(db_session, runner, make_user("member"))
     sign_in(client, "member")
     refused = client.patch(f"/api/workouts/{workout.id}", json={"hidden_from_feed": True})
     assert refused.status_code == 404
@@ -145,7 +153,7 @@ def test_a_member_who_shares_no_workouts_is_absent_from_the_feed(
     client, db_session, make_user
 ):
     runner = make_user("runner")
-    make_user("reader")
+    befriend(db_session, runner, make_user("reader"))
     workout = put_workout(db_session, runner, 30)
     runner.share_workouts = False
     db_session.commit()
@@ -167,7 +175,7 @@ def test_the_feed_pages_without_repeating_itself(client, db_session, make_user):
     runner = make_user("runner")
     for step in range(35):
         put_workout(db_session, runner, minutes_ago=step)
-    make_user("member")
+    befriend(db_session, runner, make_user("member"))
     sign_in(client, "member")
 
     first = client.get("/api/feed").json()
@@ -202,7 +210,7 @@ def test_a_held_back_heart_rate_is_absent_rather_than_empty(client, db_session, 
     db_session.commit()
     workout = synced(client, db_session, runner)
 
-    make_user("member")
+    befriend(db_session, runner, make_user("member"))
     sign_in(client, "member")
     body = client.get(f"/api/workouts/{workout.id}").json()
 
@@ -219,7 +227,7 @@ def test_held_back_calories_leave_the_workout_and_its_minutes(
     db_session.commit()
     workout = synced(client, db_session, runner)
 
-    make_user("member")
+    befriend(db_session, runner, make_user("member"))
     sign_in(client, "member")
     body = client.get(f"/api/workouts/{workout.id}").json()
 
@@ -234,7 +242,7 @@ def test_a_held_back_route_takes_the_climb_with_it(client, db_session, make_user
     db_session.commit()
     workout = synced(client, db_session, runner)
 
-    make_user("member")
+    befriend(db_session, runner, make_user("member"))
     sign_in(client, "member")
     body = client.get(f"/api/workouts/{workout.id}").json()
     row = client.get("/api/feed").json()["items"][0]
@@ -316,8 +324,8 @@ def test_each_switch_shows_its_own_fact(client, db_session, make_user):
     runner.share_location = True
     db_session.add(models.HealthProfile(user_id=runner.id, sex="male"))
     db_session.commit()
+    befriend(db_session, runner, make_user("member"))
 
-    make_user("member")
     sign_in(client, "member")
     body = client.get(f"/api/feed/members/{runner.id}").json()
 
@@ -330,8 +338,8 @@ def test_a_shared_sex_nobody_recorded_stays_absent(client, db_session, make_user
     runner = make_user("runner")
     runner.share_sex = True
     db_session.commit()
+    befriend(db_session, runner, make_user("member"))
 
-    make_user("member")
     sign_in(client, "member")
 
     assert "sex" not in client.get(f"/api/feed/members/{runner.id}").json()
@@ -372,7 +380,7 @@ def test_a_finished_day_reaches_the_others_only_once_it_is_shared(
 ):
     keeper = make_user("keeper")
     put_journal(db_session, keeper, minutes_ago=5)
-    make_user("member")
+    befriend(db_session, keeper, make_user("member"))
     sign_in(client, "member")
 
     assert client.get("/api/feed").json()["items"] == []
@@ -435,7 +443,10 @@ def test_the_pronoun_follows_what_the_member_shared(client, db_session, make_use
         profile_for(db_session, member, sex)
         put_journal(db_session, member, minutes_ago=5, day=dt.date(2026, 1, 1))
 
-    make_user("reader")
+    reader = make_user("reader")
+    for member in db_session.scalars(select(models.User)).all():
+        if member.id != reader.id:
+            befriend(db_session, member, reader)
     sign_in(client, "reader")
     rows = client.get("/api/feed").json()["items"]
     said = {row["display_name"]: row["pronoun"] for row in rows}
@@ -477,7 +488,7 @@ def losing(db_session, make_user, name="loser"):
 
 def test_a_loss_reaches_the_others_only_once_it_is_shared(client, db_session, make_user):
     loser = losing(db_session, make_user)
-    make_user("member")
+    befriend(db_session, loser, make_user("member"))
     sign_in(client, "member")
 
     assert client.get("/api/feed").json()["items"] == []
@@ -524,8 +535,8 @@ def test_a_day_with_no_weight_is_not_a_reading_the_window_reads(client, db_sessi
     db_session.commit()
     put_weigh_in(db_session, member, 81.0, dt.date(2026, 1, 12), minutes_ago=5)
 
-    make_user("member")
-    sign_in(client, "member")
+    befriend(db_session, member, make_user("reader"))
+    sign_in(client, "reader")
     rows = client.get("/api/feed").json()["items"]
     assert [row["kind"] for row in rows] == ["weight"]
     assert rows[0]["lost_kg"] == 1.0
@@ -538,7 +549,7 @@ def test_a_gain_is_never_a_row(client, db_session, make_user):
     put_weigh_in(db_session, gainer, 80.0, EARLIER, minutes_ago=10)
     put_weigh_in(db_session, gainer, 81.0, LATER, minutes_ago=5)
 
-    make_user("member")
+    befriend(db_session, gainer, make_user("member"))
     sign_in(client, "member")
     assert client.get("/api/feed").json()["items"] == []
 
@@ -551,7 +562,7 @@ def test_a_loss_too_small_to_read_is_never_a_row(client, db_session, make_user):
     put_weigh_in(db_session, steady, 80.0, EARLIER, minutes_ago=10)
     put_weigh_in(db_session, steady, 79.98, LATER, minutes_ago=5)
 
-    make_user("member")
+    befriend(db_session, steady, make_user("member"))
     sign_in(client, "member")
     assert client.get("/api/feed").json()["items"] == []
 
@@ -618,7 +629,7 @@ def test_a_page_of_every_kind_reads_through_without_repeating_itself(
             start + dt.timedelta(days=step + 1),
             minutes_ago=step * 3 + 2,
         )
-    make_user("member")
+    befriend(db_session, runner, make_user("member"))
     sign_in(client, "member")
 
     first = client.get("/api/feed").json()
@@ -701,7 +712,7 @@ def test_arriving_takes_its_place_in_time_beside_the_rest(client, db_session, ma
     runner.first_run_at = now_utc()
     db_session.commit()
     put_workout(db_session, runner, minutes_ago=1)
-    make_user("member")
+    befriend(db_session, runner, make_user("member"))
     sign_in(client, "member")
 
     rows = client.get("/api/feed").json()["items"]

@@ -107,6 +107,11 @@ const THEMES: { value: Theme; label: string }[] = [
   { value: 'dark', label: 'Dark' },
 ]
 
+// How many people are waiting on an answer, said under the row that opens them.
+function requestsNote(count: number): string {
+  return count === 1 ? '1 request' : `${count} requests`
+}
+
 function Row({
   label,
   icon: Icon,
@@ -140,6 +145,7 @@ export function More({
   onChange,
   onSignedOut,
   waiting,
+  requests,
   refresh,
   onReviewed,
   onChanged,
@@ -157,6 +163,8 @@ export function More({
   // How many submissions are waiting. Read once above this screen, because the
   // navigation says the same number.
   waiting: number
+  // How many friend requests nobody has answered, said under the Members row.
+  requests: number
   // The app-wide change tick. What this tab reads from the server is read
   // again on every bump, so a screen left open catches up on its own.
   refresh: number
@@ -240,6 +248,13 @@ export function More({
     setAccountError('')
     setMember(null)
     setScreen(next)
+  }
+
+  // A friendship started or ended: the feed lists differently and one fewer
+  // request is waiting.
+  const friendshipChanged = () => {
+    onChanged()
+    onReviewed()
   }
 
   // The two screens written here name themselves; the admin ones name
@@ -412,9 +427,19 @@ export function More({
 
   if (screen === 'members') {
     return member === null ? (
-      <Members me={me.id} onBack={() => go(null)} onOpen={setMember} />
+      <Members
+        me={me.id}
+        onBack={() => go(null)}
+        onOpen={setMember}
+        onAnswered={friendshipChanged}
+      />
     ) : (
-      <MemberView userId={member} back="Members" onBack={() => setMember(null)} />
+      <MemberView
+        userId={member}
+        back="Members"
+        onBack={() => setMember(null)}
+        onChange={friendshipChanged}
+      />
     )
   }
 
@@ -427,7 +452,12 @@ export function More({
         onOpenProfile={() => setMember(me.id)}
       />
     ) : (
-      <MemberView userId={member} back="Sharing" onBack={() => setMember(null)} />
+      <MemberView
+        userId={member}
+        back="Sharing"
+        onBack={() => setMember(null)}
+        onChange={friendshipChanged}
+      />
     )
   }
 
@@ -680,11 +710,16 @@ export function More({
           note={syncNote(sync)}
           onOpen={() => go('sync')}
         />
-        <Row label="Members" icon={Users} onOpen={() => go('members')} />
+        <Row
+          label="Members"
+          icon={Users}
+          note={requests > 0 ? requestsNote(requests) : undefined}
+          onOpen={() => go('members')}
+        />
         <Row
           label="Sharing"
           icon={Eye}
-          note="What other members can see"
+          note="What your friends can see"
           onOpen={() => go('sharing')}
         />
         <Row label="Display" icon={Monitor} onOpen={() => go('display')} />

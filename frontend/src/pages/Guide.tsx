@@ -64,7 +64,7 @@ const QUESTIONS: { q: string; a: string }[] = [
   },
   {
     q: "Who can see what?",
-    a: "Only invited members with a verified email. Workouts are shared unless you turn them off under Sharing, along with heart rate, calories and route maps. Age, gender and location show only if you switch them on. Your journal, weight, measurements and targets are always private, even from administrators.",
+    a: "Only the friends you add under Members, and only what you switch on under Sharing. Workouts are shared with friends unless you turn them off, along with heart rate, calories and route maps. Age, gender and location show only if you switch them on. Your journal, weight, measurements and targets are always private, even from administrators.",
   },
   {
     q: "Where does feedback go?",

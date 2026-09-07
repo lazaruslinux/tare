@@ -120,7 +120,7 @@ export default function App() {
   const wide = useWideLayout()
   const reduced = useReducedMotion()
   const bar = useTopBarState()
-  const { waiting, queue, refresh: refreshWaiting } = useWaitingCount(me)
+  const { waiting, queue, requests, refresh: refreshWaiting } = useWaitingCount(me)
   const changed = useCallback(() => setLogged((n) => n + 1), [])
   // Every way the account arrives or changes goes through here, so the clock
   // preference the formatters read is never a save behind what was saved.
@@ -358,6 +358,10 @@ export default function App() {
                         userId={overlay.id}
                         back={TAB_TITLE[page]}
                         onBack={() => setOverlay(null)}
+                        onChange={() => {
+                          changed()
+                          refreshWaiting()
+                        }}
                       />
                     )
                   ) : page === 'more' ? (
@@ -366,6 +370,7 @@ export default function App() {
                       onChange={remember}
                       onSignedOut={leave}
                       waiting={queue}
+                      requests={requests}
                       refresh={logged}
                       onReviewed={refreshWaiting}
                       onChanged={changed}

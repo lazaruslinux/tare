@@ -1,17 +1,7 @@
-"""What the members of this instance show each other.
-
-One list, read only, and it holds four kinds of thing: a workout somebody did,
-a day somebody finished, a weigh-in that came in under the one before it, and a
-member arriving. No food, no steps, no likes and no comments: the feed is here
-so a small group can see that somebody else went out this morning, not so
-anybody can be scored against them. A finished day says that and nothing else,
-never what was in it, and a weigh-in says how much came off, never the weight
-itself.
-
-What a member is shown about another member is the shortest list the app
-could work with: a name, how long they have been here, and up to three facts
-they turned on themselves. Everything else about an account is private to it,
-administrators included.
+"""One read-only list of what members share: workouts, finished days, weigh-ins
+that came in lower, and arrivals. It never carries food, steps, what was in a
+day, or a weight itself, and there is no answering back. Only the friends a
+member adds see any of it, and every fact still follows its owner's switch.
 """
 
 from __future__ import annotations
@@ -29,6 +19,8 @@ from sqlalchemy.orm import Session
 from app import clock, health, models
 from app.db import get_db
 from app.deps import require_user, reviews
+from app.friends import friend_ids
+from app.models import now_utc
 from app.profiles import avatar_url, contribution_counts, role_of
 from app.routers.admin import name_match, waiting_items
 from app.routers.diary import fill_auto_logs, total
@@ -43,6 +35,11 @@ PAGE = 30
 # One page marker that is not ours, and one member who is not there.
 BAD_CURSOR = "That page marker is not one of ours."
 MISSING_MEMBER = "There is no such member."
+
+# The three ways asking to be friends can be refused.
+NOT_YOURSELF = "You cannot add yourself."
+NO_REQUEST = "There is no request from this member."
+NOTHING_TO_DROP = "There is no friendship with this member."
 
 
 # The four kinds of row, and how they break a tie at the same instant: the
@@ -133,18 +130,13 @@ def read_feed(
     db: Session = Depends(get_db),
     user: models.User = Depends(require_user),
 ) -> dict[str, object]:
-    """Every member's shared workouts, finished days, weigh-ins and arrivals,
-    newest first, a page at a time.
+    """Friends' shared workouts, finished days and weigh-ins plus everybody's
+    arrivals, newest first, thirty a page.
 
-    Four tables, one list. They are read separately with the same "after this
-    marker" filter, merged here, and cut to a page; the marker written back
-    names the last row's time, its kind and which row it was, so the next page
-    starts exactly after it whichever table that row came out of. Sorting them
-    in the database instead would mean a union of four unlike shapes for no
-    gain: a page is thirty rows.
-
-    A row this account hid is still in its own feed and says so, because the
-    only way back to a hidden workout is through the list it was hidden from.
+    Four tables are read with the same "after this marker" filter and merged
+    here, and the marker written back names the last row's time, kind and id
+    so the next page starts exactly after it. A row this account hid stays in
+    its own feed and says so, because that is the only way back to it.
     """
     at: dt.datetime | None = None
     kind = ""
@@ -152,19 +144,26 @@ def read_feed(
     if cursor:
         at, kind, anchor = read_cursor(cursor)
 
-    # A row reaches the others when neither it nor its whole account is held
+    # Whose rows may be read at all: the friends this account has, and itself.
+    # Every switch below is asked after this one, so a switch left on is still
+    # nothing to anybody who was never added.
+    friends = friend_ids(db, user)
+    shared_by = friends | {user.id}
+
+    # A row reaches a friend when neither it nor its whole account is held
     # back. The owner always sees their own.
     workouts = (
         select(models.Workout)
         .join(models.User, models.User.id == models.Workout.user_id)
         .where(
+            models.Workout.user_id.in_(shared_by),
             or_(
                 and_(
                     models.Workout.hidden_from_feed.is_(False),
                     models.User.share_workouts.is_(True),
                 ),
                 models.Workout.user_id == user.id,
-            )
+            ),
         )
         .order_by(models.Workout.started_at.desc(), models.Workout.id.desc())
         .limit(PAGE + 1)
@@ -186,10 +185,11 @@ def read_feed(
         select(models.JournalDay)
         .join(models.User, models.User.id == models.JournalDay.user_id)
         .where(
+            models.JournalDay.user_id.in_(shared_by),
             or_(
                 models.User.share_journal.is_(True),
                 models.JournalDay.user_id == user.id,
-            )
+            ),
         )
         .order_by(
             models.JournalDay.completed_at.desc(),
@@ -224,6 +224,7 @@ def read_feed(
         select(readings)
         .join(models.User, models.User.id == readings.c.user_id)
         .where(
+            readings.c.user_id.in_(shared_by),
             readings.c.prev_kg.is_not(None),
             readings.c.prev_kg - readings.c.weight_kg >= MIN_LOSS_KG,
             or_(
@@ -427,6 +428,7 @@ def read_feed(
     last = page[-1] if page else None
     return {
         "items": items,
+        "friends": len(friends),
         "next_cursor": (
             write_cursor(last[0][0], last[1], last[0][3] or str(last[0][2]))
             if more and last is not None
@@ -480,6 +482,26 @@ def read_today(
 MEMBERS_PAGE = 50
 
 
+def member_rows(db: Session, members: list[models.User]) -> list[dict[str, object]]:
+    """The few things a member is listed by, wherever they are listed.
+
+    One count for the whole list rather than one per row, so a page of fifty
+    is one query and not fifty.
+    """
+    counts = contribution_counts(db, [member.id for member in members])
+    return [
+        {
+            "id": member.id,
+            "display_name": member.display_name or member.username,
+            "role": role_of(member),
+            "avatar_url": avatar_url(member),
+            "member_since": member.created_at.strftime("%Y-%m"),
+            "contributions": counts[member.id],
+        }
+        for member in members
+    ]
+
+
 @router.get("/members")
 def read_members(
     q: str = "",
@@ -511,19 +533,12 @@ def read_members(
     )
     more = len(members) > MEMBERS_PAGE
     members = members[:MEMBERS_PAGE]
-    counts = contribution_counts(db, [member.id for member in members])
+    friends = friend_ids(db, user)
+    rows = member_rows(db, members)
+    for row in rows:
+        row["friend"] = row["id"] in friends
     return {
-        "items": [
-            {
-                "id": member.id,
-                "display_name": member.display_name or member.username,
-                "role": role_of(member),
-                "avatar_url": avatar_url(member),
-                "member_since": member.created_at.strftime("%Y-%m"),
-                "contributions": counts[member.id],
-            }
-            for member in members
-        ],
+        "items": rows,
         "next_offset": start + len(members) if more else None,
     }
 
@@ -534,14 +549,17 @@ def read_member(
     db: Session = Depends(get_db),
     user: models.User = Depends(require_user),
 ) -> dict[str, object]:
-    """One member as other members see them: a name, a month, and whatever
-    they chose to show. A fact that is not shared is absent rather than null,
-    so nothing on the far side has to know what was withheld."""
+    """One member as another member sees them: a name, a month, and whatever
+    they chose to show their friends. A fact that is not shared is absent
+    rather than null, so nothing on the far side has to know what was
+    withheld."""
     member = db.get(models.User, user_id)
     if member is None:
         raise HTTPException(status.HTTP_404_NOT_FOUND, MISSING_MEMBER)
 
+    standing = state_of(user, user_id, pair(db, user, user_id))
     shown: dict[str, object] = {
+        "friendship": standing,
         "display_name": member.display_name or member.username,
         # What they do for the group, which is not a private fact: everybody
         # can see who reviews.
@@ -553,6 +571,10 @@ def read_member(
         # there is nothing here to keep private.
         "contributions": contribution_counts(db, [member.id])[member.id],
     }
+    # The three opt-in facts are for friends. A switch turned on is an offer to
+    # the people this member added, not to the whole instance.
+    if standing not in ("self", "friends"):
+        return shown
     if member.share_age and member.birthdate is not None:
         # Counted against the date in UTC: an age in whole years is not worth
         # asking whose midnight it is.
@@ -564,3 +586,150 @@ def read_member(
     if member.share_location and member.location:
         shown["location"] = member.location
     return shown
+
+
+def pair(db: Session, user: models.User, other_id: int) -> models.Friendship | None:
+    """The one row between two members, whichever of them did the asking."""
+    return db.scalar(
+        select(models.Friendship).where(
+            or_(
+                and_(
+                    models.Friendship.requester_id == user.id,
+                    models.Friendship.addressee_id == other_id,
+                ),
+                and_(
+                    models.Friendship.requester_id == other_id,
+                    models.Friendship.addressee_id == user.id,
+                ),
+            )
+        )
+    )
+
+
+def state_of(user: models.User, other_id: int, row: models.Friendship | None) -> str:
+    """What these two are to each other, in the reader's own terms.
+
+    Said from one side, so the same pending row is "requested" to whoever asked
+    and "incoming" to whoever was asked.
+    """
+    if other_id == user.id:
+        return "self"
+    if row is None:
+        return "none"
+    if row.accepted_at is not None:
+        return "friends"
+    return "requested" if row.requester_id == user.id else "incoming"
+
+
+@router.get("/friends")
+def read_friends(
+    db: Session = Depends(get_db),
+    user: models.User = Depends(require_user),
+) -> dict[str, object]:
+    """Who this account shares with, who has asked it, and who it has asked.
+
+    Three lists out of one table: every row touching this account, sorted into
+    the side it is waiting on.
+    """
+    rows = list(
+        db.execute(
+            select(models.Friendship).where(
+                or_(
+                    models.Friendship.requester_id == user.id,
+                    models.Friendship.addressee_id == user.id,
+                )
+            )
+        ).scalars()
+    )
+    sides: dict[str, list[int]] = {"friends": [], "incoming": [], "outgoing": []}
+    for row in rows:
+        other = row.addressee_id if row.requester_id == user.id else row.requester_id
+        if row.accepted_at is not None:
+            sides["friends"].append(other)
+        elif row.requester_id == user.id:
+            sides["outgoing"].append(other)
+        else:
+            sides["incoming"].append(other)
+
+    named = list(
+        db.execute(
+            select(models.User).where(
+                models.User.id.in_({other for ids in sides.values() for other in ids})
+            )
+        ).scalars()
+    )
+    shown = {row["id"]: row for row in member_rows(db, named)}
+    listed: dict[str, object] = {
+        side: sorted(
+            (shown[other] for other in ids if other in shown),
+            key=lambda row: str(row["display_name"]).lower(),
+        )
+        for side, ids in sides.items()
+    }
+    return listed
+
+
+@router.post("/friends/{user_id}")
+def ask_friend(
+    user_id: int,
+    db: Session = Depends(get_db),
+    user: models.User = Depends(require_user),
+) -> dict[str, object]:
+    """Ask a member to be friends.
+
+    Asking somebody who already asked is agreeing with them, so their pending
+    row is accepted rather than a second one written the other way round.
+    Asking twice says what already stands instead of failing.
+    """
+    if user_id == user.id:
+        raise HTTPException(status.HTTP_400_BAD_REQUEST, NOT_YOURSELF)
+    if db.get(models.User, user_id) is None:
+        raise HTTPException(status.HTTP_404_NOT_FOUND, MISSING_MEMBER)
+
+    row = pair(db, user, user_id)
+    if row is None:
+        row = models.Friendship(requester_id=user.id, addressee_id=user_id)
+        db.add(row)
+    elif row.accepted_at is None and row.requester_id == user_id:
+        row.accepted_at = now_utc()
+    db.commit()
+    return {"friendship": state_of(user, user_id, row)}
+
+
+@router.post("/friends/{user_id}/accept")
+def accept_friend(
+    user_id: int,
+    db: Session = Depends(get_db),
+    user: models.User = Depends(require_user),
+) -> dict[str, object]:
+    """Agree to a request. Only the side that was asked may."""
+    row = db.scalar(
+        select(models.Friendship).where(
+            models.Friendship.requester_id == user_id,
+            models.Friendship.addressee_id == user.id,
+            models.Friendship.accepted_at.is_(None),
+        )
+    )
+    if row is None:
+        raise HTTPException(status.HTTP_404_NOT_FOUND, NO_REQUEST)
+    row.accepted_at = now_utc()
+    db.commit()
+    return {"friendship": "friends"}
+
+
+@router.delete("/friends/{user_id}", status_code=status.HTTP_204_NO_CONTENT)
+def drop_friend(
+    user_id: int,
+    db: Session = Depends(get_db),
+    user: models.User = Depends(require_user),
+) -> None:
+    """Withdraw a request, decline one, or remove a friend.
+
+    One row holds all three, so which of them this is depends only on who wrote
+    the row and whether it was accepted. Nothing is said to the other side.
+    """
+    row = pair(db, user, user_id)
+    if row is None:
+        raise HTTPException(status.HTTP_404_NOT_FOUND, NOTHING_TO_DROP)
+    db.delete(row)
+    db.commit()

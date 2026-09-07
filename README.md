@@ -4,7 +4,7 @@ Tare is a food journal and health tracker with a community-built food database. 
 
 The only lookup that leaves the server is by barcode. Scanning a code that nobody has entered yet asks an online source for that product, and what comes back waits for a reviewer to approve it before it joins the shared database. Nothing enters the database without a person deciding it should.
 
-Beside the journal, Tare records weight, exercise, and the step and workout data a phone sends in, and shows a read-only feed of what other members have chosen to share. Accounts are created by invitation.
+Beside the journal, Tare records weight, exercise, and the step and workout data a phone sends in, and shows a read-only feed of what the friends you choose have logged. Accounts are created by invitation.
 
 Tare is open source under the AGPL and can be self-hosted; see Running it below.
 
@@ -12,7 +12,7 @@ This project was built with Claude Code, an agentic coding platform, through hun
 
 ## Status
 
-Early development, and most of it is running. Today: invite-only accounts, private custom foods, the journal with meals, recipes, auto-logged daily foods and day completion, the shared database with barcode scanning, browsing by aisle, reported issues, label photos and the approval queue that decides all of it, calorie and macro targets worked out from a weight goal, weigh-ins and body measurements, health sync from a phone including workouts and routes, member profiles, and a community feed with a sharing switch over every part of it.
+Early development, and most of it is running. Today: invite-only accounts, private custom foods, the journal with meals, recipes, auto-logged daily foods and day completion, the shared database with barcode scanning, browsing by aisle, reported issues, label photos and the approval queue that decides all of it, calorie and macro targets worked out from a weight goal, weigh-ins and body measurements, health sync from a phone including workouts and routes, member profiles, and a friends-only community feed with a sharing switch over every part of it.
 
 ## Running it
 

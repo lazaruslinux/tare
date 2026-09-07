@@ -16,8 +16,8 @@ import { clockText, dateText, useClock } from '../lib/clock'
 import { dayLabel, dayOf, today } from '../lib/day'
 import { distanceCompact, hmsText, weightCompact } from '../lib/units'
 
-// What the members of this instance are doing, read only. Four kinds of row:
-// a workout somebody did, a day somebody finished, a weigh-in that came in
+// What this account's friends are doing, read only. Four kinds of row: a
+// workout somebody did, a day somebody finished, a weigh-in that came in
 // lower, and somebody arriving. No food, no answering back.
 
 // The two nearest days keep their words. Anything older is the stamp the rest
@@ -223,6 +223,8 @@ export function Feed({
 }) {
   // Null is a list nobody has read yet, which is not the same as none.
   const [rows, setRows] = useState<FeedRow[] | null>(null)
+  // How many friends there are to fill it, which is what an empty list means.
+  const [friends, setFriends] = useState(0)
   const [cursor, setCursor] = useState<string | null>(null)
   const [busy, setBusy] = useState(false)
   const todayIso = today(me.timezone)
@@ -236,6 +238,7 @@ export function Feed({
       .then((page) => {
         if (!alive) return
         setRows(page.items)
+        setFriends(page.friends)
         setCursor(page.next_cursor)
       })
       .catch(() => alive && setRows([]))
@@ -258,18 +261,29 @@ export function Feed({
   }
 
   if (rows === null) return <p className="text-sm text-muted">Loading.</p>
+  // With nobody added the list holds arrivals at most, so the way to fill it
+  // is said above whatever is there.
+  const hint =
+    friends === 0 ? (
+      <p className="mb-2 text-sm text-muted">
+        Your feed shows the friends you add. Find them under More, then Members.
+      </p>
+    ) : null
   if (rows.length === 0) {
     return (
-      <p className="text-sm text-muted">
-        Nothing shared yet. Workouts, finished days and weigh-ins appear here as members share
-        them.
-      </p>
+      hint ?? (
+        <p className="text-sm text-muted">
+          Nothing shared yet. Workouts, finished days and weigh-ins appear here as your friends
+          share them.
+        </p>
+      )
     )
   }
 
   const shown = limit === undefined ? rows : rows.slice(0, limit)
   return (
     <>
+      {hint}
       {shown.map((row) =>
         row.kind === 'journal' ? (
           <JournalRow

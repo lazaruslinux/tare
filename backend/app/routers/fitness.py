@@ -1,14 +1,9 @@
 """What a phone sent, read back for the Fitness screen.
 
-A day's readings are private without qualification, the way the diary is: no
-address here answers for somebody else's day, and an administrator is nobody
-special. One session is the exception, and only the one the member shared: a
-workout the feed carries reads for every member, minus whatever its owner
-keeps to themselves.
-
-The other half of the file is the seam: the diary and the targets both need to
-know what was imported for a day, and the rule for counting a day's exercise
-once lives here so the two of them cannot drift apart.
+A day's readings are private, the way the diary is, and an administrator is
+nobody special; the one exception is a workout its owner shares, which reads
+for that owner's friends minus whatever they keep back. The rule for counting
+a day's exercise once also lives here, so the diary and the targets agree.
 """
 
 from __future__ import annotations
@@ -23,6 +18,7 @@ from sqlalchemy.orm import Session
 from app import clock, fitness_catalog, health, models
 from app.db import get_db
 from app.deps import require_user
+from app.friends import friend_ids
 
 router = APIRouter(prefix="/fitness", tags=["fitness"])
 workouts_router = APIRouter(prefix="/workouts", tags=["fitness"])
@@ -115,14 +111,9 @@ def day_exercise(
 ) -> tuple[float, int]:
     """One day's exercise counted once: its calories and its minutes.
 
-    Decision 7 says a manual entry and an imported workout that overlap count
-    once and the imported one wins. A manual entry carries a day and a length
-    and no clock time, so whether two of them overlap cannot be asked. What is
-    left of the rule at the resolution the data has is this: the larger of the
-    two sides stands for the day, and the two are never added together. The
-    imported figure wins every time it is the larger, which is the case the
-    rule exists for, and a day of manual work the phone never saw is not
-    thrown away.
+    A manual entry and an imported workout that overlap count once, and a
+    manual entry has no clock time to test overlap with, so the larger side
+    stands for the day and the two are never added (decision 7).
     """
     manual_kcal = sum(row.kcal for row in manual)
     manual_minutes = sum(row.minutes for row in manual)
@@ -700,17 +691,23 @@ def kept_back(owner: models.User) -> set[str]:
 
 
 def readable_workout(db: Session, workout_id: int, user: models.User) -> models.Workout:
-    """One session this account may read: its own, or one a member shared.
+    """One session this account may read: its own, or one a friend shared.
 
-    A workout that is not there, one somebody kept out of the feed, and one
-    that never existed all answer the same sentence.
+    A workout that is not there, one somebody kept out of the feed, one whose
+    owner shares none, and one belonging to somebody this account never added
+    all answer the same sentence.
     """
     row = db.get(models.Workout, workout_id)
     if row is None:
         raise HTTPException(status.HTTP_404_NOT_FOUND, MISSING_WORKOUT)
     if row.user_id != user.id:
         owner = db.get(models.User, row.user_id)
-        if row.hidden_from_feed or owner is None or not owner.share_workouts:
+        if (
+            row.hidden_from_feed
+            or owner is None
+            or not owner.share_workouts
+            or owner.id not in friend_ids(db, user)
+        ):
             raise HTTPException(status.HTTP_404_NOT_FOUND, MISSING_WORKOUT)
     return row
 

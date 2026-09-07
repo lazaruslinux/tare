@@ -316,7 +316,12 @@ export function FoodTab({
     const from = view.from
     if (member !== null) {
       return (
-        <MemberView userId={member.id} back={member.back} onBack={() => setMember(null)} />
+        <MemberView
+          userId={member.id}
+          back={member.back}
+          onBack={() => setMember(null)}
+          onChange={onChanged}
+        />
       )
     }
     return (

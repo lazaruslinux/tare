@@ -131,6 +131,7 @@ export function Sharing({
 
   return (
     <>
+      <p className="mb-3 text-sm text-muted">Only your friends see what you share here.</p>
       <p className="t-micro mb-1">Privacy settings</p>
       <div className="t-card mb-3">
         <p className="text-sm text-muted">Show my:</p>
@@ -195,7 +196,7 @@ export function Sharing({
           onChange={setLoss}
         />
         <p className="mt-2 text-xs text-muted">
-          Members see how much you lost since your last weigh-in, never your weight.
+          Friends see how much you lost since your last weigh-in, never your weight.
         </p>
       </div>
 

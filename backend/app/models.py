@@ -9,6 +9,7 @@ from typing import Any
 from sqlalchemy import (
     JSON,
     Boolean,
+    CheckConstraint,
     Date,
     DateTime,
     Dialect,
@@ -137,6 +138,33 @@ class Session(Base):
     expires_at: Mapped[dt.datetime] = mapped_column(UtcDateTime, nullable=False)
 
 
+class Friendship(Base):
+    """Two members who both agreed, and who sees what the other shares.
+
+    One row for a pair however the asking went: whoever asked is the requester,
+    and the row counts for nothing until the other side accepts. A second row
+    the other way round would make the same pair answerable two ways.
+    """
+
+    __tablename__ = "friendships"
+    __table_args__ = (
+        UniqueConstraint("requester_id", "addressee_id", name="uq_friendships_pair"),
+        CheckConstraint("requester_id <> addressee_id", name="ck_friendships_two_members"),
+        Index("ix_friendships_addressee_id", "addressee_id"),
+    )
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True)
+    requester_id: Mapped[int] = mapped_column(
+        ForeignKey("users.id", ondelete="CASCADE"), nullable=False
+    )
+    addressee_id: Mapped[int] = mapped_column(
+        ForeignKey("users.id", ondelete="CASCADE"), nullable=False
+    )
+    created_at: Mapped[dt.datetime] = mapped_column(UtcDateTime, nullable=False, default=now_utc)
+    # Null while the request is still waiting on the other side.
+    accepted_at: Mapped[dt.datetime | None] = mapped_column(UtcDateTime, nullable=True)
+
+
 class EmailToken(Base):
     __tablename__ = "email_tokens"
 
@@ -176,9 +204,8 @@ class IngestToken(Base):
     last_used_at: Mapped[dt.datetime | None] = mapped_column(UtcDateTime, nullable=True)
 
 
-# What a food row is, and who may see it. Only 'custom' is written this round;
-# the rest are the states a shared database needs, declared now so a later
-# round adds behaviour rather than another migration on this table.
+# What a food row is, and who may see it. Every status below is written by
+# some path in the app; the indented lines say what each one means.
 #   cache     looked up from elsewhere and kept, belonging to nobody
 #   custom    somebody's own, private to them
 #   pending   their own, offered to the shared database and not judged yet
@@ -1037,14 +1064,10 @@ FITNESS_SOURCES = ("sync", "upload")
 class FitnessDaily(Base):
     """One metric's figure for one day, whatever the metric is.
 
-    Deliberately generic: a phone exports far more than this app draws, and a
-    reading that is thrown away on the way in can never be shown later. So
-    every metric a sync carries is written here under the name the exporter
-    used, and the screens read the few they know about.
-
-    `fields` is for the readings that are not one number: a night's sleep in
-    its stages, a blood pressure, a heart rate summary. `value` then holds the
-    headline of it, or nothing when there is no single number to name.
+    Kept generic on purpose: a phone exports more than the app draws, so every
+    metric is stored under the exporter's own name and the screens read the
+    few they know. `fields` holds readings that are not one number (sleep
+    stages, a blood pressure), and `value` their headline or nothing.
     """
 
     __tablename__ = "fitness_daily"
@@ -1126,9 +1149,8 @@ class Workout(Base):
     max_hr: Mapped[int | None] = mapped_column(Integer, nullable=True)
     elevation_gain_m: Mapped[float | None] = mapped_column(Float, nullable=True)
     indoor: Mapped[bool] = mapped_column(Boolean, nullable=False, default=False)
-    # Nothing reads this yet. The column is here because the feed it belongs to
-    # is the next round, and a member's answer about one workout should not
-    # wait on it.
+    # Whether the owner keeps this workout out of the community feed. Set from
+    # the workout's own page and read by the feed and by that page.
     hidden_from_feed: Mapped[bool] = mapped_column(Boolean, nullable=False, default=False)
     source: Mapped[str] = mapped_column(
         Enum(*WORKOUT_SOURCES, name="workout_source", native_enum=False), nullable=False

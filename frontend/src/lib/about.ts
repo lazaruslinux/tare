@@ -37,7 +37,8 @@ export const WHAT_YOU_CAN_DO: { name: string; what: string }[] = [
   },
   {
     name: 'Community Feed',
-    what: 'Member milestones, activities & accomplishments. Forums coming in the future.',
+    what:
+      'Workouts, finished journal days & weigh-in wins, shared only with the friends you choose. Forums coming in the future.',
   },
 ]
 

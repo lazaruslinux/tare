@@ -167,7 +167,14 @@ def test_a_shared_workout_reads_for_another_member_without_what_was_held_back(
     post(client, token, {"data": {"workouts": [run(yesterday())]}})
     workout = db_session.scalar(select(models.Workout))
 
-    make_user("member")
+    # Only a friend reads somebody else's session at all.
+    member = make_user("member")
+    db_session.add(
+        models.Friendship(
+            requester_id=stranger.id, addressee_id=member.id, accepted_at=now_utc()
+        )
+    )
+    db_session.commit()
     client.post("/api/auth/login", json={"username": "member", "password": "correct-horse-9"})
 
     body = client.get(f"/api/workouts/{workout.id}").json()

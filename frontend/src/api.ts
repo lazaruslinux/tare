@@ -991,12 +991,19 @@ export type FeedJoined = {
 
 export type FeedRow = FeedWorkout | FeedJournal | FeedWeight | FeedJoined
 
-// One page of the feed. The marker is opaque and only ever handed back.
-export type FeedPage = { items: FeedRow[]; next_cursor: string | null }
+// One page of the feed, and how many friends there are to fill it. The marker
+// is opaque and only ever handed back.
+export type FeedPage = { items: FeedRow[]; friends: number; next_cursor: string | null }
 
-// One member as other members see them. A fact that is not shared is absent
+// Where two members stand with each other, said from the reader's side: the
+// same pending row is "requested" to whoever asked and "incoming" to whoever
+// was asked.
+export type Friendship = 'self' | 'none' | 'requested' | 'incoming' | 'friends'
+
+// One member as another member sees them. A fact that is not shared is absent
 // rather than null, so there is nothing here to read a withheld answer out of.
 export type MemberView = {
+  friendship: Friendship
   display_name: string
   role: Role
   member_since: string
@@ -1019,11 +1026,21 @@ export type MemberRow = {
   avatar_url: string | null
   member_since: string
   contributions: number
+  // Only on a roster row: the friends lists are already sorted by side.
+  friend?: boolean
 }
 
 // One page of the roster. It is ordered by a name rather than by an id, so the
 // marker is how far down the list the last page reached.
 export type MemberPage = { items: MemberRow[]; next_offset: number | null }
+
+// The three sides of this account's friendships: who it shares with, who has
+// asked it, and who it has asked.
+export type FriendsPage = {
+  friends: MemberRow[]
+  incoming: MemberRow[]
+  outgoing: MemberRow[]
+}
 
 // The few figures the wide layout keeps beside whatever is on screen. The
 // waiting count is an administrator's alone.

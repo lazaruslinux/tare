@@ -384,7 +384,7 @@ export function WorkoutDetails({
         <div className="t-card mb-3">
           <Switch
             label="Show in the community feed"
-            note="Members see the activity, time, distance and route line. Heart rate, calories and route follow your Sharing settings."
+            note="Friends see the activity, time, distance and route line. Heart rate, calories and route follow your Sharing settings."
             checked={!detail.hidden_from_feed}
             onChange={(next) => setHidden(!next)}
           />

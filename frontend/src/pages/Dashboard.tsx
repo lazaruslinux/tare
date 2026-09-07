@@ -277,16 +277,10 @@ const tickText = (iso: string): string =>
 type Line = { key: string; points: { date: string; value: number }[]; colour: string }
 
 // The readings, joined by straight lines, each one a round dot. Percent
-// coordinates keep the dots round whatever width the card is, because
-// nothing here is scaled: the browser lays the box out and the marks sit
-// where they are told.
-//
-// Two lines share the box and the dates under it, and each is scaled to its
-// own low and high: a weight and a percentage have nothing in common but the
-// days they were read on, and one scale would flatten whichever moves less.
-//
-// With an axis the lines get a ground to stand on and their dots get dates, so
-// that a weight line is not read as whatever number happens to sit beside it.
+// coordinates keep the dots round at any card width, since nothing here is
+// scaled. Each line is scaled to its own low and high, because a weight and a
+// percentage share only their dates; the axis gives the lines a ground and
+// their dots dates.
 function Spark({ series, tall, axis, selected = null, onSelect }: {
   series: Line[]
   tall?: boolean
@@ -1283,7 +1277,14 @@ export function Dashboard({
   }
 
   if (member !== null) {
-    return <MemberView userId={member} back="Dashboard" onBack={() => setMember(null)} />
+    return (
+      <MemberView
+        userId={member}
+        back="Dashboard"
+        onBack={() => setMember(null)}
+        onChange={onChanged}
+      />
+    )
   }
 
   if (screen === 'community') {
