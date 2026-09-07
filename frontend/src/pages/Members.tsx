@@ -7,16 +7,18 @@ import {
   queryString,
   type FriendsPage,
   type MemberPage,
-  type MemberRow,
+  type MemberRow as Member,
 } from '../api'
 import { Avatar } from '../components/Avatar'
+import { ConfirmSheet } from '../components/ConfirmSheet'
 import { RoleMark } from '../components/RoleMark'
 import { useTopBar } from '../hooks/useTopBar'
 
 // Everybody in this Tare. One row each, and each row opens the profile that
 // member chose to show. Nothing here is anybody's private business: a name, a
 // picture, and what they have given the shared database. This is how people
-// find each other, so it lists everybody and not only friends.
+// find each other, so it lists everybody and not only friends, but friends
+// come first and the rest of the roster arrives a page at a time.
 
 // The same wait as every other box that types as somebody types.
 const DEBOUNCE = 250
@@ -26,6 +28,35 @@ const NOTHING = 'No matches.'
 function countText(count: number): string {
   if (count === 0) return 'No contributions'
   return count === 1 ? '1 contribution' : `${count} contributions`
+}
+
+// One member, the same row in the friends list and in the roster, so the two
+// lists cannot drift apart. The chip is only on roster rows: the server marks
+// a friend there, and the friends list has a heading that already says it.
+function MemberRow({
+  row,
+  me,
+  onOpen,
+}: {
+  row: Member
+  me: number
+  onOpen: (userId: number) => void
+}) {
+  return (
+    <button type="button" className="t-row w-full text-left" onClick={() => onOpen(row.id)}>
+      <Avatar url={row.avatar_url} name={row.display_name} />
+      <span className="min-w-0 flex-1">
+        <span className="block truncate text-sm">
+          {row.display_name}
+          <RoleMark role={row.role} />
+        </span>
+        <span className="block text-xs text-muted">{countText(row.contributions)}</span>
+      </span>
+      {row.id === me && <span className="t-chip">You</span>}
+      {row.friend === true && <span className="t-chip shrink-0">Friends</span>}
+      <ChevronRight className="h-4 w-4 shrink-0 text-muted" strokeWidth={2} />
+    </button>
+  )
 }
 
 export function Members({
@@ -42,19 +73,27 @@ export function Members({
   onAnswered?: () => void
 }) {
   const [query, setQuery] = useState('')
-  const [rows, setRows] = useState<MemberRow[] | null>(null)
+  const [rows, setRows] = useState<Member[] | null>(null)
   const [offset, setOffset] = useState<number | null>(null)
   const [busy, setBusy] = useState(false)
   const [failed, setFailed] = useState('')
-  // Who has asked to be friends, and the tick that reads both lists again
-  // after one of them is answered.
-  const [incoming, setIncoming] = useState<MemberRow[]>([])
+  // Who has asked to be friends, who already is, and the tick that reads the
+  // lists again after a request is answered. Friends stay null until they are
+  // read, so an empty screen does not say there are none before it knows.
+  const [incoming, setIncoming] = useState<Member[]>([])
+  const [friends, setFriends] = useState<Member[] | null>(null)
   const [again, setAgain] = useState(0)
+  // The request being declined, which is asked about before it goes.
+  const [declining, setDeclining] = useState<Member | null>(null)
 
   useEffect(() => {
     let alive = true
     api<FriendsPage>('/feed/friends')
-      .then((page) => alive && setIncoming(page.incoming))
+      .then((page) => {
+        if (!alive) return
+        setIncoming(page.incoming)
+        setFriends(page.friends)
+      })
       .catch(() => undefined)
     return () => {
       alive = false
@@ -133,13 +172,28 @@ export function Members({
                 <button
                   type="button"
                   className="t-btn shrink-0"
-                  onClick={() => void answer(row.id, false)}
+                  onClick={() => setDeclining(row)}
                 >
                   Decline
                 </button>
               </div>
             ))}
           </div>
+        </>
+      )}
+
+      {friends !== null && (
+        <>
+          <p className="t-micro mb-1">Friends</p>
+          {friends.length === 0 ? (
+            <p className="mb-3 text-sm text-muted">No friends yet. Search for someone below.</p>
+          ) : (
+            <div className="t-card mb-3">
+              {friends.map((row) => (
+                <MemberRow key={row.id} row={row} me={me} onOpen={onOpen} />
+              ))}
+            </div>
+          )}
         </>
       )}
 
@@ -161,26 +215,7 @@ export function Members({
       {rows !== null && rows.length > 0 && (
         <div className="t-card mb-3">
           {rows.map((row) => (
-            <button
-              key={row.id}
-              type="button"
-              className="t-row w-full text-left"
-              onClick={() => onOpen(row.id)}
-            >
-              <Avatar url={row.avatar_url} name={row.display_name} />
-              <span className="min-w-0 flex-1">
-                <span className="block truncate text-sm">
-                  {row.display_name}
-                  <RoleMark role={row.role} />
-                </span>
-                <span className="block text-xs text-muted">
-                  {countText(row.contributions)}
-                </span>
-              </span>
-              {row.id === me && <span className="t-chip">You</span>}
-              {row.friend === true && <span className="t-chip shrink-0">Friends</span>}
-              <ChevronRight className="h-4 w-4 shrink-0 text-muted" strokeWidth={2} />
-            </button>
+            <MemberRow key={row.id} row={row} me={me} onOpen={onOpen} />
           ))}
         </div>
       )}
@@ -195,6 +230,21 @@ export function Members({
           Show more
         </button>
       )}
+
+      <ConfirmSheet
+        open={declining !== null}
+        label="Decline request"
+        question={declining === null ? '' : `Decline ${declining.display_name}'s request?`}
+        note="They will not receive a notification."
+        verb="Decline"
+        onConfirm={() => {
+          if (declining === null) return
+          const row = declining
+          setDeclining(null)
+          void answer(row.id, false)
+        }}
+        onClose={() => setDeclining(null)}
+      />
     </>
   )
 }

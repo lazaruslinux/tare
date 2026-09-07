@@ -479,14 +479,14 @@ def read_today(
 # member is shown under, which is a name somebody can change, so a page is
 # counted from the top rather than marked by a row: a marker made of a name
 # would point at nothing the moment its owner renamed themselves.
-MEMBERS_PAGE = 50
+MEMBERS_PAGE = 25
 
 
 def member_rows(db: Session, members: list[models.User]) -> list[dict[str, object]]:
     """The few things a member is listed by, wherever they are listed.
 
-    One count for the whole list rather than one per row, so a page of fifty
-    is one query and not fifty.
+    One count for the whole list rather than one per row, so a page of
+    twenty-five is one query and not twenty-five.
     """
     counts = contribution_counts(db, [member.id for member in members])
     return [
@@ -511,9 +511,9 @@ def read_members(
 ) -> dict[str, object]:
     """One page of everybody in this Tare, by the name they are shown under.
 
-    Fifty at a time with a box above them rather than the whole list: every row
-    carries a picture, so a screen that draws all of them is a screen that gets
-    slower every time somebody joins.
+    Twenty-five at a time with a box above them rather than the whole list:
+    every row carries a picture, so a screen that draws all of them is a screen
+    that gets slower every time somebody joins.
 
     An administrator is shown exactly what anybody else is shown. This is the
     community list, not the account list.

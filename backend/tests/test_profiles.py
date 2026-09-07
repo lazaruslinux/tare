@@ -14,6 +14,7 @@ from PIL import Image
 
 from app import models, photos
 from app.models import now_utc
+from app.routers.feed import MEMBERS_PAGE
 from tests.conftest import PASSWORD
 from tests.test_photos import picture
 
@@ -153,18 +154,19 @@ def test_a_list_row_carries_the_counter_and_no_private_fact(client, db_session, 
 
 
 def test_the_roster_pages_and_keeps_its_order_across_the_seam(client, make_user):
-    # Named so the alphabet and the order they were made in disagree.
-    for number in range(50):
+    # Named so the alphabet and the order they were made in disagree. The page
+    # size comes from the router, so the seam moves with it.
+    for number in range(MEMBERS_PAGE):
         make_user(f"m{99 - number:02d}")
     make_user("member")
     sign_in(client, "member")
 
     first = client.get("/api/feed/members").json()
-    assert len(first["items"]) == 50
-    assert first["items"][0]["display_name"] == "m50"
-    assert first["next_offset"] == 50
+    assert len(first["items"]) == MEMBERS_PAGE
+    assert first["items"][0]["display_name"] == f"m{100 - MEMBERS_PAGE:02d}"
+    assert first["next_offset"] == MEMBERS_PAGE
 
-    second = client.get("/api/feed/members?offset=50").json()
+    second = client.get(f"/api/feed/members?offset={MEMBERS_PAGE}").json()
     assert [row["display_name"] for row in second["items"]] == ["member"]
     assert second["next_offset"] is None
 

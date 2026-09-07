@@ -19,6 +19,20 @@ function monthText(stamp: string): string {
   return at.toLocaleDateString(undefined, { timeZone: 'UTC', month: 'long', year: 'numeric' })
 }
 
+// Starting a friendship and ending one are both answered before they happen,
+// so all four of them go through one sheet rather than four buttons that fire
+// on the first tap.
+type Ask = {
+  label: string
+  question: string
+  note?: string
+  verb: string
+  cancel?: string
+  danger: boolean
+  path: string
+  method: string
+}
+
 function Fact({ label, value }: { label: string; value: ReactNode }) {
   return (
     <div className="t-row">
@@ -46,7 +60,8 @@ export function MemberView({
   const [failed, setFailed] = useState('')
   const [busy, setBusy] = useState(false)
   const [refused, setRefused] = useState('')
-  const [removing, setRemoving] = useState(false)
+  // What the one sheet is asking, and the call to make if the answer is yes.
+  const [ask, setAsk] = useState<Ask | null>(null)
 
   useEffect(() => {
     let alive = true
@@ -132,7 +147,17 @@ export function MemberView({
                 type="button"
                 className="t-btn t-btn-primary w-full"
                 disabled={busy}
-                onClick={() => void act(`/feed/friends/${userId}`, 'POST')}
+                onClick={() =>
+                  setAsk({
+                    label: 'Add friend',
+                    question: `Add ${member.display_name} as a friend?`,
+                    note: 'They will see your request under Members.',
+                    verb: 'Add',
+                    danger: false,
+                    path: `/feed/friends/${userId}`,
+                    method: 'POST',
+                  })
+                }
               >
                 Add friend
               </button>
@@ -144,7 +169,17 @@ export function MemberView({
                   type="button"
                   className="t-link"
                   disabled={busy}
-                  onClick={() => void act(`/feed/friends/${userId}`, 'DELETE')}
+                  onClick={() =>
+                    setAsk({
+                      label: 'Cancel request',
+                      question: 'Cancel the friend request?',
+                      verb: 'Cancel request',
+                      cancel: 'Keep',
+                      danger: true,
+                      path: `/feed/friends/${userId}`,
+                      method: 'DELETE',
+                    })
+                  }
                 >
                   Cancel request
                 </button>
@@ -164,7 +199,17 @@ export function MemberView({
                   type="button"
                   className="t-btn"
                   disabled={busy}
-                  onClick={() => void act(`/feed/friends/${userId}`, 'DELETE')}
+                  onClick={() =>
+                    setAsk({
+                      label: 'Decline request',
+                      question: `Decline ${member.display_name}'s request?`,
+                      note: 'They will not receive a notification.',
+                      verb: 'Decline',
+                      danger: true,
+                      path: `/feed/friends/${userId}`,
+                      method: 'DELETE',
+                    })
+                  }
                 >
                   Decline
                 </button>
@@ -177,7 +222,17 @@ export function MemberView({
                   type="button"
                   className="t-link"
                   disabled={busy}
-                  onClick={() => setRemoving(true)}
+                  onClick={() =>
+                    setAsk({
+                      label: 'Remove friend',
+                      question: `Remove ${member.display_name} as a friend?`,
+                      note: 'They will not receive a notification.',
+                      verb: 'Remove',
+                      danger: true,
+                      path: `/feed/friends/${userId}`,
+                      method: 'DELETE',
+                    })
+                  }
                 >
                   Remove friend
                 </button>
@@ -189,16 +244,19 @@ export function MemberView({
       </div>
 
       <ConfirmSheet
-        open={removing}
-        label="Remove friend"
-        question={`Remove ${member.display_name} as a friend?`}
-        note="They will not receive a notification."
-        verb="Remove"
+        open={ask !== null}
+        label={ask?.label ?? ''}
+        question={ask?.question ?? ''}
+        note={ask?.note}
+        verb={ask?.verb ?? ''}
+        cancel={ask?.cancel}
+        danger={ask?.danger ?? true}
         onConfirm={() => {
-          setRemoving(false)
-          void act(`/feed/friends/${userId}`, 'DELETE')
+          if (ask === null) return
+          setAsk(null)
+          void act(ask.path, ask.method)
         }}
-        onClose={() => setRemoving(false)}
+        onClose={() => setAsk(null)}
       />
     </>
   )
