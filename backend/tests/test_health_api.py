@@ -156,6 +156,54 @@ def test_every_goal_rate_says_what_it_costs(client, case_a):
     assert all("cap" not in row["notes"] for row in options)
 
 
+@pytest.fixture()
+def case_floor(client, member):
+    """A man of 99 kg and 180 cm losing to 85 kg, so there is 2,364 a day to
+    spend: the three slowest steps stand and the two fastest sit on the floor.
+    """
+    assert weigh(client, 99).status_code == 200
+    assert profile(client, sex="male", height_cm=180, goal_weight_kg=85).status_code == 200
+    return member
+
+
+def test_every_goal_rate_carries_the_day_it_reaches_the_goal(client, case_floor):
+    options = client.get("/api/health/targets").json()["rate_options"]
+    dates = [row["projection"]["date"] for row in options]
+    # 14 kg to go from 2 September, at the pace each step really achieves.
+    # A pound a week is 0.4536 kg: 14 / 0.4536 * 7 is 216 days. The last two
+    # are held at (2,364 - 1,500) / 1,102.31, which is 0.7838 a week, or 125.
+    assert dates == [
+        "2027-04-06",  # 216 days
+        "2027-02-22",  # 173 days
+        "2027-01-24",  # 144 days
+        "2027-01-05",  # 125 days
+        "2027-01-05",  # the floor holds the pace, so the same day
+    ]
+    # Earlier with every step, and level once the floor is holding the pace.
+    assert dates == sorted(dates, reverse=True)
+    assert "floor" in options[3]["notes"]
+    assert options[3]["projection"] == options[4]["projection"]
+
+
+def test_a_goal_under_the_range_puts_no_day_on_any_step(client, member):
+    """Decision 22: the goal stands and no step says when it arrives."""
+    assert weigh(client, 99).status_code == 200
+    assert profile(client, sex="male", height_cm=180, goal_weight_kg=55).status_code == 200
+    body = client.get("/api/health/targets").json()
+    assert body["projection"] is None
+    assert len(body["rate_options"]) == len(health.LOSE_STEPS)
+    assert all(row["projection"] is None for row in body["rate_options"])
+
+
+def test_without_a_trend_no_step_offers_a_day(client, member):
+    """Nothing weighed, so there is no pace to work a date from and no step to
+    put one on."""
+    body = client.get("/api/health/targets").json()
+    assert body["trend_kg"] is None
+    assert body["rate_options"] == []
+    assert body["projection"] is None
+
+
 def test_a_man_gets_the_higher_added_sugars_ceiling(client, member):
     assert profile(client, sex="male", height_cm=180).status_code == 200
     assert weigh(client, 95).status_code == 200

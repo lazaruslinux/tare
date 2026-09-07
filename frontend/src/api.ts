@@ -147,6 +147,9 @@ export type RateOption = {
   calories: number
   asked: number
   change: number
+  // The day this step reaches the goal on, so the forecast can follow the
+  // stepper. Null when there is no trend or the goal is below the range.
+  projection: { date: string } | null
   notes: string[]
 }
 

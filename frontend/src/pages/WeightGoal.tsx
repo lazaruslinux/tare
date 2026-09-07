@@ -119,6 +119,9 @@ export function WeightGoal({
   // one saved, so the numbers below follow the stepper rather than the save.
   const option =
     targets.rate_options.find((row) => row.rate_kg_per_week === steps[draftAt]) ?? null
+  // The forecast follows the stepper while it is off the saved step, and goes
+  // back to the saved one on save.
+  const forecast = rateDirty && option !== null ? option.projection : targets.projection
   // The fastest steps are saved only once the review has been read and said
   // so. The box clears whenever the stepper moves.
   const [read, setRead] = useState(false)
@@ -236,12 +239,8 @@ export function WeightGoal({
         <Tile
           glyph={<Trophy className="h-5 w-5" strokeWidth={2} />}
           label="Goal forecast"
-          value={
-            targets.projection === null
-              ? 'No date yet'
-              : dateText(targets.projection.date)
-          }
-          muted={targets.projection === null}
+          value={forecast === null ? 'No date yet' : dateText(forecast.date)}
+          muted={forecast === null}
         />
       </div>
 

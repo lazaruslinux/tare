@@ -36,12 +36,14 @@ function Row({ label, value, onOpen }: { label: string; value: string; onOpen: (
 
 export function Targets({
   me,
-  onBack,
+  back,
   onOpenProfile,
   onOpenGuide,
 }: {
   me: Me
-  onBack: () => void
+  // Where this page came from, because the Journal has a shortcut into it and
+  // back means the way somebody came.
+  back: { label: string; onBack: () => void }
   // The Activity Levels screen sends people to their details, which live one screen
   // over rather than inside this one.
   onOpenProfile: () => void
@@ -75,7 +77,7 @@ export function Targets({
 
   useTopBar(
     view === null
-      ? { title: 'Targets', back: { label: 'More', onBack } }
+      ? { title: 'Targets', back }
       : { title: TITLE[view], back: { label: 'Targets', onBack: () => setView(null) } }
   )
 

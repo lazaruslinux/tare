@@ -95,9 +95,11 @@ export function Aside({
         </div>
       </div>
 
-      <div className="min-h-0">
+      {/* The feed takes what is left of the column and scrolls inside its own
+          card, so Show more never pushes the column past the window. */}
+      <div className="flex min-h-0 flex-1 flex-col">
         <p className="t-micro mb-2">Community</p>
-        <div className="t-card">
+        <div className="t-card min-h-[12rem] flex-1 overflow-y-auto">
           <Feed
             me={me}
             refresh={refresh}

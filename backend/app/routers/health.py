@@ -429,6 +429,18 @@ class Reckoning:
             absent.append("birthdate")
         return absent
 
+    def goal_bmi(self) -> float | None:
+        """The BMI the goal weight lands on, or nothing without a height."""
+        if self.profile.goal_weight_kg is None or self.cm is None or self.cm <= 0:
+            return None
+        return health.bmi(self.profile.goal_weight_kg, self.cm)
+
+    def goal_below_range(self) -> bool:
+        """Decision 22: a goal under the healthy range is accepted, and its
+        date is not shown."""
+        goal = self.goal_bmi()
+        return goal is not None and goal < health.UNDERWEIGHT_BMI
+
     def fresh_body_fat(self) -> float | None:
         """Decision 2: a body-fat reading is used only while it is recent."""
         cutoff = self.today - dt.timedelta(days=BODY_FAT_FRESH_DAYS)
@@ -464,6 +476,7 @@ def rate_options(state: Reckoning, maintenance_kcal: float | None) -> list[dict[
     if maintenance_kcal is None or state.sex is None:
         return []
     options: list[dict[str, object]] = []
+    below_range = state.goal_below_range()
     for step in health.steps_for(state.direction):
         worked = health.budget(
             maintenance_kcal,
@@ -471,6 +484,18 @@ def rate_options(state: Reckoning, maintenance_kcal: float | None) -> list[dict[
             step,
             state.sex,
             state.profile.pregnant_or_breastfeeding,
+        )
+        # The date this step really reaches the goal on, so the forecast moves
+        # with the stepper. The pace worked out, not the pace asked for.
+        month = (
+            None
+            if state.trend_kg is None or below_range
+            else health.projection(
+                state.trend_kg,
+                state.profile.goal_weight_kg,
+                worked.weekly_rate_kg,
+                state.today,
+            )
         )
         options.append(
             {
@@ -480,6 +505,7 @@ def rate_options(state: Reckoning, maintenance_kcal: float | None) -> list[dict[
                 # is 500, and a quarter pound more is 625, not 630.
                 "asked": round(step * health.KCAL_PER_DAY_PER_KG_WEEK),
                 "change": round(abs(maintenance_kcal - worked.calories)),
+                "projection": None if month is None else {"date": month},
                 "notes": list(worked.notes),
             }
         )
@@ -768,11 +794,7 @@ def read_targets(
         figures = set_by_hand
         note_keys = ["manual"]
 
-    goal_bmi = (
-        health.bmi(profile.goal_weight_kg, state.cm)
-        if profile.goal_weight_kg is not None and state.cm is not None and state.cm > 0
-        else None
-    )
+    goal_bmi = state.goal_bmi()
     dismissed = set(profile.dismissed_nudges)
     waiting = [
         {"key": key, "text": NUDGE_TEXT[key]}
@@ -780,9 +802,7 @@ def read_targets(
         if key not in dismissed
     ]
 
-    # Decision 22: a goal that lands below the healthy range is accepted, and
-    # its date is not shown.
-    below_range = goal_bmi is not None and goal_bmi < health.UNDERWEIGHT_BMI
+    below_range = state.goal_below_range()
     month = (
         None
         if state.trend_kg is None or below_range

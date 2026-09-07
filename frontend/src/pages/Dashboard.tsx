@@ -786,6 +786,9 @@ export function Dashboard({
   const [member, setMember] = useState<number | null>(null)
   const [picking, setPicking] = useState(false)
   const [measuring, setMeasuring] = useState<string | null>(null)
+  // Whether that sheet opens straight on the weigh-in form, which is what the
+  // Progress screen's own button asks for.
+  const [weighing, setWeighing] = useState(false)
   const [exercising, setExercising] = useState(false)
   // Whether today's own step and exercise goals are open, which is what the
   // two rings they fill lead to.
@@ -922,9 +925,27 @@ export function Dashboard({
   const reload = () => {
     setPicking(false)
     setMeasuring(null)
+    setWeighing(false)
     setExercising(false)
     setGoaling(false)
     setAgain(again + 1)
+  }
+
+  // The sheet on a day, with every form in it. What the history rows open.
+  const openMeasurements = (date: string) => {
+    setWeighing(false)
+    setMeasuring(date)
+  }
+
+  // The same sheet on today, straight on the weight.
+  const openWeighIn = () => {
+    setWeighing(true)
+    setMeasuring(todayIso)
+  }
+
+  const closeMeasurements = () => {
+    setMeasuring(null)
+    setWeighing(false)
   }
 
   const removeMeasurement = (row: Measurement) => {
@@ -1300,19 +1321,31 @@ export function Dashboard({
       <>
         <div className="t-card mb-3">
           {!trending ? (
-            <p className="text-sm text-muted">Weigh in a few more times to see a trend.</p>
+            <>
+              <p className="text-sm text-muted">Weigh in a few more times to see a trend.</p>
+              <button type="button" className="t-btn mt-3" onClick={openWeighIn}>
+                Weigh in
+              </button>
+            </>
           ) : (
             <>
-              {newest !== null && (
-                <span className="t-nums block text-3xl font-semibold leading-tight">
-                  {weightText(newest.value, me.units)}
+              <div className="flex items-start justify-between gap-3">
+                <span className="min-w-0">
+                  {newest !== null && (
+                    <span className="t-nums block text-3xl font-semibold leading-tight">
+                      {weightText(newest.value, me.units)}
+                    </span>
+                  )}
+                  <span className="block text-xs text-muted">
+                    {newest === null ? '' : `${dayLabel(newest.date, todayIso)} · `}
+                    {changeText(line, shares, me.units, chosen.over, lines)}
+                    {goalMonth}
+                  </span>
                 </span>
-              )}
-              <span className="block text-xs text-muted">
-                {newest === null ? '' : `${dayLabel(newest.date, todayIso)} · `}
-                {changeText(line, shares, me.units, chosen.over, lines)}
-                {goalMonth}
-              </span>
+                <button type="button" className="t-btn shrink-0" onClick={openWeighIn}>
+                  Weigh in
+                </button>
+              </div>
               <LineChips lines={lines} onPick={pickLines} />
               <Spark series={chart} tall axis />
             </>
@@ -1364,7 +1397,7 @@ export function Dashboard({
               <button
                 type="button"
                 className="t-btn t-btn-primary mt-3"
-                onClick={() => setMeasuring(todayIso)}
+                onClick={() => openMeasurements(todayIso)}
               >
                 Log biometrics
               </button>
@@ -1379,7 +1412,7 @@ export function Dashboard({
                   row={row}
                   units={me.units}
                   todayIso={todayIso}
-                  onOpen={() => setMeasuring(row.date)}
+                  onOpen={() => openMeasurements(row.date)}
                 />
               </div>
             ))
@@ -1390,11 +1423,12 @@ export function Dashboard({
           <MeasurementsSheet
             me={me}
             date={measuring}
-            onClose={() => setMeasuring(null)}
+            weighIn={weighing}
+            onClose={closeMeasurements}
             onSaved={reload}
             onDelete={() => {
               const row = rows.find((one) => one.date === measuring)
-              setMeasuring(null)
+              closeMeasurements()
               if (row) removeMeasurement(row)
             }}
           />

@@ -85,6 +85,9 @@ export default function App() {
   // Which screen the More tab should open on. Only ever set by something
   // sending somebody straight to it, and handed back once it has been read.
   const [moreView, setMoreView] = useState<Screen>(null)
+  // Where Targets was opened from, so back means the way somebody came. Only
+  // the Journal's shortcut sets it; everything else leads back to More.
+  const [targetsFrom, setTargetsFrom] = useState<'more' | 'journal'>('more')
   // The same for the Dashboard's one sub-view.
   const [dashView, setDashView] = useState<DashScreen>(null)
   // Which screen each of those two is really showing. Reported upward so the
@@ -141,6 +144,9 @@ export default function App() {
   const noteMoreScreen = useCallback((next: Screen) => {
     setMoreScreen(next)
     if (next !== 'fitness') setFitnessDay('')
+    // Any other screen under More, and leaving the tab, drops where Targets
+    // was opened from.
+    if (next !== 'targets') setTargetsFrom('more')
   }, [])
 
   // Back from wherever somebody went. Everything on screen is read again, the
@@ -200,6 +206,8 @@ export default function App() {
   // The rail draws two rows that are not pages: each opens a screen inside one,
   // the same way the Journal's own shortcut into Targets does.
   const selectRail = (target: RailTarget) => {
+    // The rail is a way in of its own, so Targets opened from it goes to More.
+    setTargetsFrom('more')
     if (target === 'targets') {
       setMoreView('targets')
       select('more')
@@ -369,6 +377,17 @@ export default function App() {
                       start={moreView}
                       onStarted={() => setMoreView(null)}
                       onScreen={noteMoreScreen}
+                      targetsBack={
+                        targetsFrom === 'journal'
+                          ? {
+                              label: 'Journal',
+                              onBack: () => {
+                                setMoreView(null)
+                                select('journal')
+                              },
+                            }
+                          : undefined
+                      }
                       fitnessDate={fitnessDay}
                     />
                   ) : page === 'food' ? (
@@ -389,6 +408,7 @@ export default function App() {
                       onDay={setJournalDay}
                       onScan={(day, slot) => setScanning({ date: day, slot })}
                       onOpenTargets={() => {
+                        setTargetsFrom('journal')
                         setMoreView('targets')
                         select('more')
                       }}
@@ -426,6 +446,8 @@ export default function App() {
               waiting={waiting}
               onSelect={(tab) => {
                 setAdding(false)
+                // A tab picked by hand is a way in of its own.
+                setTargetsFrom('more')
                 select(tab)
               }}
               onPlus={() => openAdd(null)}

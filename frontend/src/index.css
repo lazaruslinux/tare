@@ -760,6 +760,8 @@
       flex-direction: column;
       gap: 0.875rem;
       padding: calc(48px + 1.125rem) 1.5rem 2rem 1.5rem;
+      /* The feed scrolls in its own card. This is the fallback for a window
+         too short to hold both blocks. */
       overflow-y: auto;
     }
   }

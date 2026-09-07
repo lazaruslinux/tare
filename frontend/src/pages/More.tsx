@@ -148,6 +148,7 @@ export function More({
   start,
   onStarted,
   onScreen,
+  targetsBack,
   fitnessDate,
 }: {
   me: Me
@@ -177,6 +178,9 @@ export function More({
   // Which screen this tab is on, said upward so the rail can light the row
   // that leads to it.
   onScreen?: (screen: Screen) => void
+  // Where Targets should go back to, when somebody was sent to it from
+  // outside this tab. The list's own way back stands without it.
+  targetsBack?: { label: string; onBack: () => void }
   // The day the Fitness screen should read, when somebody was sent to one.
   fitnessDate?: string
 }) {
@@ -377,7 +381,7 @@ export function More({
     return (
       <Targets
         me={me}
-        onBack={() => go(null)}
+        back={targetsBack ?? back}
         onOpenProfile={() => go('profile')}
         onOpenGuide={() => go('guide')}
       />
