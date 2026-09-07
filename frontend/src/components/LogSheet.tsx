@@ -4,6 +4,7 @@ import { useState } from 'react'
 import { SLOTS, SLOT_LABEL, type Slot } from '../lib/day'
 import { MASS_UNITS, UNIT_LABEL, UNIT_TO_BASE, round1, type Unit } from '../lib/units'
 import { Sheet } from './Sheet'
+import { Switch } from './Switch'
 
 // The little a recipe or a kept meal needs before it goes in the diary: how
 // much of it, and which meal it belongs to. A food needs more than this, and
@@ -22,6 +23,8 @@ export function LogSheet({
   weight,
   weighing = false,
   counted = false,
+  standing,
+  autoLogged = false,
   error,
   saving,
   onClose,
@@ -45,12 +48,20 @@ export function LogSheet({
   // Already a count, which is how a standing auto-log set in servings is read
   // back: the scale would otherwise be offered first and the number lost.
   counted?: boolean
+  // What this thing already auto-logs, by meal, when the sheet is setting that
+  // up. One instruction per meal: switching to a meal that has one reads it
+  // back, and only a meal that has one can be removed.
+  standing?: Partial<Record<Slot, { amount: number; unit: string }>>
+  // Whether the row being edited was written by a standing auto-log, which is
+  // when the switch that carries the change onto it is worth offering.
+  autoLogged?: boolean
   error?: string
   saving?: boolean
   onClose: () => void
-  // The amount, and whether it is grams rather than servings.
-  onSubmit: (amount: number | null, slot: Slot, byWeight: boolean) => void
-  onDelete?: () => void
+  // The amount, whether it is grams rather than servings, and whether the
+  // standing auto-log behind the row takes the change with it.
+  onSubmit: (amount: number | null, slot: Slot, byWeight: boolean, follow: boolean) => void
+  onDelete?: (slot: Slot) => void
   // What the button beside the action says, where "Delete" is not the word.
   deleteLabel?: string
 }) {
@@ -71,6 +82,9 @@ export function LogSheet({
     return weighable ? '0' : String(servings)
   })
   const [meal, setMeal] = useState<Slot>(slot)
+  // A change to a row an auto-log wrote is meant for the days to come as well
+  // unless somebody says otherwise, which is what the day off looks like.
+  const [follow, setFollow] = useState(true)
   const typed = Number(amount.trim())
   const counting = servings !== null || byWeight
   const valid = !counting || (Number.isFinite(typed) && typed > 0)
@@ -88,15 +102,29 @@ export function LogSheet({
     setByWeight(next)
   }
 
+  // Which meal is being set. One this thing already auto-logs into is that
+  // instruction being edited, so its portion is what the fields read back; a
+  // meal without one keeps whatever is typed.
+  const chooseMeal = (option: Slot) => {
+    setMeal(option)
+    const row = standing?.[option]
+    if (row === undefined) return
+    setByWeight(row.unit === 'g')
+    setAmount(String(round1(row.amount)))
+  }
+
+  // Nothing to take away while the meal chosen has no instruction of its own.
+  const removable = standing === undefined || standing[meal] !== undefined
+
   const send = () => {
     if (!counting) {
-      onSubmit(null, meal, false)
+      onSubmit(null, meal, false, follow)
       return
     }
     // Whole grams, whichever of the three the scale was read in, and never
     // rounded away to nothing.
     const grams = Math.max(1, Math.round(typed * UNIT_TO_BASE[unit]))
-    onSubmit(byWeight ? grams : typed, meal, byWeight)
+    onSubmit(byWeight ? grams : typed, meal, byWeight, follow)
   }
 
   return (
@@ -189,12 +217,23 @@ export function LogSheet({
             type="button"
             aria-pressed={meal === option}
             className="t-chip aria-pressed:border-accent aria-pressed:text-text"
-            onClick={() => setMeal(option)}
+            onClick={() => chooseMeal(option)}
           >
             {SLOT_LABEL[option]}
           </button>
         ))}
       </div>
+
+      {autoLogged && (
+        <div className="mt-3">
+          <Switch
+            label="Also change the auto-log"
+            note="For the days to come as well: this mealtime and this amount."
+            checked={follow}
+            onChange={setFollow}
+          />
+        </div>
+      )}
 
       {error && <p className="t-error mt-3">{error}</p>}
 
@@ -207,8 +246,8 @@ export function LogSheet({
         >
           {action}
         </button>
-        {onDelete ? (
-          <button type="button" className="t-btn text-danger" onClick={onDelete}>
+        {onDelete !== undefined && removable ? (
+          <button type="button" className="t-btn text-danger" onClick={() => onDelete(meal)}>
             {deleteLabel}
           </button>
         ) : (

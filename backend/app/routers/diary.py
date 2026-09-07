@@ -616,6 +616,50 @@ def own_auto_log(db: Session, user: models.User, auto_log_id: int) -> models.Aut
     return row
 
 
+def follow_auto_log(
+    db: Session,
+    user: models.User,
+    entry: models.DiaryEntry,
+    sent: set[str],
+    unit: str | None,
+) -> None:
+    """Carry a change made to one entry onto the auto-log that wrote it.
+
+    The auto-log is the instruction for the days to come, so moving today's row
+    to another meal usually means it from tomorrow as well. The clash rule is
+    the one a change made on the auto-log itself answers with, and it is asked
+    before anything is written, so a refusal leaves the day where it was too.
+    """
+    if entry.auto_log_id is None:
+        return
+    row = db.get(models.AutoLog, entry.auto_log_id)
+    if row is None or row.user_id != user.id:
+        return
+    if "slot" in sent and entry.slot != row.slot:
+        # Read now, because the rollback below puts the entry back to the meal
+        # it came from and the refusal names the one that was asked for.
+        target = entry.slot
+        kind = auto_log_kind(row)
+        column = AUTO_LOG_COLUMNS[kind][0]
+        clash = db.execute(
+            select(models.AutoLog).where(
+                models.AutoLog.user_id == user.id,
+                column == getattr(row, f"{kind}_id"),
+                models.AutoLog.slot == target,
+            )
+        ).scalar_one_or_none()
+        if clash is not None:
+            db.rollback()
+            raise HTTPException(
+                status.HTTP_409_CONFLICT, AUTO_LOG_CLASH.format(kind=kind, slot=target)
+            )
+        row.slot = target
+    if ("amount" in sent or "unit" in sent) and entry.amount is not None:
+        row.amount = entry.amount
+        if unit is not None:
+            row.unit = unit
+
+
 def fill_auto_logs(db: Session, user: models.User, first: dt.date, last: dt.date) -> None:
     """Write in what the standing auto-logs owe across a run of days.
 
@@ -1143,6 +1187,10 @@ def update_entry(
     # The entry is this account's own, so the recipe under it is too.
     recipe = None if entry.recipe_id is None else db.get(models.Recipe, entry.recipe_id)
 
+    # The portion as an auto-log holds it, filled in wherever one was worked
+    # out here, so a change meant for good can be carried across.
+    auto_unit: str | None = None
+
     if "amount" in sent or "unit" in sent:
         amount = body.amount if body.amount is not None else entry.amount
         if amount is None or amount <= 0:
@@ -1155,12 +1203,14 @@ def update_entry(
             # Worked out again from the recipe as it stands now, for the same
             # reason a logged food is: this row is being touched anyway.
             entry.amount = amount
+            auto_unit = SERVING_UNIT
             serve(entry, recipe, amount)
         elif food is not None:
             # Worked out again from the food as it stands now, so an entry that
             # is being touched anyway picks up a correction to its food.
             unit = body.unit if "unit" in sent and body.unit else stored_unit(entry, food)
             base_amount, label, kept_unit = measure(food, amount, unit)
+            auto_unit = unit
             entry.amount = amount
             entry.unit = kept_unit
             entry.serving_label = label
@@ -1182,6 +1232,9 @@ def update_entry(
                 if carried is not None:
                     setattr(entry, field, carried * factor)
             entry.amount = amount
+            # A recipe weighed out or a kept meal reads in the same two words
+            # an auto-log of one does, so what the row carries is what it holds.
+            auto_unit = entry.unit
 
     typed = [field for field in ("name", *QUICK) if field in sent]
     if typed and recipe is not None:
@@ -1201,6 +1254,9 @@ def update_entry(
             entry.name = name
         else:
             setattr(entry, field, value)
+
+    if body.follow_auto_log:
+        follow_auto_log(db, user, entry, sent, auto_unit)
 
     db.commit()
     return entry_row(entry)

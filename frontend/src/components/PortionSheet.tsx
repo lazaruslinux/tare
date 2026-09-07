@@ -29,6 +29,7 @@ import {
 import { Verified } from './FoodRows'
 import { HEADLINE, nutrientText } from './NutritionLabel'
 import { Sheet } from './Sheet'
+import { Switch } from './Switch'
 
 // How a food was last measured, kept per food on this device. Somebody who
 // weighs their oats and counts their biscuits should not have to say so twice.
@@ -155,20 +156,29 @@ export function PortionSheet({
   // measurement is handed back and the sheet closes.
   onPick?: (food: Food, amount: number, unit: string) => void
   // Given instead when the portion being chosen is a standing one: the same
-  // sheet, ending in the meal it lands in every day. `existing` is the one
-  // already set for this food, or null for a new one.
+  // sheet, ending in the meal it lands in every day. `standing` is every meal
+  // this food already auto-logs into, which is one instruction each.
   autoLog?: {
-    existing: AutoLog | null
+    standing: AutoLog[]
     onSaved: () => void
     onStopped: () => void
   }
 }) {
-  const [start] = useState(() => opening(food, entry, autoLog?.existing))
+  const [start] = useState(() =>
+    opening(food, entry, autoLog?.standing.find((row) => row.slot === slot) ?? null)
+  )
   const [amount, setAmount] = useState(start.amount)
   const [choice, setChoice] = useState(start.choice)
-  const [meal, setMeal] = useState<Slot>(autoLog?.existing?.slot ?? slot)
+  const [meal, setMeal] = useState<Slot>(slot)
   const [error, setError] = useState('')
   const [saving, setSaving] = useState(false)
+  // A change to a row an auto-log wrote is meant for the days to come as well
+  // unless somebody says otherwise, which is what the day off looks like.
+  const [follow, setFollow] = useState(true)
+
+  // The instruction for the meal now chosen, or null while that meal has none
+  // and this is a new one.
+  const standing = autoLog?.standing.find((row) => row.slot === meal) ?? null
 
   const typed = Number(amount.trim())
   const valid = Number.isFinite(typed) && typed > 0
@@ -210,6 +220,19 @@ export function PortionSheet({
     setChoice(next)
   }
 
+  // Which meal is being set. One this food already auto-logs into is that
+  // instruction being edited, so its portion is what the fields read back; a
+  // meal without one keeps whatever is typed.
+  const chooseMeal = (option: Slot) => {
+    setMeal(option)
+    const row = autoLog?.standing.find((one) => one.slot === option)
+    if (row === undefined || food === null) return
+    const next = autoChoice(food, row)
+    if (next === null) return
+    setAmount(String(row.amount))
+    setChoice(next)
+  }
+
   // What the portion comes to in the food's own unit, and in servings as well
   // when that is what was chosen: the label prints servings and the scale
   // reads grams, so both are said.
@@ -223,13 +246,18 @@ export function PortionSheet({
   const picking = onPick !== undefined && food !== null && pick !== null
 
   const body = () => {
+    // Only ever sent on a row an auto-log wrote, where it says whether the
+    // standing instruction moves with the day.
+    const also = entry?.auto_log_id == null ? {} : { follow_auto_log: follow }
     if (food !== null && pick !== null) {
       const unit = chosenUnit(food, pick)
       return entry
-        ? { slot: meal, amount: sending, unit }
+        ? { slot: meal, amount: sending, unit, ...also }
         : { date, slot: meal, food_id: food.id, amount: sending, unit }
     }
-    return entry?.amount != null ? { slot: meal, amount: sending } : { slot: meal }
+    return entry?.amount != null
+      ? { slot: meal, amount: sending, ...also }
+      : { slot: meal, ...also }
   }
 
   const save = async () => {
@@ -245,7 +273,6 @@ export function PortionSheet({
     if (autoLog && food !== null && pick !== null) {
       setSaving(true)
       setError('')
-      const standing = autoLog.existing
       try {
         await api(standing === null ? '/diary/auto-logs' : `/diary/auto-logs/${standing.id}`, {
           method: standing === null ? 'POST' : 'PATCH',
@@ -278,13 +305,15 @@ export function PortionSheet({
     }
   }
 
-  // Turning it off. What it has already written down is eaten and stays.
+  // Turning off the one meal that is chosen. Any other meal this food logs
+  // into is a separate instruction and stands. What it already wrote is eaten
+  // and stays.
   const stop = async () => {
-    if (!autoLog?.existing) return
+    if (standing === null || !autoLog) return
     setSaving(true)
     setError('')
     try {
-      await api(`/diary/auto-logs/${autoLog.existing.id}`, { method: 'DELETE' })
+      await api(`/diary/auto-logs/${standing.id}`, { method: 'DELETE' })
       autoLog.onStopped()
     } catch (failure) {
       setError(errorText(failure))
@@ -449,13 +478,24 @@ export function PortionSheet({
                 type="button"
                 aria-pressed={meal === option}
                 className="t-chip aria-pressed:border-accent aria-pressed:text-text"
-                onClick={() => setMeal(option)}
+                onClick={() => chooseMeal(option)}
               >
                 {SLOT_LABEL[option]}
               </button>
             ))}
           </div>
         </>
+      )}
+
+      {entry?.auto_log_id != null && (
+        <div className="mt-3">
+          <Switch
+            label="Also change the auto-log"
+            note="For the days to come as well: this mealtime and this amount."
+            checked={follow}
+            onChange={setFollow}
+          />
+        </div>
       )}
 
       {error && <p className="t-error mt-3">{error}</p>}
@@ -483,7 +523,7 @@ export function PortionSheet({
       </div>
       {autoLog !== undefined && (
         <div className="mt-3 flex gap-3">
-          {autoLog.existing === null ? (
+          {standing === null ? (
             <button type="button" className="t-btn flex-1" onClick={onClose}>
               Cancel
             </button>

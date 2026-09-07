@@ -78,8 +78,9 @@ export function FoodDetail({
   const [food, setFood] = useState<Food | null>(null)
   const [error, setError] = useState('')
   const [logging, setLogging] = useState(false)
-  // Whether this food already logs itself, and the sheet that sets it up.
-  const [standing, setStanding] = useState<AutoLog | null>(null)
+  // Which meals this food already logs itself into, one instruction each, and
+  // the sheet that sets them up.
+  const [standing, setStanding] = useState<AutoLog[]>([])
   const [autoOpen, setAutoOpen] = useState(false)
   const [sending, setSending] = useState(false)
   // The front picture, shown big.
@@ -106,13 +107,13 @@ export function FoodDetail({
   // here rather than carried on the food.
   const loadStanding = () =>
     api<AutoLog[]>('/diary/auto-logs')
-      .then((rows) => setStanding(rows.find((row) => row.food_id === id) ?? null))
+      .then((rows) => setStanding(rows.filter((row) => row.food_id === id)))
       .catch(() => {})
 
   useEffect(() => {
     let alive = true
     api<AutoLog[]>('/diary/auto-logs')
-      .then((rows) => alive && setStanding(rows.find((row) => row.food_id === id) ?? null))
+      .then((rows) => alive && setStanding(rows.filter((row) => row.food_id === id)))
       .catch(() => {})
     return () => {
       alive = false
@@ -412,7 +413,7 @@ export function FoodDetail({
                 <button
                   className="t-btn flex-1 basis-[calc(50%-0.375rem)] min-[640px]:flex-none min-[640px]:basis-auto @xl:flex-1 @xl:basis-[calc(50%-0.375rem)] @xl:min-h-9 @xl:px-3 @xl:py-1.5 @xl:text-sm"
                   type="button"
-                  aria-pressed={standing !== null}
+                  aria-pressed={standing.length > 0}
                   onClick={() => setAutoOpen(true)}
                 >
                   <CalendarSync className="h-4 w-4" strokeWidth={2} />
@@ -617,7 +618,7 @@ export function FoodDetail({
               onClose={() => setAutoOpen(false)}
               onDone={() => setAutoOpen(false)}
               autoLog={{
-                existing: standing,
+                standing,
                 onSaved: () => {
                   setAutoOpen(false)
                   void loadStanding()
@@ -625,7 +626,7 @@ export function FoodDetail({
                 },
                 onStopped: () => {
                   setAutoOpen(false)
-                  setStanding(null)
+                  void loadStanding()
                   onChanged?.()
                 },
               }}

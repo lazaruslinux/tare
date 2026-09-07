@@ -287,6 +287,10 @@ class DiaryPatch(BaseModel):
     carbs_g: float | None = Field(default=None, ge=0)
     fat_g: float | None = Field(default=None, ge=0)
 
+    # Whether the auto-log that wrote this entry takes the change with it, so
+    # the days to come read the same. Left out is a change to the one day.
+    follow_auto_log: bool | None = None
+
 
 # How many things one recipe or one meal may hold. Enough for anything a
 # kitchen does, and few enough that saving one is a single screenful of work.

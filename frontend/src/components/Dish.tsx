@@ -126,9 +126,18 @@ export function DishPhoto({
   )
 }
 
+// The instructions this dish already has, by meal, which is how the sheet reads
+// back the one for whichever meal is chosen.
+function bySlot(rows: AutoLog[]): Partial<Record<Slot, AutoLog>> {
+  const map: Partial<Record<Slot, AutoLog>> = {}
+  for (const row of rows) map[row.slot] = row
+  return map
+}
+
 // The standing instruction, set from the dish's own page the way a food's is
 // set from its own. The same sheet that logs it, ending in the meal it lands in
-// every day rather than in today's diary.
+// every day rather than in today's diary. One per meal, and as many meals as
+// somebody eats it in.
 export function DishAutoLog({
   kind,
   id,
@@ -146,7 +155,7 @@ export function DishAutoLog({
   // The instruction changed, and the Food tab lists it.
   onChanged: () => void
 }) {
-  const [standing, setStanding] = useState<AutoLog | null>(null)
+  const [standing, setStanding] = useState<AutoLog[]>([])
   const [open, setOpen] = useState(false)
   const [saving, setSaving] = useState(false)
   const [error, setError] = useState('')
@@ -155,13 +164,13 @@ export function DishAutoLog({
   // rather than carried on the dish.
   const load = () =>
     api<AutoLog[]>('/diary/auto-logs')
-      .then((rows) => setStanding(rows.find((row) => row[`${kind}_id`] === id) ?? null))
+      .then((rows) => setStanding(rows.filter((row) => row[`${kind}_id`] === id)))
       .catch(() => {})
 
   useEffect(() => {
     let alive = true
     api<AutoLog[]>('/diary/auto-logs')
-      .then((rows) => alive && setStanding(rows.find((row) => row[`${kind}_id`] === id) ?? null))
+      .then((rows) => alive && setStanding(rows.filter((row) => row[`${kind}_id`] === id)))
       .catch(() => {})
     return () => {
       alive = false
@@ -170,13 +179,14 @@ export function DishAutoLog({
 
   const save = async (amount: number | null, slot: Slot, byWeight: boolean) => {
     if (amount === null) return
+    const row = standing.find((one) => one.slot === slot) ?? null
     setSaving(true)
     setError('')
     try {
-      await api(standing === null ? '/diary/auto-logs' : `/diary/auto-logs/${standing.id}`, {
-        method: standing === null ? 'POST' : 'PATCH',
+      await api(row === null ? '/diary/auto-logs' : `/diary/auto-logs/${row.id}`, {
+        method: row === null ? 'POST' : 'PATCH',
         body: {
-          ...(standing === null ? { [`${kind}_id`]: id } : {}),
+          ...(row === null ? { [`${kind}_id`]: id } : {}),
           amount,
           unit: byWeight ? 'g' : 'serving',
           slot,
@@ -191,15 +201,18 @@ export function DishAutoLog({
     setSaving(false)
   }
 
-  // Turning it off. What it has already written down is eaten and stays.
-  const stop = async () => {
-    if (standing === null) return
+  // Turning off the one meal that is chosen. Any other meal this dish logs
+  // into is a separate instruction and stands. What it already wrote is eaten
+  // and stays.
+  const stop = async (slot: Slot) => {
+    const row = standing.find((one) => one.slot === slot)
+    if (row === undefined) return
     setSaving(true)
     setError('')
     try {
-      await api(`/diary/auto-logs/${standing.id}`, { method: 'DELETE' })
+      await api(`/diary/auto-logs/${row.id}`, { method: 'DELETE' })
       setOpen(false)
-      setStanding(null)
+      await load()
       onChanged()
     } catch (failure) {
       setError(errorText(failure))
@@ -207,12 +220,18 @@ export function DishAutoLog({
     setSaving(false)
   }
 
+  // The sheet opens on the meal it is now, reading back whatever that meal is
+  // already set to.
+  const now = slotByTime(timezone)
+  const rows = bySlot(standing)
+  const opening = rows[now]
+
   return (
     <>
       <button
         className="t-btn"
         type="button"
-        aria-pressed={standing !== null}
+        aria-pressed={standing.length > 0}
         onClick={() => {
           setError('')
           setOpen(true)
@@ -228,16 +247,17 @@ export function DishAutoLog({
           action="Auto-log every day"
           deleteLabel="Remove"
           name={name}
-          servings={standing?.amount ?? 1}
-          counted={standing !== null && standing.unit !== 'g'}
-          weighing={standing?.unit === 'g'}
-          slot={standing?.slot ?? slotByTime(timezone)}
+          servings={opening?.amount ?? 1}
+          counted={opening !== undefined && opening.unit !== 'g'}
+          weighing={opening?.unit === 'g'}
+          slot={now}
+          standing={rows}
           weight={weight}
           error={error}
           saving={saving}
           onClose={() => setOpen(false)}
           onSubmit={(amount, slot, byWeight) => void save(amount, slot, byWeight)}
-          onDelete={standing === null ? undefined : () => void stop()}
+          onDelete={(slot) => void stop(slot)}
         />
       )}
     </>

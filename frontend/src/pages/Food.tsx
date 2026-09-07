@@ -736,7 +736,7 @@ export function FoodTab({
               <button
                 type="button"
                 className="t-tap44 shrink-0 text-muted"
-                aria-label={`Take ${row.name} off Auto-log`}
+                aria-label={`Take ${row.name} off Auto-log at ${SLOT_LABEL[row.slot]}`}
                 onClick={() => removeAuto(row)}
               >
                 <X className="h-4 w-4" strokeWidth={2.5} />
@@ -769,7 +769,7 @@ export function FoodTab({
           onClose={() => setAutoEdit(null)}
           onDone={() => setAutoEdit(null)}
           autoLog={{
-            existing: autoEdit.row,
+            standing: autos.filter((row) => row.food_id === autoEdit.food.id),
             onSaved: () => {
               setAutoEdit(null)
               void loadAutos()

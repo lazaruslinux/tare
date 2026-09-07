@@ -447,3 +447,127 @@ def test_somebody_elses_recipe_and_meal_are_both_absent(client, make_user, porri
 
     assert set_dish(client, "recipe_id", porridge).status_code == 404
     assert set_dish(client, "meal_id", plate).status_code == 404
+
+
+# ---- A change in the Journal that the standing instruction follows ----
+
+
+def standing_row(client, auto_log_id):
+    """One standing auto-log as the list reads it back."""
+    listed = client.get("/api/diary/auto-logs").json()
+    return next(row for row in listed if row["id"] == auto_log_id)
+
+
+def test_moving_an_auto_logged_entry_takes_the_instruction_with_it(client, signed_in, oats):
+    created = set_auto(client, oats).json()
+    written = entries(day(client))[0]
+    assert written["auto_log_id"] == created["id"]
+
+    moved = client.patch(
+        f"/api/diary/{written['id']}", json={"slot": "lunch", "follow_auto_log": True}
+    )
+    assert moved.status_code == 200
+    assert moved.json()["id"] == written["id"]
+    assert standing_row(client, created["id"])["slot"] == "lunch"
+
+
+def test_changing_the_amount_with_the_switch_on_changes_the_instruction(
+    client, signed_in, oats
+):
+    created = set_auto(client, oats).json()
+    written = entries(day(client))[0]
+
+    changed = client.patch(
+        f"/api/diary/{written['id']}", json={"amount": 80, "follow_auto_log": True}
+    )
+    assert changed.status_code == 200
+    row = standing_row(client, created["id"])
+    assert (row["amount"], row["unit"], row["slot"]) == (80, "g", "breakfast")
+
+
+def test_the_switch_off_or_left_out_is_a_change_to_the_one_day(client, signed_in, oats):
+    created = set_auto(client, oats).json()
+    written = entries(day(client))[0]
+
+    off = client.patch(
+        f"/api/diary/{written['id']}", json={"slot": "lunch", "follow_auto_log": False}
+    )
+    assert off.status_code == 200
+    assert standing_row(client, created["id"])["slot"] == "breakfast"
+
+    assert client.patch(f"/api/diary/{written['id']}", json={"amount": 90}).status_code == 200
+    row = standing_row(client, created["id"])
+    assert (row["slot"], row["amount"]) == ("breakfast", 50)
+
+
+def test_a_meal_that_already_auto_logs_it_refuses_the_whole_change(client, signed_in, oats):
+    first = set_auto(client, oats).json()
+    assert set_auto(client, oats, amount=20, slot="lunch").status_code == 201
+    written = entries(day(client))[0]
+
+    refused = client.patch(
+        f"/api/diary/{written['id']}", json={"slot": "lunch", "follow_auto_log": True}
+    )
+    assert refused.status_code == 409
+    assert refused.json()["detail"] == AUTO_LOG_CLASH.format(kind="food", slot="lunch")
+    # Neither the day nor the instruction moved.
+    assert [row["id"] for row in entries(day(client))] == [written["id"]]
+    assert standing_row(client, first["id"])["slot"] == "breakfast"
+
+
+def test_a_recipe_entry_carries_its_instruction_in_servings_and_in_grams(client, porridge):
+    counted = set_dish(client, "recipe_id", porridge, amount=2).json()
+    written = entries(day(client))[0]
+    moved = client.patch(
+        f"/api/diary/{written['id']}",
+        json={"amount": 3, "slot": "lunch", "follow_auto_log": True},
+    )
+    assert moved.status_code == 200
+    row = standing_row(client, counted["id"])
+    assert (row["amount"], row["unit"], row["slot"]) == (3, "serving", "lunch")
+
+    weighed = set_dish(
+        client, "recipe_id", porridge, amount=100, unit="g", slot="dinner"
+    ).json()
+    plated = entries(day(client), "dinner")[0]
+    changed = client.patch(
+        f"/api/diary/{plated['id']}", json={"amount": 150, "follow_auto_log": True}
+    )
+    assert changed.status_code == 200
+    grams = standing_row(client, weighed["id"])
+    assert (grams["amount"], grams["unit"]) == (150, "g")
+
+
+def test_a_meal_entry_carries_its_instruction_too(client, plate):
+    created = set_dish(client, "meal_id", plate).json()
+    written = entries(day(client))[0]
+
+    changed = client.patch(
+        f"/api/diary/{written['id']}",
+        json={"amount": 2, "slot": "dinner", "follow_auto_log": True},
+    )
+    assert changed.status_code == 200
+    row = standing_row(client, created["id"])
+    assert (row["amount"], row["unit"], row["slot"]) == (2, "serving", "dinner")
+
+
+def test_an_entry_nothing_set_to_repeat_is_simply_edited(client, signed_in, oats):
+    manual = client.post(
+        "/api/diary",
+        json={
+            "date": iso(TODAY),
+            "slot": "breakfast",
+            "food_id": oats["id"],
+            "amount": 30,
+            "unit": "g",
+        },
+    ).json()
+    assert manual["auto_log_id"] is None
+
+    changed = client.patch(
+        f"/api/diary/{manual['id']}",
+        json={"slot": "lunch", "amount": 40, "follow_auto_log": True},
+    )
+    assert changed.status_code == 200
+    assert changed.json()["amount"] == 40
+    assert client.get("/api/diary/auto-logs").json() == []

@@ -293,12 +293,18 @@ export function Journal({
     setEditing({ entry, food, slot })
   }
 
-  const changeServings = async (amount: number | null, slot: Slot) => {
+  const changeServings = async (amount: number | null, slot: Slot, follow: boolean) => {
     if (servings === null || amount === null) return
     setSaving(true)
     setRefusal('')
+    // The flag is only meant on a row an auto-log wrote, where it says whether
+    // the standing instruction moves with the day.
+    const also = servings.entry.auto_log_id === null ? {} : { follow_auto_log: follow }
     try {
-      await api(`/diary/${servings.entry.id}`, { method: 'PATCH', body: { amount, slot } })
+      await api(`/diary/${servings.entry.id}`, {
+        method: 'PATCH',
+        body: { amount, slot, ...also },
+      })
       reload()
     } catch (failure) {
       setRefusal(errorText(failure))
@@ -649,10 +655,11 @@ export function Journal({
           // Whichever way it was logged is the way it is edited: a row already
           // in grams has no weight of the whole thing here to switch against.
           weighing={servings.entry.unit === 'g'}
+          autoLogged={servings.entry.auto_log_id !== null}
           error={refusal}
           saving={saving}
           onClose={() => setServings(null)}
-          onSubmit={(amount, slot) => void changeServings(amount, slot)}
+          onSubmit={(amount, slot, _byWeight, follow) => void changeServings(amount, slot, follow)}
           onDelete={() => remove(servings.entry)}
         />
       )}
