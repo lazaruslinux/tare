@@ -12,6 +12,7 @@ import httpx
 from PIL import Image
 
 from app import foods_api, models, photos
+from app.routers import admin
 from tests.conftest import PASSWORD
 
 CODE = "034000002405"
@@ -746,3 +747,40 @@ def test_deciding_your_own_request_counts_as_reading_it(client, make_user):
 
     rows = {row["id"]: row for row in client.get("/api/submissions/mine").json()}
     assert rows[made["submission_id"]]["seen_at"] is not None
+
+
+def test_two_approvals_of_one_barcode_are_a_conflict_and_not_a_failure(
+    client, db_session, make_user, monkeypatch
+):
+    """Two reviewers, two waiting foods, one barcode. The database is the
+    referee, and whoever lost is told rather than shown an error."""
+    make_user("member")
+    make_user("other")
+    make_user("reviewer", admin=True)
+    sign_in(client, "member")
+    first = offer(client)
+    sign_in(client, "other")
+    second = offer(client)
+
+    sign_in(client, "reviewer")
+    assert (
+        client.post(f"/api/admin/queue/{first['submission_id']}/approve", json={}).status_code
+        == 200
+    )
+    real = admin.shared_with_barcode
+    missed = []
+
+    def once(db, food):
+        if not missed:
+            missed.append(True)
+            return None
+        return real(db, food)
+
+    monkeypatch.setattr(admin, "shared_with_barcode", once)
+
+    response = client.post(f"/api/admin/queue/{second['submission_id']}/approve", json={})
+
+    assert response.status_code == 409
+    assert response.json() == {"detail": "This barcode is already in the Tare database."}
+    db_session.expire_all()
+    assert db_session.get(models.Food, second["food"]["id"]).status == "pending"

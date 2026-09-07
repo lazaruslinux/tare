@@ -27,6 +27,7 @@ from sqlalchemy import (
     select,
     update,
 )
+from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import InstrumentedAttribute, Session, selectinload
 
 from app import models, photos, profiles, schemas, units
@@ -1470,7 +1471,14 @@ def pin_food(
     # A pin is the stronger word: it also puts back a food taken off Repeat.
     unhide(db, user, food.id)
     if not is_pinned(db, user, food.id):
-        db.add(models.SavedFood(user_id=user.id, food_id=food.id))
+        # Two taps at once. The insert goes in a savepoint: the one that loses
+        # the race leaves the pin the other one made standing.
+        try:
+            with db.begin_nested():
+                db.add(models.SavedFood(user_id=user.id, food_id=food.id))
+                db.flush()
+        except IntegrityError:
+            db.expire_all()
     db.commit()
 
 
@@ -1499,7 +1507,14 @@ def leave_repeat(
     a pin does. Taking off one already off changes nothing."""
     food = readable_food(db, user, food_id)
     if food.id not in hidden_ids(db, user):
-        db.add(models.RepeatHidden(user_id=user.id, food_id=food.id))
+        # The same race as a pin, and the same answer: whoever lost leaves the
+        # row the other one wrote.
+        try:
+            with db.begin_nested():
+                db.add(models.RepeatHidden(user_id=user.id, food_id=food.id))
+                db.flush()
+        except IntegrityError:
+            db.expire_all()
         db.commit()
 
 
@@ -1580,6 +1595,8 @@ def delete_food(
     db: Session = Depends(get_db),
     user: models.User = Depends(require_user),
 ) -> None:
+    from app.routers.photos import discard
+
     food = changeable_food(db, user, food_id, OWNER_MAY_DELETE, ADMIN_MAY_DELETE)
     # What the foreign keys already say, said again here. The constraints hold
     # on Postgres; stating it in the session keeps SQLite and the rows this
@@ -1590,6 +1607,15 @@ def delete_food(
         .values(food_id=None)
     )
     db.execute(delete(models.SavedFood).where(models.SavedFood.food_id == food.id))
+    # The pictures go with it, files and all. The foreign key would only let go
+    # of the food, and nothing sweeps up a photo that reached one, so a picture
+    # left here is a picture left on the disk and still served forever.
+    for photo in db.execute(
+        select(models.FoodPhoto).where(models.FoodPhoto.food_id == food.id)
+    ).scalars().all():
+        discard(db, photo)
+    if food.label_photo_id is not None:
+        set_label_photo(db, food, None)
     # Through the session rather than in SQL, so the servings go with it on
     # SQLite too, where the foreign key is only enforced when it is asked for.
     db.delete(food)

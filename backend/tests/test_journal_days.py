@@ -9,6 +9,9 @@ import datetime as dt
 
 import pytest
 
+from app import models
+from app.models import now_utc
+from app.routers import diary
 from app.routers.diary import DAY_COMPLETE, FUTURE_DAY
 
 TODAY = dt.datetime.now(dt.timezone.utc).date()
@@ -174,3 +177,28 @@ def test_one_members_mark_leaves_another_members_day_alone(client, make_user, si
     client.post("/api/auth/login", json={"username": "other", "password": PASSWORD})
     read = client.get("/api/diary/day", params={"date": iso(TODAY)}).json()
     assert read["completed"] is False
+
+
+def test_two_completions_of_one_day_leave_one_row(client, db_session, signed_in, monkeypatch):
+    """The request that loses the race reads the mark the other one made."""
+    row = models.JournalDay(user_id=signed_in.id, date=TODAY, completed_at=now_utc())
+    db_session.add(row)
+    db_session.commit()
+    # Out of the session, so the insert below reaches the database the way a
+    # second process's would, and expired, so the lookup sees nothing.
+    db_session.expunge(row)
+    real = diary.completion
+    missed = []
+
+    def once(db, user, day):
+        if not missed:
+            missed.append(True)
+            return None
+        return real(db, user, day)
+
+    monkeypatch.setattr(diary, "completion", once)
+
+    response = complete(client)
+
+    assert response.status_code == 200
+    assert db_session.query(models.JournalDay).count() == 1

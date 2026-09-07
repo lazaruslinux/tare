@@ -2,9 +2,11 @@ import datetime as dt
 
 import pytest
 from fastapi.testclient import TestClient
+from sqlalchemy.orm import sessionmaker
 
-from app import mail, models, security
+from app import mail, main, models, security
 from app.config import settings
+from app.models import now_utc
 from app.routers.auth import (
     BAD_CREDENTIALS,
     EMAIL_REQUIRED,
@@ -307,3 +309,39 @@ def test_the_birthdate_is_kept_on_the_account(client, db_session, invite, frozen
     assert signup(client, invite, birthdate="1990-04-02").status_code == 200
     user = db_session.query(models.User).filter_by(username="newcomer").one()
     assert user.birthdate == dt.date(1990, 4, 2)
+
+
+def test_expired_sessions_are_swept_up_when_the_server_starts(
+    db_session, make_user, monkeypatch
+):
+    """The reap on sight never fires: a cookie expires with the row it names,
+    so an expired session is never presented. Starting up is what clears them.
+    """
+    user = make_user("member")
+    for token_hash, expires_at in (
+        ("expired", now_utc() - dt.timedelta(hours=1)),
+        ("still-good", now_utc() + dt.timedelta(hours=1)),
+    ):
+        db_session.add(
+            models.Session(
+                token_hash=token_hash,
+                user_id=user.id,
+                created_at=now_utc() - dt.timedelta(days=30),
+                expires_at=expires_at,
+            )
+        )
+    db_session.commit()
+    # The startup sweep opens a session of its own, so it is pointed at the
+    # database this case built.
+    monkeypatch.setattr(
+        main,
+        "SessionLocal",
+        sessionmaker(bind=db_session.get_bind(), autoflush=False, expire_on_commit=False),
+    )
+
+    with TestClient(main.create_app()):
+        pass
+
+    db_session.expire_all()
+    assert db_session.get(models.Session, "expired") is None
+    assert db_session.get(models.Session, "still-good") is not None

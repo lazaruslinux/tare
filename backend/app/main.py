@@ -3,15 +3,19 @@
 from __future__ import annotations
 
 import logging
+from collections.abc import AsyncIterator
+from contextlib import asynccontextmanager
 
 from fastapi import FastAPI, Request
 from fastapi.exceptions import RequestValidationError
 from fastapi.responses import JSONResponse
+from sqlalchemy.exc import SQLAlchemyError
 from starlette.exceptions import HTTPException as StarletteHTTPException
 from starlette.types import ASGIApp, Message, Receive, Scope, Send
 
-from app import mail
+from app import mail, security
 from app.config import VERSION, check_deploy_config
+from app.db import SessionLocal
 from app.routers import (
     account,
     admin,
@@ -191,6 +195,20 @@ async def _unhandled_error(request: Request, exc: Exception) -> JSONResponse:
     return JSONResponse(status_code=500, content={"detail": "Something went wrong."})
 
 
+@asynccontextmanager
+async def lifespan(app: FastAPI) -> AsyncIterator[None]:
+    """The housekeeping a start is the moment for."""
+    try:
+        with SessionLocal() as db:
+            security.reap_expired_sessions(db)
+            db.commit()
+    except SQLAlchemyError as failure:
+        # A database that is not up yet is not a reason to refuse to start.
+        # The table waits for the next start rather than the process dying.
+        log.warning("expired sessions were not swept up at startup: %s", failure)
+    yield
+
+
 def create_app() -> FastAPI:
     # Before an engine, a route, or a port. A refusal here stops the process
     # rather than letting a misconfigured install answer a single request.
@@ -205,6 +223,7 @@ def create_app() -> FastAPI:
         docs_url=None,
         redoc_url=None,
         openapi_url=None,
+        lifespan=lifespan,
     )
     app.add_middleware(BodySizeLimitMiddleware)
     app.add_exception_handler(RequestValidationError, _validation_error)

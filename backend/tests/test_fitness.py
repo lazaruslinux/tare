@@ -673,3 +673,30 @@ def test_setting_a_day_apart_leaves_the_usual_goals_alone(client, signed_in):
     assert targets["exercise_minutes_goal"] == 30
     assert profile["step_goal"] == 8000
     assert profile["exercise_minutes_goal"] == 30
+
+
+def test_two_goal_writes_for_one_day_leave_one_row(client, db_session, signed_in, monkeypatch):
+    """The request that loses the race writes onto the row the other one made."""
+    day = utc_today()
+    row = models.DayGoal(user_id=signed_in.id, date=day, step_goal=7000)
+    db_session.add(row)
+    db_session.commit()
+    # Out of the session, so the insert below reaches the database the way a
+    # second process's would.
+    db_session.expunge(row)
+    real = db_session.get
+    missed = []
+
+    def once(entity, ident, **kwargs):
+        if entity is models.DayGoal and not missed:
+            missed.append(True)
+            return None
+        return real(entity, ident, **kwargs)
+
+    monkeypatch.setattr(db_session, "get", once)
+
+    response = client.put(f"/api/fitness/goals/{day}", json={"steps": 12000})
+
+    assert response.status_code == 200
+    assert response.json()["steps"] == 12000
+    assert db_session.query(models.DayGoal).count() == 1

@@ -309,6 +309,10 @@ def upload_photo(
 ) -> dict[str, int]:
     """Take one picture, and answer with the id a submission attaches it by."""
     caps.check_photos(db, user)
+    # The connection goes back to the pool before the decoding below, which is
+    # two passes of Pillow over a picture up to ten megabytes and holds nothing
+    # the database needs to know about.
+    db.commit()
     if file is None:
         raise HTTPException(status.HTTP_400_BAD_REQUEST, NO_FILE)
     if purpose not in models.PHOTO_PURPOSES:

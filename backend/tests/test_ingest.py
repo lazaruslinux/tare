@@ -1,11 +1,16 @@
 import datetime as dt
 import json
+import threading
 
-from sqlalchemy import select
+from fastapi.testclient import TestClient
+from sqlalchemy import create_engine, select
+from sqlalchemy.orm import sessionmaker
 
 from app import models, security
 from app.config import settings
+from app.db import Base, get_db
 from app.deps import BAD_INGEST_TOKEN
+from app.main import create_app
 from app.models import now_utc
 from app.throttle import TOO_MANY
 
@@ -749,3 +754,60 @@ def test_the_upload_list_names_who_sent_what(admin_client, admin):
     assert rows[0]["username"] == "admin"
     assert rows[0]["bytes"] > 0
     assert rows[0]["accepted"] > 0
+
+
+def test_two_exports_arriving_together_are_both_taken(tmp_path):
+    """One import runs at a time, and the second waits rather than being refused.
+
+    A file database with a connection for each session, because this is the one
+    case here that needs two requests genuinely at once.
+    """
+    engine = create_engine(f"sqlite:///{tmp_path / 'together.db'}")
+    Base.metadata.create_all(engine)
+    factory = sessionmaker(bind=engine, autoflush=False, expire_on_commit=False)
+    with factory() as setup:
+        user = models.User(
+            username="runner",
+            password_hash="not-signed-in-here",
+            email_verified=True,
+            birthdate=dt.date(1990, 4, 2),
+            units="imperial",
+            timezone="UTC",
+            feed_hidden=[],
+            created_at=now_utc(),
+        )
+        setup.add(user)
+        setup.flush()
+        token = token_for(setup, user)
+
+    def per_request_db():
+        db = factory()
+        try:
+            yield db
+        finally:
+            db.close()
+
+    app = create_app()
+    app.dependency_overrides[get_db] = per_request_db
+    day = yesterday()
+    answers: list[int] = []
+    lock = threading.Lock()
+
+    with TestClient(app) as client:
+
+        def send(hour: int) -> None:
+            payload = {
+                "data": {"metrics": [metric("step_count", "count", [point(day, hour, 500)])]}
+            }
+            code = post(client, token, payload).status_code
+            with lock:
+                answers.append(code)
+
+        threads = [threading.Thread(target=send, args=(hour,)) for hour in (8, 9)]
+        for thread in threads:
+            thread.start()
+        for thread in threads:
+            thread.join()
+
+    assert answers == [200, 200]
+    engine.dispose()

@@ -231,6 +231,17 @@ def asked_day(date: str, user: models.User) -> dt.date:
         raise HTTPException(status.HTTP_400_BAD_REQUEST, BAD_DATE) from None
 
 
+def measurement_on(
+    db: Session, user: models.User, day: dt.date
+) -> models.WeightEntry | None:
+    """One day's reading, or nothing recorded on it."""
+    return db.execute(
+        select(models.WeightEntry).where(
+            models.WeightEntry.user_id == user.id, models.WeightEntry.date_for == day
+        )
+    ).scalar_one_or_none()
+
+
 def readings(
     db: Session, user: models.User, since: dt.date | None = None
 ) -> list[models.WeightEntry]:
@@ -1062,11 +1073,7 @@ def write_measurement(
         if value is not None and not (low <= value <= high):
             raise HTTPException(status.HTTP_400_BAD_REQUEST, f"That is not a {_name(field)}.")
 
-    row = db.execute(
-        select(models.WeightEntry).where(
-            models.WeightEntry.user_id == user.id, models.WeightEntry.date_for == day
-        )
-    ).scalar_one_or_none()
+    row = measurement_on(db, user, day)
     kept = {field: None if row is None else getattr(row, field) for field in MEASURED}
     merged = {
         field: getattr(body, field) if field in sent else kept[field] for field in MEASURED
@@ -1077,8 +1084,24 @@ def write_measurement(
     if all(value is None for value in merged.values()):
         raise HTTPException(status.HTTP_400_BAD_REQUEST, NOTHING_RECORDED)
     if row is None:
-        row = models.WeightEntry(user_id=user.id, date_for=day)
-        db.add(row)
+        # Two devices can write the same morning at once. The insert goes in a
+        # savepoint: the one that loses the race merges into the row the other
+        # one made, so neither reading is written over.
+        try:
+            with db.begin_nested():
+                row = models.WeightEntry(user_id=user.id, date_for=day)
+                db.add(row)
+                db.flush()
+        except IntegrityError:
+            db.expire_all()
+            made = measurement_on(db, user, day)
+            if made is None:
+                raise
+            row = made
+            merged = {
+                field: getattr(body, field) if field in sent else getattr(row, field)
+                for field in MEASURED
+            }
     for field, value in merged.items():
         setattr(row, field, value)
     # Typed in always wins the day. An import that arrives later leaves this
@@ -1105,11 +1128,7 @@ def delete_measurement(
 ) -> None:
     day = asked_day(date, user)
     refuse_if_complete(db, user, day)
-    row = db.execute(
-        select(models.WeightEntry).where(
-            models.WeightEntry.user_id == user.id, models.WeightEntry.date_for == day
-        )
-    ).scalar_one_or_none()
+    row = measurement_on(db, user, day)
     if row is None:
         raise HTTPException(status.HTTP_404_NOT_FOUND, MISSING_MEASUREMENT)
     db.delete(row)

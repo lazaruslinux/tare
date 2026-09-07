@@ -13,6 +13,7 @@ import datetime as dt
 from fastapi import APIRouter, Depends, HTTPException, status
 from pydantic import BaseModel
 from sqlalchemy import func, select
+from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session
 
 from app import clock, fitness_catalog, health, models
@@ -375,11 +376,28 @@ def write_goals(
         if row is not None:
             db.delete(row)
     elif row is None:
-        db.add(
-            models.DayGoal(
-                user_id=user.id, date=day, step_goal=steps, exercise_minutes_goal=minutes
-            )
-        )
+        # Two screens can set the same day at once. The insert goes in a
+        # savepoint: the one that loses the race writes onto the row the other
+        # one made instead of failing.
+        try:
+            with db.begin_nested():
+                db.add(
+                    models.DayGoal(
+                        user_id=user.id, date=day, step_goal=steps, exercise_minutes_goal=minutes
+                    )
+                )
+                db.flush()
+        except IntegrityError:
+            db.expire_all()
+            made = db.get(models.DayGoal, (user.id, day))
+            if made is None:
+                raise
+            # Only what this request actually sent goes onto the row the other
+            # one made, so the figure it set is not written over by a default.
+            if "steps" in sent:
+                made.step_goal = body.steps
+            if "exercise_minutes" in sent:
+                made.exercise_minutes_goal = body.exercise_minutes
     else:
         row.step_goal = steps
         row.exercise_minutes_goal = minutes

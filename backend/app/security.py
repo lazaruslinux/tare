@@ -184,6 +184,16 @@ def delete_sessions(db: Session, user_id: int, *, keep: str | None = None) -> No
     db.execute(stmt)
 
 
+def reap_expired_sessions(db: Session) -> None:
+    """Every session whose time is up, gone.
+
+    Reaping on sight below only fires when an expired cookie is presented, and
+    a cookie expires with the row it names, so in practice it never does. This
+    is the sweep that keeps the table from growing forever.
+    """
+    db.execute(delete(models.Session).where(models.Session.expires_at < now_utc()))
+
+
 def session_token_hash(request: Request) -> str | None:
     token = request.cookies.get(COOKIE_NAME)
     return hash_token(token) if token else None

@@ -10,6 +10,7 @@ from __future__ import annotations
 
 import datetime as dt
 import json
+import threading
 from typing import Any
 
 from fastapi import APIRouter, Depends, HTTPException, Request, status
@@ -40,6 +41,12 @@ MAX_KEYS = 200_000
 # phone keeps failing to send, short enough that the table stays small. Purged
 # on the account's own next sync, so no scheduled job has to exist for it.
 LOG_DAYS = 90
+
+# One import at a time across the whole process. An export is up to fifteen
+# megabytes parsed into memory and then walked row by row, so two of them at
+# once is twice the memory for no more throughput. A second one waits its turn;
+# it is never refused.
+_one_at_a_time = threading.Semaphore(1)
 
 
 def _refuse_constant(literal: str) -> float:
@@ -103,6 +110,14 @@ def _receive(
     slightly different rules than a phone's post. The one difference is what
     every row is stamped with, which is the whole of `uploaded`.
     """
+    with _one_at_a_time:
+        return _import(db, user, raw, uploaded)
+
+
+def _import(
+    db: Session, user: models.User, raw: bytes, uploaded: bool
+) -> dict[str, int]:
+    """The import itself, with the turn already taken."""
     try:
         payload = json.loads(raw, parse_constant=_refuse_constant)
     except (ValueError, RecursionError):
@@ -139,27 +154,35 @@ def _receive(
     }
 
 
+async def raw_body(request: Request) -> bytes:
+    """The body, read on the event loop so the handler itself can be a plain def.
+
+    A dependency rather than a declared parameter, and last in the signature,
+    so it runs after the token or the session: reading the bytes is all that
+    happens here, and the parse is still the handler's.
+    """
+    return await request.body()
+
+
 @router.post("/health")
-async def ingest_health(
-    request: Request,
+def ingest_health(
     db: Session = Depends(get_db),
     user: models.User = Depends(require_ingest_user),
+    body: bytes = Depends(raw_body),
 ) -> dict[str, int]:
-    return _receive(db, user, await request.body())
+    """Plain and synchronous, like every other handler here: FastAPI runs one in
+    a worker thread, so parsing megabytes never holds up anybody else's
+    request."""
+    return _receive(db, user, body)
 
 
-@router.post("/upload")
-async def upload_export(
-    request: Request,
-    db: Session = Depends(get_db),
-    user: models.User = Depends(require_user),
-) -> dict[str, int]:
-    """The same export as a file, from somebody already signed in.
+def allowed_to_upload(
+    request: Request, user: models.User = Depends(require_user)
+) -> models.User:
+    """Whether this account may hand over a file at all, before one is read.
 
-    A session and never a sync key: this is a person at a screen, and the key
-    belongs to the phone. The form is read here rather than declared as a
-    parameter so the limiter and the session are both settled before this
-    server parses a file for anybody.
+    The switch and both limiters live here rather than in the handler so they
+    are settled before the dependency below parses a multipart body.
     """
     if not settings.uploads_enabled:
         raise HTTPException(status.HTTP_404_NOT_FOUND, UPLOADS_OFF)
@@ -169,13 +192,32 @@ async def upload_export(
     # somebody this server already knows, so the allowance is theirs.
     if throttle.upload_limiter.hit(str(user.id)):
         raise HTTPException(status.HTTP_429_TOO_MANY_REQUESTS, throttle.TOO_MANY_UPLOADS)
+    return user
+
+
+async def picked_file(request: Request) -> bytes:
+    """The file somebody chose, read on the event loop for the same reason as
+    the body above."""
     async with request.form() as form:
         picked = form.get("file")
         if not isinstance(picked, UploadFile):
             raise HTTPException(status.HTTP_400_BAD_REQUEST, NO_FILE)
-        raw = await picked.read()
-    # The name a file was given and the type it claims are read by nothing
-    # here: the only thing that decides what this is, is what is inside it.
+        return await picked.read()
+
+
+@router.post("/upload")
+def upload_export(
+    db: Session = Depends(get_db),
+    user: models.User = Depends(allowed_to_upload),
+    raw: bytes = Depends(picked_file),
+) -> dict[str, int]:
+    """The same export as a file, from somebody already signed in.
+
+    A session and never a sync key: this is a person at a screen, and the key
+    belongs to the phone. The name a file was given and the type it claims are
+    read by nothing here: the only thing that decides what this is, is what is
+    inside it.
+    """
     return _receive(db, user, raw, uploaded=True)
 
 

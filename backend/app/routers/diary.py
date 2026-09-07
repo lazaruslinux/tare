@@ -1086,8 +1086,20 @@ def complete_day(
         raise HTTPException(status.HTTP_400_BAD_REQUEST, FUTURE_DAY)
     row = completion(db, user, day)
     if row is None:
-        row = models.JournalDay(user_id=user.id, date=day, completed_at=now_utc())
-        db.add(row)
+        # Two phones can send this together. The insert goes in a savepoint:
+        # the one that loses the race reads the mark the other one made and
+        # answers with it.
+        try:
+            with db.begin_nested():
+                row = models.JournalDay(user_id=user.id, date=day, completed_at=now_utc())
+                db.add(row)
+                db.flush()
+        except IntegrityError:
+            db.expire_all()
+            made = completion(db, user, day)
+            if made is None:
+                raise
+            row = made
         db.commit()
     return {"date": day.isoformat(), "completed_at": row.completed_at.isoformat()}
 

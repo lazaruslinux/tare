@@ -11,6 +11,7 @@ from __future__ import annotations
 
 from fastapi import APIRouter, Depends, HTTPException, status
 from sqlalchemy import ColumnElement, delete, func, or_, select, tuple_, update
+from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session
 
 from app import models, profiles, schemas
@@ -389,6 +390,17 @@ def resolve_report(
     return {"food": proposed(target)}
 
 
+def shared_with_barcode(db: Session, food: models.Food) -> int | None:
+    """The shared food already holding this one's barcode, if there is one."""
+    return db.scalar(
+        select(models.Food.id).where(
+            models.Food.status == "approved",
+            models.Food.barcode == food.barcode,
+            models.Food.id != food.id,
+        )
+    )
+
+
 @router.post("/queue/{submission_id}/approve")
 def approve(
     submission_id: int,
@@ -412,19 +424,10 @@ def approve(
     # needs is checked again at the moment it becomes everybody's.
     check_serving(food.servings)
 
-    if food.barcode:
-        clash = db.execute(
-            select(models.Food.id).where(
-                models.Food.status == "approved",
-                models.Food.barcode == food.barcode,
-                models.Food.id != food.id,
-            )
-        ).first()
-        if clash is not None:
-            # Refused before anything is written. Two rows in the shared
-            # database claiming one barcode is the one state the scanner
-            # cannot resolve.
-            raise HTTPException(status.HTTP_409_CONFLICT, ALREADY_SHARED)
+    if food.barcode and shared_with_barcode(db, food) is not None:
+        # Refused before anything is written. Two rows in the shared database
+        # claiming one barcode is the one state the scanner cannot resolve.
+        raise HTTPException(status.HTTP_409_CONFLICT, ALREADY_SHARED)
 
     food.status = "approved"
     # Let go of the owner. A shared food outlives whoever submitted it, and it
@@ -459,7 +462,14 @@ def approve(
     log_review(
         db, reviewer, "approved", "submission", submission.id, food.name, submission.changes
     )
-    db.commit()
+    try:
+        db.commit()
+    except IntegrityError:
+        # Two reviewers approving two waiting foods with one barcode at the
+        # same moment. The check above is a read, so both can pass it; the
+        # index is the referee, and whoever lost is told the same thing.
+        db.rollback()
+        raise HTTPException(status.HTTP_409_CONFLICT, ALREADY_SHARED) from None
     return {"food": proposed(food)}
 
 

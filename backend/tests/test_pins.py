@@ -3,6 +3,8 @@
 import pytest
 
 from app import models
+from app.models import now_utc
+from app.routers import foods
 from app.routers.foods import MISSING_FOOD
 from tests.conftest import PASSWORD
 
@@ -197,3 +199,49 @@ def test_somebody_else_s_food_waiting_for_review_cannot_be_favorited(
     assert refused.status_code == 404
     assert refused.json() == {"detail": MISSING_FOOD}
     assert db_session.query(models.SavedFood).count() == 0
+
+
+def test_two_pins_of_one_food_at_once_leave_one_row(
+    client, db_session, signed_in, make_food, monkeypatch
+):
+    """The request that loses the race answers the same as the one that won."""
+    food = make_food("Rolled oats")
+    db_session.add(models.SavedFood(user_id=signed_in.id, food_id=food["id"], created_at=now_utc()))
+    db_session.commit()
+    real = foods.is_pinned
+    missed = []
+
+    def once(db, user, food_id):
+        if not missed:
+            missed.append(True)
+            return False
+        return real(db, user, food_id)
+
+    monkeypatch.setattr(foods, "is_pinned", once)
+
+    assert client.post(f"/api/foods/{food['id']}/pin").status_code == 204
+    assert db_session.query(models.SavedFood).count() == 1
+
+
+def test_two_removals_from_repeat_at_once_leave_one_row(
+    client, db_session, signed_in, make_food, monkeypatch
+):
+    """The same race on the other list, with the same answer."""
+    food = make_food("Rolled oats")
+    db_session.add(
+        models.RepeatHidden(user_id=signed_in.id, food_id=food["id"], created_at=now_utc())
+    )
+    db_session.commit()
+    real = foods.hidden_ids
+    missed = []
+
+    def once(db, user):
+        if not missed:
+            missed.append(True)
+            return set()
+        return real(db, user)
+
+    monkeypatch.setattr(foods, "hidden_ids", once)
+
+    assert client.delete(f"/api/foods/{food['id']}/repeat").status_code == 204
+    assert db_session.query(models.RepeatHidden).count() == 1

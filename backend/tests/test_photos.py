@@ -591,3 +591,35 @@ def test_a_list_row_carries_both_addresses_of_the_picture(client, db_session, si
     row = next(r for r in client.get("/api/foods/mine").json() if r["id"] == made["id"])
     assert row["photo_url"] == f"/api/photos/{photo_id}.webp"
     assert row["thumb_url"] is None
+
+
+def test_deleting_a_food_takes_its_pictures_with_it(client, db_session, signed_in):
+    """A food is deleted with the pictures on it, row and file both. Nothing
+    sweeps up a photo that reached a food, so what is left here is left forever.
+    """
+    food = client.post(
+        "/api/foods",
+        json={
+            "name": "Sourdough",
+            "base_unit": "g",
+            "calories": 260,
+            "protein_g": 9,
+            "carbs_g": 48,
+            "fat_g": 2,
+        },
+    ).json()
+    photo_id = upload(client).json()["photo_id"]
+    assert (
+        client.post(
+            f"/api/foods/{food['id']}/photo", json={"photo_id": photo_id, "purpose": "front"}
+        ).status_code
+        == 204
+    )
+    name = db_session.get(models.FoodPhoto, photo_id).path
+
+    assert client.delete(f"/api/foods/{food['id']}").status_code == 204
+
+    db_session.expire_all()
+    assert db_session.get(models.FoodPhoto, photo_id) is None
+    assert not on_disk(name)
+    assert not on_disk(photos.thumb_name(name))

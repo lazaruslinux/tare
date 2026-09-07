@@ -10,9 +10,21 @@ from sqlalchemy.orm import DeclarativeBase, Session, sessionmaker
 
 from app.config import settings
 
+_url = settings.resolved_database_url
+
+# How many connections this process may hold, and how long a request waits for
+# one. Twenty is comfortably above what a handful of members and one uvicorn
+# worker use at once; the ten spare cover a burst, and a request that cannot
+# get a connection in ten seconds is told so rather than left hanging.
+# SQLite keeps its own single-connection pool and rejects these, so the tests
+# and any file database get the plain engine.
+_pool: dict[str, Any] = (
+    {} if _url.startswith("sqlite") else {"pool_size": 20, "max_overflow": 10, "pool_timeout": 10}
+)
+
 # pool_pre_ping: the database container can restart under a running api, and a
 # connection that died with it should be replaced rather than handed out.
-engine = create_engine(settings.resolved_database_url, pool_pre_ping=True)
+engine = create_engine(_url, pool_pre_ping=True, **_pool)
 
 SessionLocal = sessionmaker(bind=engine, autoflush=False, expire_on_commit=False)
 

@@ -174,6 +174,12 @@ def resolve_barcode(
         if cached.fetched_at > now_utc() - dt.timedelta(days=CACHE_DAYS):
             return {"state": "prefill", "prefill": prefill(cached)}
 
+    # The connection goes back to the pool before the wait. Nothing here is
+    # half written, so this ends the transaction rather than saving anything,
+    # and the seconds somebody else's server may take are seconds this process
+    # is not holding a connection nobody else can have.
+    db.commit()
+
     try:
         result = foods_api.lookup(code)
     except foods_api.FoodApiError as failure:

@@ -13,6 +13,7 @@ import pytest
 from app import health
 
 from app import clock, models
+from app.routers import health as health_routes
 from app.routers.health import (
     BAD_MINUTES_GOAL,
     BAD_RATE,
@@ -695,3 +696,37 @@ def test_a_step_goal_outside_the_offered_range_is_refused(client, member, steps)
     assert answer.status_code == 400
     assert answer.json()["detail"] == BAD_STEP_GOAL
     assert client.get("/api/health/profile").json()["step_goal"] == 8000
+
+
+def test_two_readings_for_one_day_leave_one_row(client, db_session, member, monkeypatch):
+    """The request that loses the race merges into the row the other one made,
+    keeping what it holds rather than writing over it."""
+    db_session.add(
+        models.WeightEntry(
+            user_id=member.id,
+            date_for=TODAY,
+            weight_kg=81.0,
+            source="manual",
+            created_at=clock.now_utc(),
+        )
+    )
+    db_session.commit()
+    real = health_routes.measurement_on
+    missed = []
+
+    def once(db, user, day):
+        if not missed:
+            missed.append(True)
+            return None
+        return real(db, user, day)
+
+    monkeypatch.setattr(health_routes, "measurement_on", once)
+
+    response = client.put(
+        f"/api/health/measurements/{TODAY.isoformat()}", json={"body_fat_pct": 20.0}
+    )
+
+    assert response.status_code == 200
+    assert db_session.query(models.WeightEntry).count() == 1
+    assert response.json()["weight_kg"] == 81.0
+    assert response.json()["body_fat_pct"] == 20.0
