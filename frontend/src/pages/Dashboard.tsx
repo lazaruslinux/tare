@@ -21,6 +21,7 @@ import {
   type Targets,
   type TrendPoint,
 } from '../api'
+import { ConfirmSheet } from '../components/ConfirmSheet'
 import { barsAverage, DayBars, weekly, type Bar } from '../components/DayBars'
 import { ExerciseSheet } from '../components/ExerciseSheet'
 import { FoodPicker } from '../components/FoodPicker'
@@ -44,10 +45,8 @@ import {
   weightUnit,
 } from '../lib/units'
 
-// How far back the newest of each measured number is looked for, and how long
-// a deleted reading can be brought back.
+// How far back the newest of each measured number is looked for.
 const HISTORY_DAYS = 90
-const UNDO = 6000
 
 // The week, and how many days the Progress screen shows. Both come from the
 // one request, because a month of days is a few hundred bytes.
@@ -777,8 +776,8 @@ export function Dashboard({
   // Whether today's own step and exercise goals are open, which is what the
   // two rings they fill lead to.
   const [goaling, setGoaling] = useState(false)
-  const [pending, setPending] = useState<Measurement | null>(null)
-  const pendingRef = useRef<Measurement | null>(null)
+  // The day's readings waiting on the question about deleting them.
+  const [asking, setAsking] = useState<Measurement | null>(null)
 
   // The wordmark is the header here, and the rail's own name takes over
   // from it at the width the rail appears. The history is a sub-view, and it
@@ -864,29 +863,6 @@ export function Dashboard({
     setWeighPick(null)
   }, [span, refresh])
 
-  const erase = (row: Measurement) => {
-    pendingRef.current = null
-    api(`/health/measurements/${row.date}`, { method: 'DELETE' }).catch(() => {
-      // The row is already off the screen, and the next read tells the truth.
-    })
-  }
-
-  useEffect(() => {
-    if (pending === null) return
-    const timer = window.setTimeout(() => {
-      erase(pending)
-      setPending(null)
-    }, UNDO)
-    return () => window.clearTimeout(timer)
-  }, [pending])
-
-  useEffect(
-    () => () => {
-      if (pendingRef.current !== null) erase(pendingRef.current)
-    },
-    []
-  )
-
   const pickLines = (next: Lines) => {
     setLines(next)
     const on = LINE_SPECS.filter((spec) => next[spec.key]).map((spec) => spec.key)
@@ -935,14 +911,9 @@ export function Dashboard({
           }
     setHistory(without)
     setWindowed(without)
-    pendingRef.current = row
-    setPending(row)
-  }
-
-  const undo = () => {
-    pendingRef.current = null
-    setPending(null)
-    setAgain(again + 1)
+    api(`/health/measurements/${row.date}`, { method: 'DELETE' }).catch(() => {
+      // The row is already off the screen, and the next read tells the truth.
+    })
   }
 
   const rows = history?.measurements ?? []
@@ -1230,15 +1201,25 @@ export function Dashboard({
       ? `${calText(Math.abs(remaining))} cal over today`
       : `${calText(remaining)} cal remaining today`
 
-  const snackbar = pending !== null && (
-    <div className="pointer-events-none fixed inset-x-0 bottom-24 z-30 px-4">
-      <div className="pointer-events-auto mx-auto flex w-full max-w-md items-center justify-between gap-3 rounded-xl border border-line bg-surface-2 px-4 py-3 text-sm">
-        <span className="min-w-0 truncate">Deleted {pending.date}.</span>
-        <button type="button" className="font-semibold text-accent" onClick={undo}>
-          Undo
-        </button>
-      </div>
-    </div>
+  // Rendered after the sheet it is asked from, so it sits over it.
+  const askDelete = (
+    <ConfirmSheet
+      open={asking !== null}
+      label="Delete measurements"
+      question={
+        asking === null ? '' : `Delete the measurements for ${dayLabel(asking.date, todayIso)}?`
+      }
+      note="They cannot be recovered."
+      verb="Delete"
+      onConfirm={() => {
+        if (asking === null) return
+        const row = asking
+        setAsking(null)
+        closeMeasurements()
+        removeMeasurement(row)
+      }}
+      onClose={() => setAsking(null)}
+    />
   )
 
   if (workout !== null) {
@@ -1410,12 +1391,11 @@ export function Dashboard({
             onSaved={reload}
             onDelete={() => {
               const row = rows.find((one) => one.date === measuring)
-              closeMeasurements()
-              if (row) removeMeasurement(row)
+              if (row) setAsking(row)
             }}
           />
         )}
-        {snackbar}
+        {askDelete}
       </>
     )
   }
@@ -1696,7 +1676,7 @@ export function Dashboard({
         />
       )}
 
-      {snackbar}
+      {askDelete}
     </>
   )
 }

@@ -245,6 +245,10 @@ export function FoodDetail({
   const [erasing, setErasing] = useState(false)
   const [erasingBusy, setErasingBusy] = useState(false)
   const [erasingError, setErasingError] = useState('')
+  // Whether the question about taking the star off is up, and the request
+  // waiting on the question about being taken back.
+  const [unstarring, setUnstarring] = useState(false)
+  const [takingBack, setTakingBack] = useState<number | null>(null)
   // The request that made a shared food shared, when it was this account's.
   // The page says so in one line; the full history lives on the Food tab.
   const offered = shared
@@ -402,7 +406,7 @@ export function FoodDetail({
                   className="t-btn flex-1 basis-[calc(50%-0.375rem)] min-[640px]:flex-none min-[640px]:basis-auto @xl:flex-1 @xl:basis-[calc(50%-0.375rem)] @xl:min-h-9 @xl:px-3 @xl:py-1.5 @xl:text-sm"
                   type="button"
                   aria-pressed={food.pinned}
-                  onClick={() => toggleFavorite(food)}
+                  onClick={() => (food.pinned ? setUnstarring(true) : void toggleFavorite(food))}
                 >
                   <Star
                     className="h-4 w-4"
@@ -510,7 +514,7 @@ export function FoodDetail({
                         className="t-btn w-full"
                         type="button"
                         disabled={sending}
-                        onClick={() => void withdraw(food, waiting.id)}
+                        onClick={() => setTakingBack(waiting.id)}
                       >
                         Withdraw
                       </button>
@@ -657,6 +661,36 @@ export function FoodDetail({
                 })
               }}
               onClose={() => setErasing(false)}
+            />
+          )}
+          {food !== null && (
+            <ConfirmSheet
+              open={unstarring}
+              label="Remove from Favorites"
+              question={`Remove ${food.name} from Favorites?`}
+              verb="Remove"
+              onConfirm={() => {
+                setUnstarring(false)
+                void toggleFavorite(food)
+              }}
+              onClose={() => setUnstarring(false)}
+            />
+          )}
+          {food !== null && (
+            <ConfirmSheet
+              open={takingBack !== null}
+              label="Take back submission"
+              question={`Take back ${food.name}?`}
+              note="It leaves the review queue. You can submit it again."
+              verb="Take back"
+              busy={sending}
+              onConfirm={() => {
+                if (takingBack === null) return
+                const submissionId = takingBack
+                setTakingBack(null)
+                void withdraw(food, submissionId)
+              }}
+              onClose={() => setTakingBack(null)}
             />
           )}
           {viewing && (

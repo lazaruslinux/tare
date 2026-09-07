@@ -8,6 +8,7 @@ import {
   type AdminUserPage,
   type UserFilter,
 } from '../api'
+import { ConfirmSheet } from '../components/ConfirmSheet'
 import { Sheet } from '../components/Sheet'
 import { useTopBar } from '../hooks/useTopBar'
 import { joined } from './AdminUsers'
@@ -47,9 +48,11 @@ export function AdminRoles({ onBack }: { onBack: () => void }) {
   const [lists, setLists] = useState<Lists | null>(null)
   const [error, setError] = useState('')
   const [note, setNote] = useState('')
-  // The two questions this screen asks before it acts, each naming the person.
+  // The three questions this screen asks before it acts, each naming the
+  // person.
   const [demoting, setDemoting] = useState<AdminUser | null>(null)
   const [promoting, setPromoting] = useState<AdminUser | null>(null)
+  const [turningDown, setTurningDown] = useState<AdminUser | null>(null)
 
   const [picking, setPicking] = useState(false)
   const [find, setFind] = useState('')
@@ -160,7 +163,7 @@ export function AdminRoles({ onBack }: { onBack: () => void }) {
                 <button
                   type="button"
                   className="t-btn flex-1"
-                  onClick={() => void decide(person, false)}
+                  onClick={() => setTurningDown(person)}
                 >
                   Not now
                 </button>
@@ -250,70 +253,56 @@ export function AdminRoles({ onBack }: { onBack: () => void }) {
         ))}
       </Sheet>
 
-      <Sheet
+      <ConfirmSheet
+        open={turningDown !== null}
+        label="Turn down the request"
+        question={
+          turningDown === null ? '' : `Turn down ${shownName(turningDown)}'s reviewer request?`
+        }
+        note="They will not receive a notification."
+        verb="Turn down"
+        onConfirm={() => {
+          if (turningDown === null) return
+          const person = turningDown
+          setTurningDown(null)
+          void decide(person, false)
+        }}
+        onClose={() => setTurningDown(null)}
+      />
+
+      <ConfirmSheet
         open={demoting !== null}
         label="Demote to member"
-        center
+        question={demoting === null ? '' : `Demote ${shownName(demoting)} to member?`}
+        note="They will not receive a notification."
+        verb="Demote"
+        onConfirm={() => {
+          if (demoting === null) return
+          const person = demoting
+          setDemoting(null)
+          void decide(person, false)
+        }}
         onClose={() => setDemoting(null)}
-      >
-        {demoting && (
-          <>
-            <p className="text-base font-semibold">Demote {shownName(demoting)} to member?</p>
-            <p className="mt-2 text-sm text-muted">They will not receive a notification.</p>
-            <div className="mt-4 flex gap-3">
-              <button
-                type="button"
-                className="t-btn t-btn-danger flex-1"
-                onClick={() => {
-                  const person = demoting
-                  setDemoting(null)
-                  void decide(person, false)
-                }}
-              >
-                Demote
-              </button>
-              <button type="button" className="t-btn" onClick={() => setDemoting(null)}>
-                Cancel
-              </button>
-            </div>
-          </>
-        )}
-      </Sheet>
+      />
 
-      <Sheet
+      {/* After the picker sheet, so the question sits over it. */}
+      <ConfirmSheet
         open={promoting !== null}
         label="Promote to reviewer"
-        center
+        question={promoting === null ? '' : `Promote ${shownName(promoting)} to Reviewer?`}
+        note="They will be allowed to review & approve item submissions for Tare. This can be undone."
+        verb="Promote"
+        danger={false}
+        onConfirm={() => {
+          if (promoting === null) return
+          const person = promoting
+          setPromoting(null)
+          // From the picker the whole screen is re-read; from the waiting list
+          // the row moves at once.
+          void (picking ? add(person) : decide(person, true))
+        }}
         onClose={() => setPromoting(null)}
-      >
-        {promoting && (
-          <>
-            <p className="text-base font-semibold">Promote {shownName(promoting)} to Reviewer?</p>
-            <p className="mt-2 text-sm text-muted">
-              They will be allowed to review &amp; approve item submissions for Tare. This can be
-              undone.
-            </p>
-            <div className="mt-4 flex gap-3">
-              <button
-                type="button"
-                className="t-btn t-btn-primary flex-1"
-                onClick={() => {
-                  const person = promoting
-                  setPromoting(null)
-                  // From the picker the whole screen is re-read; from the
-                  // waiting list the row moves at once.
-                  void (picking ? add(person) : decide(person, true))
-                }}
-              >
-                Promote
-              </button>
-              <button type="button" className="t-btn" onClick={() => setPromoting(null)}>
-                Cancel
-              </button>
-            </div>
-          </>
-        )}
-      </Sheet>
+      />
     </>
   )
 }

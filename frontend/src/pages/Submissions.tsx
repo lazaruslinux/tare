@@ -1,6 +1,7 @@
-import { useEffect, useRef, useState } from 'react'
+import { useEffect, useState } from 'react'
 
 import { api, type Me, type MySubmission } from '../api'
+import { ConfirmSheet } from '../components/ConfirmSheet'
 import { useTopBar } from '../hooks/useTopBar'
 import { dayLabel, dayOf, today } from '../lib/day'
 import { KIND_LABEL, changeLine, statusLabel } from '../lib/community'
@@ -8,15 +9,6 @@ import { KIND_LABEL, changeLine, statusLabel } from '../lib/community'
 // Everything this account has offered the shared database, in one place. The
 // Food tab is about foods; this is about the answers to them, so it is a
 // screen of its own rather than a card wedged in beside the lists.
-
-// How long something taken back can be put back. Short enough that nobody is
-// waiting on it, long enough to notice the mistake.
-const UNDO = 6000
-
-// Something taken off the screen that has not been sent yet. The request goes
-// when the window closes, so undoing is not a second write to put back what a
-// first one destroyed.
-type Undo = { message: string; commit: () => void }
 
 export function Submissions({
   me,
@@ -42,13 +34,10 @@ export function Submissions({
   // Null until the first read answers, which is the difference between a list
   // with nothing in it and a list nobody has been given yet.
   const [rows, setRows] = useState<MySubmission[] | null>(null)
-  const [undo, setUndo] = useState<Undo | null>(null)
-  const undoRef = useRef<Undo | null>(null)
+  // The row waiting on the question about taking it back.
+  const [taking, setTaking] = useState<MySubmission | null>(null)
 
   useTopBar({ title: 'My submissions', back: { label: 'More', onBack } })
-
-  const load = () =>
-    api<MySubmission[]>('/submissions/mine').then(setRows, () => setRows((held) => held ?? []))
 
   useEffect(() => {
     let alive = true
@@ -59,33 +48,6 @@ export function Submissions({
       alive = false
     }
   }, [refresh])
-
-  const settle = () => {
-    const waiting = undoRef.current
-    undoRef.current = null
-    waiting?.commit()
-  }
-
-  // A second withdrawal inside the window settles the first rather than
-  // replacing it, so nothing leaves the screen without reaching the server.
-  const hold = (waiting: Undo) => {
-    settle()
-    undoRef.current = waiting
-    setUndo(waiting)
-  }
-
-  useEffect(() => {
-    if (undo === null) return
-    const timer = window.setTimeout(() => {
-      settle()
-      setUndo(null)
-    }, UNDO)
-    return () => window.clearTimeout(timer)
-  }, [undo])
-
-  // Leaving the screen is the window closing. Anything still waiting is settled
-  // on the way out rather than quietly forgotten.
-  useEffect(() => () => settle(), [])
 
   // This screen lists the answers, so reading it is reading them. Once per set
   // of unread ones, and the badge is asked again after.
@@ -101,22 +63,13 @@ export function Submissions({
       .catch(() => {})
   }, [unread, onSeen])
 
+  // Off the list and off the server at once, once the question has been
+  // answered.
   const withdraw = (submission: MySubmission) => {
     setRows((held) => (held ?? []).filter((row) => row.id !== submission.id))
-    hold({
-      message: `Took back ${submission.name ?? 'that submission'}.`,
-      commit: () => {
-        api(`/submissions/${submission.id}`, { method: 'DELETE' })
-          .then(() => onChanged())
-          .catch(() => {})
-      },
-    })
-  }
-
-  const putBack = () => {
-    undoRef.current = null
-    setUndo(null)
-    void load()
+    api(`/submissions/${submission.id}`, { method: 'DELETE' })
+      .then(() => onChanged())
+      .catch(() => {})
   }
 
   // Newest first, sorted here rather than trusted to whichever request last
@@ -176,7 +129,7 @@ export function Submissions({
                   <button
                     type="button"
                     className="shrink-0 text-sm font-semibold text-muted"
-                    onClick={() => withdraw(row)}
+                    onClick={() => setTaking(row)}
                   >
                     Withdraw
                   </button>
@@ -187,16 +140,24 @@ export function Submissions({
         )}
       </div>
 
-      {undo !== null && (
-        <div className="pointer-events-none fixed inset-x-0 bottom-24 z-30 px-4">
-          <div className="pointer-events-auto mx-auto flex w-full max-w-md items-center justify-between gap-3 rounded-xl border border-line bg-surface-2 px-4 py-3 text-sm">
-            <span className="min-w-0 truncate">{undo.message}</span>
-            <button type="button" className="font-semibold text-accent" onClick={putBack}>
-              Undo
-            </button>
-          </div>
-        </div>
-      )}
+      <ConfirmSheet
+        open={taking !== null}
+        label="Take back submission"
+        question={
+          taking === null
+            ? ''
+            : `Take back ${taking.target_name ?? taking.name ?? 'that submission'}?`
+        }
+        note="It leaves the review queue. You can submit it again."
+        verb="Take back"
+        onConfirm={() => {
+          if (taking === null) return
+          const row = taking
+          setTaking(null)
+          withdraw(row)
+        }}
+        onClose={() => setTaking(null)}
+      />
     </>
   )
 }

@@ -4,6 +4,7 @@ import { useEffect, useState, type ChangeEvent } from 'react'
 import { api, dishPhoto, errorText, upload, type AutoLog } from '../api'
 import { MAX_PHOTO_BYTES, PHOTO_TOO_LARGE } from '../lib/community'
 import { SLOT_LABEL, slotByTime, type Slot } from '../lib/day'
+import { ConfirmSheet } from './ConfirmSheet'
 import { DISH_ICON, DISH_LABEL } from './FoodRows'
 import { Lightbox } from './Lightbox'
 import { LogSheet } from './LogSheet'
@@ -35,6 +36,8 @@ export function DishPhoto({
   const [error, setError] = useState('')
   const [sending, setSending] = useState(false)
   const [viewing, setViewing] = useState(false)
+  // Whether the question about taking the picture off is up.
+  const [asking, setAsking] = useState(false)
   const field = `dish-photo-${kind}-${id}`
 
   const take = async (event: ChangeEvent<HTMLInputElement>) => {
@@ -112,7 +115,7 @@ export function DishPhoto({
             type="button"
             className="t-tap44 text-xs font-semibold text-muted"
             disabled={sending}
-            onClick={() => void clear()}
+            onClick={() => setAsking(true)}
           >
             Remove
           </button>
@@ -122,6 +125,18 @@ export function DishPhoto({
       {viewing && url !== null && (
         <Lightbox src={url} alt={name} onClose={() => setViewing(false)} />
       )}
+      <ConfirmSheet
+        open={asking}
+        label="Remove the photo"
+        question={`Remove the photo from ${name}?`}
+        verb="Remove"
+        busy={sending}
+        onConfirm={() => {
+          setAsking(false)
+          void clear()
+        }}
+        onClose={() => setAsking(false)}
+      />
     </div>
   )
 }

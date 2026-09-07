@@ -1,5 +1,5 @@
 import { ChevronRight } from 'lucide-react'
-import { useEffect, useRef, useState } from 'react'
+import { useEffect, useState } from 'react'
 
 import {
   api,
@@ -14,6 +14,7 @@ import {
 } from '../api'
 import { ActivityIcon } from '../components/ActivityIcon'
 import { BreakdownCard } from '../components/BreakdownCard'
+import { ConfirmSheet } from '../components/ConfirmSheet'
 import { ExerciseSheet } from '../components/ExerciseSheet'
 import { FoodPicker } from '../components/FoodPicker'
 import { LogSheet } from '../components/LogSheet'
@@ -21,16 +22,11 @@ import { MacroBar } from '../components/MacroBar'
 import { MeasurementsSheet } from '../components/MeasurementsSheet'
 import { HEADLINE, nutrientText } from '../components/NutritionLabel'
 import { PortionSheet } from '../components/PortionSheet'
-import { Sheet } from '../components/Sheet'
 import { WorkoutDetails } from '../components/WorkoutDetails'
 import { useTopBar } from '../hooks/useTopBar'
 import { SLOTS, SLOT_LABEL, dayLabel, shiftDay, slotByTime, today, type Slot } from '../lib/day'
 import { calText } from '../lib/targets'
 import { portionText, round1, servingsText, weightText } from '../lib/units'
-
-// How long a deleted row can be brought back. Short enough that nobody is
-// waiting on it, long enough to notice the mistake.
-const UNDO = 6000
 
 // The day as the completed line names it: two digits each, in the order it is
 // read aloud here.
@@ -39,9 +35,11 @@ const shortDate = (iso: string): string => {
   return `${month}/${day}/${year.slice(2)}`
 }
 
-// What is waiting to be deleted: a logged food or a logged workout. Both leave
-// the screen at once and both settle when the window closes.
-type Pending = { kind: 'food' | 'exercise'; id: number; name: string }
+// What is waiting on an answer: a logged food or a logged workout. Nothing is
+// sent until the question on screen is answered.
+type Asking =
+  | { kind: 'food'; entry: DiaryEntry }
+  | { kind: 'exercise'; id: number; name: string }
 
 // One nutrient across a set of entries, by the rule the server uses: a missing
 // figure counts as nothing, and a nutrient that no entry carries at all stays
@@ -52,9 +50,9 @@ function tally(entries: DiaryEntry[], key: Headline): number | null {
 }
 
 // The day with one row taken out of it, added up again. The row leaves the
-// screen at once and the request waits, so undoing is not a second write
-// putting back what a first one destroyed. Only the four figures this screen
-// reads are corrected; the rest are replaced by the next read either way.
+// screen the moment the deletion is answered for. Only the four figures this
+// screen reads are corrected; the rest are replaced by the next read either
+// way.
 function without(day: DiaryDay, gone: DiaryEntry): DiaryDay {
   const slots = {} as DiaryDay['slots']
   const left: DiaryEntry[] = []
@@ -228,18 +226,8 @@ export function Journal({
     if (wantDate !== undefined && wantDate !== '') setDate(wantDate)
   }, [wantDate])
 
-  // A deletion that has not happened yet.
-  const [pending, setPending] = useState<Pending | null>(null)
-  const pendingRef = useRef<Pending | null>(null)
-
-  const erase = (row: Pending) => {
-    pendingRef.current = null
-    const path = row.kind === 'food' ? `/diary/${row.id}` : `/health/exercise/${row.id}`
-    api(path, { method: 'DELETE' }).catch(() => {
-      // The row is already off the screen. Saying so now, on a day somebody has
-      // moved on from, would be noise; the next read tells the truth.
-    })
-  }
+  // A deletion waiting on its answer.
+  const [asking, setAsking] = useState<Asking | null>(null)
 
   useEffect(() => {
     let alive = true
@@ -250,24 +238,6 @@ export function Journal({
       alive = false
     }
   }, [date, again, refresh])
-
-  useEffect(() => {
-    if (pending === null) return
-    const timer = window.setTimeout(() => {
-      erase(pending)
-      setPending(null)
-    }, UNDO)
-    return () => window.clearTimeout(timer)
-  }, [pending])
-
-  // Leaving the page is the window closing. Anything still waiting is settled
-  // on the way out rather than quietly forgotten.
-  useEffect(
-    () => () => {
-      if (pendingRef.current !== null) erase(pendingRef.current)
-    },
-    []
-  )
 
   const reload = () => {
     setPicking(null)
@@ -312,27 +282,19 @@ export function Journal({
     setSaving(false)
   }
 
-  const hold = (row: Pending) => {
-    pendingRef.current = row
-    setPending(row)
-  }
-
-  const remove = (entry: DiaryEntry) => {
+  // The row goes off the screen and the request goes with it. A refusal is not
+  // worth a message on a day somebody has moved on from; the next read tells
+  // the truth.
+  const remove = (asked: Asking) => {
+    if (asked.kind === 'exercise') {
+      setDay((current) => (current === null ? current : withoutExercise(current, asked.id)))
+      api(`/health/exercise/${asked.id}`, { method: 'DELETE' }).catch(() => {})
+      return
+    }
     setEditing(null)
     setServings(null)
-    setDay((current) => (current === null ? current : without(current, entry)))
-    hold({ kind: 'food', id: entry.id, name: entry.name })
-  }
-
-  const removeExercise = (id: number, name: string) => {
-    setDay((current) => (current === null ? current : withoutExercise(current, id)))
-    hold({ kind: 'exercise', id, name })
-  }
-
-  const undo = () => {
-    pendingRef.current = null
-    setPending(null)
-    setAgain(again + 1)
+    setDay((current) => (current === null ? current : without(current, asked.entry)))
+    api(`/diary/${asked.entry.id}`, { method: 'DELETE' }).catch(() => {})
   }
 
   const weighed = day?.measurement ?? null
@@ -521,7 +483,9 @@ export function Journal({
                     <button
                       type="button"
                       className="t-tap44 shrink-0 text-sm text-muted"
-                      onClick={() => removeExercise(row.id as number, row.name)}
+                      onClick={() =>
+                        setAsking({ kind: 'exercise', id: row.id as number, name: row.name })
+                      }
                     >
                       Delete
                     </button>
@@ -641,7 +605,7 @@ export function Journal({
           entry={editing.entry}
           onClose={() => setEditing(null)}
           onDone={reload}
-          onDelete={remove}
+          onDelete={(entry) => setAsking({ kind: 'food', entry })}
         />
       )}
 
@@ -660,46 +624,48 @@ export function Journal({
           saving={saving}
           onClose={() => setServings(null)}
           onSubmit={(amount, slot, _byWeight, follow) => void changeServings(amount, slot, follow)}
-          onDelete={() => remove(servings.entry)}
+          onDelete={() => setAsking({ kind: 'food', entry: servings.entry })}
         />
       )}
 
-      <Sheet
-        center
+      <ConfirmSheet
         open={confirming}
         label="Mark day as complete?"
+        question="Mark day as complete?"
+        note={`This will lock ${
+          date === todayIso ? "today's" : "this day's"
+        } journal from further edits. You can always un-lock it again.`}
+        verb="Mark complete"
+        danger={false}
+        busy={marking}
+        onConfirm={() => void toggleComplete()}
         onClose={() => setConfirming(false)}
-      >
-        <p className="text-base font-semibold tracking-tight">Mark day as complete?</p>
-        <p className="mt-2 text-sm text-muted">
-          This will lock {date === todayIso ? "today's" : "this day's"} journal from further
-          edits. You can always un-lock it again.
-        </p>
-        <div className="mt-4 flex gap-3">
-          <button
-            type="button"
-            className="t-btn t-btn-primary flex-1"
-            disabled={marking}
-            onClick={() => void toggleComplete()}
-          >
-            Mark complete
-          </button>
-          <button type="button" className="t-btn" onClick={() => setConfirming(false)}>
-            Cancel
-          </button>
-        </div>
-      </Sheet>
+      />
 
-      {pending !== null && (
-        <div className="pointer-events-none fixed inset-x-0 bottom-24 z-30 px-4">
-          <div className="pointer-events-auto mx-auto flex w-full max-w-md items-center justify-between gap-3 rounded-xl border border-line bg-surface-2 px-4 py-3 text-sm">
-            <span className="min-w-0 truncate">Deleted {pending.name}.</span>
-            <button type="button" className="font-semibold text-accent" onClick={undo}>
-              Undo
-            </button>
-          </div>
-        </div>
-      )}
+      {/* Last, so it sits over the sheet a row is being edited in. */}
+      <ConfirmSheet
+        open={asking !== null}
+        label="Delete entry"
+        question={
+          asking === null
+            ? ''
+            : `Delete ${asking.kind === 'food' ? asking.entry.name : asking.name} from ${dayLabel(
+                date,
+                todayIso
+              )}?`
+        }
+        note={
+          asking?.kind === 'exercise' ? 'Its minutes leave the day.' : 'Its calories leave the day.'
+        }
+        verb="Delete"
+        onConfirm={() => {
+          if (asking === null) return
+          const asked = asking
+          setAsking(null)
+          remove(asked)
+        }}
+        onClose={() => setAsking(null)}
+      />
     </>
   )
 }

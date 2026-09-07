@@ -22,6 +22,7 @@ import {
 import { useEffect, useState, type FormEvent } from 'react'
 
 import { api, errorText, type Me, type SyncKey, type Units } from '../api'
+import { ConfirmSheet } from '../components/ConfirmSheet'
 import { Sheet } from '../components/Sheet'
 import { type Glyph } from '../components/TabBar'
 import { SaveMarks, useSavedChip } from '../components/SaveMarks'
@@ -204,6 +205,8 @@ export function More({
   // sent. The account's own answer opens it, and this keeps it there for the
   // rest of the session without a second read.
   const [applying, setApplying] = useState(false)
+  // Whether the question about signing out is up.
+  const [signingOut, setSigningOut] = useState(false)
   const [applied, setApplied] = useState(me.reviewer_requested)
   const [applyError, setApplyError] = useState('')
   // Which member's profile is open on the Members or Sharing screen, if any.
@@ -771,7 +774,7 @@ export function More({
       )}
 
       <div className="t-card mb-3">
-        <button className="t-btn w-full" type="button" onClick={signOut}>
+        <button className="t-btn w-full" type="button" onClick={() => setSigningOut(true)}>
           Sign out
         </button>
       </div>
@@ -793,6 +796,19 @@ export function More({
           </button>
         </div>
       </Sheet>
+
+      <ConfirmSheet
+        open={signingOut}
+        label="Sign out"
+        question="Sign out of Tare?"
+        verb="Sign out"
+        danger={false}
+        onConfirm={() => {
+          setSigningOut(false)
+          void signOut()
+        }}
+        onClose={() => setSigningOut(false)}
+      />
     </>
   )
 }

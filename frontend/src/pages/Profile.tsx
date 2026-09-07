@@ -1,5 +1,6 @@
 import { useEffect, useRef, useState, type ChangeEvent, type FormEvent } from 'react'
 import { CircleHelp } from 'lucide-react'
+import { ConfirmSheet } from '../components/ConfirmSheet'
 import { Sheet } from '../components/Sheet'
 
 import { api, errorText, uploadFile, type Me, type Profile as ProfileRow, type Sex } from '../api'
@@ -51,6 +52,8 @@ export function Profile({
   const [picked, setPicked] = useState<File | null>(null)
   const [sending, setSending] = useState(false)
   const [pictureError, setPictureError] = useState('')
+  // Whether the question about taking the photo off is up.
+  const [removingPhoto, setRemovingPhoto] = useState(false)
   // The file input is reset after every pick, so choosing the same file twice
   // in a row still opens the framing sheet the second time.
   const chooser = useRef<HTMLInputElement>(null)
@@ -222,7 +225,7 @@ export function Profile({
               type="button"
               className="t-btn"
               disabled={sending}
-              onClick={removePicture}
+              onClick={() => setRemovingPhoto(true)}
             >
               Remove
             </button>
@@ -369,6 +372,19 @@ export function Profile({
         the Sharing screen.
       </p>
     </form>
+
+      <ConfirmSheet
+        open={removingPhoto}
+        label="Remove your photo"
+        question="Remove your photo?"
+        verb="Remove"
+        busy={sending}
+        onConfirm={() => {
+          setRemovingPhoto(false)
+          void removePicture()
+        }}
+        onClose={() => setRemovingPhoto(false)}
+      />
 
       <Sheet open={about} label="Pregnancy and breastfeeding" onClose={() => setAbout(false)}>
         <p className="text-sm">

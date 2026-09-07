@@ -10,7 +10,7 @@ import {
   type Synced,
   type SyncKey,
 } from '../api'
-import { Sheet } from '../components/Sheet'
+import { ConfirmSheet } from '../components/ConfirmSheet'
 import { stampText, useClock } from '../lib/clock'
 
 type Platform = 'iphone' | 'android'
@@ -22,19 +22,12 @@ const WHAT_THIS_IS =
   'dashboard and fitness plan: steps, calories, workouts and more. Setup is ' +
   'one time. Read the guide below.'
 
-// The two things this screen asks before it does them. A new key silently
-// breaking a working automation, and numbers going away, are both worth a
-// question first.
 // What the key card says, before there is a key and after there is one.
 const SHOWN_ONCE =
   'The key is shown once. Copy both lines into your phone before you leave this screen.'
 const ALREADY_MADE =
   "You've already created a key, which was only shown once. To make a new one, " +
   'click below. Creating a new key will disable the old one.'
-
-const NEW_KEY_ASK =
-  'This will create a new sync key that must be replaced in your export app. Continue?'
-const WIPE_ASK = 'Remove every number that came from a file? Synced data stays.'
 
 // What each phone needs, in the order somebody does it. Written for a person
 // who has never set up an automation, so every step is one thing to do.
@@ -182,28 +175,26 @@ export function SyncDevice() {
 
   const prompts = (
     <>
-      <Sheet open={asking} label="New sync key" onClose={() => setAsking(false)}>
-        <p className="text-sm">{NEW_KEY_ASK}</p>
-        <div className="mt-4 flex gap-3">
-          <button type="button" className="t-btn t-btn-primary flex-1" onClick={make}>
-            Make a new key
-          </button>
-          <button type="button" className="t-btn" onClick={() => setAsking(false)}>
-            Cancel
-          </button>
-        </div>
-      </Sheet>
-      <Sheet open={wiping} label="Remove uploads" onClose={() => setWiping(false)}>
-        <p className="text-sm">{WIPE_ASK}</p>
-        <div className="mt-4 flex gap-3">
-          <button type="button" className="t-btn text-danger flex-1" onClick={wipe}>
-            Remove
-          </button>
-          <button type="button" className="t-btn" onClick={() => setWiping(false)}>
-            Cancel
-          </button>
-        </div>
-      </Sheet>
+      <ConfirmSheet
+        open={asking}
+        label="New sync key"
+        question="Make a new sync key?"
+        note="The old key stops working; put the new one in your export app."
+        verb="Make a new key"
+        danger={false}
+        busy={working}
+        onConfirm={make}
+        onClose={() => setAsking(false)}
+      />
+      <ConfirmSheet
+        open={wiping}
+        label="Remove uploads"
+        question="Remove every number that came from a file?"
+        note="Synced data stays."
+        verb="Remove"
+        onConfirm={wipe}
+        onClose={() => setWiping(false)}
+      />
     </>
   )
 

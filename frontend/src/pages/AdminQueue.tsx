@@ -13,10 +13,10 @@ import {
   type Proposed,
   type QueueItem,
 } from '../api'
+import { ConfirmSheet } from '../components/ConfirmSheet'
 import { Lightbox } from '../components/Lightbox'
 import { Fold } from '../components/NutritionLabel'
 import { FoodForm } from '../components/FoodForm'
-import { Sheet } from '../components/Sheet'
 import { useTopBar } from '../hooks/useTopBar'
 import {
   KIND_LABEL,
@@ -333,6 +333,8 @@ export function AdminQueue({
   // The request an approval is being confirmed for. Yes is the one answer here
   // that cannot be taken back, so it is asked twice.
   const [approving, setApproving] = useState<QueueItem | null>(null)
+  // The evidence picture waiting on the question about taking it off.
+  const [removing, setRemoving] = useState<{ id: number; purpose: PhotoPurpose } | null>(null)
   // Which row is open. The queue is a list of line items; one card at a time
   // is read out of it.
   const [selected, setSelected] = useState<number | null>(null)
@@ -597,7 +599,7 @@ export function AdminQueue({
                   busy={busy}
                   onLook={setLooking}
                   onReplace={(purpose, file) => void replacePhoto(item.id, purpose, file)}
-                  onRemove={(purpose) => void removePhoto(item.id, purpose)}
+                  onRemove={(purpose) => setRemoving({ id: item.id, purpose })}
                 />
                 {item.kind === 'new' ? (
                   <Panel food={proposal} ingredients={proposal.ingredients_text} />
@@ -770,33 +772,35 @@ export function AdminQueue({
         )
       })}
 
-      <Sheet
-        center
+      <ConfirmSheet
         open={approving !== null}
         label={`Approve ${approvingName}?`}
+        question={`Approve ${approvingName}?`}
+        note="This goes into the Tare database for everybody."
+        verb="Approve"
+        danger={false}
+        busy={busy}
+        onConfirm={() => {
+          if (approving === null) return
+          void decide(approving.id, 'approve', approveBody(approving))
+        }}
         onClose={() => setApproving(null)}
-      >
-        <p className="text-base font-semibold tracking-tight">Approve {approvingName}?</p>
-        <p className="mt-2 text-sm text-muted">
-          This goes into the Tare database for everybody.
-        </p>
-        <div className="mt-4 flex gap-3">
-          <button
-            type="button"
-            className="t-btn t-btn-primary flex-1"
-            disabled={busy}
-            onClick={() => {
-              if (approving === null) return
-              void decide(approving.id, 'approve', approveBody(approving))
-            }}
-          >
-            Approve
-          </button>
-          <button type="button" className="t-btn" onClick={() => setApproving(null)}>
-            Cancel
-          </button>
-        </div>
-      </Sheet>
+      />
+
+      <ConfirmSheet
+        open={removing !== null}
+        label="Remove the photo"
+        question="Remove this photo from the submission?"
+        verb="Remove"
+        busy={busy}
+        onConfirm={() => {
+          if (removing === null) return
+          const asked = removing
+          setRemoving(null)
+          void removePhoto(asked.id, asked.purpose)
+        }}
+        onClose={() => setRemoving(null)}
+      />
 
       {looking && <Lightbox src={looking} alt="The label" onClose={() => setLooking(null)} />}
     </>

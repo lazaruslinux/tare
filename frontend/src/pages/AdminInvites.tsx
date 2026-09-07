@@ -2,6 +2,7 @@ import { Copy } from 'lucide-react'
 import { useEffect, useState } from 'react'
 
 import { api, errorText, type AdminInvite } from '../api'
+import { ConfirmSheet } from '../components/ConfirmSheet'
 import { useTopBar } from '../hooks/useTopBar'
 
 // The links that let somebody in. Three at a time on purpose: a link with a
@@ -46,9 +47,8 @@ export function AdminInvites({ onBack }: { onBack: () => void }) {
   const [busy, setBusy] = useState(false)
   const [copied, setCopied] = useState('')
   const [seats, setSeats] = useState('1')
-  // The link a second tap would delete. Asking twice rather than opening a
-  // dialogue: the answer is one word and the row is already on screen.
-  const [sure, setSure] = useState('')
+  // The link waiting on the question about deleting it.
+  const [deleting, setDeleting] = useState<AdminInvite | null>(null)
 
   useTopBar({ title: 'Invites', back: { label: 'More', onBack } })
 
@@ -90,7 +90,6 @@ export function AdminInvites({ onBack }: { onBack: () => void }) {
   const remove = async (code: string) => {
     setBusy(true)
     setError('')
-    setSure('')
     try {
       await api(`/admin/invites/${encodeURIComponent(code)}`, { method: 'DELETE' })
       await load()
@@ -181,9 +180,9 @@ export function AdminInvites({ onBack }: { onBack: () => void }) {
                 type="button"
                 className="shrink-0 text-sm font-semibold text-danger"
                 disabled={busy}
-                onClick={() => (sure === invite.code ? remove(invite.code) : setSure(invite.code))}
+                onClick={() => setDeleting(invite)}
               >
-                {sure === invite.code ? 'Sure?' : 'Delete'}
+                Delete
               </button>
             </div>
             {invite.members.length > 0 && (
@@ -193,6 +192,26 @@ export function AdminInvites({ onBack }: { onBack: () => void }) {
           </div>
         )
       })}
+
+      <ConfirmSheet
+        open={deleting !== null}
+        label="Delete invite link"
+        question="Delete this invite link?"
+        note={
+          deleting !== null && deleting.used >= deleting.seats
+            ? 'It has already been used; deleting it only tidies the list.'
+            : 'Anyone holding it can no longer join.'
+        }
+        verb="Delete"
+        busy={busy}
+        onConfirm={() => {
+          if (deleting === null) return
+          const invite = deleting
+          setDeleting(null)
+          void remove(invite.code)
+        }}
+        onClose={() => setDeleting(null)}
+      />
     </>
   )
 }

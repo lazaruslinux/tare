@@ -10,7 +10,7 @@ import {
   Star,
   X,
 } from 'lucide-react'
-import { useEffect, useRef, useState } from 'react'
+import { useEffect, useState } from 'react'
 
 import {
   api,
@@ -56,9 +56,6 @@ import { RecipeDetail } from './RecipeDetail'
 // starts being a list. Three keeps all five cards in reach; the rest are one
 // tap away in a catalog built to search them.
 const SHOWN = 3
-// How long something taken back can be put back. Short enough that nobody is
-// waiting on it, long enough to notice the mistake.
-const UNDO = 6000
 
 // How much of it goes in every day, in the words the diary row of that kind
 // reads back in: a food is the portion it was measured out as, and a recipe or
@@ -113,11 +110,6 @@ type View =
   // The editors are given what they are changing, or nothing for a new one.
   | { at: 'recipeForm'; recipe: Recipe | null }
   | { at: 'mealForm'; meal: Meal | null }
-
-// Something taken off the screen that has not been sent yet. The request goes
-// when the window closes, so undoing is not a second write to put back what a
-// first one destroyed.
-type Undo = { message: string; commit: () => void; revert?: () => void }
 
 // The way out of a card that holds more than it shows.
 function SeeAll({ count, onOpen }: { count: number; onOpen: () => void }) {
@@ -192,8 +184,8 @@ export function FoodTab({
       : null
   )
 
-  const [undo, setUndo] = useState<Undo | null>(null)
-  const undoRef = useRef<Undo | null>(null)
+  // The favorite waiting on the question about taking its star off.
+  const [unstarring, setUnstarring] = useState<FoodRow | null>(null)
 
   const load = () =>
     api<MyFoodRow[]>('/foods/mine').then(setFoods, (failure) => setError(errorText(failure)))
@@ -201,20 +193,6 @@ export function FoodTab({
   const loadRecipes = () => api<RecipeRow[]>('/recipes').then(setRecipes, () => setRecipes([]))
 
   const loadMeals = () => api<MealRow[]>('/meals').then(setMeals, () => setMeals([]))
-
-  const settle = () => {
-    const waiting = undoRef.current
-    undoRef.current = null
-    waiting?.commit()
-  }
-
-  // A second deletion inside the window settles the first rather than
-  // replacing it, so nothing leaves the screen without reaching the server.
-  const hold = (waiting: Undo) => {
-    settle()
-    undoRef.current = waiting
-    setUndo(waiting)
-  }
 
   const loadRepeat = () => api<RepeatRow[]>('/foods/repeat').then(setRepeat, () => {})
 
@@ -242,19 +220,6 @@ export function FoodTab({
     }
   }, [refresh])
 
-  useEffect(() => {
-    if (undo === null) return
-    const timer = window.setTimeout(() => {
-      settle()
-      setUndo(null)
-    }, UNDO)
-    return () => window.clearTimeout(timer)
-  }, [undo])
-
-  // Leaving the tab is the window closing. Anything still waiting is settled on
-  // the way out rather than quietly forgotten.
-  useEffect(() => () => settle(), [])
-
   // A food asked for from outside is opened once, and then this tab owns where
   // it is again.
   useEffect(() => {
@@ -274,16 +239,11 @@ export function FoodTab({
       onChanged()
     })
 
-  // Off the card at once, and the star comes off when the undo window closes.
+  // Off the card and off the server at once, once the question has been
+  // answered.
   const removeFavorite = (row: FoodRow) => {
     setRepeat((rows) => rows.filter((item) => item.id !== row.id))
-    hold({
-      message: 'Removed from Favorites.',
-      commit: () => {
-        api(`/foods/${row.id}/pin`, { method: 'DELETE' }).then(onChanged, () => {})
-      },
-      revert: () => void loadRepeat(),
-    })
+    api(`/foods/${row.id}/pin`, { method: 'DELETE' }).then(onChanged, () => {})
   }
 
   // Taking an item off the card takes off every mealtime it was set for, which
@@ -318,28 +278,17 @@ export function FoodTab({
     return () => window.removeEventListener('keydown', onKey)
   }, [catalog])
 
+  // Both pages ask before they call this, so the request goes at once.
   const removeRecipe = (recipe: Recipe) => {
     setRecipes((rows) => rows.filter((row) => row.id !== recipe.id))
     setView({ at: 'list' })
-    const waiting: Undo = {
-      message: `Deleted ${recipe.name}.`,
-      commit: () => {
-        api(`/recipes/${recipe.id}`, { method: 'DELETE' }).then(onChanged, () => {})
-      },
-    }
-    hold(waiting)
+    api(`/recipes/${recipe.id}`, { method: 'DELETE' }).then(onChanged, () => {})
   }
 
   const removeMeal = (meal: Meal) => {
     setMeals((rows) => rows.filter((row) => row.id !== meal.id))
     setView({ at: 'list' })
-    const waiting: Undo = {
-      message: `Deleted ${meal.name}.`,
-      commit: () => {
-        api(`/meals/${meal.id}`, { method: 'DELETE' }).then(onChanged, () => {})
-      },
-    }
-    hold(waiting)
+    api(`/meals/${meal.id}`, { method: 'DELETE' }).then(onChanged, () => {})
   }
 
   // The same sheet the food page opens, on the food this instruction is about.
@@ -364,18 +313,6 @@ export function FoodTab({
   // The card and the catalog over it read the same starred foods, in the same
   // order.
   const favorites = favoritesOf(repeat)
-
-  const putBack = () => {
-    const waiting = undoRef.current
-    undoRef.current = null
-    setUndo(null)
-    waiting?.revert?.()
-    void load()
-    void loadRecipes()
-    void loadMeals()
-    void loadRepeat()
-    void loadAutos()
-  }
 
   if (view.at === 'detail') {
     const from = view.from
@@ -634,7 +571,7 @@ export function FoodTab({
                 key={row.id}
                 row={row}
                 onOpen={() => setView({ at: 'detail', id: row.id, from: { at: 'list' } })}
-                onRemove={() => removeFavorite(row)}
+                onRemove={() => setUnstarring(row)}
                 removeLabel={`Remove ${row.name} from Favorites`}
               />
             ))}
@@ -858,17 +795,9 @@ export function FoodTab({
                     : { kind: catalog, rows: recipes }
             }
             onClose={() => setCatalog(null)}
-            // Unstarring from in here closes the catalog with it: the undo bar
-            // belongs to the page under this sheet, and a sheet over it is a
-            // sheet nobody can reach it through.
-            onRemove={
-              catalog === 'favorites'
-                ? (row) => {
-                    setCatalog(null)
-                    removeFavorite(row)
-                  }
-                : undefined
-            }
+            // The question opens over the catalog, and the row leaves the
+            // list behind it.
+            onRemove={catalog === 'favorites' ? (row) => setUnstarring(row) : undefined}
             onOpen={(id) => {
               setCatalog(null)
               setView(
@@ -899,16 +828,21 @@ export function FoodTab({
         </Sheet>
       )}
 
-      {undo !== null && (
-        <div className="pointer-events-none fixed inset-x-0 bottom-24 z-30 px-4">
-          <div className="pointer-events-auto mx-auto flex w-full max-w-md items-center justify-between gap-3 rounded-xl border border-line bg-surface-2 px-4 py-3 text-sm">
-            <span className="min-w-0 truncate">{undo.message}</span>
-            <button type="button" className="font-semibold text-accent" onClick={putBack}>
-              Undo
-            </button>
-          </div>
-        </div>
-      )}
+      {/* After the catalog, so the question is on top of it. */}
+      <ConfirmSheet
+        open={unstarring !== null}
+        label="Remove from Favorites"
+        question={unstarring === null ? '' : `Remove ${unstarring.name} from Favorites?`}
+        note="You can add it back from its page."
+        verb="Remove"
+        onConfirm={() => {
+          if (unstarring === null) return
+          const row = unstarring
+          setUnstarring(null)
+          removeFavorite(row)
+        }}
+        onClose={() => setUnstarring(null)}
+      />
     </>
   )
 }

@@ -3,6 +3,7 @@ import { useId, useState, type ChangeEvent } from 'react'
 
 import { errorText, upload, type PhotoPurpose } from '../api'
 import { MAX_PHOTO_BYTES, PHOTO_TOO_LARGE } from '../lib/community'
+import { ConfirmSheet } from './ConfirmSheet'
 import { Lightbox } from './Lightbox'
 
 // The two pictures a food submitted to everybody carries: the front of the
@@ -27,6 +28,7 @@ function Tile({
   photoId,
   standing,
   title,
+  thing,
   note,
   busy,
   purpose,
@@ -38,6 +40,8 @@ function Tile({
   photoId: number | null
   standing?: string | null
   title: string
+  // What the picture is called in the question about taking it off.
+  thing: string
   note: string
   busy: boolean
   purpose: PhotoPurpose
@@ -49,6 +53,8 @@ function Tile({
   const field = useId()
   const [uploading, setUploading] = useState(false)
   const [viewing, setViewing] = useState(false)
+  // Whether the question about taking the standing picture off is up.
+  const [asking, setAsking] = useState(false)
   const shown = photoId === null ? (standing ?? null) : `/api/photos/${photoId}.webp`
 
   const take = async (event: ChangeEvent<HTMLInputElement>) => {
@@ -99,11 +105,25 @@ function Tile({
               type="button"
               className="t-tap44 absolute -top-2 -right-2 flex h-7 w-7 items-center justify-center rounded-full border border-line bg-surface-2 text-muted"
               aria-label={`Remove ${title.toLowerCase()}`}
-              onClick={photoId === null ? onRemove : onCleared}
+              onClick={photoId === null ? () => setAsking(true) : onCleared}
             >
               <X className="h-3.5 w-3.5" strokeWidth={2.5} />
             </button>
           )}
+          {/* Only the picture the food already carries is asked about. One
+              uploaded a moment ago is taken back in one tap. */}
+          <ConfirmSheet
+            open={asking}
+            label={`Remove the ${thing}`}
+            question={`Remove the ${thing}?`}
+            note="It goes when you save."
+            verb="Remove"
+            onConfirm={() => {
+              setAsking(false)
+              onRemove?.()
+            }}
+            onClose={() => setAsking(false)}
+          />
         </div>
       )}
       <input
@@ -144,6 +164,7 @@ export function PhotoSlots({
           photoId={front.id}
           standing={front.url}
           title="Front of Item"
+          thing="front photo"
           note={front.required ? 'Required' : 'Optional'}
           busy={Boolean(busy)}
           purpose="front"
@@ -156,6 +177,7 @@ export function PhotoSlots({
           photoId={label.id}
           standing={label.url}
           title="Nutrition Label"
+          thing="nutrition label"
           note={label.required ? 'Required' : 'Optional'}
           busy={Boolean(busy)}
           purpose="label"
