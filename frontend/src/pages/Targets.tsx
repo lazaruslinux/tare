@@ -14,7 +14,7 @@ type View = 'weight' | 'activity' | 'budget' | null
 
 const TITLE: Record<NonNullable<View>, string> = {
   weight: 'Weight goal',
-  activity: 'Activity Levels',
+  activity: 'Activity level',
   budget: 'Macro & Calorie Targets',
 }
 
@@ -157,9 +157,9 @@ export function Targets({
     targets.resting === null
       ? LEVEL_LABEL[targets.activity_level]
       : `${LEVEL_LABEL[targets.activity_level]} · ${calText(targets.resting)} cal at rest`
-  const budgetValue = `${calText(targets.budget.calories)} cal · ${targets.budget.protein_g}/${
-    targets.budget.carbs_g
-  }/${targets.budget.fat_g} g`
+  const budgetValue =
+    `${calText(targets.budget.calories)} cal · ${targets.budget.protein_g} g protein · ` +
+    `${targets.budget.carbs_g} g carbs · ${targets.budget.fat_g} g fat`
 
   return (
     <>
@@ -168,7 +168,7 @@ export function Targets({
       <div className="t-card mb-3">
         <Row label="Weight goal" value={weightValue} onOpen={() => setView('weight')} />
         <Row
-          label="Activity Levels"
+          label="Activity level"
           value={activityValue}
           onOpen={() => setView('activity')}
         />

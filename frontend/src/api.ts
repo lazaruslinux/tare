@@ -1086,7 +1086,8 @@ export type TodayStrip = {
   exercise_min: number | null
   latest_weight_kg: number | null
   latest_weight_date: string | null
-  waiting?: number
+  contributions: number
+  pending: number
 }
 
 export type FitnessSummary = {

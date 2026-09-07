@@ -151,7 +151,7 @@ export function ActivityLevels({
       {error && <p className="t-error mb-3">{error}</p>}
 
       <div className="t-card mb-3">
-        <p className="t-micro mb-2">Baseline Activity Level</p>
+        <p className="t-micro mb-2">Baseline activity level</p>
         <p className="t-note mb-3">{LEVEL_INTRO}</p>
         {LEVELS.map((level) => {
           const option = options.get(level.value)

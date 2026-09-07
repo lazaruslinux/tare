@@ -132,7 +132,7 @@ export function Sharing({
   return (
     <>
       <p className="mb-3 text-sm text-muted">Only your friends see what you share here.</p>
-      <p className="t-micro mb-1">Privacy settings</p>
+      <p className="t-micro mb-1">Profile</p>
       <div className="t-card mb-3">
         <p className="text-sm text-muted">Show my:</p>
         <Switch label={ageLabel} checked={age} onChange={setAge} />
@@ -145,7 +145,7 @@ export function Sharing({
         <p className="mt-2 text-xs text-muted">These can be edited in your profile settings.</p>
       </div>
 
-      <p className="t-micro mb-1">Workout privacy settings</p>
+      <p className="t-micro mb-1">Workouts</p>
       <div className="t-card mb-3">
         <Switch label="Share my workouts" checked={workouts} onChange={shareWorkouts} />
         <AnimatePresence initial={false}>
@@ -179,7 +179,7 @@ export function Sharing({
         </AnimatePresence>
       </div>
 
-      <p className="t-micro mb-1">Journal privacy settings</p>
+      <p className="t-micro mb-1">Journal</p>
       <div className="t-card mb-3">
         <Switch
           label="Share when I complete my journal"
@@ -188,7 +188,7 @@ export function Sharing({
         />
       </div>
 
-      <p className="t-micro mb-1">Weight privacy settings</p>
+      <p className="t-micro mb-1">Weight</p>
       <div className="t-card mb-3">
         <Switch
           label="Share weight lost since last weigh-in"

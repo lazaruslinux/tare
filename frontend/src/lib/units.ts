@@ -260,12 +260,12 @@ export function paceText(
 }
 
 // The feed's tighter spellings. A row is one line of small text, so a distance
-// and a duration there drop the spaces and keep a fixed shape.
+// there keeps a fixed shape of two decimals rather than the rounded one.
 export const distanceCompact = (metres: number, units: 'imperial' | 'metric'): string =>
-  `${distanceIn(metres, units).toFixed(2)}${distanceUnit(units)}`
+  `${distanceIn(metres, units).toFixed(2)} ${distanceUnit(units)}`
 
 export const weightCompact = (kg: number, units: 'imperial' | 'metric'): string =>
-  `${weightIn(kg, units)}${weightUnit(units)}`
+  `${weightIn(kg, units)} ${weightUnit(units)}`
 
 // A clock reading of a finished session: 01:19:02, hours always written.
 export function hmsText(seconds: number): string {

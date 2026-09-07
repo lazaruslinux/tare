@@ -463,7 +463,6 @@ export default function App() {
               <Aside
                 me={me}
                 refresh={logged}
-                waiting={queue}
                 onOpenWorkout={(id) => setOverlay({ kind: 'workout', id })}
                 onOpenMember={(id) => setOverlay({ kind: 'member', id })}
               />

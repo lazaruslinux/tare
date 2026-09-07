@@ -81,7 +81,7 @@ function JournalRow({
             <Name row={row} onOpenMember={onOpenMember} />: {JOURNAL_DONE}
           </span>
           <span className="block text-xs text-muted">
-            {dayText(row.date, todayIso)} {clockText(row.at, me.timezone)}
+            {dayText(row.date, todayIso)} · {clockText(row.at, me.timezone)}
           </span>
         </span>
       </span>
@@ -114,7 +114,7 @@ function JoinedRow({
           {/* Arriving is a moment, not a day of theirs: the day is read in the
               reader's zone, the same one the clock beside it uses. */}
           <span className="block text-xs text-muted">
-            {dayText(dayOf(me.timezone, row.at), todayIso)} {clockText(row.at, me.timezone)}
+            {dayText(dayOf(me.timezone, row.at), todayIso)} · {clockText(row.at, me.timezone)}
           </span>
         </span>
       </span>
@@ -145,7 +145,7 @@ function WeightRow({
             <span className="whitespace-nowrap">since last weigh-in</span>
           </span>
           <span className="block text-xs text-muted">
-            {dayText(row.date, todayIso)} {clockText(row.at, me.timezone)}
+            {dayText(row.date, todayIso)} · {clockText(row.at, me.timezone)}
           </span>
         </span>
       </span>
@@ -195,7 +195,7 @@ function Row({
             </span>
           </span>
           <span className="block text-xs text-muted">
-            {dayText(row.date, todayIso)} {clockText(row.started_at, me.timezone)}
+            {dayText(row.date, todayIso)} · {clockText(row.started_at, me.timezone)}
           </span>
         </span>
       </span>
@@ -223,8 +223,6 @@ export function Feed({
 }) {
   // Null is a list nobody has read yet, which is not the same as none.
   const [rows, setRows] = useState<FeedRow[] | null>(null)
-  // How many friends there are to fill it, which is what an empty list means.
-  const [friends, setFriends] = useState(0)
   const [cursor, setCursor] = useState<string | null>(null)
   const [busy, setBusy] = useState(false)
   const todayIso = today(me.timezone)
@@ -238,7 +236,6 @@ export function Feed({
       .then((page) => {
         if (!alive) return
         setRows(page.items)
-        setFriends(page.friends)
         setCursor(page.next_cursor)
       })
       .catch(() => alive && setRows([]))
@@ -261,29 +258,18 @@ export function Feed({
   }
 
   if (rows === null) return <p className="text-sm text-muted">Loading.</p>
-  // With nobody added the list holds arrivals at most, so the way to fill it
-  // is said above whatever is there.
-  const hint =
-    friends === 0 ? (
-      <p className="mb-2 text-sm text-muted">
-        Your feed shows the friends you add. Find them under More, then Members.
-      </p>
-    ) : null
   if (rows.length === 0) {
     return (
-      hint ?? (
-        <p className="text-sm text-muted">
-          Nothing shared yet. Workouts, finished days and weigh-ins appear here as your friends
-          share them.
-        </p>
-      )
+      <p className="text-sm text-muted">
+        Nothing shared yet. Workouts, finished days and weigh-ins appear here as your friends
+        share them.
+      </p>
     )
   }
 
   const shown = limit === undefined ? rows : rows.slice(0, limit)
   return (
     <>
-      {hint}
       {shown.map((row) =>
         row.kind === 'journal' ? (
           <JournalRow

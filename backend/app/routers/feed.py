@@ -18,11 +18,11 @@ from sqlalchemy.orm import Session
 
 from app import clock, health, models
 from app.db import get_db
-from app.deps import require_user, reviews
+from app.deps import require_user
 from app.friends import friend_ids
 from app.models import now_utc
 from app.profiles import avatar_url, contribution_counts, role_of
-from app.routers.admin import name_match, waiting_items
+from app.routers.admin import name_match
 from app.routers.diary import fill_auto_logs, total
 from app.routers.fitness import day_exercise, kept_back, steps_on, workouts_on
 from app.routers.health import Reckoning, exercise_on
@@ -469,9 +469,17 @@ def read_today(
         "exercise_min": minutes,
         "latest_weight_kg": None if latest is None else latest.weight_kg,
         "latest_weight_date": None if latest is None else latest.date_for.isoformat(),
+        "contributions": contribution_counts(db, [user.id])[user.id],
+        "pending": db.scalar(
+            select(func.count())
+            .select_from(models.FoodSubmission)
+            .where(
+                models.FoodSubmission.submitted_by_id == user.id,
+                models.FoodSubmission.status == "pending",
+            )
+        )
+        or 0,
     }
-    if reviews(user):
-        figures["waiting"] = len(waiting_items(db))
     return figures
 
 

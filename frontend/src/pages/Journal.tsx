@@ -341,7 +341,7 @@ export function Journal({
           </span>
           <span className="flex items-center gap-2 text-xs text-muted">
             <span>
-              {nutrientText('calories', day.totals.calories ?? 0)} consumed of{' '}
+              {calText(day.totals.calories ?? 0)} consumed of{' '}
               {calText(day.budget.calories + day.exercise_kcal)}
             </span>
             {gap !== null && (

@@ -767,10 +767,35 @@ def test_the_strip_carries_the_days_figures(client, db_session, make_user):
     assert "calories_left" not in body
     assert body["latest_weight_kg"] == 80.0
     assert body["latest_weight_date"] == today.isoformat()
+    assert body["contributions"] == 0
+    assert body["pending"] == 0
     assert "waiting" not in body
 
 
-def test_only_an_administrator_is_told_what_is_waiting(client, admin_client):
+def test_the_strip_counts_what_this_member_gave_and_what_is_still_waiting(
+    client, db_session, make_user
+):
+    member = make_user("member")
+    sign_in(client, "member")
+    food = models.Food(status="approved", name="Oats", base_unit="g")
+    db_session.add(food)
+    db_session.commit()
+    db_session.add_all(
+        [
+            models.FoodSubmission(
+                kind="new",
+                status="approved",
+                submitted_by_id=member.id,
+                food_id=food.id,
+                decided_at=now_utc(),
+            ),
+            models.FoodSubmission(kind="new", status="pending", submitted_by_id=member.id),
+        ]
+    )
+    db_session.commit()
+
     body = client.get("/api/feed/today").json()
 
-    assert body["waiting"] == 0
+    assert body["contributions"] == 1
+    assert body["pending"] == 1
+    assert "waiting" not in body

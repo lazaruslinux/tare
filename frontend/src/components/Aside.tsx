@@ -2,7 +2,6 @@ import { useEffect, useState } from 'react'
 
 import { api, type Me, type TodayStrip } from '../api'
 import { dayLabel, today } from '../lib/day'
-import { reviews } from '../lib/roles'
 import { weightText } from '../lib/units'
 import { Feed } from './Feed'
 
@@ -23,14 +22,11 @@ function Figure({ label, value, note }: { label: string; value: string; note?: s
 export function Aside({
   me,
   refresh,
-  waiting,
   onOpenWorkout,
   onOpenMember,
 }: {
   me: Me
   refresh: number
-  // What the queue holds, already read once above this for the navigation.
-  waiting: number
   onOpenWorkout: (id: number) => void
   onOpenMember: (userId: number) => void
 }) {
@@ -69,11 +65,11 @@ export function Aside({
             }
           />
           <Figure
-            label="Exercise (in min)"
+            label="Exercise"
             value={
               strip === null || strip.exercise_min === null
                 ? '-'
-                : Math.round(strip.exercise_min).toLocaleString()
+                : `${Math.round(strip.exercise_min).toLocaleString()} min`
             }
           />
           <Figure
@@ -89,9 +85,13 @@ export function Aside({
                 : dayLabel(strip.latest_weight_date, todayIso)
             }
           />
-          {reviews(me) && (
-            <Figure label="Waiting for review" value={waiting.toLocaleString()} />
-          )}
+          <Figure
+            label="Contributions"
+            value={strip === null ? '-' : strip.contributions.toLocaleString()}
+            note={
+              strip !== null && strip.pending > 0 ? `${strip.pending} pending` : undefined
+            }
+          />
         </div>
       </div>
 

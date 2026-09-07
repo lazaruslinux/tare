@@ -1034,9 +1034,9 @@ export function Dashboard({
     index === null ? null : (bars[index]?.date ?? null)
 
   const macroParts = (protein: number, carbs: number, fat: number): string[] => [
-    `${Math.round(protein)}g protein`,
-    `${Math.round(carbs)}g carbs`,
-    `${Math.round(fat)}g fat`,
+    `${Math.round(protein)} g protein`,
+    `${Math.round(carbs)} g carbs`,
+    `${Math.round(fat)} g fat`,
   ]
 
   // The rows of one week that are also inside the span, which is what a part

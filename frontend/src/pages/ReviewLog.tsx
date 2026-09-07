@@ -95,7 +95,7 @@ export function ReviewLog({ me, onBack }: { me: Me; onBack: () => void }) {
                 <span className="block text-sm">{sentence(row)}</span>
                 {said !== null && <span className="block text-xs text-muted">{said}</span>}
                 <span className="block text-xs text-muted">
-                  {dateText(row.when, me.timezone)} {clockText(row.when, me.timezone)}
+                  {dateText(row.when, me.timezone)} · {clockText(row.when, me.timezone)}
                 </span>
               </span>
             </div>

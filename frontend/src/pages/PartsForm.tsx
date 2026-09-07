@@ -343,9 +343,9 @@ export function PartsForm({
             <>
               <p className="t-nums mt-3 border-t border-line pt-2 text-xs text-muted">
                 Total {nutrientText('calories', summed(rows, 'calories'))} cal ·{' '}
-                {nutrientText('protein_g', summed(rows, 'protein_g'))}g protein ·{' '}
-                {nutrientText('carbs_g', summed(rows, 'carbs_g'))}g carbs ·{' '}
-                {nutrientText('fat_g', summed(rows, 'fat_g'))}g fat
+                {nutrientText('protein_g', summed(rows, 'protein_g'))} g protein ·{' '}
+                {nutrientText('carbs_g', summed(rows, 'carbs_g'))} g carbs ·{' '}
+                {nutrientText('fat_g', summed(rows, 'fat_g'))} g fat
               </p>
               {/* What it all weighs, which is what logging it by the gram works
                   from. Left out while a part is measured by volume: the Final

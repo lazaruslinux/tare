@@ -61,17 +61,22 @@ export function clockText(iso: string, timezone?: string): string {
 
 const DATE_ONLY = /^\d{4}-\d{2}-\d{2}$/
 
+// A date in the words the rest of the app writes one in: Sat, Sep 5. The year
+// is only said when the date is not in the one we are standing in.
 function spelled(at: Date, timezone: string | undefined): string {
-  const parts = new Intl.DateTimeFormat('en-US', {
+  const yearOf = (when: Date): string =>
+    new Intl.DateTimeFormat('en-US', { timeZone: timezone, year: 'numeric' }).format(when)
+  const options: Intl.DateTimeFormatOptions = {
     timeZone: timezone,
     weekday: 'short',
-    month: 'numeric',
+    month: 'short',
     day: 'numeric',
-    year: '2-digit',
-  }).formatToParts(at)
-  const of = (type: Intl.DateTimeFormatPartTypes): string =>
-    parts.find((part) => part.type === type)?.value ?? ''
-  return `${of('weekday').toUpperCase()} ${of('month')}/${of('day')}/${of('year')}`
+  }
+  const thisYear = yearOf(at) === yearOf(new Date())
+  return new Intl.DateTimeFormat(
+    'en-US',
+    thisYear ? options : { ...options, year: 'numeric' }
+  ).format(at)
 }
 
 export function dateText(iso: string, timezone?: string): string {
@@ -87,5 +92,5 @@ export function dateText(iso: string, timezone?: string): string {
   }
 }
 
-// A moment written out whole, in the device's own zone: WED 9/2/26 5:53AM.
-export const stampText = (iso: string): string => `${dateText(iso)} ${clockText(iso)}`
+// A moment written out whole, in the device's own zone: Wed, Sep 2 · 5:53AM.
+export const stampText = (iso: string): string => `${dateText(iso)} · ${clockText(iso)}`

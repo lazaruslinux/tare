@@ -72,7 +72,7 @@ export function nutrientText(_key: Nutrient, value: number | null): string {
 // nobody has read the added-sugars line off keeps the plain word.
 function tileLabel(fact: Fact, values: Panel): string {
   if (fact.key !== 'sugar_g' || values.added_sugars_g === null) return fact.label
-  return `Sugar (${nutrientText('added_sugars_g', values.added_sugars_g)}g added)`
+  return `Sugar (${nutrientText('added_sugars_g', values.added_sugars_g)} g added)`
 }
 
 // A heading that opens and closes what sits under it.

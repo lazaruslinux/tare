@@ -23,8 +23,7 @@ export function MacroBar({
           {value === null ? '-' : Math.round(value)}
           <span className="text-muted">
             {' '}
-            / {target}
-            {unit} · {percent}%
+            / {target} {unit} · {percent}%
           </span>
         </span>
       </div>
