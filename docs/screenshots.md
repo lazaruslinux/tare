@@ -1,7 +1,7 @@
 # Screenshots for the invite page and About
 
-The pictures the invite page and About show come from one manifest,
-`frontend/src/lib/screenshots.ts`. Every entry starts with `src: null`, which draws a
+The pictures the invite page and About show, in one gallery at the end of the story, come
+from one manifest, `frontend/src/lib/screenshots.ts`, in the order listed there. Every entry starts with `src: null`, which draws a
 frame saying what belongs there instead of a picture. Nothing else has to change when a
 real file lands.
 

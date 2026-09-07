@@ -9,16 +9,11 @@ export const WHAT_TARE_IS =
   'use. Tare can also identify foods that are high in added sugars, artificial ingredients ' +
   '& dyes, or other harmful additives, based on publicly available research.'
 
-// Which set of screenshots sits under an entry. The manifest in
-// lib/screenshots.ts is keyed by these.
-export type GalleryKey = 'food' | 'plan' | 'journal' | 'fitness' | 'feed' | 'platform'
-
 // What is inside, said the way somebody arriving on an invite would ask it.
-export const WHAT_YOU_CAN_DO: { name: string; what: string; gallery: GalleryKey }[] = [
+export const WHAT_YOU_CAN_DO: { name: string; what: string }[] = [
   {
     name: 'Community Food Database',
     what: 'A growing index of food items submitted by you. Photos, Nutrition labels & ingredients.',
-    gallery: 'food',
   },
   {
     name: 'Weight Loss Plan',
@@ -26,7 +21,6 @@ export const WHAT_YOU_CAN_DO: { name: string; what: string; gallery: GalleryKey 
       'Pick a goal weight and a goal rate. Choose your daily activity level, and Tare will ' +
       'calculate your daily calorie budget, an estimated goal date, and macro targets ' +
       'specific to your needs.',
-    gallery: 'plan',
   },
   {
     name: 'Journal',
@@ -34,19 +28,16 @@ export const WHAT_YOU_CAN_DO: { name: string; what: string; gallery: GalleryKey 
       'Quickly log your biometrics (weight, body fat %, other smart scale options), your ' +
       'breakfast, lunch, dinner, snacks, view your macro breakdowns & calorie deficit. ' +
       'Workouts are automatically added via Device Sync and your calories are adjusted.',
-    gallery: 'journal',
   },
   {
     name: 'Fitness + Device Sync',
     what:
       'Upload your Apple Health or Health Connect workouts & health metrics to receive full ' +
       'insights. Full instructions inside. (Requires use of a free & simple export app)',
-    gallery: 'fitness',
   },
   {
     name: 'Community Feed',
     what: 'Member milestones, activities & accomplishments. Forums coming in the future.',
-    gallery: 'feed',
   },
 ]
 
