@@ -123,7 +123,8 @@ export function WeightGoal({
   // back to the saved one on save.
   const forecast = rateDirty && option !== null ? option.projection : targets.projection
   // The fastest steps are saved only once the review has been read and said
-  // so. The box clears whenever the stepper moves.
+  // so. The box clears whenever the stepper moves, and only shows while a
+  // step is waiting to be saved: the one already saved was read at the time.
   const [read, setRead] = useState(false)
   useEffect(() => setRead(false), [draftAt])
   const mustRead = targets.goal === 'lose' && draftAt >= ACKNOWLEDGE_FROM
@@ -209,7 +210,7 @@ export function WeightGoal({
               </span>
             </div>
             {option !== null && <p className="t-note mt-2">{rateCostText(option, targets.goal)}</p>}
-            {mustRead && (
+            {mustRead && rateDirty && (
               <label className="mt-3 flex items-start gap-3 rounded-lg border border-danger p-3 text-sm">
                 <input
                   type="checkbox"
