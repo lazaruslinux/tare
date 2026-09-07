@@ -170,7 +170,6 @@ export function Login({ onSignedIn }: { onSignedIn: (me: Me) => void }) {
               Forgot your password?
             </button>
           )}
-          <p className="text-center text-sm text-muted">New here? Ask a member for an invite.</p>
         </div>
       </div>
     </div>

@@ -37,8 +37,10 @@ function MoveDetail({ item, onBack }: { item: MoveItem; onBack: () => void }) {
 
   return (
     <div className="t-card mb-3">
-      {/* Kept for a photo later. Empty on purpose: nothing to read yet. */}
-      <div className="t-phototile mb-3 aspect-[4/3] w-full max-w-sm" aria-hidden="true" />
+      {/* Kept for a photo later. Says so until one arrives. */}
+      <div className="t-phototile mb-3 aspect-[4/3] w-full max-w-sm text-xs text-muted">
+        Graphic Coming Soon
+      </div>
 
       <div className="flex items-start gap-2">
         <h2 className="min-w-0 flex-1 text-lg">{item.name}</h2>

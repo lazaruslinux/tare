@@ -7,12 +7,12 @@ export const MIN_PASSWORD_LENGTH = 10
 
 // A guide rather than a rule. The backend has one requirement, a length, and
 // saying anything stricter here would be inventing a rule it does not enforce.
+// One line under the field, in three states: the rule, the count, the reached.
 export function strength(password: string): string {
-  if (!password) {
-    return `At least ${MIN_PASSWORD_LENGTH} characters. A few words you will remember beats a short one you will not.`
-  }
+  if (!password) return `${MIN_PASSWORD_LENGTH} character minimum`
   if (password.length < MIN_PASSWORD_LENGTH) {
-    return `${MIN_PASSWORD_LENGTH - password.length} more to go.`
+    const left = MIN_PASSWORD_LENGTH - password.length
+    return `${left} ${left === 1 ? 'character' : 'characters'} left`
   }
-  return 'Long enough.'
+  return 'Reached minimum'
 }
