@@ -77,12 +77,21 @@ const ANDROID_NOTE =
 // What a file has to hold, said plainly enough that somebody exporting from
 // something other than Health Auto Export knows what to build.
 const IMPORT_COPY =
-  'One JSON file, up to 15 MB, in the Health Auto Export layout: a top-level "data" ' +
-  'object holding "metrics" and "workouts" lists. Tare draws Step Count, Active Energy, ' +
-  'Apple Exercise Time and Resting Heart Rate for the tiles, Walking + Running Distance ' +
-  'for the hour bars, and keeps every other metric it finds. A workout needs a name and a ' +
-  'start time; end or duration, calories, distance, heart rate and route are read when ' +
-  'present. Anything already stored is skipped. Weigh-ins are never written from a file.'
+  'If you do not wish to use the sync/automation feature, Tare accepts JSON files ' +
+  'containing exported Apple Health data. Android has not been tested. See the JSON ' +
+  'format below.'
+
+// The rules of the format, kept with the example so another exporter can match it.
+const FORMAT_NOTE =
+  'One file up to 15 MB, in the Health Auto Export layout: a top-level "data" object ' +
+  'holding "metrics" and "workouts" lists. Tare draws Step Count, Active Energy, Apple ' +
+  'Exercise Time and Resting Heart Rate for the tiles, Walking + Running Distance for the ' +
+  'hour bars, and keeps every other metric it finds. A workout needs a name and a start ' +
+  'time; end or duration, calories, distance, heart rate and route are read when present. ' +
+  'Anything already stored is skipped. Weigh-ins are never written from a file.'
+
+// How many recent imports show before the member asks for more.
+const RECENT_PAGE = 5
 
 // The smallest file this parser reads whole: one metric with two readings and
 // one workout, with the dates written the way an export writes them.
@@ -194,6 +203,7 @@ export function SyncDevice() {
   // is connected, and the file layout.
   const [guideOpen, setGuideOpen] = useState(false)
   const [layoutOpen, setLayoutOpen] = useState(false)
+  const [shown, setShown] = useState(RECENT_PAGE)
   // The guide picture opened big, or none.
   const [enlarged, setEnlarged] = useState<Picture | null>(null)
   const field = useId()
@@ -455,7 +465,7 @@ export function SyncDevice() {
             aria-expanded={layoutOpen}
             onClick={() => setLayoutOpen(!layoutOpen)}
           >
-            <span className="min-w-0 flex-1 text-sm">Show the file layout</span>
+            <span className="min-w-0 flex-1 text-sm">Show JSON format</span>
             <ChevronDown
               className={`h-4 w-4 shrink-0 text-muted ${layoutOpen ? 'rotate-180' : ''}`}
               strokeWidth={2}
@@ -463,6 +473,7 @@ export function SyncDevice() {
           </button>
           {layoutOpen && (
             <>
+              <p className="mt-2 text-sm text-muted">{FORMAT_NOTE}</p>
               <pre className="mt-2 overflow-x-auto rounded-lg bg-surface-2 p-2 text-[0.75rem]">
                 {FILE_LAYOUT}
               </pre>
@@ -476,11 +487,11 @@ export function SyncDevice() {
 
       {uploads !== null && (
         <div className="t-card mb-3">
-          <p className="t-micro mb-2">Your uploads</p>
+          <p className="t-micro mb-2">Your imports</p>
           <div className="grid grid-cols-2 gap-3">
-            <Stat label="Days with data" value={uploads.days_with_data.toLocaleString()} />
-            <Stat label="Workouts" value={uploads.workouts.toLocaleString()} />
-            <Stat label="Covers" value={covers} small />
+            <Stat label="Days synced" value={uploads.days_with_data.toLocaleString()} />
+            <Stat label="Total workouts" value={uploads.workouts.toLocaleString()} />
+            <Stat label="Date range of all imports" value={covers} small />
             <Stat
               label="Last received"
               value={
@@ -493,7 +504,7 @@ export function SyncDevice() {
           {uploads.recent.length === 0 ? (
             <p className="text-sm text-muted">Nothing has arrived yet.</p>
           ) : (
-            uploads.recent.map((row, index) => {
+            uploads.recent.slice(0, shown).map((row, index) => {
               const detail = arrivalDetail(row)
               return (
                 <div key={`${row.received_at}-${index}`} className="t-row flex-col items-stretch">
@@ -507,6 +518,15 @@ export function SyncDevice() {
                 </div>
               )
             })
+          )}
+          {uploads.recent.length > shown && (
+            <button
+              type="button"
+              className="t-btn mt-2"
+              onClick={() => setShown(shown + RECENT_PAGE)}
+            >
+              Show {Math.min(RECENT_PAGE, uploads.recent.length - shown)} more
+            </button>
           )}
           <p className="t-note mt-3">Tare keeps this list for 90 days.</p>
         </div>

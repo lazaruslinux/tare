@@ -391,7 +391,7 @@ UPLOAD_KINDS = {"hae": "sync", "hc": "sync", "upload": "upload", "wipe": "wipe"}
 
 # How many rows of the record the screen is handed. The record itself keeps 90
 # days; this is the part somebody reads.
-RECENT_UPLOADS = 10
+RECENT_UPLOADS = 50
 
 
 @router.get("/account/uploads")

@@ -180,12 +180,12 @@ uploads off for the whole instance with TARE_UPLOADS=false.
 HC Webhook has no export to a file, so on Android the webhook above is the only
 way in.
 
-## Your uploads
+## Your imports
 
 The bottom of Health data sync says what has arrived: how many days have data,
 how many workouts came from a phone or a file, the first and last day covered,
-and when something last arrived. Under that is the recent list, newest first,
-each row saying when it came, whether it was From sync, From upload or Removed
+and when something last arrived. Under that is the recent list, newest first, five at a
+time with a Show more button, each row saying when it came, whether it was From sync, From upload or Removed
 uploads, and what it brought. The list is kept for 90 days; the numbers above it
 are read off your data and go back as far as it does.
 
