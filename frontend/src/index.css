@@ -28,6 +28,8 @@
      one thing this colour must not read as is done. */
   --pending: #d9a441;
   --danger: #d98b83;
+  /* Past a target. A true red, kept apart from the coral the fat bar wears. */
+  --over: #e5383b;
   --ring: rgba(143, 199, 160, 0.35);
   /* One of the lines the Progress chart draws, beside the accent green
      (weight), the pending amber (body fat) and the violet below (muscle). It
@@ -63,6 +65,7 @@
   --pending: #b7791f;
   /* Dark enough to clear 4.5:1 on --surface-2, the same measurement. */
   --danger: #ab4f45;
+  --over: #d6003c;
   --ring: rgba(58, 114, 87, 0.3);
   /* The same one, darkened for the cream ground. */
   --chart-water: #1f6f9c;
@@ -91,6 +94,7 @@
   --color-accent-strong: var(--accent-strong);
   --color-pending: var(--pending);
   --color-danger: var(--danger);
+  --color-over: var(--over);
   --color-ring: var(--ring);
   --color-blue: var(--blue);
   --color-coral: var(--coral);

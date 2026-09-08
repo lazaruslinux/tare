@@ -24,7 +24,7 @@ export function MacroBar({
     <div>
       <div className="flex items-baseline justify-between gap-2">
         <span className="text-xs text-muted">{label}</span>
-        <span className={`t-nums text-xs ${over ? 'text-danger' : ''}`}>
+        <span className={`t-nums text-xs ${over ? 'text-over' : ''}`}>
           {value === null ? '-' : Math.round(value)}
           <span className={over ? '' : 'text-muted'}>
             {' '}
@@ -35,7 +35,7 @@ export function MacroBar({
       <div className="mt-1 h-1.5 overflow-hidden rounded-full bg-surface-2">
         <div
           className="h-full rounded-full"
-          style={{ width: `${share * 100}%`, background: over ? 'var(--danger)' : color }}
+          style={{ width: `${share * 100}%`, background: over ? 'var(--over)' : color }}
         />
       </div>
     </div>
