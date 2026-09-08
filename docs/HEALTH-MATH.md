@@ -156,7 +156,7 @@ Items marked UNVERIFIED were not confirmed against a primary source at the time 
 22. Clinician nudge, shown once per trigger as a calm sentence with a Dismiss action, never a modal:
    - Current BMI under 18.5 with a weight-loss goal: "Your details put you below the healthy weight range. Talk to a clinician before aiming lower." The loss goal is not blocked; the nudge stays on the Targets page while the condition holds.
    - Goal weight that would give a BMI under 18.5: the goal is accepted but the same sentence appears and the goal date is not shown.
-   - BMI of 40 or more: "A clinician can help plan safely at this weight. Tare is only an estimate."
+   - BMI of 40 or more: no sentence. It used to say "A clinician can help plan safely at this weight. Tare is only an estimate." and was retired on 2026-09-08 as a product decision: the goal-rate review box (decision 14's tiered note with its acknowledgement) already puts the caution in front of the member, and a second unprompted card on the same screen read as a scolding.
    Why: the WHO defines adult underweight as a BMI under 18.5 in its indicator set and overweight and obesity at 25 and 30 on its fact sheet; [25] the 40 threshold is obesity class III in the NHLBI classification table. [16] Eating-disorder red flags cannot be detected from a calorie budget, so the app does not attempt it; the disclaimer (decision 30) and the floors are the protection.
 
 23. BMI is computed on the server for the guardrails and shown on the Profile screen as a plain number with no category word; it is never shown on any other screen. Body-fat percentage is shown as the member's own recorded number without a category label.

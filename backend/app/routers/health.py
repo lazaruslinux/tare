@@ -126,7 +126,6 @@ NUDGE_TEXT = {
         "Your details put you below the healthy weight range. Talk to a clinician "
         "before aiming lower."
     ),
-    "high_weight": "A clinician can help plan safely at this weight. Tare is only an estimate.",
 }
 
 

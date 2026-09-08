@@ -43,10 +43,8 @@ SURPLUS_CAP = 0.20
 # (decision 15).
 FLOOR = {"female": 1200.0, "male": 1500.0}
 
-# The body mass index below which a goal is warned about, and the one at or
-# above which the app says to talk to a clinician (decision 22).
+# The body mass index below which a goal is warned about (decision 22).
 UNDERWEIGHT_BMI = 18.5
-CLINICIAN_BMI = 40.0
 
 # Decision 10: protein in grams per kilogram of current weight, by goal, and
 # the floor that applies from 65.
@@ -456,8 +454,6 @@ def nudges(
         found.append("below_range")
     if goal_bmi is not None and goal_bmi < UNDERWEIGHT_BMI:
         found.append("goal_below_range")
-    if body_mass_index >= CLINICIAN_BMI:
-        found.append("high_weight")
     return tuple(found)
 
 

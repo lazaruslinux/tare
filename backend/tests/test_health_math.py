@@ -267,7 +267,8 @@ def test_the_clinician_sentences_appear_only_on_their_own_trigger():
     # The same numbers with no loss goal say nothing.
     assert health.nudges(17.0, "maintain", None) == ()
     assert health.nudges(24.0, "lose", 17.0) == ("goal_below_range",)
-    assert health.nudges(41.0, "lose", None) == ("high_weight",)
+    # A high weight on its own says nothing: the goal-rate review box covers it.
+    assert health.nudges(41.0, "lose", None) == ()
     assert health.nudges(None, "lose", None) == ()
 
 
