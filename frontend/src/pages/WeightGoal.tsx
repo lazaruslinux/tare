@@ -97,9 +97,13 @@ export function WeightGoal({
     (typed === null ? null : weightFrom(typed, units)) !==
     (targets.goal_weight_kg === null ? null : targets.goal_weight_kg)
 
+  // A saved goal closes the sheet, the way the weigh-in sheet does.
   const saveGoalWeight = async () => {
     const kg = typed === null ? null : weightFrom(typed, units)
-    if (await onSaveProfile({ goal_weight_kg: kg })) markGoalSaved()
+    if (await onSaveProfile({ goal_weight_kg: kg })) {
+      markGoalSaved()
+      setOpen(null)
+    }
   }
 
   const dismiss = async (key: string) => {
