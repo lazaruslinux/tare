@@ -2,7 +2,7 @@ import { ChevronDown } from 'lucide-react'
 import { useState, type ReactNode } from 'react'
 
 import type { Food, Headline, Panel } from '../api'
-import { MICROS, microText, percentDv } from '../lib/micros'
+import { MICROS, microText, percentDv, type Micros } from '../lib/micros'
 import { UNIT_LABEL, amountText, scale } from '../lib/units'
 
 // The panel, as it is stored and as it reads. The form fills in the same list,
@@ -166,18 +166,24 @@ export function PanelFacts({
 export const labelBaseAmount = (food: Food): number =>
   food.servings[0] ? food.servings[0].base_amount : 100
 
-// What a food has vitamins for at all. The fold is not drawn without one.
-export const hasMicros = (food: Food): boolean =>
-  MICROS.some((micro) => typeof food.micros?.[micro.key] === 'number')
+// What a reading has vitamins for at all. The fold is not drawn without one.
+export const hasMicros = (micros: Micros | null | undefined): boolean =>
+  MICROS.some((micro) => typeof micros?.[micro.key] === 'number')
 
 // The vitamins and minerals, at the portion the label above is showing. Label
 // order, only the rows something stated, and the percent of a day beside each.
 // The stored per-100 figure is never drawn.
-export function MicroRows({ food, baseAmount }: { food: Food; baseAmount: number }) {
+export function MicroRows({
+  micros,
+  baseAmount,
+}: {
+  micros: Micros | null | undefined
+  baseAmount: number
+}) {
   return (
     <>
       {MICROS.map((micro) => {
-        const per100 = food.micros?.[micro.key]
+        const per100 = micros?.[micro.key]
         if (typeof per100 !== 'number') return null
         const amount = (per100 * baseAmount) / 100
         return (

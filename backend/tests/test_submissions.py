@@ -786,3 +786,77 @@ def test_a_member_may_only_offer_so_much_in_one_day(client, db_session, signed_i
 def test_the_day_cap_does_not_count_an_administrator(db_session, admin, admin_client):
     fill_day(db_session, admin, caps.DAILY_SUBMISSIONS)
     assert offer(admin_client).status_code == 201
+
+
+# ---- What the scan brings in, and what nobody types ----
+
+
+def a_scan_of_it(db, code=CODE):
+    """The reading a scan wrote down: what is in the packet, and its vitamins."""
+    row = models.Food(
+        status="cache",
+        barcode=code,
+        name="Milk chocolate bar",
+        base_unit="g",
+        source="off",
+        source_id=code,
+        fetched_at=now_utc(),
+        ingredients_text="Sugar, milk, chocolate.",
+        micros={"calcium": 190.0},
+        micros_source="off",
+        micros_ref=code,
+        **FULL,
+    )
+    db.add(row)
+    db.commit()
+    return row
+
+
+def test_a_scanned_food_arrives_with_what_the_reading_said_is_in_it(
+    client, db_session, signed_in
+):
+    a_scan_of_it(db_session)
+    made = offer(client, ingredients_text="Whatever the member typed")
+    assert made.status_code == 201
+
+    food = db_session.get(models.Food, made.json()["food"]["id"])
+    # The reading's, never the form's: nobody is asked to type either of these,
+    # and a value sent by an older client is dropped rather than refused.
+    assert food.ingredients_text == "Sugar, milk, chocolate."
+    assert food.micros == {"calcium": 190.0}
+    assert food.micros_source == "off"
+    assert food.micros_ref == CODE
+
+
+def test_a_food_kept_from_a_scan_carries_them_too(client, db_session, signed_in):
+    a_scan_of_it(db_session)
+    saved = client.post("/api/foods", json=body())
+    assert saved.status_code == 201
+
+    food = db_session.get(models.Food, saved.json()["id"])
+    assert food.ingredients_text == "Sugar, milk, chocolate."
+    assert food.micros == {"calcium": 190.0}
+
+
+def test_a_food_typed_in_whole_has_nothing_to_take(client, db_session, signed_in):
+    saved = client.post("/api/foods", json=body(barcode=None, name="Grandma's fudge"))
+    assert saved.status_code == 201
+    food = db_session.get(models.Food, saved.json()["id"])
+    assert food.ingredients_text == ""
+    assert food.micros is None
+
+
+def test_an_edit_that_says_nothing_about_the_ingredients_leaves_them(
+    client, db_session, signed_in
+):
+    """The form stopped asking, so a save without the line must not blank it."""
+    a_scan_of_it(db_session)
+    saved = client.post("/api/foods", json=body())
+    food_id = saved.json()["id"]
+
+    again = client.patch(f"/api/foods/{food_id}", json=body(name="My own bar"))
+    assert again.status_code == 200
+    food = db_session.get(models.Food, food_id)
+    db_session.refresh(food)
+    assert food.name == "My own bar"
+    assert food.ingredients_text == "Sugar, milk, chocolate."

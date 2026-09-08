@@ -9,6 +9,8 @@ instance.
 
 from __future__ import annotations
 
+import re
+
 from fastapi import APIRouter, Depends, HTTPException, status
 from sqlalchemy import ColumnElement, delete, func, or_, select, tuple_, update
 from sqlalchemy.exc import IntegrityError
@@ -58,6 +60,10 @@ PHOTO_KIND = "A picture is kept or turned down as it is."
 # for is done to the food itself, on the food's own page.
 REPORT_KIND = "A report is resolved or dismissed as it is."
 BAD_PURPOSE = "A photo is of the front or of the label."
+
+# What a label prints in brackets: a note, not part of the name a record
+# is filed under.
+BRACKETED = re.compile(r"\([^)]*\)")
 
 # Granting the role to somebody who already reviews by being an administrator
 # would read as a demotion waiting to happen, and there is no demotion here.
@@ -401,6 +407,57 @@ def shared_with_barcode(db: Session, food: models.Food) -> int | None:
     )
 
 
+def plain_name(name: str) -> str:
+    """A name as FoodData Central is asked it: no brackets, no double spaces.
+
+    What is in brackets is a note to whoever reads the label rather than part
+    of what the food is, and a search takes it literally.
+    """
+    return " ".join(BRACKETED.sub(" ", name).split())
+
+
+def queue_micro_match(db: Session, food: models.Food) -> None:
+    """Ask what a newly shared food might be, for somebody to pick from later.
+
+    Only a food with no barcode and no vitamins: one with a code was answered
+    by its code, and a reading already on the row was not a guess. Nothing
+    happens without a key, and a server that will not answer is never a reason
+    to refuse an approval, so a failure here is let go of quietly.
+    """
+    if food.barcode or micros.clean(food.micros) or not usda_api.configured():
+        return
+    # The same food a hundred grammes of a record describes, which a volume
+    # with no weight behind it is not. The backfill leaves these alone too.
+    if food.base_unit == "ml" and not food.density_g_per_ml:
+        return
+    asked = db.execute(
+        select(models.MicroMatch.id).where(models.MicroMatch.food_id == food.id)
+    ).first()
+    if asked is not None:
+        return
+
+    name = plain_name(food.name)
+    if not name:
+        return
+    # The raw ingredient first, because that is how a whole food is described
+    # where it is filed; the bare name is what is left to try.
+    for query in (f"{name} raw", name):
+        try:
+            candidates = usda_api.search_by_name(query)
+        except foods_api.FoodApiError:
+            return
+        if candidates:
+            db.add(
+                models.MicroMatch(
+                    food_id=food.id,
+                    candidates=[candidate.as_dict() for candidate in candidates],
+                    status="pending",
+                    created_at=now_utc(),
+                )
+            )
+            return
+
+
 @router.post("/queue/{submission_id}/approve")
 def approve(
     submission_id: int,
@@ -470,6 +527,14 @@ def approve(
         # index is the referee, and whoever lost is told the same thing.
         db.rollback()
         raise HTTPException(status.HTTP_409_CONFLICT, ALREADY_SHARED) from None
+
+    # A food with no code on it is the one nothing can look up by itself, so
+    # this is where it joins the queue of names to be matched by hand. Asked
+    # after the decision is written rather than during it: somebody else's
+    # server is not worth holding the queue open for, and a food that misses
+    # this is one the backfill picks up.
+    queue_micro_match(db, food)
+    db.commit()
     return {"food": proposed(food)}
 
 

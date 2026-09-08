@@ -854,7 +854,8 @@ def apply_body(food: models.Food, body: schemas.FoodIn) -> None:
     food.section = section or DEFAULT_SECTION
     food.base_unit = body.base_unit
     food.density_g_per_ml = body.density_g_per_ml
-    food.ingredients_text = body.ingredients_text.strip()
+    if body.ingredients_text is not None:
+        food.ingredients_text = body.ingredients_text.strip()
     for field in FOOD_NUTRIENTS:
         setattr(food, field, getattr(body, field))
 
@@ -888,6 +889,27 @@ def apply_body(food: models.Food, body: schemas.FoodIn) -> None:
     # Wholesale, never merged. A list that arrived without a row is a row the
     # person deleted, and matching them up by name would resurrect it.
     food.servings = servings
+
+
+def adopt_scan(db: Session, food: models.Food, code: str) -> None:
+    """Take onto a new food what the scan that filled the form already read.
+
+    The ingredients and the vitamins are the reading's rather than the form's:
+    nobody is asked to type either, so what the cache row holds is what a food
+    built from that scan carries. Whatever the body said about them is dropped
+    here rather than refused, so an older client still saves.
+    """
+    row = db.execute(
+        select(models.Food).where(models.Food.status == "cache", models.Food.barcode == code)
+    ).scalars().first()
+    if row is None:
+        return
+    food.ingredients_text = row.ingredients_text
+    # A copy, never the cache row's own dict: two rows sharing one object is
+    # one of them changing under the other.
+    food.micros = dict(row.micros) if row.micros else None
+    food.micros_source = row.micros_source
+    food.micros_ref = row.micros_ref
 
 
 def check_barcode(db: Session, user: models.User, code: str) -> None:
@@ -1557,6 +1579,8 @@ def create_food(
         barcode=code or None,
     )
     apply_body(food, body)
+    if code:
+        adopt_scan(db, food, code)
     db.add(food)
     db.commit()
     return food_detail(db, food, user)

@@ -11,7 +11,9 @@ import os
 import httpx
 from PIL import Image
 
-from app import foods_api, models, photos
+from app import foods_api, models, photos, usda_api
+from app.config import settings
+from app.models import now_utc
 from app.routers import admin
 from tests.conftest import PASSWORD
 
@@ -784,3 +786,138 @@ def test_two_approvals_of_one_barcode_are_a_conflict_and_not_a_failure(
     assert response.json() == {"detail": "This barcode is already in the Tare database."}
     db_session.expire_all()
     assert db_session.get(models.Food, second["food"]["id"]).status == "pending"
+
+
+# ---- The vitamins a decision does and does not touch ----
+
+CANDIDATES = {
+    "foods": [{"fdcId": 999002, "description": "Broccoli, raw", "dataType": "Foundation"}]
+}
+
+
+def a_scan_of_it(db):
+    """The reading behind the offer: what is in the packet, and its vitamins."""
+    db.add(
+        models.Food(
+            status="cache",
+            barcode=CODE,
+            name="What the internet said",
+            base_unit="g",
+            source="off",
+            fetched_at=now_utc(),
+            ingredients_text="Sugar, milk, chocolate.",
+            micros={"calcium": 190.0},
+            micros_source="off",
+            micros_ref=CODE,
+            **FULL,
+        )
+    )
+    db.commit()
+
+
+def food_data_central(monkeypatch, handler):
+    """FoodData Central answered from this file, and every query it was asked."""
+    asked: list[str] = []
+
+    def route(request):
+        asked.append(str(request.url))
+        return handler(request)
+
+    monkeypatch.setattr(
+        usda_api, "session", lambda: httpx.Client(transport=httpx.MockTransport(route))
+    )
+    return asked
+
+
+def test_approving_keeps_the_vitamins_the_scan_brought(client, db_session, make_user):
+    make_user("member")
+    make_user("reviewer", admin=True)
+    sign_in(client, "member")
+    a_scan_of_it(db_session)
+    made = offer(client)
+
+    sign_in(client, "reviewer")
+    assert (
+        client.post(f"/api/admin/queue/{made['submission_id']}/approve", json={})
+    ).status_code == 200
+
+    food = db_session.get(models.Food, made["food"]["id"])
+    db_session.refresh(food)
+    assert food.status == "approved"
+    # The cache row it came off goes; what it carried does not go with it.
+    assert food.micros == {"calcium": 190.0}
+    assert food.ingredients_text == "Sugar, milk, chocolate."
+    assert db_session.query(models.Food).filter_by(status="cache").all() == []
+    # A food with a code on it is matched by that code, so nobody is asked.
+    assert db_session.query(models.MicroMatch).count() == 0
+
+
+def test_approving_a_food_with_no_code_asks_what_it_might_be(
+    client, db_session, make_user, monkeypatch
+):
+    make_user("member")
+    make_user("reviewer", admin=True)
+    sign_in(client, "member")
+    made = offer(client, barcode=None, name="Broccoli (fresh)")
+
+    monkeypatch.setattr(settings, "usda_api_key", "test-key")
+
+    def answer(request):
+        # The raw ingredient is asked for first, and this record is not filed
+        # that way, so the bare name is what finds it.
+        if "raw" in str(request.url):
+            return httpx.Response(200, json={"foods": []})
+        return httpx.Response(200, json=CANDIDATES)
+
+    asked = food_data_central(monkeypatch, answer)
+    sign_in(client, "reviewer")
+    assert (
+        client.post(f"/api/admin/queue/{made['submission_id']}/approve", json={})
+    ).status_code == 200
+
+    match = db_session.query(models.MicroMatch).one()
+    assert match.food_id == made["food"]["id"]
+    assert match.status == "pending"
+    assert [row["fdc_id"] for row in match.candidates] == [999002]
+    assert len(asked) == 2 and "raw" in asked[0]
+    # Nothing in brackets ever reaches a search.
+    assert all("(" not in query and "%28" not in query for query in asked)
+
+
+def test_nothing_is_asked_about_without_a_key(client, db_session, make_user, monkeypatch):
+    make_user("member")
+    make_user("reviewer", admin=True)
+    sign_in(client, "member")
+    made = offer(client, barcode=None, name="Broccoli")
+
+    monkeypatch.setattr(settings, "usda_api_key", "")
+
+    def refuse(request):
+        raise AssertionError(f"a request went out to {request.url}")
+
+    food_data_central(monkeypatch, refuse)
+    sign_in(client, "reviewer")
+    assert (
+        client.post(f"/api/admin/queue/{made['submission_id']}/approve", json={})
+    ).status_code == 200
+    assert db_session.query(models.MicroMatch).count() == 0
+
+
+def test_a_reviewer_still_corrects_the_ingredients_line(client, db_session, make_user):
+    made = member_and_admin(client, make_user)
+    sign_in(client, "reviewer")
+
+    saved = client.patch(
+        f"/api/foods/{made['food']['id']}",
+        json={
+            "name": "Milk chocolate bar",
+            "section": "candy-and-sweets",
+            "ingredients_text": "Sugar, cocoa butter, milk.",
+            **FULL,
+        },
+    )
+    assert saved.status_code == 200
+
+    food = db_session.get(models.Food, made["food"]["id"])
+    db_session.refresh(food)
+    assert food.ingredients_text == "Sugar, cocoa butter, milk."

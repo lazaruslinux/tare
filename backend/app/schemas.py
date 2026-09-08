@@ -71,7 +71,9 @@ class FoodIn(BaseModel):
     sugar_g: float | None = Field(default=None, ge=0)
     added_sugars_g: float | None = Field(default=None, ge=0)
 
-    ingredients_text: str = ""
+    # Left out means leave it alone: nobody but a reviewer types this, and a
+    # form that no longer asks for it must not blank what a scan brought.
+    ingredients_text: str | None = None
     # None means the list was left out, which on an edit leaves the servings
     # alone. An empty list is a value: it means this food has none.
     servings: list[ServingIn] | None = Field(default=None, max_length=MAX_SERVINGS)

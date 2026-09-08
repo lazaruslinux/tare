@@ -209,6 +209,8 @@ def test_a_scan_writes_the_vitamins_onto_the_cache_row(client, db_session, signe
     monkeypatch.setattr(foods_api, "session", lambda: transport(answering(OFF_PRODUCT)))
     body = client.get(f"/api/barcode/{CODE}").json()
     assert body["state"] == "prefill"
+    # And the form is handed them, per 100, to scale to the serving it shows.
+    assert body["prefill"]["micros"]["vitamin_a"] == 517.2
     row = db_session.query(models.Food).filter_by(status="cache", barcode=CODE).one()
     assert row.micros["vitamin_a"] == 517.2
     assert row.micros_source == "off"

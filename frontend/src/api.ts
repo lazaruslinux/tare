@@ -421,6 +421,9 @@ export type Prefill = Panel & {
   base_unit: BaseUnit
   density_g_per_ml: number | null
   ingredients_text: string
+  // Per 100 of the base unit, the way it is stored. Shown only scaled to the
+  // serving the form is filled in per, never as it arrives.
+  micros: Micros
   // Where the reading came from, in the words a person reads.
   source: string
   serving: LabelServing | null

@@ -12,6 +12,7 @@ import {
 } from '../api'
 import { useTopBar } from '../hooks/useTopBar'
 import { NO_SECTION, NO_SERVING, SECTIONS, SHARED_FACTS, type Values } from '../lib/community'
+import type { Micros } from '../lib/micros'
 import {
   MASS_UNITS,
   UNIT_LABEL,
@@ -24,7 +25,15 @@ import {
   type Unit,
 } from '../lib/units'
 import { BarcodeScanner } from './BarcodeScanner'
-import { HEADLINE, LABEL_ORDER, type Fact, type Nutrient } from './NutritionLabel'
+import {
+  Fold,
+  HEADLINE,
+  LABEL_ORDER,
+  MicroRows,
+  hasMicros,
+  type Fact,
+  type Nutrient,
+} from './NutritionLabel'
 import { PhotoSlots } from './PhotoSlots'
 import { Sheet } from './Sheet'
 
@@ -232,7 +241,10 @@ export function FoodForm({
     food && food.section !== 'other' ? food.section : ''
   )
   const [baseUnit, setBaseUnit] = useState<BaseUnit>(opening?.base_unit ?? 'g')
+  // What the scan read, shown at the bottom and never typed. A reviewer
+  // correcting a proposal is the one person who edits the ingredients line.
   const [ingredients, setIngredients] = useState(opening?.ingredients_text ?? '')
+  const [vitamins, setVitamins] = useState<Micros | null>(opening?.micros ?? null)
   const [serving, setServingRow] = useState<ServingDraft>(() =>
     startingServing(food, prefill ?? null)
   )
@@ -298,6 +310,8 @@ export function FoodForm({
   // Who is asked which aisle it belongs in: whoever is offering it, and
   // whoever is reviewing it. Nobody else is browsing this food.
   const asksSection = (offerable && submitOn) || review !== undefined
+  // The reviewer has the box itself, so the fold would be the same line twice.
+  const showsIngredients = review === undefined && ingredients.trim() !== ''
   const scannable = onOpenFood !== undefined && food === null
 
   const heading = title ?? (food ? 'Edit food' : 'New food')
@@ -334,6 +348,7 @@ export function FoodForm({
     setBrand(reading.brand)
     setBaseUnit(reading.base_unit)
     setIngredients(reading.ingredients_text)
+    setVitamins(reading.micros)
     setSource(reading.source)
     setDensity(reading.density_g_per_ml)
     const read = {} as Values
@@ -433,7 +448,6 @@ export function FoodForm({
       section,
       base_unit: baseUnit,
       density_g_per_ml: density,
-      ingredients_text: ingredients,
       servings: [
         { name: serving.name, amount: typed, unit: serving.unit, position: 0 },
         ...extras.map((row, index) => ({
@@ -445,6 +459,10 @@ export function FoodForm({
       ],
       ...stored,
     }
+    // A reviewer's, and nobody else's. What is in a packet is read off the
+    // scan rather than typed, and the server keeps what the scan brought for
+    // anything sent without this.
+    if (review !== undefined) body.ingredients_text = ingredients
     // The stamp this form loaded, so a save written against an older copy of
     // the food is refused rather than applied over whoever saved in between.
     if (food) body.as_of = food.updated_at
@@ -652,19 +670,23 @@ export function FoodForm({
               onChange={(event) => setDescription(event.target.value)}
             />
           </div>
-          <div className="mt-3">
-            <label className="t-label" htmlFor="food-ingredients">
-              Ingredients (optional)
-            </label>
-            <textarea
-              id="food-ingredients"
-              className="t-input"
-              rows={3}
-              value={ingredients}
-              onChange={(event) => setIngredients(event.target.value)}
-            />
-            <p className="mt-1 text-xs text-muted">As printed on the package.</p>
-          </div>
+          {/* The one place anybody types this. A member's form shows what the
+              scan read at the bottom and asks for none of it. */}
+          {review !== undefined && (
+            <div className="mt-3">
+              <label className="t-label" htmlFor="food-ingredients">
+                Ingredients (optional)
+              </label>
+              <textarea
+                id="food-ingredients"
+                className="t-input"
+                rows={3}
+                value={ingredients}
+                onChange={(event) => setIngredients(event.target.value)}
+              />
+              <p className="mt-1 text-xs text-muted">As printed on the package.</p>
+            </div>
+          )}
           {asksSection && (
             <div className="mt-3">
               <label className="t-label" htmlFor="food-section">
@@ -855,6 +877,26 @@ export function FoodForm({
               value={note}
               onChange={(event) => setNote(event.target.value)}
             />
+          </div>
+        )}
+
+        {/* What the scan brought and nobody typed, at the bottom and closed.
+            Read-only on purpose: the ingredients and the vitamins come off the
+            reading, and a member is never asked to check them by hand. */}
+        {(showsIngredients || hasMicros(vitamins)) && (
+          <div className="t-card mb-3">
+            {showsIngredients && (
+              <Fold label="Ingredients">
+                <p className="text-sm whitespace-pre-line">{ingredients}</p>
+              </Fold>
+            )}
+            {hasMicros(vitamins) && (
+              <Fold label="Vitamins & minerals">
+                {/* At the serving the boxes above are filled in per, the way
+                    the food's own page reads them. Never the stored 100. */}
+                <MicroRows micros={vitamins} baseAmount={baseOf(serving) ?? 100} />
+              </Fold>
+            )}
           </div>
         )}
 

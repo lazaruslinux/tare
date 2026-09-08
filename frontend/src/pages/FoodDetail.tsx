@@ -402,9 +402,9 @@ export function FoodDetail({
                   )}
                   {/* What else is in it, at the same portion the label above is
                       showing. Only on a food something had readings for. */}
-                  {hasMicros(food) && (
+                  {hasMicros(food.micros) && (
                     <Fold label="Vitamins & minerals">
-                      <MicroRows food={food} baseAmount={labelBaseAmount(food)} />
+                      <MicroRows micros={food.micros} baseAmount={labelBaseAmount(food)} />
                     </Fold>
                   )}
                 </NutritionLabel>

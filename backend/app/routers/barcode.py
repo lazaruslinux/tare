@@ -15,7 +15,7 @@ from fastapi import APIRouter, Depends, HTTPException, status
 from sqlalchemy import select
 from sqlalchemy.orm import Session
 
-from app import foods_api, models, throttle
+from app import foods_api, micros, models, throttle
 from app.db import get_db
 from app.deps import require_user
 from app.models import FOOD_NUTRIENTS, now_utc
@@ -60,6 +60,9 @@ def prefill(food: models.Food) -> dict[str, object]:
         "base_unit": food.base_unit,
         "density_g_per_ml": food.density_g_per_ml,
         "ingredients_text": food.ingredients_text,
+        # Per 100, the way it is stored, for the form to scale to the label
+        # serving it is showing. The figure itself never reaches a screen.
+        "micros": micros.clean(food.micros),
         "source": SOURCE_NAMES.get(food.source, food.source),
         "serving": None
         if serving is None

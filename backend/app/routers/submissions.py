@@ -26,6 +26,7 @@ from app.routers.foods import (
     BARCODE_PATTERN,
     LISTED,
     MISSING_FOOD,
+    adopt_scan,
     apply_body,
     food_detail,
     open_submission,
@@ -247,6 +248,10 @@ def submit_new_food(
         barcode=code or None,
     )
     apply_body(food, body)
+    # What the scan read and nobody typed: the ingredients and the vitamins
+    # come off the cache row for this code, whatever the body said about them.
+    if code:
+        adopt_scan(db, food, code)
     db.add(food)
     # The food's id is what the photo and the submission both point at, so it
     # has to exist before either of them is written.
