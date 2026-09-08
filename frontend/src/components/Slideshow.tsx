@@ -8,11 +8,14 @@ export type Slide = { title: string; shots: Shot[] }
 // One picture on a slide, big enough to read where it sits. A phone shot is
 // narrow and a desktop one is 16:10; below 900px they stack and the desktop
 // one takes the column's width.
-function Picture({ shot, onOpen }: { shot: Shot; onOpen: () => void }) {
+function Picture({ shot, alone, onOpen }: { shot: Shot; alone: boolean; onOpen: () => void }) {
+  // A picture with the slide to itself fills the slide's height.
   const size =
     shot.shape === 'desktop'
       ? 'aspect-[16/10] w-full min-[900px]:aspect-auto min-[900px]:h-80 min-[900px]:w-[512px]'
-      : 'h-72 w-[133px] min-[900px]:h-80 min-[900px]:w-[148px]'
+      : alone
+        ? 'h-full w-[237px] min-[900px]:w-[178px]'
+        : 'h-72 w-[133px] min-[900px]:h-80 min-[900px]:w-[148px]'
   return (
     <button
       type="button"
@@ -68,7 +71,7 @@ export function Slideshow({
       <div className="transition-opacity duration-150 motion-reduce:transition-none">
         <p className="text-lg font-semibold min-[900px]:text-xl">{slide.title}</p>
         <div
-          className="mt-3 flex h-[32rem] flex-col items-center justify-center gap-3 min-[900px]:h-80 min-[900px]:flex-row"
+          className="mt-3 flex h-[32rem] flex-col items-center justify-center gap-3 min-[900px]:h-96 min-[900px]:flex-row"
           style={{ touchAction: 'pan-y' }}
           onPointerDown={(event) => {
             from.current = event.clientX
@@ -83,7 +86,12 @@ export function Slideshow({
           }}
         >
           {slide.shots.map((shot) => (
-            <Picture key={shot.id} shot={shot} onOpen={() => onOpen(SHOTS.indexOf(shot))} />
+            <Picture
+              key={shot.id}
+              shot={shot}
+              alone={slide.shots.length === 1}
+              onOpen={() => onOpen(SHOTS.indexOf(shot))}
+            />
           ))}
         </div>
       </div>
