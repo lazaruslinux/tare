@@ -140,18 +140,22 @@ def test_a_bridge_session_carries_its_minutes_but_no_line(client, db_session, ma
     assert workout.avg_hr == 130
 
 
-def test_a_bridge_weigh_in_lands_on_an_empty_day(client, db_session, make_user):
+def test_a_bridge_scale_reading_is_a_metric_and_not_a_weigh_in(client, db_session, make_user):
     user = phoenix(make_user, "androidscale")
     token = token_for(db_session, user)
     day = yesterday()
 
     post(client, token, android(day))
 
-    row = db_session.scalar(select(models.WeightEntry))
-    assert row.date_for == day
-    assert row.weight_kg == 88.2
-    assert row.body_fat_pct == 24.5
-    assert row.source == "ingest"
+    assert db_session.scalar(select(models.WeightEntry)) is None
+    stored = {
+        row.metric: row.value
+        for row in db_session.scalars(
+            select(models.FitnessDaily).where(models.FitnessDaily.date_for == day)
+        )
+    }
+    assert stored["weight_body_mass"] == 88.2
+    assert stored["body_fat_percentage"] == 24.5
 
 
 def test_a_bridge_export_is_recorded_under_its_own_dialect(client, db_session, make_user):

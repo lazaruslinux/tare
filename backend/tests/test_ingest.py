@@ -227,7 +227,27 @@ def test_a_workout_the_route_was_drawn_for_keeps_its_minutes(client, db_session,
     assert samples[0].hr_avg == 142
 
 
-def test_a_weigh_in_somebody_typed_in_wins_its_day(client, db_session, make_user):
+def test_an_export_never_writes_a_weigh_in(client, db_session, make_user):
+    """Weigh-ins are typed in by hand. The scale readings in an export are kept
+    as metrics like everything else and go no further."""
+    user = make_user("scaled")
+    token = token_for(db_session, user)
+    day = yesterday()
+
+    post(client, token, export(day))
+
+    assert db_session.scalar(select(models.WeightEntry)) is None
+    stored = {
+        row.metric: row.value
+        for row in db_session.scalars(
+            select(models.FitnessDaily).where(models.FitnessDaily.date_for == day)
+        )
+    }
+    assert round(stored["weight_body_mass"], 1) == 219.4
+    assert stored["body_fat_percentage"] == 0.281
+
+
+def test_an_export_leaves_a_typed_weigh_in_alone(client, db_session, make_user):
     user = make_user("weigher")
     token = token_for(db_session, user)
     day = yesterday()
@@ -241,77 +261,8 @@ def test_a_weigh_in_somebody_typed_in_wins_its_day(client, db_session, make_user
     rows = list(db_session.execute(select(models.WeightEntry)).scalars())
     assert len(rows) == 1
     assert rows[0].weight_kg == 100.0
+    assert rows[0].body_fat_pct is None
     assert rows[0].source == "manual"
-    # Body fat fills a blank on the day that was already there.
-    assert rows[0].body_fat_pct == 28.1
-
-
-def test_a_day_with_no_weigh_in_takes_the_scales_reading(client, db_session, make_user):
-    user = make_user("scaled")
-    token = token_for(db_session, user)
-    post(client, token, export(yesterday()))
-
-    row = db_session.scalar(select(models.WeightEntry))
-    assert row.source == "ingest"
-    assert round(row.weight_kg, 1) == 99.5
-    assert row.body_fat_pct == 28.1
-
-
-def test_a_body_fat_with_no_weigh_in_makes_the_day(client, db_session, make_user):
-    """The reading is the day's own, and a weight it was not taken beside is
-    not a reason to throw it away."""
-    user = make_user("fatonly")
-    token = token_for(db_session, user)
-    day = yesterday()
-    post(
-        client,
-        token,
-        {
-            "data": {
-                "metrics": [metric("body_fat_percentage", "%", [point(day, 7, 0.281)])],
-                "workouts": [],
-            }
-        },
-    )
-
-    row = db_session.scalar(select(models.WeightEntry))
-    assert row.date_for == day
-    assert row.weight_kg is None
-    assert row.body_fat_pct == 28.1
-    assert row.source == "ingest"
-
-
-def test_a_weigh_in_fills_a_day_that_held_only_a_body_fat(client, db_session, make_user):
-    user = make_user("blank")
-    token = token_for(db_session, user)
-    day = yesterday()
-    db_session.add(
-        models.WeightEntry(user_id=user.id, date_for=day, body_fat_pct=22.0, source="manual")
-    )
-    db_session.commit()
-
-    post(client, token, export(day))
-
-    row = db_session.scalar(select(models.WeightEntry))
-    assert round(row.weight_kg, 1) == 99.5
-    # The body fat that was already there is still the one that stands.
-    assert row.body_fat_pct == 22.0
-
-
-def test_a_body_fat_reading_never_overwrites_one_already_there(client, db_session, make_user):
-    user = make_user("measured")
-    token = token_for(db_session, user)
-    day = yesterday()
-    db_session.add(
-        models.WeightEntry(
-            user_id=user.id, date_for=day, weight_kg=99.0, body_fat_pct=22.0, source="manual"
-        )
-    )
-    db_session.commit()
-
-    post(client, token, export(day))
-
-    assert db_session.scalar(select(models.WeightEntry)).body_fat_pct == 22.0
 
 
 def test_a_reading_older_than_the_window_is_counted_not_stored(client, db_session, make_user):
@@ -618,9 +569,6 @@ def test_an_upload_stamps_every_row_it_writes(client, db_session, signed_in):
     assert workout.source == "upload"
     # Nothing out of a file is put in front of anybody until they say so.
     assert workout.hidden_from_feed is True
-    weight = db_session.scalar(select(models.WeightEntry))
-    assert weight.source == "ingest"
-    assert weight.via == "upload"
 
 
 def test_a_sync_stamps_its_rows_as_a_sync(client, db_session, make_user):
@@ -634,7 +582,6 @@ def test_a_sync_stamps_its_rows_as_a_sync(client, db_session, make_user):
     workout = db_session.scalar(select(models.Workout))
     assert workout.source == "apple"
     assert workout.hidden_from_feed is False
-    assert db_session.scalar(select(models.WeightEntry)).via is None
 
 
 def test_a_wipe_takes_only_what_a_file_brought(client, db_session, signed_in):
@@ -671,8 +618,8 @@ def test_a_wipe_takes_only_what_a_file_brought(client, db_session, signed_in):
         workouts[0].id
     }
     weights = list(db_session.scalars(select(models.WeightEntry)))
-    assert {row.source for row in weights} == {"ingest", "manual"}
-    assert all(row.via is None for row in weights)
+    # The typed weigh-in is the only one there: an export writes none.
+    assert {row.source for row in weights} == {"manual"}
     assert "wipe" in {row.dialect for row in db_session.scalars(select(models.IngestLog))}
 
 

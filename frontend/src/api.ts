@@ -234,7 +234,7 @@ export type SharePoint = { date: string; pct: number }
 
 // The short name each share is lined under, which the chart's lines and chips
 // are keyed on.
-export type ShareKey = 'fat' | 'water' | 'muscle' | 'bone'
+export type ShareKey = 'fat' | 'water' | 'muscle'
 
 export type Measurements = {
   days: number

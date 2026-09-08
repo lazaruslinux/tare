@@ -52,7 +52,7 @@ const QUESTIONS: { q: string; a: string }[] = [
   },
   {
     q: "How do I sync my phone?",
-    a: "More, then Health data sync. iPhone uses the Health Auto Export app; Android uses Health Connect. Steps, workouts and weigh-ins then arrive on their own.",
+    a: "More, then Health data sync. iPhone uses the Health Auto Export app; Android uses Health Connect. Steps and workouts then arrive on their own; weigh-ins you enter yourself.",
   },
   {
     q: "What does Fitness show?",

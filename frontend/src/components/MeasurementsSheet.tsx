@@ -23,7 +23,7 @@ type Mode = 'pick' | 'weight' | 'fat' | 'other' | 'edit'
 // The numbers beyond the weight, in the order a scale prints them. Body fat
 // leads: it is the one that has a form to itself.
 type Extra = {
-  key: 'body_fat_pct' | 'body_water_pct' | 'muscle_pct' | 'bone_pct'
+  key: 'body_fat_pct' | 'body_water_pct' | 'muscle_pct'
   label: string
   // Stored as a share of the weight, but some scales print it as a mass, so
   // the field can be typed either way when the day has a weight.
@@ -35,7 +35,6 @@ const EXTRAS: Extra[] = [
   { key: 'body_fat_pct', label: 'Body fat', unit: '%' },
   { key: 'body_water_pct', label: 'Body water', unit: '%' },
   { key: 'muscle_pct', label: 'Muscle', unit: '%', mass: true },
-  { key: 'bone_pct', label: 'Bone', unit: '%', mass: true },
 ]
 
 // Which way each mass-or-share field is typed, kept on the device: a scale
@@ -314,7 +313,7 @@ function filled(row: Measurement, units: Me['units'], modes: Record<string, Fiel
     const value = row[extra.key]
     if (value === null) continue
     if (extra.mass && modes[extra.key] === 'mass' && row.weight_kg !== null) {
-      const mass = extra.key === 'muscle_pct' ? row.muscle_kg : row.bone_kg
+      const mass = row.muscle_kg
       out[extra.key] = mass === null ? '' : String(weightIn(mass, units))
     } else {
       out[extra.key] = String(round1(value))

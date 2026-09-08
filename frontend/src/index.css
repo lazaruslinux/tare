@@ -29,12 +29,11 @@
   --pending: #d9a441;
   --danger: #d98b83;
   --ring: rgba(143, 199, 160, 0.35);
-  /* Two of the lines the Progress chart draws, beside the accent green
-     (weight), the pending amber (body fat) and the violet below (muscle). Each
-     reads at better than 3:1 on the card and sits in a hue of its own, so five
+  /* One of the lines the Progress chart draws, beside the accent green
+     (weight), the pending amber (body fat) and the violet below (muscle). It
+     reads at better than 3:1 on the card and sits in a hue of its own, so four
      lines in one box stay told apart. */
   --chart-water: #6fb2e0;
-  --chart-bone: #c2a98d;
   /* Row glyphs and chips. Violet is the Progress muscle line as well. */
   --blue: #7cb8ea;
   --coral: #ef8a7c;
@@ -65,9 +64,8 @@
   /* Dark enough to clear 4.5:1 on --surface-2, the same measurement. */
   --danger: #ab4f45;
   --ring: rgba(58, 114, 87, 0.3);
-  /* The same two, darkened for the cream ground. */
+  /* The same one, darkened for the cream ground. */
   --chart-water: #1f6f9c;
-  --chart-bone: #7a6248;
   --blue: #2a6ca8;
   --coral: #b9453b;
   /* Orange darkened so chip text clears 4.5:1. */

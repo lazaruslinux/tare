@@ -543,18 +543,6 @@ export function Journal({
                   </span>
                 </div>
               )}
-              {weighed.bone_pct !== null && (
-                <div className="t-row min-h-9 text-sm">
-                  <span className="flex-1 text-muted">Bone</span>
-                  {/* No weight on the day means no mass to show it as, so the
-                      share stands on its own. */}
-                  <span className="t-nums">
-                    {weighed.bone_kg === null
-                      ? `${round1(weighed.bone_pct)}%`
-                      : weightText(weighed.bone_kg, me.units)}
-                  </span>
-                </div>
-              )}
             </>
           )}
           {!locked && (

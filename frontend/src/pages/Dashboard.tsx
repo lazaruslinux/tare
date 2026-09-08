@@ -81,7 +81,7 @@ const LINE_SPECS: {
   key: LineKey
   label: string
   word: string
-  field: 'weight_kg' | 'body_fat_pct' | 'body_water_pct' | 'muscle_pct' | 'bone_pct'
+  field: 'weight_kg' | 'body_fat_pct' | 'body_water_pct' | 'muscle_pct'
   colour: string
 }[] = [
   { key: 'weight', label: 'Weight', word: '', field: 'weight_kg', colour: 'var(--accent)' },
@@ -100,7 +100,6 @@ const LINE_SPECS: {
     field: 'muscle_pct',
     colour: 'var(--violet)',
   },
-  { key: 'bone', label: 'Bone', word: 'bone', field: 'bone_pct', colour: 'var(--chart-bone)' },
 ]
 
 // The two that were on before any of this was a choice.
@@ -109,11 +108,10 @@ const DEFAULT_LINES: Lines = {
   fat: true,
   water: false,
   muscle: false,
-  bone: false,
 }
 
 // Nothing measured yet, so every line has nothing to draw.
-const NO_TRENDS: Record<ShareKey, SharePoint[]> = { fat: [], water: [], muscle: [], bone: [] }
+const NO_TRENDS: Record<ShareKey, SharePoint[]> = { fat: [], water: [], muscle: [] }
 
 function readLines(): Lines {
   try {
@@ -682,17 +680,6 @@ function WeighIn({
             </span>
           </div>
         )}
-        {row.bone_pct !== null && (
-          <div className="t-row min-h-9 text-sm">
-            <span className="flex-1 text-muted">Bone</span>
-            {/* A share read on a day with no weight has no mass to stand
-                beside it, so the share is the whole row. */}
-            <span className="t-nums">
-              {round1(row.bone_pct)}%
-              {row.bone_kg !== null && ` · ${weightText(row.bone_kg, units)}`}
-            </span>
-          </div>
-        )}
       </button>
     </div>
   )
@@ -930,7 +917,6 @@ export function Dashboard({
       stamps.body_fat_pct,
       stamps.body_water_pct,
       stamps.muscle_pct,
-      stamps.bone_pct,
     ].some((one) => one !== null)
   // The weight over the chosen span, which this card and the Progress screen
   // both draw, and how a move across it is said.
@@ -1612,14 +1598,6 @@ export function Dashboard({
                     label="Muscle"
                     value={shareText(stamps.muscle_pct, me.units)}
                     date={stamps.muscle_pct.date}
-                    todayIso={todayIso}
-                  />
-                )}
-                {stamps?.bone_pct && (
-                  <Dated
-                    label="Bone"
-                    value={shareText(stamps.bone_pct, me.units)}
-                    date={stamps.bone_pct.date}
                     todayIso={todayIso}
                   />
                 )}

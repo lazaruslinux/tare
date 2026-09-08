@@ -20,11 +20,9 @@ from sqlalchemy.orm import Session
 
 from app import clock, models, routemaps, samples
 from app.fitness_catalog import (
-    BODY_FAT_METRIC,
     INTRADAY,
     TILE_FOR_METRIC,
     UNIT_FOR_TILE,
-    WEIGHT_METRIC,
     combine,
     headline,
     normal_unit,
@@ -53,7 +51,6 @@ BACKFILL_DAYS = 365
 # still counted, and the flag is what says it looked odd.
 MAX_PLAUSIBLE_STEPS = 100_000
 RESTING_HR_RANGE = (25.0, 150.0)
-WEIGHT_KG_RANGE = (20.0, 400.0)
 # Minutes per mile, under which nothing on foot goes.
 MIN_FOOT_PACE_MIN_PER_MILE = 4.0
 # Miles an hour, over which nothing on a bicycle goes.
@@ -66,7 +63,6 @@ MAX_DISTANCE_M = 1_000_000.0
 MAX_KCAL = 50_000.0
 
 MILE_M = 1609.344
-LB_KG = 0.45359237
 
 # The words in an activity name that say what it was done with.
 _ON_FOOT = ("walk", "run", "hike", "jog")
@@ -240,8 +236,6 @@ def import_metrics(
     origin: str = "sync",
 ) -> None:
     earliest = first_day(user)
-    body_fat: list[tuple[dt.date, dt.datetime, float]] = []
-    weights: list[tuple[dt.date, dt.datetime, float]] = []
 
     for entry in metrics[:MAX_METRICS]:
         if not isinstance(entry, dict):
@@ -296,13 +290,6 @@ def import_metrics(
 
         if name in INTRADAY:
             _store_intraday(db, user, name, unit, points, zone, earliest, origin)
-        if name == WEIGHT_METRIC:
-            weights.extend(_weigh_ins(points, unit, zone, earliest))
-        if name == BODY_FAT_METRIC:
-            body_fat.extend(_body_fats(points, zone, earliest))
-
-    _write_weights(db, user, weights, counts, origin)
-    _write_body_fat(db, user, body_fat)
 
 
 def _implausible(metric: str, value: float) -> bool:
@@ -356,121 +343,6 @@ def _store_intraday(
         rolled = combine(values, rule)
         if rolled is not None:
             upsert_intraday(db, user.id, day, hour, key, rolled, stored_unit, origin)
-
-
-def _weigh_ins(
-    points: list[Any], unit: str, zone: dt.tzinfo, earliest: dt.date
-) -> list[tuple[dt.date, dt.datetime, float]]:
-    """The scale readings in one metric, in kilograms, newest per day kept."""
-    out: list[tuple[dt.date, dt.datetime, float]] = []
-    for point in points[:MAX_POINTS_PER_METRIC]:
-        if not isinstance(point, dict):
-            continue
-        moment = read_time(point.get("date"), zone)
-        value = quantity(point.get("qty"))
-        if moment is None or value is None or moment.day < earliest:
-            continue
-        kg = value * LB_KG if normal_unit(unit).startswith("lb") else value
-        out.append((moment.day, moment.instant, kg))
-    return out
-
-
-def _body_fats(
-    points: list[Any], zone: dt.tzinfo, earliest: dt.date
-) -> list[tuple[dt.date, dt.datetime, float]]:
-    out: list[tuple[dt.date, dt.datetime, float]] = []
-    for point in points[:MAX_POINTS_PER_METRIC]:
-        if not isinstance(point, dict):
-            continue
-        moment = read_time(point.get("date"), zone)
-        value = quantity(point.get("qty"))
-        if moment is None or value is None or moment.day < earliest:
-            continue
-        # A phone stores this as a fraction and its exporter has shipped it both
-        # ways. Nobody is at one percent body fat, so at or under 1.0 it can
-        # only be a fraction.
-        pct = value * 100.0 if value <= 1.0 else value
-        if not (1.0 < pct <= 75.0):
-            continue
-        out.append((moment.day, moment.instant, pct))
-    return out
-
-
-def _write_weights(
-    db: Session,
-    user: models.User,
-    weights: list[tuple[dt.date, dt.datetime, float]],
-    counts: Counts,
-    origin: str = "sync",
-) -> None:
-    """The scale's readings onto the weigh-in log, and only onto empty days.
-
-    A weigh-in somebody typed in is a deliberate act and always wins its day.
-    """
-    newest: dict[dt.date, tuple[dt.datetime, float]] = {}
-    for day, at, kg in weights:
-        if day not in newest or at > newest[day][0]:
-            newest[day] = (at, kg)
-    for day, (_, kg) in newest.items():
-        if not (WEIGHT_KG_RANGE[0] <= kg <= WEIGHT_KG_RANGE[1]):
-            # Kept in the fitness table with everything else, and left out of
-            # the log the calorie budget is worked out from: a scale that read
-            # five kilograms would move every number on the Targets screen.
-            counts.flagged += 1
-            continue
-        existing = db.scalar(
-            select(models.WeightEntry).where(
-                models.WeightEntry.user_id == user.id, models.WeightEntry.date_for == day
-            )
-        )
-        if existing is not None:
-            # A day that holds a body fat and no weight takes the reading into
-            # the blank; a weight already there is left standing.
-            if existing.weight_kg is None:
-                existing.weight_kg = round(kg, 2)
-            continue
-        db.add(
-            models.WeightEntry(
-                user_id=user.id,
-                date_for=day,
-                weight_kg=round(kg, 2),
-                source="ingest",
-                # The source stays what it is. This is the mark that says a
-                # file brought it, and it is the only thing a wipe reads.
-                via="upload" if origin == "upload" else None,
-            )
-        )
-
-
-def _write_body_fat(
-    db: Session, user: models.User, readings: list[tuple[dt.date, dt.datetime, float]]
-) -> None:
-    """Body fat onto the day's row, and only into a blank.
-
-    A day nobody weighed on still gets a row: the reading is the day's, and a
-    weight it was not taken beside is not a reason to throw it away.
-    """
-    newest: dict[dt.date, tuple[dt.datetime, float]] = {}
-    for day, at, pct in readings:
-        if day not in newest or at > newest[day][0]:
-            newest[day] = (at, pct)
-    if not newest:
-        return
-    # This payload's own weigh-ins are usually still pending inserts, and the
-    # session does not autoflush: make them queryable first.
-    db.flush()
-    for day, (_, pct) in newest.items():
-        entry = db.scalar(
-            select(models.WeightEntry).where(
-                models.WeightEntry.user_id == user.id, models.WeightEntry.date_for == day
-            )
-        )
-        if entry is None:
-            entry = models.WeightEntry(user_id=user.id, date_for=day, source="ingest")
-            db.add(entry)
-        elif entry.body_fat_pct is not None:
-            continue
-        entry.body_fat_pct = round(pct, 1)
 
 
 # Reading the workouts

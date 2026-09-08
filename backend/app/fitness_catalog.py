@@ -32,8 +32,8 @@ TILE_FOR_METRIC = {name: key for key, name, _, _ in TILES}
 UNIT_FOR_TILE = {key: unit for key, _, unit, _ in TILES}
 
 # The exporter's names for the two readings that are not a fitness number at
-# all: they belong on the weigh-in the member already keeps, so they are
-# written there as well as here.
+# all. They are stored here like any other metric and nowhere else: weigh-ins
+# are typed in by hand, and an export never writes one.
 WEIGHT_METRIC = "weight_body_mass"
 BODY_FAT_METRIC = "body_fat_percentage"
 

@@ -114,10 +114,8 @@ minutes come from how long each session lasted.
   day, and a workout that is already stored is recognised and left alone.
 - The first sync can be large. Tare accepts a body up to 15 MB and reaches back
   one year before the day your account was made.
-- Weighing in yourself always wins. If you logged a weight in Tare for a day,
-  a reading from your scale never replaces it. On a day with no weigh-in, the
-  scale's reading is used. Body fat fills a blank and never overwrites a number
-  you entered.
+- Weigh-ins stay yours to enter. A weight or body fat your phone sends is kept
+  with the rest of your health data and never writes a weigh-in for you.
 - A workout that arrived from your phone cannot be deleted in Tare. Delete it
   on your phone and it stops being sent.
 - If a reading looks impossible, Tare stores it anyway and marks it. Nothing is
