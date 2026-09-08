@@ -732,6 +732,10 @@ export type DiaryDay = {
   completed: boolean
   completed_at: string | null
   totals: Totals
+  // What the day came to of each vitamin and mineral, in catalogue order and
+  // holding only the keys something carried. Worked out at every read rather
+  // than kept, so a food filled in later fills in the days it was eaten on.
+  micros: Micros
   slots: Record<Slot, { entries: DiaryEntry[]; subtotal_calories: number | null }>
   // The four the day is read against, what exercise added back to it, and what
   // is left. All four arrive with the day so the Journal reads it in one call.

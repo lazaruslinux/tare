@@ -75,9 +75,9 @@ USDA_SEARCH = {
             "dataType": "Branded",
             "gtinUpc": "00038000391323",
             "foodNutrients": [
-                {"nutrientNumber": "1087", "unitName": "MG", "value": 130},
-                {"nutrientNumber": "1180", "unitName": "MG", "value": 20},
-                {"nutrientNumber": "1106", "unitName": "UG", "value": 517.2},
+                {"nutrientNumber": "301", "unitName": "MG", "value": 130},
+                {"nutrientNumber": "421", "unitName": "MG", "value": 20},
+                {"nutrientNumber": "320", "unitName": "UG", "value": 517.2},
             ],
         }
     ]
@@ -88,11 +88,11 @@ USDA_FOOD = {
     "description": "Broccoli, raw",
     "dataType": "Foundation",
     "foodNutrients": [
-        {"nutrient": {"number": "1162", "unitName": "mg"}, "amount": 91.3},
-        {"nutrient": {"number": "1087", "unitName": "mg"}, "amount": 46},
-        {"nutrient": {"number": "1177", "unitName": "ug"}, "amount": 63},
+        {"nutrient": {"number": "401", "unitName": "mg"}, "amount": 91.3},
+        {"nutrient": {"number": "301", "unitName": "mg"}, "amount": 46},
+        {"nutrient": {"number": "417", "unitName": "ug"}, "amount": 63},
         # Not in the catalogue, so it is dropped rather than stored.
-        {"nutrient": {"number": "1093", "unitName": "mg"}, "amount": 33},
+        {"nutrient": {"number": "307", "unitName": "mg"}, "amount": 33},
     ],
 }
 
@@ -160,7 +160,8 @@ def test_the_catalogue_is_the_twenty_seven_with_a_day_of_each():
     assert len(set(micros.KEYS)) == 27
     assert all(entry.daily_value > 0 for entry in micros.CATALOG)
     assert all(entry.unit in ("mcg", "mg") for entry in micros.CATALOG)
-    assert all(entry.usda for entry in micros.CATALOG)
+    # Every nutrient has somewhere to come from; molybdenum has no USDA number yet.
+    assert all(entry.usda or entry.off for entry in micros.CATALOG)
 
 
 def test_the_frontend_mirror_says_the_same_thing():
@@ -427,3 +428,123 @@ def test_a_food_is_read_with_its_vitamins_per_hundred(client, db_session, signed
 def test_a_food_nobody_has_filled_hands_back_nothing(client, db_session, signed_in):
     food = put_food(db_session, status="approved", name="Kitchen granola")
     assert client.get(f"/api/foods/{food.id}").json()["micros"] == {}
+
+
+# ---- What a day comes to
+
+DAY = "2026-09-01"
+
+
+def with_micros(client, db, name, found, **fields):
+    """A food somebody can log, with vitamins written onto it afterwards."""
+    response = client.post(
+        "/api/foods",
+        json={
+            "name": name,
+            "base_unit": "g",
+            "calories": 100,
+            "protein_g": 5,
+            "carbs_g": 10,
+            "fat_g": 2,
+            **fields,
+        },
+    )
+    assert response.status_code == 201
+    made = response.json()
+    food = db.get(models.Food, made["id"])
+    food.micros = found
+    db.commit()
+    return made
+
+
+def logged(client, **body):
+    sent = {"date": DAY, "slot": "breakfast"}
+    sent.update(body)
+    response = client.post("/api/diary", json=sent)
+    assert response.status_code == 201
+    return response.json()
+
+
+def day_micros(client, date=DAY):
+    return client.get("/api/diary/day", params={"date": date}).json()["micros"]
+
+
+def test_a_day_scales_each_food_s_vitamins_by_the_portion(client, db_session, signed_in):
+    broccoli = with_micros(client, db_session, "Broccoli", {"vitamin_c": 89.2, "calcium": 47})
+    cereal = with_micros(
+        client,
+        db_session,
+        "Fortified cereal",
+        {"vitamin_c": 20, "iron": 8},
+        servings=[{"name": "1 cup", "amount": 40, "unit": "g", "position": 0}],
+    )
+    cup = cereal["servings"][0]["id"]
+
+    logged(client, food_id=broccoli["id"], amount=150, unit="g")
+    logged(client, food_id=cereal["id"], amount=2, unit=f"serving:{cup}")
+
+    found = day_micros(client)
+    # 150 g of the one, 80 g of the other, and the keys in catalogue order.
+    assert list(found) == ["vitamin_c", "calcium", "iron"]
+    assert found["vitamin_c"] == pytest.approx(133.8 + 16)
+    assert found["calcium"] == pytest.approx(70.5)
+    assert found["iron"] == pytest.approx(6.4)
+
+
+def test_a_day_reads_its_vitamins_from_the_food_as_it_stands_now(client, db_session, signed_in):
+    """Nothing is copied onto an entry, so a food filled in later fills in
+    every day it was already eaten on."""
+    food = with_micros(client, db_session, "Broccoli", {})
+    logged(client, food_id=food["id"], amount=100, unit="g")
+    assert day_micros(client) == {}
+
+    db_session.get(models.Food, food["id"]).micros = {"vitamin_c": 89.2}
+    db_session.commit()
+    assert day_micros(client) == {"vitamin_c": 89.2}
+
+
+def test_a_recipe_entry_counts_what_went_into_the_pot(client, db_session, signed_in):
+    broccoli = with_micros(client, db_session, "Broccoli", {"vitamin_c": 89.2})
+    cereal = with_micros(client, db_session, "Fortified cereal", {"vitamin_c": 20, "iron": 8})
+    recipe = client.post(
+        "/api/recipes",
+        json={
+            "name": "Breakfast bowl",
+            "yield_servings": 4,
+            "ingredients": [
+                {"food_id": broccoli["id"], "amount": 200, "unit": "g"},
+                {"food_id": cereal["id"], "amount": 100, "unit": "g"},
+            ],
+        },
+    ).json()
+
+    logged(client, recipe_id=recipe["id"], amount=1.5)
+
+    found = day_micros(client)
+    # The whole pot is 198.4 mg of vitamin C and 8 mg of iron; a serving is a
+    # quarter of it, and one and a half servings were eaten.
+    assert found["vitamin_c"] == pytest.approx(198.4 * 1.5 / 4)
+    assert found["iron"] == pytest.approx(8 * 1.5 / 4)
+
+
+def test_a_quick_add_and_a_food_that_has_gone_add_nothing(client, db_session, signed_in):
+    broccoli = with_micros(client, db_session, "Broccoli", {"vitamin_c": 89.2})
+    logged(client, food_id=broccoli["id"], amount=100, unit="g")
+    logged(client, name="Flat white", calories=120)
+    assert day_micros(client) == {"vitamin_c": 89.2}
+
+    assert client.delete(f"/api/foods/{broccoli['id']}").status_code == 204
+    # The entry stands with the calories it was logged at, and says nothing
+    # about vitamins any more.
+    assert day_micros(client) == {}
+
+
+def test_one_diary_s_vitamins_are_nobody_else_s(client, db_session, signed_in, make_user):
+    broccoli = with_micros(client, db_session, "Broccoli", {"vitamin_c": 89.2})
+    logged(client, food_id=broccoli["id"], amount=100, unit="g")
+
+    make_user("stranger")
+    assert (
+        client.post("/api/auth/login", json={"username": "stranger", "password": PASSWORD})
+    ).status_code == 200
+    assert day_micros(client) == {}

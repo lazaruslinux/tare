@@ -40,38 +40,43 @@ class Micro:
     usda: tuple[str, ...]
 
 
+# The USDA numbers are the nutrient numbers FoodData Central prints on every
+# record (the old NDB numbering), not the newer nutrient ids, which the API
+# does not return in abridged or search results. Vitamin D keeps the IU
+# reading as a fallback; it is the one vitamin with a fixed IU to mcg factor.
 CATALOG: tuple[Micro, ...] = (
-    Micro("vitamin_a", "Vitamin A", "mcg", 900, "vitamin-a", ("1106",)),
-    Micro("vitamin_c", "Vitamin C", "mg", 90, "vitamin-c", ("1162",)),
-    Micro("vitamin_d", "Vitamin D", "mcg", 20, "vitamin-d", ("1114",)),
-    Micro("vitamin_e", "Vitamin E", "mg", 15, "vitamin-e", ("1109",)),
-    Micro("vitamin_k", "Vitamin K", "mcg", 120, "vitamin-k", ("1185",)),
-    Micro("thiamin", "Thiamin", "mg", 1.2, "vitamin-b1", ("1165",)),
-    Micro("riboflavin", "Riboflavin", "mg", 1.3, "vitamin-b2", ("1166",)),
-    Micro("niacin", "Niacin", "mg", 16, "vitamin-pp", ("1167",)),
-    Micro("vitamin_b6", "Vitamin B6", "mg", 1.7, "vitamin-b6", ("1175",)),
+    Micro("vitamin_a", "Vitamin A", "mcg", 900, "vitamin-a", ("320",)),
+    Micro("vitamin_c", "Vitamin C", "mg", 90, "vitamin-c", ("401",)),
+    Micro("vitamin_d", "Vitamin D", "mcg", 20, "vitamin-d", ("328", "324")),
+    Micro("vitamin_e", "Vitamin E", "mg", 15, "vitamin-e", ("323",)),
+    Micro("vitamin_k", "Vitamin K", "mcg", 120, "vitamin-k", ("430",)),
+    Micro("thiamin", "Thiamin", "mg", 1.2, "vitamin-b1", ("404",)),
+    Micro("riboflavin", "Riboflavin", "mg", 1.3, "vitamin-b2", ("405",)),
+    Micro("niacin", "Niacin", "mg", 16, "vitamin-pp", ("406",)),
+    Micro("vitamin_b6", "Vitamin B6", "mg", 1.7, "vitamin-b6", ("415",)),
     # Folate is counted as dietary folate equivalents on a label. Total folate
     # is the fallback: the same microgrammes under a looser definition, which
     # is nearer the truth than leaving the row empty.
-    Micro("folate", "Folate", "mcg", 400, "vitamin-b9", ("1190", "1177")),
-    Micro("vitamin_b12", "Vitamin B12", "mcg", 2.4, "vitamin-b12", ("1178",)),
-    Micro("biotin", "Biotin", "mcg", 30, "biotin", ("1176",)),
-    Micro("pantothenic_acid", "Pantothenic acid", "mg", 5, "pantothenic-acid", ("1170",)),
-    Micro("choline", "Choline", "mg", 550, None, ("1180",)),
-    Micro("calcium", "Calcium", "mg", 1300, "calcium", ("1087",)),
-    Micro("iron", "Iron", "mg", 18, "iron", ("1089",)),
-    Micro("potassium", "Potassium", "mg", 4700, "potassium", ("1092",)),
-    Micro("magnesium", "Magnesium", "mg", 420, "magnesium", ("1090",)),
-    Micro("zinc", "Zinc", "mg", 11, "zinc", ("1095",)),
-    Micro("phosphorus", "Phosphorus", "mg", 1250, "phosphorus", ("1091",)),
-    Micro("iodine", "Iodine", "mcg", 150, "iodine", ("1100",)),
-    Micro("selenium", "Selenium", "mcg", 55, "selenium", ("1103",)),
-    Micro("copper", "Copper", "mg", 0.9, "copper", ("1098",)),
-    Micro("manganese", "Manganese", "mg", 2.3, "manganese", ("1101",)),
-    Micro("chromium", "Chromium", "mcg", 35, "chromium", ("1096",)),
-    Micro("molybdenum", "Molybdenum", "mcg", 45, "molybdenum", ("1102",)),
-    # Filed by FoodData Central under the element's name, Chlorine.
-    Micro("chloride", "Chloride", "mg", 2300, "chloride", ("1088",)),
+    Micro("folate", "Folate", "mcg", 400, "vitamin-b9", ("435", "417")),
+    Micro("vitamin_b12", "Vitamin B12", "mcg", 2.4, "vitamin-b12", ("418",)),
+    Micro("biotin", "Biotin", "mcg", 30, "biotin", ("416",)),
+    Micro("pantothenic_acid", "Pantothenic acid", "mg", 5, "pantothenic-acid", ("410",)),
+    Micro("choline", "Choline", "mg", 550, None, ("421",)),
+    Micro("calcium", "Calcium", "mg", 1300, "calcium", ("301",)),
+    Micro("iron", "Iron", "mg", 18, "iron", ("303",)),
+    Micro("potassium", "Potassium", "mg", 4700, "potassium", ("306",)),
+    Micro("magnesium", "Magnesium", "mg", 420, "magnesium", ("304",)),
+    Micro("zinc", "Zinc", "mg", 11, "zinc", ("309",)),
+    Micro("phosphorus", "Phosphorus", "mg", 1250, "phosphorus", ("305",)),
+    Micro("iodine", "Iodine", "mcg", 150, "iodine", ("314",)),
+    Micro("selenium", "Selenium", "mcg", 55, "selenium", ("317",)),
+    Micro("copper", "Copper", "mg", 0.9, "copper", ("312",)),
+    Micro("manganese", "Manganese", "mg", 2.3, "manganese", ("315",)),
+    Micro("chromium", "Chromium", "mcg", 35, "chromium", ("310",)),
+    # No FoodData Central record found that carries it, so no number yet.
+    Micro("molybdenum", "Molybdenum", "mcg", 45, "molybdenum", ()),
+    # Filed by FoodData Central under the element's name, Chlorine, Cl.
+    Micro("chloride", "Chloride", "mg", 2300, "chloride", ("302",)),
 )
 
 KEYS: tuple[str, ...] = tuple(micro.key for micro in CATALOG)

@@ -22,6 +22,7 @@ import { MacroBar } from '../components/MacroBar'
 import { MeasurementsSheet } from '../components/MeasurementsSheet'
 import { HEADLINE, nutrientText } from '../components/NutritionLabel'
 import { PortionSheet } from '../components/PortionSheet'
+import { VitaminsSheet } from '../components/VitaminsSheet'
 import { WorkoutDetails } from '../components/WorkoutDetails'
 import { useTopBar } from '../hooks/useTopBar'
 import { SLOTS, SLOT_LABEL, dayLabel, shiftDay, slotByTime, today, type Slot } from '../lib/day'
@@ -146,6 +147,9 @@ export function Journal({
   // The popup that asks before a day is closed. Closing it again is one tap
   // and asks nothing.
   const [confirming, setConfirming] = useState(false)
+  // The day's vitamins and minerals, which are a panel of their own rather
+  // than another fold inside the card.
+  const [vitamins, setVitamins] = useState(false)
   const [marking, setMarking] = useState(false)
 
   // A day the member has closed. Nothing on it can be written until the check
@@ -162,7 +166,6 @@ export function Journal({
             day.energy.exercise -
             (day.totals.calories ?? 0)
         )
-  const [reveal, setReveal] = useState(0)
 
   const toggleComplete = async () => {
     if (day === null || marking) return
@@ -323,7 +326,11 @@ export function Journal({
       )}
 
       {day !== null && (
-        <BreakdownCard energy={day.energy} reveal={reveal} tour="journal-top">
+        <BreakdownCard
+          energy={day.energy}
+          gap={(day.totals.calories ?? 0) > 0 ? gap : null}
+          tour="journal-top"
+        >
           <div className="mb-1 flex items-center justify-between">
             <p className="t-micro">Remaining today</p>
             <button
@@ -339,23 +346,9 @@ export function Journal({
             {calText(day.remaining_calories)}
             <span className="ml-1 text-sm font-normal text-muted">cal</span>
           </span>
-          <span className="flex items-center gap-2 text-xs text-muted">
-            <span>
-              {calText(day.totals.calories ?? 0)} consumed of{' '}
-              {calText(day.budget.calories + day.exercise_kcal)}
-            </span>
-            {gap !== null && (
-              <button
-                type="button"
-                className={`t-chip ${
-                  gap > 0 ? 'border-accent text-accent' : gap < 0 ? 'border-orange text-orange' : ''
-                }`}
-                aria-label="Show where the number comes from"
-                onClick={() => setReveal((count) => count + 1)}
-              >
-                {gap > 0 ? `Deficit ${calText(gap)}` : gap < 0 ? `Surplus ${calText(-gap)}` : 'Even'}
-              </button>
-            )}
+          <span className="block text-xs text-muted">
+            {calText(day.totals.calories ?? 0)} consumed of{' '}
+            {calText(day.budget.calories + day.exercise_kcal)}
           </span>
           {day.exercise_kcal > 0 && (
             <span className="block text-xs text-muted">
@@ -374,6 +367,16 @@ export function Journal({
             ))}
           </div>
         </BreakdownCard>
+      )}
+
+      {day !== null && (
+        <button
+          type="button"
+          className="t-btn mb-3 w-full"
+          onClick={() => setVitamins(true)}
+        >
+          View vitamins
+        </button>
       )}
 
       {/* Every meal card is on the page from the start, empty or not, so the
@@ -569,6 +572,14 @@ export function Journal({
             setPicking(null)
             onScan(date, slot)
           }}
+        />
+      )}
+
+      {vitamins && day !== null && (
+        <VitaminsSheet
+          micros={day.micros}
+          day={dayLabel(date, todayIso)}
+          onClose={() => setVitamins(false)}
         />
       )}
 

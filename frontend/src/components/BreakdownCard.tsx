@@ -1,6 +1,6 @@
 import { AnimatePresence, motion, useReducedMotion } from 'framer-motion'
-import { ChevronDown } from 'lucide-react'
-import { useEffect, useState, type ReactNode } from 'react'
+import { Check, ChevronDown } from 'lucide-react'
+import { useState, type ReactNode } from 'react'
 
 import type { DayEnergy } from '../api'
 import { LEVEL_LABEL, calText } from '../lib/targets'
@@ -12,26 +12,45 @@ function Line({
   note,
   value,
   total,
+  // The colour the whole row reads in, for the one line that says which way
+  // the day is going.
+  tone,
+  icon,
 }: {
   label: string
   note?: string
   value: string
   total?: boolean
+  tone?: string
+  icon?: ReactNode
 }) {
   return (
     <div
-      className={`t-row min-h-9 text-sm ${
+      className={`t-row min-h-9 text-sm ${tone ?? ''} ${
         total ? 'border-t border-line-strong font-semibold' : ''
       }`}
     >
       <span className="min-w-0 flex-1">
         {label}
         {note !== undefined && <span className="text-muted"> {note}</span>}
+        {icon}
       </span>
       <span className="t-nums shrink-0 text-right">{value}</span>
     </div>
   )
 }
+
+// What the weight goal is doing to the budget, said as the thing it is rather
+// than as a signed number nobody reads twice.
+const plannedLabel = (adjustment: number): string =>
+  adjustment < 0 ? 'Planned deficit' : adjustment > 0 ? 'Planned surplus' : 'Weight goal adjustment'
+
+// Where the day stands against what the body is using, in the same words.
+const gapLabel = (gap: number): string =>
+  gap > 0 ? 'Deficit so far' : gap < 0 ? 'Surplus so far' : 'Even'
+
+const gapTone = (gap: number): string =>
+  gap > 0 ? 'text-accent' : gap < 0 ? 'text-orange' : 'text-muted'
 
 // A figure that is added on, and one that can go either way.
 const added = (value: number): string => `+${calText(value)}`
@@ -44,16 +63,17 @@ const signed = (value: number): string =>
 // the card instead of sitting in one.
 export function BreakdownCard({
   energy,
-  reveal,
+  gap,
   tour,
   children,
 }: {
   // Null while the budget is typed in by hand or the profile is short of a
   // detail: then this is an ordinary card with nothing to open.
   energy: DayEnergy | null
-  // Bumped by whatever owns the card to open the fold from inside it, the
-  // way a badge that stands for one of the five figures does.
-  reveal?: number
+  // Where the day stands against what the body is using today. Null on a
+  // screen that is not about one day, and on a day nothing was logged on:
+  // a deficit before breakfast is arithmetic rather than news.
+  gap?: number | null
   // The name the welcome tour points at this card by, on the one screen whose
   // card it stops at.
   tour?: string
@@ -63,11 +83,6 @@ export function BreakdownCard({
   // behind the number, not the number, so it is asked for rather than left up.
   const [open, setOpen] = useState(false)
   const reduced = useReducedMotion()
-
-  useEffect(() => {
-    if (reveal === undefined || reveal === 0) return
-    setOpen(true)
-  }, [reveal])
 
   const toggle = () => setOpen(!open)
 
@@ -92,8 +107,24 @@ export function BreakdownCard({
                   value={added(energy.activity)}
                 />
                 <Line label="Exercise (Workouts)" value={added(energy.exercise)} />
-                <Line label="Weight goal adjustment" value={signed(energy.adjustment)} />
+                <Line
+                  label={plannedLabel(energy.adjustment)}
+                  note="(weight goal)"
+                  value={signed(energy.adjustment)}
+                />
                 <Line label="Budget" value={`${calText(energy.budget)} cal`} total />
+                {gap !== undefined && gap !== null && (
+                  <Line
+                    label={gapLabel(gap)}
+                    value={calText(Math.abs(gap))}
+                    tone={gapTone(gap)}
+                    icon={
+                      gap > 0 ? (
+                        <Check className="ml-1 inline h-3.5 w-3.5" strokeWidth={2.5} />
+                      ) : undefined
+                    }
+                  />
+                )}
               </div>
             </motion.div>
           )}

@@ -18,11 +18,11 @@ from sqlalchemy import func, select
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session
 
-from app import clock, health, models, schemas, units
+from app import clock, health, micros, models, schemas, units
 from app.db import get_db
 from app.deps import require_user
 from app.models import DIARY_SLOTS, NUTRIENTS, SERVING_UNIT, now_utc
-from app.recipes import own_recipe, per_serving, settled_weight, totals, weight
+from app.recipes import own_recipe, per_serving, readable, settled_weight, totals, weight
 from app.routers.fitness import (
     day_exercise,
     goals_on,
@@ -888,6 +888,102 @@ def delete_auto_log(
     db.commit()
 
 
+# ---- What a day's vitamins and minerals come to ----
+
+
+def portion_micros(food: models.Food, base_amount: float) -> dict[str, float]:
+    """What that much of a food carries, from the food as it stands now."""
+    return {key: value * base_amount / 100 for key, value in micros.clean(food.micros).items()}
+
+
+def add_into(running: dict[str, float], found: dict[str, float]) -> None:
+    """One thing's vitamins added to what a day has so far."""
+    for key, value in found.items():
+        running[key] = running.get(key, 0.0) + value
+
+
+def dish_micros(
+    db: Session, user: models.User, dish: models.Recipe | models.MealTemplate
+) -> dict[str, float]:
+    """The whole recipe or the whole kept meal, from the foods in it as they
+    stand now. A part whose food is gone adds nothing, the way its calories do."""
+    whole: dict[str, float] = {}
+    if isinstance(dish, models.Recipe):
+        for row in dish.ingredients:
+            food = None if row.food_id is None else readable(db, user, row.food_id)
+            if food is not None:
+                add_into(whole, portion_micros(food, row.base_amount))
+        return whole
+    for item in dish.items:
+        food = None if item.food_id is None else readable(db, user, item.food_id)
+        if food is None:
+            continue
+        try:
+            base_amount, _, _ = measure(food, item.amount, stored_unit(item, food))
+        except HTTPException:
+            continue
+        add_into(whole, portion_micros(food, base_amount))
+    return whole
+
+
+def entry_micros(db: Session, user: models.User, entry: models.DiaryEntry) -> dict[str, float]:
+    """What one row of a day carries, worked out from what it points at.
+
+    Nothing at all from a quick add, from a row whose food or dish has gone,
+    or from a portion that can no longer be measured: that is silence about a
+    nutrient rather than none of it.
+    """
+    if entry.amount is None:
+        return {}
+    if entry.food_id is not None:
+        food = readable(db, user, entry.food_id)
+        if food is None:
+            return {}
+        try:
+            base_amount, _, _ = measure(food, entry.amount, stored_unit(entry, food))
+        except HTTPException:
+            return {}
+        return portion_micros(food, base_amount)
+
+    dish: models.Recipe | models.MealTemplate | None = None
+    if entry.recipe_id is not None:
+        dish = db.get(models.Recipe, entry.recipe_id)
+    elif entry.meal_id is not None:
+        dish = db.get(models.MealTemplate, entry.meal_id)
+    if dish is None:
+        return {}
+    # Counted in servings or weighed out, the two ways a dish is logged, and
+    # the share is worked out the same way its calories were.
+    if entry.unit == SERVING_UNIT:
+        share = entry.amount
+        if isinstance(dish, models.Recipe):
+            share = entry.amount / dish.yield_servings
+    else:
+        weighs = dish_weight(db, user, dish)
+        if weighs is None:
+            return {}
+        share = entry.amount / weighs
+    return {key: value * share for key, value in dish_micros(db, user, dish).items()}
+
+
+def day_micros(
+    db: Session, user: models.User, entries: list[models.DiaryEntry]
+) -> dict[str, float]:
+    """Every vitamin and mineral a day came to, in catalogue order.
+
+    Worked out at every read and never written onto an entry, so a food whose
+    vitamins are filled in tomorrow fills in every day it was eaten on. Only
+    the keys something actually carried: a row of zeroes would say the day had
+    none of them, and what it has is nothing said either way.
+    """
+    running: dict[str, float] = {}
+    for entry in entries:
+        add_into(running, entry_micros(db, user, entry))
+    return {
+        key: round(running[key], 4) for key in micros.KEYS if running.get(key, 0.0) > 0
+    }
+
+
 @router.get("/day")
 def read_day(
     date: str = "",
@@ -936,6 +1032,9 @@ def read_day(
         "completed": done is not None,
         "completed_at": None if done is None else done.completed_at.isoformat(),
         "totals": {field: total(entries, field) for field in NUTRIENTS},
+        # Worked out here rather than kept on the entries, so filling a food's
+        # vitamins in later fills in every day it was ever eaten on.
+        "micros": day_micros(db, user, entries),
         "slots": {
             slot: {
                 "entries": [entry_row(entry) for entry in in_slot],

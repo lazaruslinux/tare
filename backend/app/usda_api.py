@@ -29,6 +29,9 @@ TIMEOUT = 20.0
 NAME_TYPES = "Foundation,SR Legacy"
 NAME_RESULTS = 5
 
+# Vitamin D is the one vitamin whose international unit is a fixed amount.
+IU_PER_MCG_VITAMIN_D = 40.0
+
 # FoodData Central files a barcode zero-padded to fourteen digits, and a search
 # for the number as it is printed on the packet finds nothing at all.
 GTIN_WIDTH = 14
@@ -107,11 +110,13 @@ def _rows(food: dict[str, Any]) -> list[dict[str, Any]]:
                 }
             )
         else:
+            # A search row says nutrientNumber and value; an abridged record
+            # says number and amount.
             rows.append(
                 {
-                    "number": str(entry.get("nutrientNumber") or ""),
+                    "number": str(entry.get("nutrientNumber") or entry.get("number") or ""),
                     "unit": str(entry.get("unitName") or ""),
-                    "value": entry.get("value"),
+                    "value": entry.get("value", entry.get("amount")),
                 }
             )
     return rows
@@ -137,6 +142,8 @@ def read_micros(food: dict[str, Any]) -> dict[str, float]:
             if number not in stated:
                 continue
             value, unit = stated[number]
+            if micro.key == "vitamin_d" and unit.strip().upper() == "IU":
+                value, unit = value / IU_PER_MCG_VITAMIN_D, "mcg"
             converted = micros.convert(value, unit, micro.key)
             if converted is not None:
                 found[micro.key] = converted
@@ -193,4 +200,6 @@ def search_by_name(name: str, client: httpx.Client | None = None) -> list[Candid
 
 def food(fdc_id: int, client: httpx.Client | None = None) -> dict[str, Any]:
     """One whole record, which is where the nutrient list lives."""
-    return _get(FOOD_URL.format(fdc_id=fdc_id), {}, client)
+    # Abridged on purpose: the full record answers 404 for Foundation foods,
+    # and the abridged one still carries every nutrient number and amount.
+    return _get(FOOD_URL.format(fdc_id=fdc_id), {"format": "abridged"}, client)
