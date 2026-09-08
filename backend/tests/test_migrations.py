@@ -60,6 +60,7 @@ def test_upgrade_head_builds_the_identity_schema(tmp_path):
         journal_columns = {column["name"] for column in inspector.get_columns("journal_days")}
         photo_columns = {column["name"] for column in inspector.get_columns("food_photos")}
         food_columns = {column["name"] for column in inspector.get_columns("foods")}
+        match_indexes = {index["name"] for index in inspector.get_indexes("micro_matches")}
         serving_columns = {
             column["name"] for column in inspector.get_columns("food_servings")
         }
@@ -150,6 +151,12 @@ def test_upgrade_head_builds_the_identity_schema(tmp_path):
     assert "uq_auto_logs_user_food_slot" in {
         constraint["name"] for constraint in inspector.get_unique_constraints("auto_logs")
     }
+    # The vitamins a food carries, who supplied them, and the record they came
+    # out of, beside the questions an administrator answers about the foods no
+    # barcode can match.
+    assert {"micros", "micros_source", "micros_ref"} <= food_columns
+    assert "micro_matches" in tables
+    assert "uq_micro_matches_pending" in match_indexes
     # The partial indexes are the one thing here a plain column cannot express,
     # so it is worth seeing that the migrations really emitted them.
     assert "uq_foods_barcode_approved" in food_indexes

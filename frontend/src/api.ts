@@ -4,6 +4,7 @@
 
 import type { Clock } from './lib/clock'
 import type { Slot } from './lib/day'
+import type { Micros } from './lib/micros'
 import type { BaseUnit, Unit } from './lib/units'
 
 export type Units = 'imperial' | 'metric'
@@ -385,6 +386,10 @@ export type Food = FoodRow & {
   // How much of the sugars above was put in. Null on every food nobody has
   // read that line off, which is most of them.
   added_sugars_g: number | null
+  // The vitamins and minerals on file, per 100 of the base unit, holding only
+  // the keys something stated. The screen scales them to the portion it shows
+  // and never draws the per-100 figure itself.
+  micros: Micros
 }
 
 // A food offered before anybody searches: favorited on purpose, or eaten
@@ -1211,6 +1216,23 @@ export type Uploads = {
   last_day: string | null
   last_received_at: string | null
   recent: Arrival[]
+}
+
+// One food waiting on an administrator to say which FoodData Central record it
+// is, and the records offered for it.
+export type MicroCandidate = {
+  fdc_id: number
+  description: string
+  data_type: string
+}
+
+export type MicroMatch = {
+  id: number
+  food_id: number
+  name: string
+  brand: string
+  label_photo_url: string | null
+  candidates: MicroCandidate[]
 }
 
 // One file somebody handed this instance, on the administrator's list.

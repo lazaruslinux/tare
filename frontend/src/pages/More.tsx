@@ -11,6 +11,7 @@ import {
   Mail,
   MessageSquare,
   Monitor,
+  Pill,
   ScrollText,
   ShieldCheck,
   Smartphone,
@@ -34,6 +35,7 @@ import { ZONES, offList } from '../lib/zones'
 import { applyTheme, rememberTheme, useTheme, type Theme } from '../theme'
 import { About } from './About'
 import { AdminInvites } from './AdminInvites'
+import { AdminMicroMatches } from './AdminMicroMatches'
 import { AdminQueue } from './AdminQueue'
 import { AdminRoles } from './AdminRoles'
 import { AdminUploads } from './AdminUploads'
@@ -73,6 +75,7 @@ export type Screen =
   | 'roles'
   | 'users'
   | 'uploads'
+  | 'micromatches'
   | 'feedbacklog'
   | null
 
@@ -489,6 +492,7 @@ export function More({
   if (screen === 'roles') return <AdminRoles onBack={leaveAdmin} />
   if (screen === 'users') return <AdminUsers onBack={leaveAdmin} />
   if (screen === 'uploads') return <AdminUploads onBack={() => go(null)} />
+  if (screen === 'micromatches') return <AdminMicroMatches onBack={() => go(null)} />
 
   if (screen === 'account') {
     return (
@@ -774,6 +778,11 @@ export function More({
                 <Row label="Roles" icon={ShieldCheck} onOpen={() => go('roles')} />
                 <Row label="Member accounts" icon={Users} onOpen={() => go('users')} />
                 <Row label="Uploads" icon={Upload} onOpen={() => go('uploads')} />
+                <Row
+                  label="Vitamin matches"
+                  icon={Pill}
+                  onOpen={() => go('micromatches')}
+                />
                 <Row label="Feedback log" icon={ScrollText} onOpen={() => go('feedbacklog')} />
               </>
             )}

@@ -2,6 +2,7 @@ import { ChevronDown } from 'lucide-react'
 import { useState, type ReactNode } from 'react'
 
 import type { Food, Headline, Panel } from '../api'
+import { MICROS, microText, percentDv } from '../lib/micros'
 import { UNIT_LABEL, amountText, scale } from '../lib/units'
 
 // The panel, as it is stored and as it reads. The form fills in the same list,
@@ -159,6 +160,42 @@ export function PanelFacts({
   )
 }
 
+// What the label is read per: the food's own first serving, or the 100 it is
+// stored in when it has none. Exported because the vitamins fold beside it has
+// to follow the same portion the figures above are showing.
+export const labelBaseAmount = (food: Food): number =>
+  food.servings[0] ? food.servings[0].base_amount : 100
+
+// What a food has vitamins for at all. The fold is not drawn without one.
+export const hasMicros = (food: Food): boolean =>
+  MICROS.some((micro) => typeof food.micros?.[micro.key] === 'number')
+
+// The vitamins and minerals, at the portion the label above is showing. Label
+// order, only the rows something stated, and the percent of a day beside each.
+// The stored per-100 figure is never drawn.
+export function MicroRows({ food, baseAmount }: { food: Food; baseAmount: number }) {
+  return (
+    <>
+      {MICROS.map((micro) => {
+        const per100 = food.micros?.[micro.key]
+        if (typeof per100 !== 'number') return null
+        const amount = (per100 * baseAmount) / 100
+        return (
+          <div key={micro.key} className="t-row min-h-9 text-sm">
+            <span className="flex-1 text-muted">{micro.label}</span>
+            <span className="t-nums">
+              {microText(amount)} {micro.unit}
+            </span>
+            <span className="t-nums w-16 shrink-0 text-right text-xs text-muted">
+              {percentDv(micro, amount)}% DV
+            </span>
+          </div>
+        )
+      })}
+    </>
+  )
+}
+
 // A food's panel at some amount of it, which is what the figures above read.
 function panelAt(food: Food, baseAmount: number): Panel {
   const values = {} as Panel
@@ -173,7 +210,7 @@ export function NutritionLabel({ food, children }: { food: Food; children?: Reac
   // One reading, and it is the serving. A food kept without a serving of its
   // own is read per the 100 it is stored in, said in the same words: what the
   // figures are per is a size, not a rule about storage.
-  const baseAmount = serving ? serving.base_amount : 100
+  const baseAmount = labelBaseAmount(food)
 
   // Beside the chip, so the two read as one line: Per serving, 100 g.
   const size = serving

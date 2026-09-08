@@ -30,7 +30,7 @@ from sqlalchemy import (
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import InstrumentedAttribute, Session, selectinload
 
-from app import models, photos, profiles, schemas, units
+from app import micros, models, photos, profiles, schemas, units
 from app.db import get_db
 from app.deps import require_user, reviews
 from app.models import DEFAULT_SECTION, FOOD_NUTRIENTS, FOOD_SECTIONS
@@ -633,6 +633,10 @@ def food_detail(db: Session, food: models.Food, user: models.User) -> dict[str, 
         # of the panel printed beside it.
         "barcode": food.barcode,
         "ingredients_text": food.ingredients_text,
+        # The vitamins and minerals on file, per 100 of the base unit, so the
+        # screen can scale them to the portion it is showing. The per-100
+        # figure itself is never drawn.
+        "micros": micros.clean(food.micros),
         # Whether the account reading it is the one who may change it. The
         # owner's id is not sent: the answer is what the screen needs, and the
         # id is somebody's account.

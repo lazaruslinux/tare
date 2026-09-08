@@ -14,7 +14,7 @@ from sqlalchemy import ColumnElement, delete, func, or_, select, tuple_, update
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session
 
-from app import models, profiles, schemas
+from app import foods_api, micros, models, profiles, schemas, usda_api
 from app.db import get_db
 from app.deps import require_admin, require_reviewer
 from app.models import FOOD_NUTRIENTS, SUBMISSION_STATUSES, now_utc
@@ -986,3 +986,115 @@ def read_review_log(
         ],
         "next_cursor": str(page[-1].id) if more and page else None,
     }
+
+
+# ---- Vitamin matches ----
+
+# A food with a barcode is matched by that barcode and needs nobody. These are
+# the ones with none, where FoodData Central was asked about a name and a name
+# is a guess, so an administrator says which of the guesses is right.
+MISSING_MATCH = "That match is not waiting on a decision."
+NOT_A_CANDIDATE = "That is not one of the records offered for this food."
+NO_RECORD = "FoodData Central has nothing under that record any more."
+NO_VITAMINS = "That record carries no vitamins or minerals."
+
+
+def waiting_match(db: Session, match_id: int) -> models.MicroMatch:
+    row = db.get(models.MicroMatch, match_id)
+    if row is None or row.status != "pending":
+        raise HTTPException(status.HTTP_404_NOT_FOUND, MISSING_MATCH)
+    return row
+
+
+@router.get("/micro-matches")
+def read_micro_matches(
+    db: Session = Depends(get_db), admin: models.User = Depends(require_admin)
+) -> list[dict[str, object]]:
+    """Every food waiting on somebody to say which record it is."""
+    rows = db.execute(
+        select(models.MicroMatch, models.Food)
+        .join(models.Food, models.Food.id == models.MicroMatch.food_id)
+        .where(models.MicroMatch.status == "pending")
+        .order_by(models.MicroMatch.id)
+    ).all()
+    return [
+        {
+            "id": match.id,
+            "food_id": food.id,
+            "name": food.name,
+            "brand": food.brand,
+            # The panel on file, so a decision can be checked against the
+            # numbers rather than made on a name alone.
+            "label_photo_url": photo_url(food.label_photo_id),
+            "candidates": match.candidates,
+        }
+        for match, food in rows
+    ]
+
+
+@router.post("/micro-matches/{match_id}/apply")
+def apply_micro_match(
+    match_id: int,
+    body: schemas.MicroPickIn,
+    db: Session = Depends(get_db),
+    admin: models.User = Depends(require_admin),
+) -> dict[str, object]:
+    """Take one record's vitamins into the food, filling only what is empty.
+
+    The ten figures on the panel are never touched. They were read off a label
+    somebody photographed, and a record that agrees with them adds nothing while
+    one that disagrees is not the food.
+    """
+    match = waiting_match(db, match_id)
+    offered = {
+        candidate.get("fdc_id")
+        for candidate in match.candidates
+        if isinstance(candidate, dict)
+    }
+    if body.fdc_id not in offered:
+        raise HTTPException(status.HTTP_400_BAD_REQUEST, NOT_A_CANDIDATE)
+    food = db.get(models.Food, match.food_id)
+    if food is None:
+        raise HTTPException(status.HTTP_404_NOT_FOUND, NO_FOOD)
+
+    try:
+        record = usda_api.food(body.fdc_id)
+    except foods_api.FoodApiError as failure:
+        raise HTTPException(status.HTTP_502_BAD_GATEWAY, str(failure)) from None
+    if not record:
+        raise HTTPException(status.HTTP_502_BAD_GATEWAY, NO_RECORD)
+    found = usda_api.read_micros(record)
+    if not found:
+        raise HTTPException(status.HTTP_502_BAD_GATEWAY, NO_VITAMINS)
+
+    added = micros.fill_empty(food, found, "usda", str(body.fdc_id))
+    match.status = "applied"
+    match.decided_at = now_utc()
+    match.decided_by_id = admin.id
+    log_review(
+        db,
+        admin,
+        "micros_applied",
+        "food",
+        food.id,
+        food.name,
+        {"fdc_id": body.fdc_id, "keys": added},
+    )
+    db.commit()
+    return {"filled": len(added)}
+
+
+@router.post("/micro-matches/{match_id}/skip")
+def skip_micro_match(
+    match_id: int,
+    db: Session = Depends(get_db),
+    admin: models.User = Depends(require_admin),
+) -> dict[str, object]:
+    """None of these is the food. Kept as a decision rather than deleted, so the
+    backfill does not ask again until it is asked to with --again."""
+    match = waiting_match(db, match_id)
+    match.status = "skipped"
+    match.decided_at = now_utc()
+    match.decided_by_id = admin.id
+    db.commit()
+    return {"skipped": True}

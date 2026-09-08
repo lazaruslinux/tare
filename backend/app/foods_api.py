@@ -15,6 +15,8 @@ from typing import Any
 
 import httpx
 
+from app import micros
+
 OFF_PRODUCT_URL = "https://world.openfoodfacts.org/api/v2/product/{barcode}.json"
 
 # Named rather than anonymous. Open Food Facts asks callers to identify
@@ -69,6 +71,9 @@ class FoodResult:
     serving: str = ""
     serving_amount: float | None = None
     ingredients_text: str = ""
+    # The vitamins and minerals the record carried, keyed by app.micros and
+    # per 100 of the base unit above. Only the keys it actually stated.
+    micros: dict[str, float] = dataclasses.field(default_factory=dict)
 
 
 def _num(value: object) -> float | None:
@@ -345,8 +350,41 @@ def lookup_off(barcode: str, client: httpx.Client | None = None) -> FoodResult |
             serving=serving_text,
             serving_amount=measured.amount,
             ingredients_text=clean_ingredients(str(product.get("ingredients_text") or "")),
+            micros=read_micros(nutriments),
         )
     )
+
+
+def read_micros(nutriments: dict[str, Any]) -> dict[str, float]:
+    """The vitamins and minerals out of one product's nutriments.
+
+    Open Food Facts states a nutrient three ways: the number as it was typed,
+    the unit that number was typed in, and the per-hundred figure it converted
+    that to. Only the last is worth reading, and it comes with a unit of its
+    own, so the unit is honoured where the record gives one and grams are
+    assumed where it does not, which is what Open Food Facts stores in.
+
+    A unit this app cannot convert without knowing which compound was measured,
+    an international unit above all, drops the reading rather than guessing.
+    """
+    found: dict[str, float] = {}
+    for micro in micros.CATALOG:
+        if micro.off is None:
+            continue
+        # Read whole rather than through _num: these arrive as fractions of a
+        # gram, and 517 micrograms rounded to two places first is nothing at
+        # all. The rounding happens once the reading is in its own unit.
+        try:
+            value = float(nutriments[f"{micro.off}_100g"])  # type: ignore[arg-type]
+        except (KeyError, TypeError, ValueError):
+            continue
+        if value < 0:
+            continue
+        unit = str(nutriments.get(f"{micro.off}_unit") or "g")
+        converted = micros.convert(value, unit, micro.key)
+        if converted is not None:
+            found[micro.key] = converted
+    return found
 
 
 # Where an ingredient list stops and the rest of the package begins. A

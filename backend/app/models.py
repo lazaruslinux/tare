@@ -334,6 +334,17 @@ class Food(Base):
     # label that never printed the line, which most older foods here are.
     added_sugars_g: Mapped[float | None] = mapped_column(Float, nullable=True)
 
+    # The vitamins and minerals, per 100 of the base unit, keyed by app.micros
+    # and holding only the keys something actually said. Apart from the ten
+    # above because they are read off a label one at a time and these arrive in
+    # a batch from whoever had them, and because nothing is ever totalled by
+    # them at write time. Null on a food nobody has filled yet.
+    micros: Mapped[dict[str, Any] | None] = mapped_column(JSON, nullable=True)
+    # Which of the three supplied them, and the record they came out of: the
+    # FoodData Central id, or the barcode Open Food Facts was asked about.
+    micros_source: Mapped[str | None] = mapped_column(String(8), nullable=True)
+    micros_ref: Mapped[str | None] = mapped_column(String(32), nullable=True)
+
     ingredients_text: Mapped[str] = mapped_column(Text, nullable=False, default="")
     # The nutrition panel this food keeps, once a reviewer has approved
     # something that carried one. One file for the life of the food, and it is
@@ -377,6 +388,56 @@ class FoodServing(Base):
     # sum is worked out from.
     base_amount: Mapped[float] = mapped_column(Float, nullable=False)
     position: Mapped[int] = mapped_column(Integer, nullable=False, default=0)
+
+
+# Where a food's vitamins came from: read off its own label, from Open Food
+# Facts, or from FoodData Central.
+MICRO_SOURCES = ("label", "off", "usda")
+
+# Where one waiting match has got to. A skipped one is kept rather than
+# deleted, so the same food is not queued again the next time the backfill
+# runs.
+MICRO_MATCH_STATUSES = ("pending", "applied", "skipped")
+
+
+class MicroMatch(Base):
+    """Foods FoodData Central might be describing, for somebody to pick from.
+
+    A food with a barcode is matched by its barcode and needs nobody. A food
+    without one can only be matched by its name, and a name is a guess, so the
+    guesses are written down here and an administrator says which is right.
+    """
+
+    __tablename__ = "micro_matches"
+    __table_args__ = (
+        # One waiting question per food. A decided row stays beside it, which
+        # is why the uniqueness is partial rather than a plain constraint.
+        Index(
+            "uq_micro_matches_pending",
+            "food_id",
+            unique=True,
+            postgresql_where=text("status = 'pending'"),
+            sqlite_where=text("status = 'pending'"),
+        ),
+    )
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True)
+    food_id: Mapped[int] = mapped_column(
+        ForeignKey("foods.id", ondelete="CASCADE"), nullable=False, index=True
+    )
+    # Up to five of {fdc_id, description, data_type}, in the order the search
+    # ranked them.
+    candidates: Mapped[list[Any]] = mapped_column(JSON, nullable=False, default=list)
+    status: Mapped[str] = mapped_column(
+        Enum(*MICRO_MATCH_STATUSES, name="micro_match_status", native_enum=False),
+        nullable=False,
+        default="pending",
+    )
+    decided_at: Mapped[dt.datetime | None] = mapped_column(UtcDateTime, nullable=True)
+    decided_by_id: Mapped[int | None] = mapped_column(
+        ForeignKey("users.id", ondelete="SET NULL"), nullable=True
+    )
+    created_at: Mapped[dt.datetime] = mapped_column(UtcDateTime, nullable=False, default=now_utc)
 
 
 # What a picture of a label is: waiting on a decision, or published with the

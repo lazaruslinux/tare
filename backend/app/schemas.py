@@ -192,6 +192,12 @@ class RejectIn(BaseModel):
     note: str = Field(default="", max_length=MAX_NOTE)
 
 
+class MicroPickIn(BaseModel):
+    """Which of the offered records an administrator says a food really is."""
+
+    fdc_id: int
+
+
 class RoleIn(BaseModel):
     """The one thing an administrator may change about somebody's account."""
 

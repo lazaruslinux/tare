@@ -99,6 +99,12 @@ def remember(db: Session, code: str, result: foods_api.FoodResult) -> models.Foo
     row.ingredients_text = result.ingredients_text
     for field in FOOD_NUTRIENTS:
         setattr(row, field, getattr(result, field))
+    # Whatever the record had, kept on the cache row so a food built from this
+    # scan arrives with its vitamins already in it. Nothing about the panel
+    # above depends on them and nothing here goes looking for more.
+    row.micros = result.micros or None
+    row.micros_source = "off" if result.micros else None
+    row.micros_ref = code if result.micros else None
     row.fetched_at = now_utc()
 
     # The label's own serving, when the source gave one that can be multiplied.

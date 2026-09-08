@@ -13,7 +13,13 @@ import { useEffect, useState, type ChangeEvent } from 'react'
 import { api, errorText, upload, type AutoLog, type Food, type Me } from '../api'
 import { ConfirmSheet } from '../components/ConfirmSheet'
 import { Verified } from '../components/FoodRows'
-import { Fold, NutritionLabel } from '../components/NutritionLabel'
+import {
+  Fold,
+  MicroRows,
+  NutritionLabel,
+  hasMicros,
+  labelBaseAmount,
+} from '../components/NutritionLabel'
 import { PortionSheet } from '../components/PortionSheet'
 import { Lightbox } from '../components/Lightbox'
 import { RoleMark } from '../components/RoleMark'
@@ -392,6 +398,13 @@ export function FoodDetail({
                       <p className="text-sm whitespace-pre-line">
                         {food.ingredients_text || 'No ingredients listed.'}
                       </p>
+                    </Fold>
+                  )}
+                  {/* What else is in it, at the same portion the label above is
+                      showing. Only on a food something had readings for. */}
+                  {hasMicros(food) && (
+                    <Fold label="Vitamins & minerals">
+                      <MicroRows food={food} baseAmount={labelBaseAmount(food)} />
                     </Fold>
                   )}
                 </NutritionLabel>

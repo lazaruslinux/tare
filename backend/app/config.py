@@ -73,6 +73,11 @@ class Settings(BaseSettings):
     # mail catcher on the same machine while developing.
     smtp_starttls: bool = True
 
+    # A key for FoodData Central, which the vitamin backfill and the vitamin
+    # picker read and nothing else does. Empty on an install that never fills
+    # a food's vitamins from there, and those two tools then say so and stop.
+    usda_api_key: str = ""
+
     media_dir: str = "/data/media"
 
     # Where members' feedback is appended. A file rather than a table: it is
