@@ -1,99 +1,79 @@
-// The pictures the invite and About show, in one place and in this order. src
-// is null until a real file lands in public/screenshots, and a null one draws a
-// frame saying what belongs there rather than an empty box.
+// The pictures the invite page shows, in one place and in this order. `line` is
+// the bullet on the invite the picture belongs beside. src is null until a real
+// file lands in public/screenshots, and a null one draws a frame saying what
+// belongs there rather than an empty box.
 export type Shot = {
   id: string
+  line: number
   shape: 'phone' | 'desktop'
   caption: string
   src: string | null
 }
 
 export const SHOTS: Shot[] = [
+  { id: 'setup-about', line: 1, shape: 'phone', caption: 'Setup: About you', src: '/screenshots/setup-about.webp' },
   {
-    id: 'food-1',
+    id: 'setup-activity',
+    line: 2,
     shape: 'phone',
-    caption: 'A food page with photo, nutrition facts and ingredients',
-    src: null,
+    caption: 'Setup: Activity level',
+    src: '/screenshots/setup-activity.webp',
   },
   {
-    id: 'food-2',
+    id: 'plan-goal',
+    line: 3,
     shape: 'phone',
-    caption: 'Browsing the database with search and the letter strip',
-    src: null,
+    caption: 'Weight goal with the rate steps and the review',
+    src: '/screenshots/plan-goal.webp',
   },
   {
-    id: 'food-3',
-    shape: 'phone',
-    caption: 'A scanned barcode, prefilled and ready to submit',
-    src: null,
-  },
-  {
-    id: 'plan-1',
-    shape: 'phone',
-    caption: 'Weight goal with the five rate steps and the review',
-    src: null,
-  },
-  {
-    id: 'plan-2',
-    shape: 'phone',
+    id: 'plan-targets',
+    line: 3,
+    shape: 'desktop',
     caption: 'Targets: goal forecast, energy target and macro targets',
-    src: null,
+    src: '/screenshots/plan-targets.webp',
   },
-  { id: 'plan-3', shape: 'phone', caption: 'Activity Levels', src: null },
   {
-    id: 'journal-1',
+    id: 'scan-form',
+    line: 4,
     shape: 'phone',
-    caption: 'A journal day: four slots, biometrics and the deficit pill',
-    src: null,
+    caption: 'A scanned barcode, prefilled, with ingredients and vitamins',
+    src: '/screenshots/scan-form.webp',
   },
   {
-    id: 'journal-2',
+    id: 'journal-day',
+    line: 4,
+    shape: 'desktop',
+    caption: 'A journal day with the breakdown open',
+    src: '/screenshots/journal-day.webp',
+  },
+  {
+    id: 'recipe-page',
+    line: 5,
     shape: 'phone',
-    caption: 'The breakdown: macros against targets',
-    src: null,
+    caption: 'A recipe page with photo, parts and Auto-log',
+    src: '/screenshots/recipe-page.webp',
   },
   {
-    id: 'journal-3',
-    shape: 'phone',
-    caption: 'A run day: the workout row and the adjusted calories',
-    src: null,
-  },
-  { id: 'fitness-1', shape: 'phone', caption: 'Fitness summary', src: null },
-  {
-    id: 'fitness-2',
+    id: 'fitness-workout',
+    line: 6,
     shape: 'phone',
     caption: 'A workout: the two-lane chart and the route',
-    src: null,
+    src: '/screenshots/fitness-workout.webp',
+  },
+  { id: 'sync-setup', line: 6, shape: 'desktop', caption: 'Health data sync', src: '/screenshots/sync-setup.webp' },
+  {
+    id: 'feed-desktop',
+    line: 7,
+    shape: 'desktop',
+    caption: 'Dashboard on a desktop with the feed column',
+    src: '/screenshots/feed-desktop.webp',
   },
   {
-    id: 'fitness-3',
-    shape: 'phone',
-    caption: 'Device sync setup with the instructions',
-    src: null,
-  },
-  { id: 'feed-1', shape: 'phone', caption: 'The community feed', src: null },
-  {
-    id: 'feed-2',
+    id: 'member-page',
+    line: 7,
     shape: 'phone',
     caption: "A member's page with Contributions",
-    src: null,
-  },
-  {
-    id: 'platform-1',
-    shape: 'desktop',
-    caption: 'Dashboard on a desktop: rail, middle and the feed column',
-    src: null,
-  },
-  {
-    id: 'platform-2',
-    shape: 'phone',
-    caption: 'Dashboard on a phone',
-    src: null,
-  },
-  {
-    id: 'platform-3',
-    shape: 'phone',
-    caption: 'The Tare icon on a phone home screen',
-    src: null,
+    src: '/screenshots/member-page.webp',
   },
 ]

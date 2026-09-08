@@ -97,8 +97,9 @@ export function Welcome({ code, onReady }: { code: string; onReady: () => void }
           <TareWordmark size={32} />
         </p>
         <p className="mx-auto mb-4 max-w-xl text-center text-sm text-muted">
-          {invite.inviter_display_name} has invited you to help grow Tare, a free,
-          community-managed food database, fitness/nutrition journal, & more.
+          {invite.inviter_display_name} has invited you to Tare: A free, community-managed
+          grocery database, nutrition &amp; fitness journal, custom weight goal builder and
+          more.
         </p>
         {/* One column on a phone, where the story takes the form's place; two
             from 900px, where there is room for both and the form follows the
@@ -107,7 +108,11 @@ export function Welcome({ code, onReady }: { code: string; onReady: () => void }
           <div className={about ? '' : 'hidden min-[900px]:block'}>
             {/* No way back from a story that never took the form's place:
                 from 900px both stand side by side. */}
-            <TareStory onBack={about ? () => setAbout(false) : undefined} />
+            <TareStory
+              invite
+              onBack={about ? () => setAbout(false) : undefined}
+              onCreate={() => document.getElementById('new-username')?.focus()}
+            />
             <SignIn className="mt-4 min-[900px]:hidden" />
           </div>
           <div
@@ -121,7 +126,7 @@ export function Welcome({ code, onReady }: { code: string; onReady: () => void }
                 className="inline-flex min-h-11 items-center text-sm text-accent underline underline-offset-4"
                 onClick={() => setAbout(true)}
               >
-                What is Tare?
+                Show me more
               </button>
             </div>
             <form className="t-card flex flex-col gap-3" onSubmit={submit}>

@@ -42,10 +42,12 @@ export const WHAT_YOU_CAN_DO: { name: string; what: string }[] = [
   },
 ]
 
-export const PLATFORMS =
-  'Tare is built for both Desktop and mobile devices. As this is a private web-app, it is ' +
-  "not available in the iOS or Play Store. Instead, add a shortcut to Tare on your phone's " +
-  'home screen to treat it as a phone app.'
+// The address is the one the reader is on, never a hostname written into the repo.
+export const platforms = (host: string): string =>
+  'Tare is built as a web-app and is available on desktop browsers as well as a mobile ' +
+  'in-browser app. It is not currently available on the App Store or Play Store. You can ' +
+  `add a shortcut to ${host} on your phone's home screen to treat it as a full-screen ` +
+  'phone app.'
 
 export const DATA_PRIVACY =
   'This project is hosted on a private server. There are no trackers on this web-app and ' +

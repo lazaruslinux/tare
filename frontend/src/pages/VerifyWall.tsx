@@ -76,7 +76,7 @@ export function VerifyWall({
     setError('')
     setNote('')
     try {
-      if (!(await onVerified())) setNote('Not yet. Open the link in the email first.')
+      if (!(await onVerified())) setNote('Not yet; Open the link Tare sent to your email & try again.')
     } catch (failure) {
       setError(errorText(failure))
     }
@@ -127,7 +127,7 @@ export function VerifyWall({
                 disabled={busy}
                 onClick={() => void recheck()}
               >
-                I've verified it
+                Check verification
               </button>
               {/* Only while the account's own address is the one waiting on an
                   answer. A resend goes to that address and replaces whatever

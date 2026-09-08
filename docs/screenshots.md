@@ -1,9 +1,9 @@
-# Screenshots for the invite page and About
+# Screenshots for the invite page
 
-The pictures the invite page and About show, in one gallery at the end of the story, come
-from one manifest, `frontend/src/lib/screenshots.ts`, in the order listed there. Every entry starts with `src: null`, which draws a
-frame saying what belongs there instead of a picture. Nothing else has to change when a
-real file lands.
+The pictures sit beside the bullet line they belong to on the invite page, and they come from
+one manifest, `frontend/src/lib/screenshots.ts`, whose `line` field says which bullet. About
+shows none of them. Every entry starts with `src: null`, which draws a frame saying what
+belongs there instead of a picture. Nothing else has to change when a real file lands.
 
 ## Adding one
 
@@ -14,27 +14,19 @@ real file lands.
 
 - Phone shots are 390x844 at 2x, so 780x1688.
 - Desktop shots are 1440x900 at 1.5x, so 2160x1350.
-- Dark theme, webp quality 82.
+- Dark theme, webp quality 82. Light theme for plan-goal and sync-setup.
 - The only display names allowed on screen are "Member 01" and "Member 02".
 
 ## The list
 
-- [ ] food-1 (phone): A food page with photo, nutrition facts and ingredients
-- [ ] food-2 (phone): Browsing the database with search and the letter strip
-- [ ] food-3 (phone): A scanned barcode, prefilled and ready to submit
-- [ ] plan-1 (phone): Weight goal with the five rate steps and the review
-- [ ] plan-2 (phone): Targets: goal forecast, energy target and macro targets
-- [ ] plan-3 (phone): Activity Levels
-- [ ] journal-1 (phone): A journal day: four slots, biometrics and the deficit pill
-- [ ] journal-2 (phone): The breakdown: macros against targets
-- [ ] journal-3 (phone): A run day: the workout row and the adjusted calories
-- [ ] fitness-1 (phone): Fitness summary
-- [ ] fitness-2 (phone): A workout: the two-lane chart and the route
-- [ ] fitness-3 (phone): Device sync setup with the instructions
-- [ ] feed-1 (phone): The community feed
-- [ ] feed-2 (phone): A member's page with Contributions
-- [ ] platform-1 (desktop): Dashboard on a desktop: rail, middle and the feed column
-- [ ] platform-2 (phone): Dashboard on a phone
-- [ ] platform-3 (phone): The Tare icon on a phone home screen
-
-platform-3 is a real phone home-screen shot, taken by hand on a phone that has the shortcut.
+- [ ] setup-about (line 1, phone): Setup: About you
+- [ ] setup-activity (line 2, phone): Setup: Activity level
+- [ ] plan-goal (line 3, phone): Weight goal with the rate steps and the review
+- [ ] plan-targets (line 3, desktop): Targets: goal forecast, energy target and macro targets
+- [ ] scan-form (line 4, phone): A scanned barcode, prefilled, with ingredients and vitamins
+- [ ] journal-day (line 4, desktop): A journal day with the breakdown open
+- [ ] recipe-page (line 5, phone): A recipe page with photo, parts and Auto-log
+- [ ] fitness-workout (line 6, phone): A workout: the two-lane chart and the route
+- [ ] sync-setup (line 6, desktop): Health data sync
+- [ ] feed-desktop (line 7, desktop): Dashboard on a desktop with the feed column
+- [ ] member-page (line 7, phone): A member's page with Contributions

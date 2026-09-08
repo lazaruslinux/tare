@@ -149,11 +149,12 @@ type RingSpec = {
   centre: string
   caption: string
   label: string
+  color: string
   onOpen: () => void
   wide?: boolean
 }
 
-function Ring({ filled }: { filled: number }) {
+function Ring({ filled, color }: { filled: number; color: string }) {
   const share = Math.min(Math.max(filled, 0), 1)
   return (
     // As wide as the column it stands in, so the room a screen has is the room
@@ -172,7 +173,7 @@ function Ring({ filled }: { filled: number }) {
         cy="50"
         r={RADIUS}
         fill="none"
-        stroke="var(--accent)"
+        stroke={color}
         strokeWidth="8"
         // A round cap on nothing is still a dot, and a ring with no answer in
         // it has to read as empty.
@@ -201,7 +202,7 @@ function Rings({ rings }: { rings: RingSpec[] }) {
           aria-label={ring.label}
           onClick={ring.onOpen}
         >
-          <Ring filled={ring.filled} />
+          <Ring filled={ring.filled} color={ring.color} />
           <div className="absolute inset-0 flex flex-col items-center justify-center px-1">
             <span
               // Five digits and a comma is the widest number a ring holds. At
@@ -1137,6 +1138,7 @@ export function Dashboard({
   const macroRing = (
     key: 'protein_g' | 'carbs_g' | 'fat_g',
     word: string,
+    color: string,
   ): RingSpec => {
     const eaten = day?.totals[key] ?? 0
     const budget = day?.budget[key] ?? 0
@@ -1146,6 +1148,7 @@ export function Dashboard({
       centre: day === null ? '\u2013' : `${calText(eaten)} g`,
       caption: `of ${calText(budget)} g ${word}`,
       label: `${word[0].toUpperCase()}${word.slice(1)} today. Opens the Journal.`,
+      color,
       onOpen: onOpenJournal,
       wide: true,
     }
@@ -1157,6 +1160,7 @@ export function Dashboard({
       centre: steps === null ? '\u2013' : calText(steps),
       caption: steps === null ? 'Sync a device' : `of ${calText(stepGoal)} steps`,
       label: "Steps today. Opens today's goals.",
+      color: 'var(--blue)',
       onOpen: () => setGoaling(true),
     },
     {
@@ -1165,6 +1169,7 @@ export function Dashboard({
       centre: day === null ? '\u2013' : calText(Math.abs(remaining)),
       caption: remaining < 0 ? 'cal over' : 'cal remaining',
       label: 'Calories today. Opens the Journal.',
+      color: 'var(--accent)',
       onOpen: onOpenJournal,
     },
     {
@@ -1173,11 +1178,12 @@ export function Dashboard({
       centre: day === null ? '\u2013' : String(day.exercise_minutes),
       caption: `of ${minutesGoal} min`,
       label: "Exercise minutes today. Opens today's goals.",
+      color: 'var(--orange)',
       onOpen: () => setGoaling(true),
     },
-    macroRing('protein_g', 'protein'),
-    macroRing('carbs_g', 'carbs'),
-    macroRing('fat_g', 'fat'),
+    macroRing('protein_g', 'protein', 'var(--violet)'),
+    macroRing('carbs_g', 'carbs', 'var(--gold)'),
+    macroRing('fat_g', 'fat', 'var(--coral)'),
   ]
 
   // The same calories, said once more in small type on the card that is about

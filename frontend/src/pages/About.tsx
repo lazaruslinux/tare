@@ -35,7 +35,7 @@ export function About({ onOpenGuide }: { onOpenGuide: () => void }) {
         {version !== '' && <p className="mt-1 text-sm text-muted">Version {version}</p>}
       </div>
 
-      <TareStory gallery={false} />
+      <TareStory />
 
       <div className="t-card mb-3">
         <p className="t-micro mb-2">How it works</p>
