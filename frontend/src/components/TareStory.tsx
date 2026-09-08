@@ -21,8 +21,8 @@ const LINES = [
 function Thumb({ shot, onOpen }: { shot: Shot; onOpen: () => void }) {
   const size =
     shot.shape === 'desktop'
-      ? 'h-24 w-[154px] min-[900px]:h-40 min-[900px]:w-64'
-      : 'h-24 w-11 min-[900px]:h-40 min-[900px]:w-[74px]'
+      ? 'h-32 w-[205px] min-[900px]:h-56 min-[900px]:w-[358px]'
+      : 'h-32 w-[59px] min-[900px]:h-56 min-[900px]:w-[104px]'
   return (
     <button
       type="button"
@@ -121,14 +121,9 @@ export function TareStory({
       <div className="t-card mb-3">
         <p className="t-micro mb-2">What is Tare?</p>
         {LINES.map((line, at) => (
-          <div
-            key={line}
-            className={`min-[900px]:grid min-[900px]:grid-cols-[1fr_auto] min-[900px]:items-center min-[900px]:gap-4 ${
-              at === 0 ? 'pb-3' : 'border-t border-line py-3'
-            }`}
-          >
-            <p className="text-sm">{line}</p>
-            <div className="mt-2 flex gap-2 min-[900px]:mt-0">
+          <div key={line} className={at === 0 ? 'pb-4' : 'border-t border-line py-4'}>
+            <p className="text-base font-semibold min-[900px]:text-lg">{line}</p>
+            <div className="mt-3 flex gap-2 min-[900px]:gap-3">
               {SHOTS.flatMap((each, index) =>
                 each.line === at + 1
                   ? [<Thumb key={each.id} shot={each} onOpen={() => setShot(index)} />]
