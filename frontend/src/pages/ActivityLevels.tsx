@@ -90,6 +90,7 @@ export function ActivityLevels({
   error,
   onSaveProfile,
   onOpenProfile,
+  setup = false,
 }: {
   me: Me
   targets: TargetsRow
@@ -98,6 +99,8 @@ export function ActivityLevels({
   missing: string[]
   busy: boolean
   error: string
+  // True inside the guided setup, where only the level and the BMR are shown.
+  setup?: boolean
   onSaveProfile: Save
   onOpenProfile: () => void
 }) {
@@ -215,6 +218,10 @@ export function ActivityLevels({
         )}
       </button>
 
+      {/* Setup asks for the level alone: the budget only means something once the
+          goal step has taken its deficit off it. */}
+      {!setup && (
+        <>
       <div className="t-card mb-3">
         <p className="t-micro mb-2">Daily calorie budget</p>
         {resting === null ? (
@@ -278,6 +285,8 @@ export function ActivityLevels({
           onOpen={() => openGoal('steps')}
         />
       </div>
+        </>
+      )}
 
       <Sheet
         open={goal !== null}

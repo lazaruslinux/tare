@@ -322,6 +322,7 @@ export function Setup({
     if (step === 2) {
       return (
         <ActivityLevels
+          setup
           me={account}
           targets={targets}
           missing={profile?.missing ?? []}
