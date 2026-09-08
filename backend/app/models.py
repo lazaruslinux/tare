@@ -1276,3 +1276,7 @@ class IngestLog(Base):
     bytes: Mapped[int | None] = mapped_column(Integer, nullable=True)
     # The first thing that could not be read, and why. One line, no payload.
     error: Mapped[str | None] = mapped_column(String(200), nullable=True)
+    # What `accepted` was made of. Null on a wipe, which brought nothing, and
+    # on rows written before this was kept.
+    days: Mapped[int | None] = mapped_column(Integer, nullable=True)
+    workouts: Mapped[int | None] = mapped_column(Integer, nullable=True)

@@ -758,3 +758,111 @@ def test_two_exports_arriving_together_are_both_taken(tmp_path):
 
     assert answers == [200, 200]
     engine.dispose()
+
+
+# ---- What the Your uploads card is told ----
+
+UPLOADS = "/api/account/uploads"
+
+
+def test_an_account_nothing_has_arrived_on_reads_as_zeros(client, signed_in):
+    body = client.get(UPLOADS).json()
+
+    assert body == {
+        "days_with_data": 0,
+        "workouts": 0,
+        "first_day": None,
+        "last_day": None,
+        "last_received_at": None,
+        "recent": [],
+    }
+
+
+def test_a_sync_is_listed_as_a_sync_with_what_it_brought(client, db_session, signed_in):
+    token = token_for(db_session, signed_in)
+    day = yesterday()
+
+    post(client, token, export(day))
+
+    body = client.get(UPLOADS).json()
+    assert body["days_with_data"] == 1
+    assert body["workouts"] == 1
+    assert body["first_day"] == day.isoformat()
+    assert body["last_day"] == day.isoformat()
+    assert body["last_received_at"] is not None
+    assert len(body["recent"]) == 1
+    row = body["recent"][0]
+    assert row["kind"] == "sync"
+    # The split, which is what the row says on screen.
+    assert row["days"] == 9
+    assert row["workouts"] == 1
+    assert row["skipped"] == 0
+    assert row["error"] is None
+
+
+def test_a_file_is_listed_as_an_upload(client, signed_in):
+    pick(client, json.dumps(export(yesterday())).encode())
+
+    row = client.get(UPLOADS).json()["recent"][0]
+
+    assert row["kind"] == "upload"
+    assert row["days"] == 9
+    assert row["workouts"] == 1
+
+
+def test_a_wipe_is_listed_with_no_split(client, signed_in):
+    pick(client, json.dumps(export(yesterday())).encode())
+
+    client.delete("/api/ingest/uploads")
+
+    body = client.get(UPLOADS).json()
+    assert body["recent"][0]["kind"] == "wipe"
+    # A wipe brought nothing, so it has nothing to split.
+    assert body["recent"][0]["days"] is None
+    assert body["recent"][0]["workouts"] is None
+    assert body["days_with_data"] == 0
+
+
+def test_another_member_s_arrivals_are_not_listed(client, db_session, signed_in, make_user):
+    other = make_user("somebody-else")
+    token = token_for(db_session, other)
+
+    post(client, token, export(yesterday()))
+
+    body = client.get(UPLOADS).json()
+    assert body["recent"] == []
+    assert body["days_with_data"] == 0
+    assert body["workouts"] == 0
+
+
+def test_the_totals_count_days_once_and_leave_typed_workouts_out(
+    client, db_session, signed_in
+):
+    token = token_for(db_session, signed_in)
+    day = yesterday()
+    older = day - dt.timedelta(days=1)
+    second = export(older)
+    # Its own id, or the second workout lands on the first one's row.
+    second["data"]["workouts"][0]["id"] = "run-two"
+    post(client, token, export(day))
+    post(client, token, second)
+    db_session.add(
+        models.Workout(
+            user_id=signed_in.id,
+            activity="Walk",
+            started_at=now_utc(),
+            date_for=day,
+            duration_s=600,
+            source="manual",
+        )
+    )
+    db_session.commit()
+
+    body = client.get(UPLOADS).json()
+
+    # Nine metrics a day over two days is two days with data, not eighteen.
+    assert body["days_with_data"] == 2
+    assert body["first_day"] == older.isoformat()
+    assert body["last_day"] == day.isoformat()
+    # The typed one is theirs rather than something that arrived.
+    assert body["workouts"] == 2

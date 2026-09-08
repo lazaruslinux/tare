@@ -1188,6 +1188,31 @@ export type Synced = { days: number; workouts: number; flagged: number; skipped:
 // What a wipe took away.
 export type Removed = { removed: number }
 
+// One arrival on the sync record: a phone's post, a file, or a wipe. `days`
+// and `workouts` are null on a wipe and on rows written before the split was
+// kept, and then `accepted` is all the row can say.
+export type Arrival = {
+  received_at: string
+  kind: 'sync' | 'upload' | 'wipe'
+  days: number | null
+  workouts: number | null
+  accepted: number
+  skipped: number
+  flagged: number
+  error: string | null
+}
+
+// What has arrived on this account: the totals off the rows themselves, and
+// the recent arrivals off the record.
+export type Uploads = {
+  days_with_data: number
+  workouts: number
+  first_day: string | null
+  last_day: string | null
+  last_received_at: string | null
+  recent: Arrival[]
+}
+
 // One file somebody handed this instance, on the administrator's list.
 export type Upload = {
   id: number

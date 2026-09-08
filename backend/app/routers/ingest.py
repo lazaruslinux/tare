@@ -327,6 +327,10 @@ def _log(
             bytes=size,
             items=counts.items,
             accepted=counts.days + counts.workouts,
+            # The split, so a row can say what it brought. A wipe brought
+            # nothing, and says so by leaving both null.
+            days=None if dialect == "wipe" else counts.days,
+            workouts=None if dialect == "wipe" else counts.workouts,
             flagged=counts.flagged,
             skipped=counts.skipped,
             error=counts.error,

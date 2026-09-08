@@ -10,9 +10,8 @@ you pick, and Tare stores what arrives.
 ## What you need first
 
 1. Open Tare, go to More, then Health data sync.
-2. Pick iPhone or Android.
-3. Tap Make my sync key.
-4. Copy the two lines it shows you: the address to send to, and the
+2. Under Automatic sync setup, tap Make my sync key.
+3. Copy the two lines it shows you: the address to send to, and the
    authorization line. The key is shown once and never again. If you lose it,
    make a new one; the old one stops working the moment you do.
 
@@ -123,16 +122,52 @@ minutes come from how long each session lasted.
 - If your phone is set to kilojoules or kilometres, Tare converts on the way in
   and shows you your own units.
 
-## Upload an export
+## Import health data
 
 Health data sync takes a file as well, which is the other way to bring a month of
 history in. In Health Auto Export, export the range you want as JSON and save
-the file to your phone. Then open Tare, go to More, then Health data sync, pick
-your phone, and choose the file under Upload an export.
+the file to your phone. Then open Tare, go to More, then Health data sync, and
+choose the file under Import health data.
 
-It takes one JSON file, up to 15 MB, and reads it exactly as a sync from your
-phone is read. Anything already stored is skipped, and the line underneath says
-how many days and workouts it added.
+It takes one JSON file, up to 15 MB, in the Health Auto Export layout: a
+top-level `data` object holding `metrics` and `workouts` lists. Tare draws Step
+Count, Active Energy, Apple Exercise Time and Resting Heart Rate for the tiles,
+Walking + Running Distance for the hour bars, and keeps every other metric it
+finds. A workout needs a name and a start time; end or duration, calories,
+distance, heart rate and route are read when present. Anything already stored is
+skipped. Weigh-ins are never written from a file.
+
+The smallest file it reads whole looks like this, and the screen shows the same
+example under Show the file layout:
+
+```json
+{
+  "data": {
+    "metrics": [
+      {
+        "name": "step_count",
+        "units": "count",
+        "data": [
+          { "date": "2026-09-07 08:00:00 -0700", "qty": 4000 },
+          { "date": "2026-09-07 18:00:00 -0700", "qty": 4500 }
+        ]
+      }
+    ],
+    "workouts": [
+      {
+        "name": "Outdoor Run",
+        "start": "2026-09-07 17:12:00 -0700",
+        "end": "2026-09-07 17:54:00 -0700",
+        "activeEnergyBurned": { "qty": 431, "units": "kcal" },
+        "distance": { "qty": 4.02, "units": "mi" }
+      }
+    ]
+  }
+}
+```
+
+A Health Connect bridge export is read too, so anything that can write either
+layout can be used; it does not have to be Health Auto Export.
 
 Everything that arrives from a file is marked as such. Workouts from a file stay
 out of the community feed unless you choose to share them, and the Remove
@@ -144,6 +179,15 @@ uploads off for the whole instance with TARE_UPLOADS=false.
 
 HC Webhook has no export to a file, so on Android the webhook above is the only
 way in.
+
+## Your uploads
+
+The bottom of Health data sync says what has arrived: how many days have data,
+how many workouts came from a phone or a file, the first and last day covered,
+and when something last arrived. Under that is the recent list, newest first,
+each row saying when it came, whether it was From sync, From upload or Removed
+uploads, and what it brought. The list is kept for 90 days; the numbers above it
+are read off your data and go back as far as it does.
 
 ## If it is not arriving
 

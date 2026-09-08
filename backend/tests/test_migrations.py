@@ -94,6 +94,8 @@ def test_upgrade_head_builds_the_identity_schema(tmp_path):
     # The record of a sync keeps the counting and never the export itself.
     assert "payload" not in log_columns
     assert {"dialect", "items", "accepted", "flagged", "skipped", "error"} <= log_columns
+    # What the accepted count was made of, kept apart for the uploads card.
+    assert {"days", "workouts"} <= log_columns
     # How large a file was, and the mark on every row one of them wrote.
     assert "bytes" in log_columns
     assert "source" in daily_columns

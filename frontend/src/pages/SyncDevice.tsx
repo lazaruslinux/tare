@@ -1,27 +1,27 @@
-import { KeyRound } from 'lucide-react'
+import { ChevronDown, KeyRound } from 'lucide-react'
 import { type ChangeEvent, useEffect, useId, useState } from 'react'
 
 import {
   api,
   errorText,
   uploadFile,
+  type Arrival,
   type MintedKey,
   type Removed,
   type Synced,
   type SyncKey,
+  type Uploads,
 } from '../api'
 import { ConfirmSheet } from '../components/ConfirmSheet'
 import { Lightbox } from '../components/Lightbox'
-import { stampText, useClock } from '../lib/clock'
-
-type Platform = 'iphone' | 'android'
+import { dateText, stampText, useClock } from '../lib/clock'
 
 // What this screen is for, said once, to somebody who has never connected a
 // phone to anything.
 const WHAT_THIS_IS =
   'Tare takes the health data your phone exports and turns it into your ' +
   'Dashboard and Fitness screens: steps, calories, workouts and more. Setup ' +
-  'is one time. Pick your device below.'
+  'is one time.'
 
 // What the key card says, before there is a key and after there is one.
 const SHOWN_ONCE =
@@ -34,7 +34,9 @@ const ALREADY_MADE =
 // who has never set up an automation, so every step is one thing to do. A
 // picture under a step is the screen it describes, opened big on a tap.
 type Picture = { src: string; alt: string }
-type Step = { text: string; pictures?: Picture[] }
+// `text` is the key as well as the first words, so it stays a string; `bold`
+// is the part of a step that is said louder.
+type Step = { text: string; bold?: string; pictures?: Picture[] }
 
 const IPHONE_STEPS: Step[] = [
   {
@@ -48,7 +50,9 @@ const IPHONE_STEPS: Step[] = [
     text:
       'Inside this app there are several ways to send out your health data. The free ' +
       'trial lasts 7 days, and the premium version (a one-time fee) offers automated ' +
-      'exports. Tare is not affiliated with this developer in any way, and you can find ' +
+      'exports. ',
+    bold:
+      'Tare is not affiliated with this developer in any way, and you can find ' +
       'other ways to export your health data as JSON if you wish.',
   },
   {
@@ -70,7 +74,64 @@ const ANDROID_NOTE =
   'The Android guide is in development, but the ingest link and upload portal is still ' +
   'available. Android has not been fully tested and may show inaccurate numbers on Tare.'
 
-const PLATFORM_LABEL: Record<Platform, string> = { iphone: 'iPhone', android: 'Android' }
+// What a file has to hold, said plainly enough that somebody exporting from
+// something other than Health Auto Export knows what to build.
+const IMPORT_COPY =
+  'One JSON file, up to 15 MB, in the Health Auto Export layout: a top-level "data" ' +
+  'object holding "metrics" and "workouts" lists. Tare draws Step Count, Active Energy, ' +
+  'Apple Exercise Time and Resting Heart Rate for the tiles, Walking + Running Distance ' +
+  'for the hour bars, and keeps every other metric it finds. A workout needs a name and a ' +
+  'start time; end or duration, calories, distance, heart rate and route are read when ' +
+  'present. Anything already stored is skipped. Weigh-ins are never written from a file.'
+
+// The smallest file this parser reads whole: one metric with two readings and
+// one workout, with the dates written the way an export writes them.
+const FILE_LAYOUT = `{
+  "data": {
+    "metrics": [
+      {
+        "name": "step_count",
+        "units": "count",
+        "data": [
+          { "date": "2026-09-07 08:00:00 -0700", "qty": 4000 },
+          { "date": "2026-09-07 18:00:00 -0700", "qty": 4500 }
+        ]
+      }
+    ],
+    "workouts": [
+      {
+        "name": "Outdoor Run",
+        "start": "2026-09-07 17:12:00 -0700",
+        "end": "2026-09-07 17:54:00 -0700",
+        "activeEnergyBurned": { "qty": 431, "units": "kcal" },
+        "distance": { "qty": 4.02, "units": "mi" }
+      }
+    ]
+  }
+}`
+
+// What each arrival on the record is called on screen.
+const ARRIVAL_LABEL: Record<Arrival['kind'], string> = {
+  sync: 'From sync',
+  upload: 'From upload',
+  wipe: 'Removed uploads',
+}
+
+// What one arrival did. A wipe says it in its label and has nothing to add;
+// a row from before the split was kept can only say how much it took.
+// A count with its word: "1 workout", "9 readings".
+const some = (n: number, word: string): string => `${n} ${word}${n === 1 ? '' : 's'}`
+
+function arrivalDetail(row: Arrival): string {
+  if (row.kind === 'wipe') return ''
+  const brought =
+    row.days === null || row.workouts === null
+      ? `${row.accepted} kept`
+      : `${some(row.days, 'reading')}, ${some(row.workouts, 'workout')} added`
+  const skipped = row.skipped > 0 ? ` · ${row.skipped} already synced` : ''
+  const flagged = row.flagged > 0 ? ` · ${row.flagged} flagged` : ''
+  return `${brought}${skipped}${flagged}`
+}
 
 function CopyRow({ label, value }: { label: string; value: string }) {
   const [copied, setCopied] = useState(false)
@@ -103,9 +164,22 @@ function CopyRow({ label, value }: { label: string; value: string }) {
   )
 }
 
+// One figure on the uploads strip, in the Fitness tiles' shape: what it is,
+// then the number.
+function Stat({ label, value, small }: { label: string; value: string; small?: boolean }) {
+  return (
+    <div>
+      <p className="text-xs text-muted">{label}</p>
+      <p className={`t-nums font-semibold ${small === true ? 'text-base' : 'text-2xl'}`}>
+        {value}
+      </p>
+    </div>
+  )
+}
+
 export function SyncDevice() {
-  const [platform, setPlatform] = useState<Platform | null>(null)
   const [status, setStatus] = useState<SyncKey | null>(null)
+  const [uploads, setUploads] = useState<Uploads | null>(null)
   const [minted, setMinted] = useState<MintedKey | null>(null)
   const [failed, setFailed] = useState('')
   const [working, setWorking] = useState(false)
@@ -116,6 +190,10 @@ export function SyncDevice() {
   const [asking, setAsking] = useState(false)
   const [wiping, setWiping] = useState(false)
   const [wiped, setWiped] = useState('')
+  // The two folds, both local and neither remembered: the guide once a phone
+  // is connected, and the file layout.
+  const [guideOpen, setGuideOpen] = useState(false)
+  const [layoutOpen, setLayoutOpen] = useState(false)
   // The guide picture opened big, or none.
   const [enlarged, setEnlarged] = useState<Picture | null>(null)
   const field = useId()
@@ -127,10 +205,21 @@ export function SyncDevice() {
     api<SyncKey>('/account/ingest-token')
       .then((row) => alive && setStatus(row))
       .catch((failure) => alive && setFailed(errorText(failure)))
+    api<Uploads>('/account/uploads')
+      .then((row) => alive && setUploads(row))
+      .catch(() => alive && setUploads(null))
     return () => {
       alive = false
     }
   }, [])
+
+  // After anything that changes what is stored. A failure here leaves the card
+  // out rather than putting a wrong figure on screen.
+  const refreshUploads = () => {
+    void api<Uploads>('/account/uploads')
+      .then(setUploads)
+      .catch(() => setUploads(null))
+  }
 
   const make = async () => {
     setAsking(false)
@@ -157,9 +246,10 @@ export function SyncDevice() {
     try {
       const counts = await uploadFile<Synced>('/ingest/upload', file)
       const skipped = counts.skipped > 0 ? ` ${counts.skipped} already synced.` : ''
-      setAdded(`Added ${counts.days} days and ${counts.workouts} workouts.${skipped}`)
+      setAdded(`Added ${some(counts.days, 'reading')} and ${some(counts.workouts, 'workout')}.${skipped}`)
       // Something came from a file, so the way back out of that is now offered.
       setStatus((current) => (current === null ? current : { ...current, uploaded: true }))
+      refreshUploads()
     } catch (failure) {
       setRefused(errorText(failure))
     }
@@ -174,6 +264,7 @@ export function SyncDevice() {
       setWiped(`Removed ${answer.removed} uploaded readings.`)
       setAdded('')
       setStatus((current) => (current === null ? current : { ...current, uploaded: false }))
+      refreshUploads()
     } catch (failure) {
       setFailed(errorText(failure))
     }
@@ -221,87 +312,98 @@ export function SyncDevice() {
 
   const address = `${window.location.origin}${status?.path ?? '/api/ingest/health'}`
 
-  if (platform === null) {
-    return (
-      <>
-        <div className="t-card mb-3">
-          <p className="text-sm">{WHAT_THIS_IS}</p>
-          {status?.connected === true ? (
-            <p className="mt-2 text-sm text-muted">
-              {status.last_used_at === null
-                ? 'Key created, nothing received yet.'
-                : `Connected. Last health data sync: ${stampText(status.last_used_at)}.`}
-            </p>
-          ) : (
-            <p className="mt-2 text-sm text-muted">
-              Nothing is sent from Tare to your phone. Your phone posts to Tare on a
-              schedule you pick.
-            </p>
+  const steps = (
+    <ol className="ml-4 list-decimal text-sm">
+      {IPHONE_STEPS.map((step) => (
+        <li key={step.text} className="mb-3">
+          {step.text}
+          {step.bold !== undefined && <strong>{step.bold}</strong>}
+          {step.pictures !== undefined && (
+            <div className="mt-2 flex flex-wrap gap-2">
+              {step.pictures.map((picture) => (
+                <button
+                  key={picture.src}
+                  type="button"
+                  className="max-w-[12rem] overflow-hidden rounded-lg bg-surface-2"
+                  aria-label={`Open ${picture.alt}`}
+                  onClick={() => setEnlarged(picture)}
+                >
+                  <img src={picture.src} alt={picture.alt} loading="lazy" className="w-full" />
+                </button>
+              ))}
+            </div>
           )}
-        </div>
-        <div className="t-card mb-3">
-          <p className="t-micro mb-2">Pick a device</p>
-          <button
-            type="button"
-            className="t-option w-full"
-            onClick={() => setPlatform('iphone')}
-          >
-            iPhone
-          </button>
-          <button
-            type="button"
-            className="t-option w-full"
-            onClick={() => setPlatform('android')}
-          >
-            Android
-          </button>
-        </div>
-        {wipeRow}
-        {failed !== '' && <p className="t-error">{failed}</p>}
-        {prompts}
-      </>
-    )
-  }
+        </li>
+      ))}
+    </ol>
+  )
+
+  const covers =
+    uploads === null || uploads.first_day === null || uploads.last_day === null
+      ? '-'
+      : uploads.first_day === uploads.last_day
+        ? dateText(uploads.first_day)
+        : `${dateText(uploads.first_day)} to ${dateText(uploads.last_day)}`
 
   return (
     <>
       <div className="t-card mb-3">
-        <p className="t-micro mb-2">{PLATFORM_LABEL[platform]} guide</p>
-        {platform === 'android' ? (
-          <p className="text-sm text-muted">{ANDROID_NOTE}</p>
+        <p className="text-sm">{WHAT_THIS_IS}</p>
+        {status?.connected === true ? (
+          <p className="mt-2 text-sm text-muted">
+            {status.last_used_at === null
+              ? 'Key created, nothing received yet.'
+              : `Connected. Last health data sync: ${stampText(status.last_used_at)}.`}
+          </p>
         ) : (
-          <ol className="ml-4 list-decimal text-sm">
-            {IPHONE_STEPS.map((step) => (
-              <li key={step.text} className="mb-3">
-                {step.text}
-                {step.pictures !== undefined && (
-                  <div className="mt-2 flex flex-wrap gap-2">
-                    {step.pictures.map((picture) => (
-                      <button
-                        key={picture.src}
-                        type="button"
-                        className="max-w-[12rem] overflow-hidden rounded-lg bg-surface-2"
-                        aria-label={`Open ${picture.alt}`}
-                        onClick={() => setEnlarged(picture)}
-                      >
-                        <img src={picture.src} alt={picture.alt} loading="lazy" className="w-full" />
-                      </button>
-                    ))}
-                  </div>
-                )}
-              </li>
-            ))}
-          </ol>
+          <p className="mt-2 text-sm text-muted">
+            Nothing is sent from Tare to your phone. Your phone posts to Tare on a
+            schedule you pick.
+          </p>
         )}
       </div>
+
+      {/* The guide is the whole screen until a phone is connected. After that
+          it is a row somebody opens when they set up a second phone. */}
+      {status?.connected === true ? (
+        <div className="t-card mb-3">
+          <button
+            type="button"
+            className="flex w-full items-center gap-3 text-left"
+            aria-expanded={guideOpen}
+            onClick={() => setGuideOpen(!guideOpen)}
+          >
+            <span className="min-w-0 flex-1 text-sm">Show the iPhone guide</span>
+            <ChevronDown
+              className={`h-4 w-4 shrink-0 text-muted ${guideOpen ? 'rotate-180' : ''}`}
+              strokeWidth={2}
+            />
+          </button>
+          {guideOpen && <div className="mt-3">{steps}</div>}
+        </div>
+      ) : (
+        <div className="t-card mb-3">
+          <p className="t-micro mb-2">iPhone guide</p>
+          {steps}
+        </div>
+      )}
       {enlarged !== null && (
         <Lightbox src={enlarged.src} alt={enlarged.alt} onClose={() => setEnlarged(null)} />
       )}
 
       <div className="t-card mb-3">
-        <p className="t-micro mb-2">Your sync key</p>
+        <p className="t-micro mb-2">Android</p>
+        <p className="text-sm text-muted">{ANDROID_NOTE}</p>
+      </div>
+
+      <div className="t-card mb-3">
+        <p className="t-micro mb-2">Automatic sync setup</p>
         {minted === null ? (
           <>
+            <p className="mb-2 text-sm text-muted">
+              For Health Auto Export or any app that can post JSON to an address on a
+              schedule.
+            </p>
             <p className="mb-3 text-sm text-muted">
               {status?.connected === true ? ALREADY_MADE : SHOWN_ONCE}
             </p>
@@ -332,11 +434,8 @@ export function SyncDevice() {
           nothing to offer here. */}
       {status?.uploads !== false && (
         <div className="t-card mb-3">
-          <p className="t-micro mb-2">Upload an export</p>
-          <p className="mb-3 text-sm text-muted">
-            Export the last 30 days from Health Auto Export as JSON and pick the file here.
-            Anything already synced is skipped. Files up to 15 MB.
-          </p>
+          <p className="t-micro mb-2">Import health data</p>
+          <p className="mb-3 text-sm text-muted">{IMPORT_COPY}</p>
           <label className="t-btn cursor-pointer" htmlFor={field}>
             {uploading ? 'Uploading.' : 'Choose a file'}
           </label>
@@ -350,16 +449,70 @@ export function SyncDevice() {
           />
           {added !== '' && <p className="mt-2 text-sm">{added}</p>}
           {refused !== '' && <p className="t-error mt-2">{refused}</p>}
+          <button
+            type="button"
+            className="mt-3 flex w-full items-center gap-3 text-left"
+            aria-expanded={layoutOpen}
+            onClick={() => setLayoutOpen(!layoutOpen)}
+          >
+            <span className="min-w-0 flex-1 text-sm">Show the file layout</span>
+            <ChevronDown
+              className={`h-4 w-4 shrink-0 text-muted ${layoutOpen ? 'rotate-180' : ''}`}
+              strokeWidth={2}
+            />
+          </button>
+          {layoutOpen && (
+            <>
+              <pre className="mt-2 overflow-x-auto rounded-lg bg-surface-2 p-2 text-[0.75rem]">
+                {FILE_LAYOUT}
+              </pre>
+              <p className="mt-2 text-sm text-muted">
+                A Health Connect bridge export is read too.
+              </p>
+            </>
+          )}
+        </div>
+      )}
+
+      {uploads !== null && (
+        <div className="t-card mb-3">
+          <p className="t-micro mb-2">Your uploads</p>
+          <div className="grid grid-cols-2 gap-3">
+            <Stat label="Days with data" value={uploads.days_with_data.toLocaleString()} />
+            <Stat label="Workouts" value={uploads.workouts.toLocaleString()} />
+            <Stat label="Covers" value={covers} small />
+            <Stat
+              label="Last received"
+              value={
+                uploads.last_received_at === null ? '-' : stampText(uploads.last_received_at)
+              }
+              small
+            />
+          </div>
+          <p className="t-micro mt-3 mb-1">Recent</p>
+          {uploads.recent.length === 0 ? (
+            <p className="text-sm text-muted">Nothing has arrived yet.</p>
+          ) : (
+            uploads.recent.map((row, index) => {
+              const detail = arrivalDetail(row)
+              return (
+                <div key={`${row.received_at}-${index}`} className="t-row flex-col items-stretch">
+                  <p className="text-sm">
+                    {stampText(row.received_at)} · {ARRIVAL_LABEL[row.kind]}
+                    {detail !== '' && ` · ${detail}`}
+                  </p>
+                  {row.error !== null && (
+                    <p className="mt-1 text-xs text-muted">{row.error}</p>
+                  )}
+                </div>
+              )
+            })
+          )}
+          <p className="t-note mt-3">Tare keeps this list for 90 days.</p>
         </div>
       )}
 
       {wipeRow}
-
-      <div className="t-card mb-3">
-        <button type="button" className="t-btn w-full" onClick={() => setPlatform(null)}>
-          Pick a different phone
-        </button>
-      </div>
       {prompts}
     </>
   )

@@ -15,6 +15,7 @@ from fastapi import (
     status,
 )
 from pydantic import BaseModel
+from sqlalchemy import func, select
 from sqlalchemy.orm import Session
 
 from app import clock, mail, models, photos, profiles, security, throttle
@@ -382,3 +383,72 @@ def revoke_ingest_token(
     if row is not None:
         db.delete(row)
         db.commit()
+
+
+# What a row on the sync record is called on screen. A phone's export is a
+# sync whichever dialect it spoke; the other two say what they were.
+UPLOAD_KINDS = {"hae": "sync", "hc": "sync", "upload": "upload", "wipe": "wipe"}
+
+# How many rows of the record the screen is handed. The record itself keeps 90
+# days; this is the part somebody reads.
+RECENT_UPLOADS = 10
+
+
+@router.get("/account/uploads")
+def read_uploads(
+    db: Session = Depends(get_db), user: models.User = Depends(require_user)
+) -> dict[str, object]:
+    """What has arrived on this account, and when it last did.
+
+    Counted off the rows themselves rather than off the record, so a member
+    who only ever uploaded files still sees their totals: the record says what
+    each arrival did, the rows say what is actually here.
+    """
+    days_with_data, first_day, last_day = db.execute(
+        select(
+            func.count(func.distinct(models.FitnessDaily.date_for)),
+            func.min(models.FitnessDaily.date_for),
+            func.max(models.FitnessDaily.date_for),
+        ).where(models.FitnessDaily.user_id == user.id)
+    ).one()
+    # Everything a phone or a file brought. A workout somebody typed in is
+    # theirs rather than something that arrived.
+    workouts = db.scalar(
+        select(func.count(models.Workout.id)).where(
+            models.Workout.user_id == user.id, models.Workout.source != "manual"
+        )
+    )
+    received = db.scalar(
+        select(func.max(models.IngestLog.received_at)).where(
+            models.IngestLog.user_id == user.id
+        )
+    )
+    if received is None:
+        token = db.get(models.IngestToken, user.id)
+        received = None if token is None else token.last_used_at
+    recent = db.scalars(
+        select(models.IngestLog)
+        .where(models.IngestLog.user_id == user.id)
+        .order_by(models.IngestLog.received_at.desc(), models.IngestLog.id.desc())
+        .limit(RECENT_UPLOADS)
+    )
+    return {
+        "days_with_data": days_with_data or 0,
+        "workouts": workouts or 0,
+        "first_day": None if first_day is None else first_day.isoformat(),
+        "last_day": None if last_day is None else last_day.isoformat(),
+        "last_received_at": None if received is None else received.isoformat(),
+        "recent": [
+            {
+                "received_at": row.received_at.isoformat(),
+                "kind": UPLOAD_KINDS.get(row.dialect, row.dialect),
+                "days": row.days,
+                "workouts": row.workouts,
+                "accepted": row.accepted,
+                "skipped": row.skipped,
+                "flagged": row.flagged,
+                "error": row.error,
+            }
+            for row in recent
+        ],
+    }
