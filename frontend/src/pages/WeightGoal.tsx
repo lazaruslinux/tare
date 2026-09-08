@@ -74,6 +74,7 @@ export function WeightGoal({
   onSaved,
   onSaveProfile,
   onSaveTargets,
+  onHold,
 }: {
   me: Me
   targets: TargetsRow
@@ -83,6 +84,9 @@ export function WeightGoal({
   onSaved: () => void
   onSaveProfile: Save
   onSaveTargets: Save
+  // True while a faster rate waits on the review box, so the setup step can
+  // hold its Continue with the Save.
+  onHold?: (held: boolean) => void
 }) {
   const units = me.units
   const [open, setOpen] = useState<Open>(null)
@@ -132,6 +136,10 @@ export function WeightGoal({
   const [read, setRead] = useState(false)
   useEffect(() => setRead(false), [draftAt])
   const mustRead = targets.goal === 'lose' && draftAt >= ACKNOWLEDGE_FROM
+  const held = rateDirty && mustRead && !read
+  useEffect(() => {
+    onHold?.(held)
+  }, [held, onHold])
 
   const step = (to: number) => {
     if (to < 0 || to >= steps.length) return

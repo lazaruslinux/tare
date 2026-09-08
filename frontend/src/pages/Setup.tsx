@@ -46,6 +46,8 @@ export function Setup({
   onDone: (me: Me) => void
 }) {
   const [step, setStep] = useState(1)
+  // The weight-goal step's review box holds Continue as well as its Save.
+  const [held, setHeld] = useState(false)
   // The account as the server has it. Step one changes it, and the steps after
   // read the units off it.
   const [account, setAccount] = useState(me)
@@ -348,6 +350,7 @@ export function Setup({
         onSaved={reload}
         onSaveProfile={saveProfile}
         onSaveTargets={saveTargets}
+        onHold={setHeld}
       />
     )
   }
@@ -367,23 +370,9 @@ export function Setup({
           ) : (
             <span />
           )}
-          <div className="flex items-center gap-3">
-            {/* The phone step is long and optional, so the way past it sits at
-                the top as well as the bottom. */}
-            {step === 4 && (
-              <button
-                type="button"
-                className="text-sm text-accent"
-                disabled={busy}
-                onClick={() => go(step + 1)}
-              >
-                Set up later
-              </button>
-            )}
-            <p className="t-micro">
-              Step {step} of {last}
-            </p>
-          </div>
+          <p className="t-micro">
+            Step {step} of {last}
+          </p>
         </div>
 
         <AnimatePresence mode="wait" initial={false}>
@@ -394,11 +383,23 @@ export function Setup({
             exit={{ opacity: 0, x: reduced ? 0 : -24 }}
             transition={{ duration: 0.18 }}
           >
-            <p
-              className={`text-xl font-semibold tracking-tight ${step === 1 ? 'mb-1' : 'mb-4'}`}
+            <div
+              className={`flex items-start justify-between gap-3 ${step === 1 ? 'mb-1' : 'mb-4'}`}
             >
-              {HEADINGS[step - 1]}
-            </p>
+              <p className="text-xl font-semibold tracking-tight">{HEADINGS[step - 1]}</p>
+              {/* The phone step is long and optional, so the way past it stands
+                  beside its heading as well as at the bottom. */}
+              {step === 4 && (
+                <button
+                  type="button"
+                  className="t-btn shrink-0"
+                  disabled={busy}
+                  onClick={() => go(step + 1)}
+                >
+                  Set up later
+                </button>
+              )}
+            </div>
             {body()}
           </motion.div>
         </AnimatePresence>
@@ -409,7 +410,7 @@ export function Setup({
         <button
           className="t-btn t-btn-primary mt-1 w-full"
           type="button"
-          disabled={busy}
+          disabled={busy || held}
           onClick={() => void forward()}
         >
           {step === last ? 'Done' : 'Continue'}
