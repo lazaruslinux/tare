@@ -25,7 +25,7 @@ import { api, errorText, type Me, type SyncKey, type Units } from '../api'
 import { ConfirmSheet } from '../components/ConfirmSheet'
 import { Sheet } from '../components/Sheet'
 import { type Glyph } from '../components/TabBar'
-import { SaveMarks, useSavedChip } from '../components/SaveMarks'
+import { SaveMarks, useInstantSave, useSavedChip } from '../components/SaveMarks'
 import { useTopBar, type TopBarHeader } from '../hooks/useTopBar'
 import { useRailLayout } from '../hooks/useWideLayout'
 import { type Clock } from '../lib/clock'
@@ -215,9 +215,7 @@ export function More({
   const [units, setUnits] = useState<Units>(me.units)
   const [clock, setClock] = useState<Clock>(me.clock)
   const [timezone, setTimezone] = useState(me.timezone)
-  const [accountError, setAccountError] = useState('')
-  const [accountSaved, markAccountSaved] = useSavedChip()
-  const [savingAccount, setSavingAccount] = useState(false)
+  const displaySave = useInstantSave()
 
   const [currentPassword, setCurrentPassword] = useState('')
   const [newPassword, setNewPassword] = useState('')
@@ -246,9 +244,7 @@ export function More({
   }, [refresh, screen])
 
 
-  // What was said about the last save belongs to the screen it was said on.
   const go = (next: Screen) => {
-    setAccountError('')
     setMember(null)
     setScreen(next)
   }
@@ -304,26 +300,17 @@ export function More({
   }, [screen, onScreen])
 
   // The display name is edited on Profile, which is where somebody looks for
-  // what other members see. This screen keeps the reading preferences.
-  const displayDirty = units !== me.units || clock !== me.clock || timezone !== me.timezone
-
-  const saveAccount = async (event: FormEvent) => {
-    event.preventDefault()
-    setSavingAccount(true)
-    setAccountError('')
-    try {
-      onChange(
-        await api<Me>('/account', {
-          method: 'PATCH',
-          body: { units, clock, timezone },
-        })
-      )
-      markAccountSaved()
-    } catch (failure) {
-      setAccountError(errorText(failure))
-    }
-    setSavingAccount(false)
-  }
+  // what other members see. This screen keeps the reading preferences, and
+  // each one saves as it is picked. A failure puts the select back.
+  const patchDisplay = (body: Record<string, unknown>, undo: () => void) =>
+    displaySave.run(async () => {
+      try {
+        onChange(await api<Me>('/account', { method: 'PATCH', body }))
+      } catch (failure) {
+        undo()
+        throw failure
+      }
+    })
 
   const sendEmailLink = async (event: FormEvent) => {
     event.preventDefault()
@@ -606,7 +593,7 @@ export function More({
   if (screen === 'display') {
     return (
       <>
-        <form className="t-card mb-3" onSubmit={saveAccount}>
+        <div className="t-card mb-3">
           <div className="t-row">
             <label className="flex-1 text-sm" htmlFor="settings-units">
               Units
@@ -615,7 +602,12 @@ export function More({
               id="settings-units"
               className="t-input max-w-[55%]"
               value={units}
-              onChange={(event) => setUnits(event.target.value as Units)}
+              onChange={(event) => {
+                const next = event.target.value as Units
+                const was = units
+                setUnits(next)
+                patchDisplay({ units: next }, () => setUnits(was))
+              }}
             >
               {UNITS.map((option) => (
                 <option key={option.value} value={option.value}>
@@ -623,6 +615,7 @@ export function More({
                 </option>
               ))}
             </select>
+            {displaySave.saved && <span className="t-chip text-accent">Saved.</span>}
           </div>
           <div className="t-row">
             <label className="flex-1 text-sm" htmlFor="settings-clock">
@@ -632,7 +625,12 @@ export function More({
               id="settings-clock"
               className="t-input max-w-[55%]"
               value={clock}
-              onChange={(event) => setClock(event.target.value as Clock)}
+              onChange={(event) => {
+                const next = event.target.value as Clock
+                const was = clock
+                setClock(next)
+                patchDisplay({ clock: next }, () => setClock(was))
+              }}
             >
               {CLOCKS.map((option) => (
                 <option key={option.value} value={option.value}>
@@ -649,7 +647,12 @@ export function More({
               id="settings-timezone"
               className="t-input max-w-[55%]"
               value={timezone}
-              onChange={(event) => setTimezone(event.target.value)}
+              onChange={(event) => {
+                const next = event.target.value
+                const was = timezone
+                setTimezone(next)
+                patchDisplay({ timezone: next }, () => setTimezone(was))
+              }}
             >
               {/* An account made before this list keeps working, and says so
                   once, until it is moved onto one of the seven. */}
@@ -663,18 +666,8 @@ export function More({
               ))}
             </select>
           </div>
-          {accountError && <p className="t-error mt-3">{accountError}</p>}
-          <div className="mt-3 flex items-center gap-3">
-            <button
-              className="t-btn t-btn-primary"
-              type="submit"
-              disabled={!displayDirty || savingAccount}
-            >
-              Save
-            </button>
-            <SaveMarks dirty={displayDirty} saved={accountSaved} />
-          </div>
-        </form>
+          {displaySave.error && <p className="t-error mt-2">{displaySave.error}</p>}
+        </div>
 
         <div className="t-card mb-3">
           <div className="t-row">

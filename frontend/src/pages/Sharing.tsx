@@ -2,13 +2,13 @@ import { AnimatePresence, motion, useReducedMotion } from 'framer-motion'
 import { ChevronRight } from 'lucide-react'
 import { useEffect, useState } from 'react'
 
-import { api, errorText, type Me, type Profile } from '../api'
-import { SaveMarks, useSavedChip } from '../components/SaveMarks'
+import { api, type Me, type Profile } from '../api'
+import { useInstantSave } from '../components/SaveMarks'
 import { Switch } from '../components/Switch'
 import { useTopBar } from '../hooks/useTopBar'
 
-// The one screen that says what leaves this account. Nothing here saves until
-// the button: turning a switch is a draft, not an announcement.
+// The one screen that says what leaves this account. Every switch saves itself
+// as it is turned, and each card says so on its own heading.
 
 const GENDER_LABEL: Record<string, string> = { female: 'Female', male: 'Male' }
 
@@ -50,9 +50,11 @@ export function Sharing({
   // Held the way the screen reads them: on means shown, and the server is
   // told what is hidden.
   const [hidden, setHidden] = useState<string[]>(me.feed_hidden)
-  const [error, setError] = useState('')
-  const [saving, setSaving] = useState(false)
-  const [saved, markSaved] = useSavedChip()
+  // One per card, so the card that was touched is the card that answers.
+  const profileSave = useInstantSave()
+  const workoutSave = useInstantSave()
+  const journalSave = useInstantSave()
+  const weightSave = useInstantSave()
   const reduced = useReducedMotion()
 
   useTopBar({ title: 'Sharing', back: { label: 'More', onBack } })
@@ -67,55 +69,46 @@ export function Sharing({
     }
   }, [])
 
-  const dirty =
-    age !== me.share_age ||
-    gender !== me.share_sex ||
-    place !== me.share_location ||
-    workouts !== me.share_workouts ||
-    journal !== me.share_journal ||
-    loss !== me.share_weight_loss ||
-    hidden.join() !== me.feed_hidden.join()
+  // Straight to the server, one card's fields at a time. A failure puts the
+  // switch back where it was and the card says why.
+  const patch = (
+    run: (save: () => Promise<void>) => void,
+    body: Record<string, unknown>,
+    undo: () => void
+  ) =>
+    run(async () => {
+      try {
+        onChange(await api<Me>('/account', { method: 'PATCH', body }))
+      } catch (failure) {
+        undo()
+        throw failure
+      }
+    })
 
   // The master switch takes the three with it: off folds them away and turns
   // them off, on brings them back at their defaults, all shown.
   const shareWorkouts = (next: boolean) => {
+    const parts = next ? [] : [...HIDEABLE]
+    const wasHidden = hidden
     setWorkouts(next)
-    setHidden(next ? [] : [...HIDEABLE])
+    setHidden(parts)
+    patch(workoutSave.run, { share_workouts: next, feed_hidden: parts }, () => {
+      setWorkouts(!next)
+      setHidden(wasHidden)
+    })
   }
 
   const shows = (name: string) => !hidden.includes(name)
-  // Kept in the order the server names them, so a comparison against what was
-  // saved is a comparison of two lists and not of two orderings.
+  // Kept in the order the server names them, so what is sent is a list in the
+  // server's own order rather than in the order the switches were touched.
   const show = (name: string, next: boolean) => {
     const held = new Set(hidden)
     if (next) held.delete(name)
     else held.add(name)
-    setHidden(HIDEABLE.filter((each) => held.has(each)))
-  }
-
-  const save = async () => {
-    setSaving(true)
-    setError('')
-    try {
-      onChange(
-        await api<Me>('/account', {
-          method: 'PATCH',
-          body: {
-            feed_hidden: hidden,
-            share_age: age,
-            share_sex: gender,
-            share_location: place,
-            share_workouts: workouts,
-            share_journal: journal,
-            share_weight_loss: loss,
-          },
-        })
-      )
-      markSaved()
-    } catch (failure) {
-      setError(errorText(failure))
-    }
-    setSaving(false)
+    const parts = HIDEABLE.filter((each) => held.has(each))
+    const wasHidden = hidden
+    setHidden(parts)
+    patch(workoutSave.run, { feed_hidden: parts }, () => setHidden(wasHidden))
   }
 
   // Each label carries the fact itself, so what a member turns on is exactly
@@ -132,20 +125,48 @@ export function Sharing({
   return (
     <>
       <p className="mb-3 text-sm text-muted">Only your friends see what you share here.</p>
-      <p className="t-micro mb-1">Profile</p>
+      <div className="mb-1 flex min-h-7 items-center gap-3">
+        <p className="t-micro flex-1">Profile</p>
+        {profileSave.saved && <span className="t-chip text-accent">Saved.</span>}
+      </div>
       <div className="t-card mb-3">
         <p className="text-sm text-muted">Show my:</p>
-        <Switch label={ageLabel} checked={age} onChange={setAge} />
-        <Switch label={genderLabel} checked={gender} onChange={setGender} />
-        <Switch label={placeLabel} checked={place} onChange={setPlace} />
+        <Switch
+          label={ageLabel}
+          checked={age}
+          onChange={(next) => {
+            setAge(next)
+            patch(profileSave.run, { share_age: next }, () => setAge(!next))
+          }}
+        />
+        <Switch
+          label={genderLabel}
+          checked={gender}
+          onChange={(next) => {
+            setGender(next)
+            patch(profileSave.run, { share_sex: next }, () => setGender(!next))
+          }}
+        />
+        <Switch
+          label={placeLabel}
+          checked={place}
+          onChange={(next) => {
+            setPlace(next)
+            patch(profileSave.run, { share_location: next }, () => setPlace(!next))
+          }}
+        />
         <button type="button" className="t-row w-full text-left" onClick={onOpenProfile}>
           <span className="flex-1 text-sm">View my public profile</span>
           <ChevronRight className="h-4 w-4 shrink-0 text-muted" strokeWidth={2} />
         </button>
         <p className="mt-2 text-xs text-muted">These can be edited in your profile settings.</p>
+        {profileSave.error && <p className="t-error mt-2">{profileSave.error}</p>}
       </div>
 
-      <p className="t-micro mb-1">Workouts</p>
+      <div className="mb-1 flex min-h-7 items-center gap-3">
+        <p className="t-micro flex-1">Workouts</p>
+        {workoutSave.saved && <span className="t-chip text-accent">Saved.</span>}
+      </div>
       <div className="t-card mb-3">
         <Switch label="Share my workouts" checked={workouts} onChange={shareWorkouts} />
         <AnimatePresence initial={false}>
@@ -177,41 +198,42 @@ export function Sharing({
             </motion.div>
           )}
         </AnimatePresence>
+        {workoutSave.error && <p className="t-error mt-2">{workoutSave.error}</p>}
       </div>
 
-      <p className="t-micro mb-1">Journal</p>
+      <div className="mb-1 flex min-h-7 items-center gap-3">
+        <p className="t-micro flex-1">Journal</p>
+        {journalSave.saved && <span className="t-chip text-accent">Saved.</span>}
+      </div>
       <div className="t-card mb-3">
         <Switch
           label="Share when I complete my journal"
           checked={journal}
-          onChange={setJournal}
+          onChange={(next) => {
+            setJournal(next)
+            patch(journalSave.run, { share_journal: next }, () => setJournal(!next))
+          }}
         />
+        {journalSave.error && <p className="t-error mt-2">{journalSave.error}</p>}
       </div>
 
-      <p className="t-micro mb-1">Weight</p>
+      <div className="mb-1 flex min-h-7 items-center gap-3">
+        <p className="t-micro flex-1">Weight</p>
+        {weightSave.saved && <span className="t-chip text-accent">Saved.</span>}
+      </div>
       <div className="t-card mb-3">
         <Switch
           label="Share weight lost since last weigh-in"
           checked={loss}
-          onChange={setLoss}
+          onChange={(next) => {
+            setLoss(next)
+            patch(weightSave.run, { share_weight_loss: next }, () => setLoss(!next))
+          }}
         />
         <p className="mt-2 text-xs text-muted">
           Friends see how much you lost since your last weigh-in, never your weight.
         </p>
-      </div>
-
-      {error && <p className="t-error mb-3">{error}</p>}
-
-      <div className="mb-3 flex items-center gap-3">
-        <button
-          type="button"
-          className="t-btn t-btn-primary"
-          disabled={!dirty || saving}
-          onClick={save}
-        >
-          Save
-        </button>
-        <SaveMarks dirty={dirty} saved={saved} />
+        {weightSave.error && <p className="t-error mt-2">{weightSave.error}</p>}
       </div>
 
       <p className="text-xs text-muted">Everything else stays private to you.</p>
