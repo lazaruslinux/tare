@@ -102,40 +102,41 @@ Items marked UNVERIFIED were not confirmed against a primary source at the time 
 
 ### Weight change
 
-13. Weight loss rate is set with a stepper, and all three steps are offered to every member:
+13. Weight loss rate is set with a stepper of five steps, and every one of them is offered to every member (product decision of 2026-09-06, which replaced a three-step table of 1, 1.5 and 2 lb a week):
 
    | Step | Rate | Deficit |
    |---|---|---|
-   | 1 (default) | 0.45 kg (1 lb) per week | 450 kcal/day |
-   | 2 | 0.7 kg (1.5 lb) per week | 700 kcal/day |
-   | 3 | 0.9 kg (2 lb) per week | 900 kcal/day |
+   | 1 (default) | 0.4536 kg (1 lb) per week | 500 kcal/day |
+   | 2 | 0.567 kg (1.25 lb) per week | 625 kcal/day |
+   | 3 | 0.6804 kg (1.5 lb) per week | 750 kcal/day |
+   | 4 | 0.7938 kg (1.75 lb) per week | 875 kcal/day |
+   | 5 | 0.9072 kg (2 lb) per week | 1,000 kcal/day |
 
-   Under the stepper the screen shows a "Goal rate review" note, picked from the rate against the latest weigh-in:
-   - Step 1: "A steady pace most people can keep up. Slower loss tends to hold on to more muscle."
-   - Steps 2 and 3 at or under 1 percent of the member's weight a week, and either step before the first weigh-in: "This makes a bigger gap between what you consume and what you use. It works for some, but many find it hard to keep up. Watch how you feel and ease back if it stops feeling right."
-   - Steps 2 and 3 over 1 percent of the member's weight a week: "This is faster than about 1 percent of your weight a week. Loss this quick is often water rather than fat, and makes it easier to lose muscle and miss out on nutrients. Most guidance stops at 2 lb a week."
+   Each rate is stored as the exact kilogram its pound is, so the day's figure comes out as the round number the tables are written in: 3,500 kcal per pound of fat. The screen works every step out as if it were chosen, with the floor of decision 15 applied, and shows each step's own budget and gap.
 
-   2026-09-06 decision, supersedes the table above: FIVE steps, 1, 1.25, 1.5, 1.75 and 2 lb a week, stored as the exact kilogram each pound is (0.4536, 0.567, 0.6804, 0.7938, 0.9072). The deficit is the real figure from 3,500 kcal per pound of fat: 500, 625, 750, 875 and 1,000 kcal a day. The screen works every step out as if it were chosen (the floor of decision 15 applied) and shows each step's own budget and gap. The review sentences are product copy, used verbatim: one for 1 lb, one for 1.25 lb, one shared by 1.5, 1.75 and 2 lb; those three steps also show a red acknowledgment box, "Check this box to indicate that you have read the goal rate review above.", and Save waits for it. Nothing on the screen says a goal will be slower; a stored rate from the older three-step table snaps to the nearest step.
+   Under the stepper the screen shows a "Goal rate review" note. The sentences are product copy, used verbatim: one for step 1, one for step 2, and one shared by steps 3, 4 and 5. Those three fastest steps also show a red acknowledgment box, "Check this box to indicate that you have read the goal rate review above.", and Save waits for it. Nothing on the screen says a goal will be slower, and a rate stored under the older three-step table snaps to the nearest step.
 
-   Why: the BMI 35 gate that used to hold back the two faster rates is retired, a product decision of 2026-09-02. It sorted members by a number the app never shows them (decision 29) and refused a pace to the person it was hardest to explain the refusal to. What replaces it is a tiered note that says what a fast loss costs, plus the two guardrails that were always the real ones: the 25 percent cap of decision 14 and the floors of decision 15, both of which ease a chosen step back and say so. The NHLBI clinical guidelines still bound the top of the list: 500 to 1,000 kcal/day, 1 to 2 lb per week, is the fastest they describe, [16] and 0.9 kg a week is inside it. Athletes aiming at 0.7 percent of body weight per week (and achieving it) kept more lean mass than those aiming at 1.4 percent (achieving about 1.0), [19] which is why step 1 is the default and why the tier that warns starts at 1 percent. The CDC's 1 to 2 lb per week page could not be reached (UNVERIFIED). [17] NICE's current guideline NG246 gives no weekly rate; the 0.5 to 1 kg per week figure belonged to the withdrawn CG189. [18] The third tier's sentence about water, muscle and nutrients is UNVERIFIED product wording: the ACSM 2009 position stand (Donnelly et al., Med Sci Sports Exerc 41(2):459) was the intended citation, and on 2026-09-02 its DOI redirected to a paywall (HTTP 402) and PubMed refused the abstract, so nothing was read and nothing is cited for it.
+   Why: the BMI 35 gate that used to hold back the two faster rates is retired, a product decision of 2026-09-02. It sorted members by a number the app never shows them (decision 29) and refused a pace to the person it was hardest to explain the refusal to. What replaces it is a tiered note that says what a fast loss costs, plus the guardrail that was always the real one: the floors of decision 15, which ease a chosen step back and say so. The 25 percent deficit cap that used to sit beside them is retired too (decision 14). The NHLBI clinical guidelines still bound the top of the list: 500 to 1,000 kcal/day, 1 to 2 lb per week, is the fastest they describe, [16] and 0.9 kg a week is inside it. Athletes aiming at 0.7 percent of body weight per week (and achieving it) kept more lean mass than those aiming at 1.4 percent (achieving about 1.0), [19] which is why step 1 is the default. The note is picked by which step was chosen rather than by that step as a share of the member's weight. The CDC's 1 to 2 lb per week page could not be reached (UNVERIFIED). [17] NICE's current guideline NG246 gives no weekly rate; the 0.5 to 1 kg per week figure belonged to the withdrawn CG189. [18] The third note, the one the three fastest steps share, is UNVERIFIED product wording: the ACSM 2009 position stand (Donnelly et al., Med Sci Sports Exerc 41(2):459) was the intended citation, and on 2026-09-02 its DOI redirected to a paywall (HTTP 402) and PubMed refused the abstract, so nothing was read and nothing is cited for it.
 
 14. RETIRED for weight loss on 2026-09-06 (product decision: members set their own restriction, no cap); the floor of decision 15 is the one guardrail for losing, and the acknowledgment box of decision 13 carries the warning. The 20 percent surplus cap of decision 17 stands for gaining. Original text: The deficit is capped at 25 percent of the maintenance estimate. A chosen rate that needs more than that is reduced to the cap and the Targets page says so in one sentence.
-   Why: the guideline deficits above assume a typical adult; for a small or light person 1,000 kcal/day is a far larger fraction of maintenance than it is for a large one. A percentage cap keeps the deficit proportional. The 25 percent figure is a product decision informed by the lean-mass finding, [19] not a guideline number.
+   Why it was there: the guideline deficits above assume a typical adult; for a small or light person 1,000 kcal/day is a far larger fraction of maintenance than it is for a large one. A percentage cap keeps the deficit proportional. The 25 percent figure was a product decision informed by the lean-mass finding, [19] not a guideline number.
 
 15. Calorie floors: the budget never goes below 1,200 kcal for female members or 1,500 kcal for male members, whatever the goal. If the floor binds, the budget sits at the floor, the projected rate is recalculated from the deficit that remains, and the Targets page says the goal will take longer than the chosen pace.
    Why: the NHLBI guidelines describe low-calorie diets of 1,000 to 1,200 kcal/day for women and 1,200 to 1,500 kcal/day for men as a choice made with a clinician, [16] so an unsupervised app should not set budgets below the upper edge of those ranges. The floors sit exactly at those upper edges. They are also the common convention among calorie apps.
 
-16. The budget may fall below the resting estimate when the floor allows it. Tare does not refuse that; it applies the floor and the 25 percent cap instead.
+16. The budget may fall below the resting estimate when the floor allows it. Tare does not refuse that; the floor of decision 15 is what stops it going further, and for a gaining plan the surplus cap of decision 17 is the matching wall.
    Why: guideline deficits routinely produce budgets under resting rate for heavier members, and refusing them would block the guideline itself.
 
 17. Weight gain rate is set the same way, with two steps:
 
    | Step | Rate | Surplus |
    |---|---|---|
-   | 1 (default) | 0.25 kg (0.5 lb) per week | 250 kcal/day |
-   | 2 | 0.45 kg (1 lb) per week | 450 kcal/day |
+   | 1 (default) | 0.25 kg (shown as 0.5 lb) per week | 276 kcal/day |
+   | 2 | 0.45 kg (shown as 1 lb) per week | 496 kcal/day |
 
-   Its review note is one sentence at either step: "A small, steady gain keeps more of it as muscle."
+   Unlike the losing steps, these two are round kilograms rather than round pounds, so the screen rounds each to the nearest quarter pound to name it. The surplus is the same 3,500 kcal per pound arithmetic decision 13 uses.
+
+   Its review note is one sentence per step, product copy used verbatim.
 
    Why: for muscle gain a surplus of roughly 10 to 20 percent above maintenance, giving 0.25 to 0.5 percent of body weight per week, is the recommendation that limits fat gain. [20] A surplus is also capped at 20 percent of maintenance.
 
@@ -156,7 +157,7 @@ Items marked UNVERIFIED were not confirmed against a primary source at the time 
 22. Clinician nudge, shown once per trigger as a calm sentence with a Dismiss action, never a modal:
    - Current BMI under 18.5 with a weight-loss goal: "Your details put you below the healthy weight range. Talk to a clinician before aiming lower." The loss goal is not blocked; the nudge stays on the Targets page while the condition holds.
    - Goal weight that would give a BMI under 18.5: the goal is accepted but the same sentence appears and the goal date is not shown.
-   - BMI of 40 or more: no sentence. It used to say "A clinician can help plan safely at this weight. Tare is only an estimate." and was retired on 2026-09-08 as a product decision: the goal-rate review box (decision 14's tiered note with its acknowledgement) already puts the caution in front of the member, and a second unprompted card on the same screen read as a scolding.
+   - BMI of 40 or more: no sentence. It used to say "A clinician can help plan safely at this weight. Tare is only an estimate." and was retired on 2026-09-08 as a product decision: the goal-rate review box (decision 13's tiered note with its acknowledgement) already puts the caution in front of the member, and a second unprompted card on the same screen read as a scolding.
    Why: the WHO defines adult underweight as a BMI under 18.5 in its indicator set and overweight and obesity at 25 and 30 on its fact sheet; [25] the 40 threshold is obesity class III in the NHLBI classification table. [16] Eating-disorder red flags cannot be detected from a calorie budget, so the app does not attempt it; the disclaimer (decision 30) and the floors are the protection.
 
 23. BMI is computed on the server for the guardrails and shown on the Profile screen as a plain number with no category word; it is never shown on any other screen. Body-fat percentage is shown as the member's own recorded number without a category label.
@@ -188,7 +189,7 @@ Items marked UNVERIFIED were not confirmed against a primary source at the time 
 28. Every computed number rounds for display: calories to the nearest 10, grams to the nearest 1, percentages to the nearest 1. Internal values keep full precision.
    Why: a budget of 1,847 kcal claims a precision the equation does not have. [2]
 
-29. Formula names (Mifflin-St Jeor, Cunningham, MET, PAL, BMI, AMDR, TDEE, BMR) never appear in the UI, with one exception: the At rest helper on the Activity Levels screen may say "Sometimes called basal metabolic rate" once, because it is the name a member is most likely to have met elsewhere and to be looking for. Every other formula name stays out. They live in this document and in the Guide page under a "Where the numbers come from" heading for members who want them.
+29. Formula names (Mifflin-St Jeor, Cunningham, MET, PAL, BMI, AMDR, TDEE) never appear in the UI. BMR is the one exception, because it is the name a member is most likely to have met elsewhere and to be looking for: the At rest card on the Activity Levels screen is labelled BMR and explains in a line under the number what it is. That helper is the one place in the app any of these names is used. The rest of them live in this document.
 
 30. Disclaimer, shown once on the Targets page the first time a budget is computed, and always reachable from the Guide:
    "Tare estimates. It is not medical advice. The numbers come from population averages and can be off by a few hundred calories for any one person. Talk to a clinician before changing how you eat if you are pregnant or breastfeeding, under care for a medical condition, or have a history of disordered eating."
@@ -218,7 +219,7 @@ Items marked UNVERIFIED were not confirmed against a primary source at the time 
 
 | Concept | Words the UI uses | Words the UI never uses |
 |---|---|---|
-| Resting energy expenditure | "At rest", "what your body uses at rest", and once, in the helper under it, "Sometimes called basal metabolic rate" | RMR, REE, basal (BMR only in that one helper) |
+| Resting energy expenditure | "At rest", "what your body uses at rest", and the Activity Levels screen's At rest card, which is labelled BMR and says in a line what that is | RMR, REE, basal (BMR only on that card) |
 | Total daily energy expenditure | "your daily budget", "about what you use in a day", the Activity Levels screen's "About what you use today" | TDEE, maintenance calories, total daily energy expenditure |
 | Activity multiplier | "Baseline Activity Level" with Sedentary / Lightly Active / Moderately Active / Very Active, each with what it adds to the day | PAL, multiplier, activity factor |
 | Energy spent digesting food | not shown | TEF, thermic effect of food |
@@ -247,7 +248,7 @@ Each item is a decision for the product owner. The default in the Decisions sect
 3. Default activity level (decision 6): Not much (1.2) is the conservative pick. Alternative: Light (1.375), which better matches a person who walks a fair amount but does not exercise. The cost of the wrong pick is a budget about 200 kcal too high or too low.
 5. Pregnancy switch (decision 24): included as a profile switch. Alternative: leave it out of version 1 and let the disclaimer carry it.
 6. Maintain protein (decision 10): decided 2026-09-01, 1.4 g/kg, the middle of the federal range. [12]
-9. Faster rates gated on BMI 35 (decision 13): decided 2026-09-01, the gate stays; it is what the source says. [16] The Targets page explains it in one sentence.
+9. Faster rates gated on BMI 35 (decision 13): decided 2026-09-02, the gate goes. It sorted members by a number the app never shows them (decision 29) and refused a pace to the person hardest to explain the refusal to. Every step is offered to everybody, and what carries the caution instead is the review note under the stepper with its acknowledgment box in front of the three fastest steps. The floors of decision 15 are the guardrail that remains; the 25 percent deficit cap was retired after it, on 2026-09-06 (decision 14).
 10. Added sugars ceiling (decisions 9 and 12): decided 2026-09-02, the American Heart Association's 25 g for women and 36 g for men, [31] and 36 g while sex is unknown. The 10 percent of calories basis is dropped with the percentage the Dietary Guidelines withdrew. [12]
 7. Activity multiplier provenance (decision 5): the 1.2 to 1.9 set is a convention with no primary source found. Alternative: use the DRI physical-activity coefficients directly inside the DRI estimated energy requirement equations, [7] which have a documented derivation but are less familiar and give slightly different numbers.
 8. Older-adult protein (decision 10): PROT-AGE's 1.0 to 1.2 g/kg is a floor for age 65 and over, with at least 1.2 g/kg for those who exercise. [13] Its 1.2 to 1.5 g/kg band is for acute or chronic illness, which Tare cannot know about. The 1.2 minimum stands.

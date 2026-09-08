@@ -18,6 +18,14 @@ you pick, and Tare stores what arrives.
 The address looks like `https://<your Tare address>/api/ingest/health` and the
 authorization line looks like `Bearer <a long string of letters>`.
 
+Three addresses do all of this, and there are no others:
+
+| Address | What it takes |
+|---|---|
+| `POST /api/ingest/health` | An export posted by a phone, with the sync key on the Authorization header. |
+| `POST /api/ingest/upload` | The same export handed over as a file by somebody signed in. |
+| `DELETE /api/ingest/uploads` | Nothing. It takes back every number that arrived in a file. |
+
 ## iPhone
 
 The app is Health Auto Export. It reads Apple Health and posts it on a
@@ -58,7 +66,7 @@ schedule. You set up two automations: one for workouts, one for everything else.
 | Header Key | Authorization |
 | Header Value | The same authorization line |
 | Data Type | Health Metrics |
-| Select Health Metrics | Everything you want Tare to keep. Step Count, Active Energy, Apple Exercise Time and Resting Heart Rate are the four Tare draws today. Turn on anything else you want kept: sleep, heart rate variability, oxygen, weight, body fat. Tare stores all of it |
+| Select Health Metrics | Step Count, Active Energy, Walking + Running Distance, Apple Exercise Time and Resting Heart Rate, which is the list the Health data sync screen names. Heart Rate as well, which is what the heart rate hour bars are drawn from. Turn on anything else you want kept: sleep, heart rate variability, oxygen, weight, body fat. Tare stores all of it and draws none of it yet |
 | Summarize Data | On |
 | Time Grouping | Day, or Hour if you want the hour by hour bars |
 | Export Format | JSON |
@@ -83,6 +91,11 @@ above says. Nothing is sent twice: days that are already stored are recognised
 and left alone.
 
 ## Android
+
+The Android path is in development. The sync key and both addresses work, and
+the upload portal takes a file the same way it does for an iPhone, but the
+webhook route has not been fully tested and the numbers it produces may be
+wrong. What follows is how it is meant to be set up.
 
 Health Connect is where a Pixel watch, a Fitbit or Samsung Health leaves its
 readings. A bridge app reads Health Connect and posts it to a webhook.
@@ -117,10 +130,68 @@ minutes come from how long each session lasted.
   with the rest of your health data and never writes a weigh-in for you.
 - A workout that arrived from your phone cannot be deleted in Tare. Delete it
   on your phone and it stops being sent.
-- If a reading looks impossible, Tare stores it anyway and marks it. Nothing is
-  thrown away for looking wrong.
+- A reading that looks impossible is stored anyway and marked. More than
+  100,000 steps in a day, a resting heart rate outside 25 to 150, a run faster
+  than 4 minutes a mile, a ride over 40 miles an hour: all kept, all flagged,
+  and the flag is what says it looked odd.
+- A workout whose figures cannot be describing a workout is the exception, and
+  is skipped rather than stored: longer than 24 hours, further than 1,000
+  kilometres, or over 50,000 calories. So is one with no name, no readable
+  start time, or a start older than the account reaches back. That sync's
+  record says how many were skipped and names the first of them.
 - If your phone is set to kilojoules or kilometres, Tare converts on the way in
   and shows you your own units.
+
+## What a workout brings
+
+Out of a workout entry Tare reads its name, when it started and ended, how long
+it lasted, the active energy it burned, the distance, whether it was indoor,
+and the id the exporter gave it. `duration` is preferred over the two times and
+the times are used when there is none. `heartRate` is read as the summary of
+the whole session, its average and its maximum. `route` is the line, trimmed as
+above. The per-minute arrays a session carries, distance, steps, heart rate and
+active energy, are folded into one row a minute, up to a day of them.
+
+A health metric is read differently. A reading with more than one figure, a
+night's sleep in its stages or a blood pressure, keeps every field it arrived
+with, and is given one headline number where one of those fields is an obvious
+headline.
+
+## What Tare refuses
+
+None of this is about a number looking wrong. It is about an export that is too
+big to read or is not an export at all, and every one of these answers before
+the body is read properly.
+
+- A body over 15 MB, refused without being read at all: 413, "Request body is
+  too large."
+- A body that is not JSON: 400, "Body must be JSON."
+- A body that is not shaped like a health export: 400, "This file is not a
+  health export." That is also the answer for one nested more than 12 levels
+  deep or carrying more than 200,000 keys, because the walk that counts them
+  stops at the ceiling rather than finishing the count.
+- More than 200 kinds of reading in one export: 400, "That export carries too
+  many kinds of reading for one sync."
+- More than 2,000 workouts: 400, "That export carries too many workouts for one
+  sync."
+- More than 100,000 readings of one kind: 400, "That export carries too many
+  readings of one kind for one sync."
+
+Then the limiters, which count rather than read:
+
+- Sixty posts a minute from one address, counted before the key is looked at,
+  so guessing keys spends the same allowance as anything else.
+- Sixty posts a minute for one account on top of that, because a phone moving
+  between networks arrives from a new address each time.
+- Five uploads an hour for one account.
+- Five new sync keys a minute for one account.
+
+A limiter that has had enough answers 429 with "Too many attempts just now.
+Wait a few minutes and try again.", except an upload, which says "Too many
+uploads. Try again in an hour."
+
+One import is processed at a time across the whole server. A second waits its
+turn; it is never refused for it.
 
 ## Import health data
 
@@ -130,11 +201,12 @@ the file to your phone. Then open Tare, go to More, then Health data sync, and
 choose the file under Import health data.
 
 It takes one JSON file, up to 15 MB. Upload your Workouts file and your Health
-Metrics file separately. The only Apple Health metrics Tare currently looks for
-are Step Count, Active Energy, Walking + Running Distance, Apple Exercise Time
-and Resting Heart Rate; everything else can stay unselected when creating the
-export, though anything extra that arrives is kept. Anything already stored is
-skipped. Weigh-ins are never written from a file.
+Metrics file separately. The metrics Tare draws are Step Count, Active Energy,
+Walking + Running Distance, Apple Exercise Time and Resting Heart Rate, plus
+Heart Rate for the hour bars, which is the same list as above; everything else
+can stay unselected when creating the export, though anything extra that
+arrives is kept. Anything already stored is skipped. Weigh-ins are never
+written from a file.
 
 The smallest file it reads whole looks like this, and the screen shows the same
 example under Show the file layout:
@@ -176,8 +248,8 @@ limited to five an hour per account, a file that is not shaped like a health
 export is refused before it is read in full, and an administrator can turn
 uploads off for the whole instance with TARE_UPLOADS=false.
 
-HC Webhook has no export to a file, so on Android the webhook above is the only
-way in.
+HC Webhook has no export to a file of its own, so on Android the file route
+needs something else that can write either layout.
 
 ## Your imports
 

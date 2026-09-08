@@ -74,7 +74,7 @@ const ANDROID_NOTE =
   'The Android guide is in development, but the ingest link and upload portal is still ' +
   'available. Android has not been fully tested and may show inaccurate numbers on Tare.'
 
-// What a file is for, in his words, and which metrics the export needs.
+// What a file is for, and which metrics the export needs.
 const IMPORT_COPY =
   'If you do not wish to use the sync/automation feature, Tare accepts JSON files ' +
   '(up to 15 MB) containing exported Apple Health data. Android has not been tested. ' +

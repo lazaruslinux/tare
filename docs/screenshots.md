@@ -2,8 +2,7 @@
 
 Each line is one slide of the invite's slideshow, with its pictures on it, and they come from
 one manifest, `frontend/src/lib/screenshots.ts`, whose `line` field says which bullet. About
-shows none of them. Every entry starts with `src: null`, which draws a frame saying what
-belongs there instead of a picture. Nothing else has to change when a real file lands.
+shows none of them. All eleven are shot and in place.
 
 ## Adding one
 
@@ -19,14 +18,14 @@ belongs there instead of a picture. Nothing else has to change when a real file 
 
 ## The list
 
-- [ ] setup-about (line 1, phone): Setup: About you
-- [ ] setup-activity (line 2, phone): Setup: Activity level
-- [ ] plan-goal (line 3, phone): Weight goal with the rate steps and the review
-- [ ] plan-targets (line 3, desktop): Targets: goal forecast, energy target and macro targets
-- [ ] scan-form (line 4, phone): A scanned barcode, prefilled, with ingredients and vitamins
-- [ ] journal-day (line 4, desktop): A journal day with the breakdown open
-- [ ] recipe-page (line 5, phone): A recipe page with photo, parts and Auto-log
-- [ ] fitness-workout (line 6, phone): A workout: the two-lane chart and the route
-- [ ] sync-setup (line 6, desktop): Health data sync
-- [ ] feed-desktop (line 7, desktop): Dashboard on a desktop with the feed column
-- [ ] member-page (line 7, phone): A member's page with Contributions
+- [x] setup-about (line 1, phone): Setup: About you
+- [x] setup-activity (line 2, phone): Setup: Activity level
+- [x] plan-goal (line 3, phone): Weight goal with the rate steps and the review
+- [x] plan-targets (line 3, desktop): Targets: goal forecast, energy target and macro targets
+- [x] scan-form (line 4, phone): A scanned barcode, prefilled, with ingredients and vitamins
+- [x] journal-day (line 4, desktop): A journal day with the breakdown open
+- [x] recipe-page (line 5, phone): A recipe page with photo, parts and Auto-log
+- [x] fitness-workout (line 6, phone): A workout: the two-lane chart and the route
+- [x] sync-setup (line 6, desktop): Health data sync
+- [x] feed-desktop (line 7, desktop): Dashboard on a desktop with the feed column
+- [x] member-page (line 7, phone): A member's page with Contributions

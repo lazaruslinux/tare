@@ -36,12 +36,25 @@ Then open `.env` and go down it. In the file's order:
 | `TARE_UPLOADS` | Whether members may hand the instance a health export as a file. `true` unless you want that address to stop existing. |
 | `SMTP_HOST`, `SMTP_PORT`, `SMTP_USER`, `SMTP_PASSWORD`, `SMTP_FROM` | Optional, and all five together or none. An email address is asked for at sign-up either way. With them the instance mails a verification link and keeps the new member on a verify screen until it is opened; without them there is nowhere to send one, so accounts are verified on the spot and the sign-in screen stops offering a password reset. |
 | `SMTP_STARTTLS` | `true`. The one reason to turn it off is a local mail catcher while developing, which has no certificate to offer. |
+| `USDA_API_KEY` | Optional. A free FoodData Central key from https://fdc.nal.usda.gov/api-key-signup. It unlocks the administrator's vitamin match picker and the `python -m app.micros_backfill` command, and nothing else reads it. Left blank, both of those say so and stop, and members never touch it either way. |
 
 `POSTGRES_PASSWORD` and `SECRET_KEY` must change. The api refuses to start
 while either is still the example value, and says which one. It refuses the
 same way when `SITE_URL` begins with `https://` while `COOKIE_SECURE` is false,
 because that pair hands out a session cookie the browser will also send over
 plain http.
+
+### Settings the example file does not list
+
+These have working defaults and only need setting when the default is wrong.
+
+| Key | Default | What it is |
+|---|---|---|
+| `SESSION_HOURS` | `720` | How long a signed-in session lasts, in hours. Thirty days. |
+| `MEDIA_DIR` | `/data/media` | Where photos are written inside the api container. The compose file already keeps `/data` on a volume. |
+| `FEEDBACK_PATH` | `/data/feedback.md` | The file members' feedback is appended to. A file rather than a table, because it is prose an administrator reads start to finish. |
+| `POSTGRES_DB`, `POSTGRES_USER` | `tare`, `tare` | The database and the role. The backup commands below are written for the defaults, so changing these means changing those too. |
+| `DATABASE_URL`, `POSTGRES_HOST`, `POSTGRES_PORT` | built from the parts, `db`, `5432` | Only for a database outside this compose file. A whole `DATABASE_URL` wins over the parts; otherwise point the host and port at the server you run. |
 
 ## Start
 
@@ -62,7 +75,7 @@ from a shell, which prompts for the password rather than taking it as an
 argument:
 
 ```
-docker compose exec api python manage.py create-admin --username you --birthdate 1990-01-15
+docker compose exec api python manage.py create-admin --username you --birthdate 1990-01-15 --email you@example.com
 ```
 
 Nothing in the app makes anybody an administrator, so if that account is lost
@@ -72,14 +85,16 @@ the role is handed to an existing one from the same shell:
 docker compose exec api python manage.py grant-admin --username someone
 ```
 
-Then mint a link for everybody else. Each code is good for one account:
+Then mint a link for everybody else. One code lets one person in unless you
+say otherwise: `--seats N` opens it to N accounts, anywhere from 1 to 10, and
+the link stops working once they are taken.
 
 ```
-docker compose exec api python manage.py create-invite
+docker compose exec api python manage.py create-invite --seats 4
 ```
 
 That prints the code and the path it lives at; the whole link is your address
-followed by that path. `--days 7` gives it an expiry.
+followed by that path. A code never expires unless you give it `--days 7`.
 
 An instance that sends mail keeps a new member on the verify screen until they
 open the link. When one never arrives and resending does not help, the address
@@ -107,10 +122,41 @@ correct a food that is already shared. Nothing else about the instance is
 theirs, and there is no path in the app that makes anybody an administrator.
 
 Roles are handed out from More, Roles: a list of who reviews, and a picker that
-adds one. A member whose submissions have mostly been taken can apply for the
-role from their own More list, which puts them at the top of that screen for an
-administrator to answer. Every decision either role makes is written to the
-review log, which administrators read under More.
+adds one. A member with 100 approved foods to their name can apply for the role
+from their own More list, which puts them at the top of that screen for an
+administrator to answer. Below 100 the row is not offered. Every decision either
+role makes is written to the review log, which administrators read under More.
+
+## Vitamins
+
+A food's vitamins and minerals come from wherever they can. A food scanned by
+barcode carries whatever Open Food Facts held for that code, so it is usually
+filled in before anybody looks at it. A food with no barcode can only be matched
+by its name, and a name is a guess, so it waits for a person.
+
+That is the vitamin match picker, under More, Vitamin matches, and only an
+administrator sees it. A barcode-less food approved into the shared database
+with no vitamins on it joins that queue, with the candidate records FoodData
+Central offered for its name and the label photo on file beside them. An
+administrator picks the record that is the food, or skips it. Nothing is written
+without that decision, and only empty figures are ever filled.
+
+None of that happens without `USDA_API_KEY`. With no key nothing is queued, the
+picker stays empty, and the rest of the instance carries on as it was.
+
+Foods approved before the key was set are caught up by one command:
+
+```
+docker compose exec api python -m app.micros_backfill
+```
+
+Two passes: barcoded foods are filled from Open Food Facts first and FoodData
+Central for whatever it left empty, and barcode-less foods are queued for the
+picker. It is safe to run again, because only empty figures are ever written.
+`--limit N` stops each pass after N foods, which is the way to try it on a few
+first, and is also how a key with an hourly allowance is spent carefully.
+`--again` reopens the barcode-less foods an administrator already skipped, and
+is the only thing that does; an applied match is never asked about twice.
 
 ## Put a proxy in front
 
@@ -296,7 +342,9 @@ them.
   begins "Tare cannot start until this is fixed" names what in `.env` is wrong:
   a key still on its example value, a zone Tare does not offer, or
   `COOKIE_SECURE` left false on an https instance. Nothing else in the stack
-  stops it starting.
+  stops it starting. `manage.py` checks the same rules before it runs any
+  command, so the refusal above is also what a `create-admin` on a
+  half-configured instance answers with.
 - Every screen says the server is not answering. That sentence is the web
   container's, said when the api does not answer it: the api is down or still
   starting. `docker compose ps` says which and `docker compose logs api` says
