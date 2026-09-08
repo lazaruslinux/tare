@@ -1,6 +1,6 @@
 # Screenshots for the invite page
 
-The pictures sit beside the bullet line they belong to on the invite page, and they come from
+Each line is one slide of the invite's slideshow, with its pictures on it, and they come from
 one manifest, `frontend/src/lib/screenshots.ts`, whose `line` field says which bullet. About
 shows none of them. Every entry starts with `src: null`, which draws a frame saying what
 belongs there instead of a picture. Nothing else has to change when a real file lands.

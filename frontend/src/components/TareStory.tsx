@@ -1,11 +1,12 @@
 import { useState } from 'react'
 
 import { DATA_PRIVACY, platforms, WHAT_TARE_IS, WHAT_YOU_CAN_DO } from '../lib/about'
-import { SHOTS, type Shot } from '../lib/screenshots'
+import { SHOTS } from '../lib/screenshots'
 import { Lightbox } from './Lightbox'
+import { Slideshow } from './Slideshow'
 
-// What somebody arriving on an invite gets, one line at a time, with the
-// pictures of each beside it.
+// What somebody arriving on an invite gets, one line at a time: each line is a
+// slide of the slideshow, with its pictures on it.
 const LINES = [
   'Enter your bio markers (height, weight etc)',
   'Choose an activity level',
@@ -15,37 +16,6 @@ const LINES = [
   'Upload/sync your Apple/Android workouts or health metrics for calorie adjustments & workout insights',
   'Build your body & Tare from the ground up, with real humans.',
 ]
-
-// One thumbnail. A phone shot is narrow and a desktop one is about 16:10, and
-// both grow a step from 900px.
-function Thumb({ shot, onOpen }: { shot: Shot; onOpen: () => void }) {
-  const size =
-    shot.shape === 'desktop'
-      ? 'h-32 w-[205px] min-[900px]:h-56 min-[900px]:w-[358px]'
-      : 'h-32 w-[59px] min-[900px]:h-56 min-[900px]:w-[104px]'
-  return (
-    <button
-      type="button"
-      aria-label={shot.caption}
-      className={`t-phototile shrink-0 overflow-hidden rounded-lg ${size}`}
-      onClick={onOpen}
-    >
-      {shot.src === null ? (
-        <span className="p-1 text-center text-[10px] leading-tight text-muted">
-          Put screenshot of {shot.caption} here
-        </span>
-      ) : (
-        <img
-          src={shot.src}
-          alt={shot.caption}
-          loading="lazy"
-          decoding="async"
-          className="h-full w-full rounded-lg object-cover object-top"
-        />
-      )}
-    </button>
-  )
-}
 
 // What Tare is, what is inside it, and what it does with your details, in one
 // place. About shows the story plainly; the invite shows the seven lines with
@@ -120,18 +90,13 @@ export function TareStory({
     <>
       <div className="t-card mb-3">
         <p className="t-micro mb-2">What is Tare?</p>
-        {LINES.map((line, at) => (
-          <div key={line} className={at === 0 ? 'pb-4' : 'border-t border-line py-4'}>
-            <p className="text-base font-semibold min-[900px]:text-lg">{line}</p>
-            <div className="mt-3 flex gap-2 min-[900px]:gap-3">
-              {SHOTS.flatMap((each, index) =>
-                each.line === at + 1
-                  ? [<Thumb key={each.id} shot={each} onOpen={() => setShot(index)} />]
-                  : [],
-              )}
-            </div>
-          </div>
-        ))}
+        <Slideshow
+          slides={LINES.map((line, at) => ({
+            title: line,
+            shots: SHOTS.filter((each) => each.line === at + 1),
+          }))}
+          onOpen={setShot}
+        />
         <div className="mt-3 flex gap-2">
           <button className="t-btn t-btn-primary" type="button" onClick={create}>
             Create an account
