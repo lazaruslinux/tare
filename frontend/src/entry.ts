@@ -1,15 +1,17 @@
 // What address the app was opened on, read once on the way in.
 //
 // There is no router here and there does not need to be: the app is one screen
-// with tabs, and exactly three addresses arrive from outside it, all by email or
-// by a link somebody was sent. Reading them at import rather than in a
-// component means it happens once whatever React does with renders.
+// with tabs, and three addresses arrive from outside it, all by email or by a
+// link somebody was sent. The fourth comes from inside: a link back through
+// setup. Reading them at import rather than in a component means it happens
+// once whatever React does with renders.
 
 export type Entry =
   | { kind: 'app' }
   | { kind: 'welcome'; code: string }
   | { kind: 'verify'; token: string }
   | { kind: 'reset'; token: string }
+  | { kind: 'setup' }
 
 function read(): Entry {
   const path = window.location.pathname
@@ -20,6 +22,10 @@ function read(): Entry {
   }
   if (path === '/reset-password') {
     return { kind: 'reset', token: new URLSearchParams(window.location.search).get('token') ?? '' }
+  }
+  // Walking the setup steps again. It carries nothing but the request.
+  if (path === '/' && new URLSearchParams(window.location.search).has('setup')) {
+    return { kind: 'setup' }
   }
   return { kind: 'app' }
 }

@@ -22,12 +22,12 @@ import { setClock } from './lib/clock'
 import { slotByTime, today, type Slot } from './lib/day'
 import { Birthdate } from './pages/Birthdate'
 import { Dashboard, type DashScreen } from './pages/Dashboard'
-import { FirstRun } from './pages/FirstRun'
 import { FoodTab } from './pages/Food'
 import { Journal } from './pages/Journal'
 import { Login } from './pages/Login'
 import { More, type Screen } from './pages/More'
 import { ResetPassword } from './pages/ResetPassword'
+import { Setup } from './pages/Setup'
 import { VerifyEmail } from './pages/VerifyEmail'
 import { VerifyWall } from './pages/VerifyWall'
 import { Welcome } from './pages/Welcome'
@@ -69,7 +69,12 @@ export default function App() {
   const [mail, setMail] = useState<boolean | null>(null)
   // An invite, a verification link or a reset link is answered before anything
   // asks who is signed in: all three are opened by somebody who is not.
-  const [phase, setPhase] = useState<Phase>(entry.kind === 'app' ? 'loading' : entry.kind)
+  const [phase, setPhase] = useState<Phase>(
+    entry.kind === 'app' || entry.kind === 'setup' ? 'loading' : entry.kind
+  )
+  // Whether the setup steps are being walked again, asked for by the address
+  // the app was opened on. Cleared the moment they are through.
+  const [replaying, setReplaying] = useState(entry.kind === 'setup')
   const [page, setPage] = useState<Page>('dashboard')
   const [adding, setAdding] = useState(false)
   // Where the add menu was opened from. The rail gives its button's place and
@@ -286,16 +291,16 @@ export default function App() {
     return <VerifyWall me={me} onVerified={recheck} onSignOut={leave} />
   }
   if (phase === 'birthdate') return <Birthdate onDone={enter} />
-  if (phase === 'firstrun') {
+  if (phase === 'firstrun') return <Setup me={me} replay={false} onDone={enter} />
+  // The same steps again, in front of the app rather than on the way into it.
+  if (replaying) {
     return (
-      <FirstRun
+      <Setup
         me={me}
-        onDone={(who, openTargets) => {
-          if (openTargets) {
-            setMoreView('targets')
-            setPage('more')
-          }
-          enter(who)
+        replay
+        onDone={(who) => {
+          remember(who)
+          setReplaying(false)
         }}
       />
     )
