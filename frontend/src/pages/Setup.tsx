@@ -9,12 +9,11 @@ import {
   type Sex,
   type SyncKey,
   type Targets as TargetsRow,
-  type Units,
 } from '../api'
 import { TareWordmark } from '../components/TareWordmark'
 import { today } from '../lib/day'
 import { asNumber } from '../lib/targets'
-import { heightParts, partsToCm, weightFrom, weightUnit } from '../lib/units'
+import { partsToCm, weightFrom, weightUnit } from '../lib/units'
 import { ActivityLevels } from './ActivityLevels'
 import { SyncDevice } from './SyncDevice'
 import type { Save } from './Targets'
@@ -27,13 +26,9 @@ const HEADINGS = [
   'A few things about you',
   'How active are you most days?',
   'Set a weight goal',
-  'Connect your phone',
+  'Add your workouts and more to Tare',
 ]
 
-const UNIT_CHOICES: { units: Units; title: string; note: string }[] = [
-  { units: 'imperial', title: 'Pounds and ounces', note: 'lb, oz, fl oz' },
-  { units: 'metric', title: 'Grams and milliliters', note: 'g, ml' },
-]
 
 const SEXES: { value: Sex; label: string }[] = [
   { value: 'female', label: 'Female' },
@@ -62,7 +57,8 @@ export function Setup({
   const [busy, setBusy] = useState(false)
   const reduced = useReducedMotion()
 
-  const [units, setUnits] = useState<Units>(me.units)
+  // Pounds or grams is the account's setting, changed under More, then Display.
+  const units = me.units
   const [displayName, setDisplayName] = useState(me.display_name ?? '')
   const [sex, setSex] = useState<Sex | null>(null)
   const [feet, setFeet] = useState('')
@@ -135,7 +131,7 @@ export function Setup({
     try {
       const who = await api<Me>('/account', {
         method: 'PATCH',
-        body: { units, display_name: displayName },
+        body: { display_name: displayName },
       })
       setAccount(who)
 
@@ -201,10 +197,7 @@ export function Setup({
     go(step + 1)
   }
 
-  // The height fields read in whichever system was just picked, so switching
-  // at the top changes the boxes underneath rather than the number in them.
   const metric = units === 'metric'
-  const parts = heightParts(Number(heightCm) || 0)
 
   const about = (
     <>
@@ -212,32 +205,6 @@ export function Setup({
         Every one of these can be left for later, and changed under More.
       </p>
 
-      <p className="t-label">How do you measure?</p>
-      <div className="mb-4 flex gap-3">
-        {UNIT_CHOICES.map((choice) => (
-          <button
-            key={choice.units}
-            type="button"
-            aria-pressed={units === choice.units}
-            className="t-choice"
-            onClick={() => {
-              setUnits(choice.units)
-              // Carry the height across rather than emptying it: somebody who
-              // typed 5 ft 9 in should see 175 cm, not a blank box.
-              if (choice.units === 'metric') {
-                const cm = centimetres()
-                setHeightCm(cm === null ? '' : String(Math.round(cm)))
-              } else if (heightCm) {
-                setFeet(String(parts.feet))
-                setInches(String(parts.inches))
-              }
-            }}
-          >
-            <span className="block text-sm font-semibold">{choice.title}</span>
-            <span className="block text-xs">{choice.note}</span>
-          </button>
-        ))}
-      </div>
 
       <div className="mb-4">
         <label className="t-label" htmlFor="setup-display-name">
@@ -338,7 +305,19 @@ export function Setup({
   // line below says why if they never arrive.
   const body = () => {
     if (step === 1) return about
-    if (step === 4) return <SyncDevice />
+    if (step === 4) {
+      return (
+        <>
+          <p className="mb-4 text-sm text-muted">
+            Tare reads the health data your phone exports: workouts, steps, active calories
+            and more. A workout recorded on your phone lands in your Journal as calories you
+            used that day. None of this is needed for your weight goal, and you can set it
+            up later under More, then Health data sync.
+          </p>
+          <SyncDevice />
+        </>
+      )
+    }
     if (targets === null) return null
     if (step === 2) {
       return (
