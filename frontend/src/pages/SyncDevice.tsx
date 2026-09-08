@@ -182,7 +182,9 @@ function Stat({ label, value, small }: { label: string; value: string; small?: b
   )
 }
 
-export function SyncDevice() {
+// `folded` starts the iPhone guide closed, for the setup step where it is a
+// long optional read.
+export function SyncDevice({ folded = false }: { folded?: boolean } = {}) {
   const [status, setStatus] = useState<SyncKey | null>(null)
   const [uploads, setUploads] = useState<Uploads | null>(null)
   const [minted, setMinted] = useState<MintedKey | null>(null)
@@ -371,7 +373,7 @@ export function SyncDevice() {
 
       {/* The guide is the whole screen until a phone is connected. After that
           it is a row somebody opens when they set up a second phone. */}
-      {status?.connected === true ? (
+      {status?.connected === true || folded ? (
         <div className="t-card mb-3">
           <button
             type="button"

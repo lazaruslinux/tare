@@ -192,6 +192,11 @@ export function Setup({
     setStep(to)
   }
 
+  // A long step leaves the page scrolled; the next one starts at its heading.
+  useEffect(() => {
+    window.scrollTo(0, 0)
+  }, [step])
+
   const forward = async () => {
     if (step === 1 && !(await saveAbout())) return
     go(step + 1)
@@ -314,7 +319,7 @@ export function Setup({
             used that day. None of this is needed for your weight goal, and you can set it
             up later under More, then Health data sync.
           </p>
-          <SyncDevice />
+          <SyncDevice folded />
         </>
       )
     }
@@ -362,9 +367,23 @@ export function Setup({
           ) : (
             <span />
           )}
-          <p className="t-micro">
-            Step {step} of {last}
-          </p>
+          <div className="flex items-center gap-3">
+            {/* The phone step is long and optional, so the way past it sits at
+                the top as well as the bottom. */}
+            {step === 4 && (
+              <button
+                type="button"
+                className="text-sm text-accent"
+                disabled={busy}
+                onClick={() => go(step + 1)}
+              >
+                Set up later
+              </button>
+            )}
+            <p className="t-micro">
+              Step {step} of {last}
+            </p>
+          </div>
         </div>
 
         <AnimatePresence mode="wait" initial={false}>
