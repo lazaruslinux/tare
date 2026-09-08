@@ -56,9 +56,8 @@ const IPHONE_STEPS: Step[] = [
       'Make two automations pointed at the address below, or export the files and upload ' +
       'them here. One with Data Type set to Workouts, like the example below. One more with ' +
       'Data Type set to Health Metrics, where you pick what Tare shows: Step Count, Active ' +
-      'Energy, Walking + Running Distance, Apple Exercise Time and Resting Heart Rate, plus ' +
-      'Body Mass and Body Fat Percentage if a scale writes to Apple Health. Everything else ' +
-      'can stay unselected.',
+      'Energy, Walking + Running Distance, Apple Exercise Time and Resting Heart Rate. ' +
+      'Everything else can stay unselected.',
     pictures: [
       { src: '/guide/hae-workouts-1.webp', alt: 'The Tare Workouts automation, top half' },
       { src: '/guide/hae-workouts-2.webp', alt: 'The Tare Workouts automation, bottom half' },
