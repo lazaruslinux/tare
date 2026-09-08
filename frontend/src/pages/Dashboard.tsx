@@ -1459,7 +1459,9 @@ export function Dashboard({
           day !== null && <p className="t-nums mb-2 text-xs text-muted">{leftToday}</p>
         )}
         {logged.length === 0 && (
-          <p className="mb-2 text-sm">Log a day to see your {chosen.label.toLowerCase()}.</p>
+          <p className="mb-2 text-sm">
+            Log a day to see {chosen.label === 'This week' ? 'this week' : `the last ${chosen.label.toLowerCase()}`}.
+          </p>
         )}
         <div className="mb-3 flex gap-6">
           <Stat value={`${underTarget} of ${dates.length}`} label="Days within budget" />
