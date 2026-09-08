@@ -21,6 +21,13 @@ import { LogSheet } from '../components/LogSheet'
 import { MacroBar } from '../components/MacroBar'
 import { MeasurementsSheet } from '../components/MeasurementsSheet'
 import { HEADLINE, nutrientText } from '../components/NutritionLabel'
+
+// The Dashboard rings' colours, so a macro looks the same on both screens.
+const MACRO_COLOR: Record<string, string> = {
+  protein_g: 'var(--violet)',
+  carbs_g: 'var(--gold)',
+  fat_g: 'var(--coral)',
+}
 import { PortionSheet } from '../components/PortionSheet'
 import { VitaminsSheet } from '../components/VitaminsSheet'
 import { WorkoutDetails } from '../components/WorkoutDetails'
@@ -363,6 +370,7 @@ export function Journal({
                 value={day.totals[fact.key]}
                 target={day.budget[fact.key]}
                 unit={fact.unit}
+                color={MACRO_COLOR[fact.key] ?? 'var(--accent)'}
               />
             ))}
           </div>
