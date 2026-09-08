@@ -15,6 +15,7 @@ const SAID: Record<string, string> = {
   rejected: 'turned down',
   resolved: 'resolved the report on',
   food_edited: 'corrected',
+  micros_edited: 'typed the vitamins on',
   photo_replaced: 'changed a photo on',
   photo_removed: 'removed a photo from',
   role_granted: 'made a reviewer:',

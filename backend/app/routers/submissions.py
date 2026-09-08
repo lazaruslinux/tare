@@ -247,7 +247,7 @@ def submit_new_food(
         source="user",
         barcode=code or None,
     )
-    apply_body(food, body)
+    apply_body(food, body, user)
     # What the scan read and nobody typed: the ingredients and the vitamins
     # come off the cache row for this code, whatever the body said about them.
     if code:
@@ -344,7 +344,7 @@ def suggest_edit(
         # database, and the partial index there allows exactly one of them.
         barcode=None,
     )
-    apply_body(shadow, body.proposed)
+    apply_body(shadow, body.proposed, user)
     db.add(shadow)
     # The proposal's id is what the submission points at, so it has to exist
     # before the submission is written.

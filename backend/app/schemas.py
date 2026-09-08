@@ -74,6 +74,10 @@ class FoodIn(BaseModel):
     # Left out means leave it alone: nobody but a reviewer types this, and a
     # form that no longer asks for it must not blank what a scan brought.
     ingredients_text: str | None = None
+    # The vitamins and minerals, per one label serving, in each key's own unit.
+    # An administrator's to send and nobody else's, which is the route's rule.
+    # Left out leaves the row alone; an empty object clears it.
+    micros: dict[str, float] | None = None
     # None means the list was left out, which on an edit leaves the servings
     # alone. An empty list is a value: it means this food has none.
     servings: list[ServingIn] | None = Field(default=None, max_length=MAX_SERVINGS)

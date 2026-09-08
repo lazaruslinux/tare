@@ -12,7 +12,7 @@ import {
 } from '../api'
 import { useTopBar } from '../hooks/useTopBar'
 import { NO_SECTION, NO_SERVING, SECTIONS, SHARED_FACTS, type Values } from '../lib/community'
-import type { Micros } from '../lib/micros'
+import { MICROS, microText, type Micros } from '../lib/micros'
 import {
   MASS_UNITS,
   UNIT_LABEL,
@@ -156,6 +156,18 @@ function extraServings(food: Food | null): ServingDraft[] {
     }))
 }
 
+// The vitamins as an administrator types them: one box a nutrient, per the
+// serving the panel above is filled in per. Blank is a row nothing stated,
+// which is not the same as none of it.
+function microsDraft(micros: Micros | null, amount: number): Record<string, string> {
+  const draft: Record<string, string> = {}
+  for (const micro of MICROS) {
+    const per100 = micros?.[micro.key]
+    draft[micro.key] = typeof per100 === 'number' ? microText((per100 * amount) / 100) : ''
+  }
+  return draft
+}
+
 function startingPanel(
   carrier: Food | Prefill | null,
   serving: ServingDraft
@@ -245,6 +257,16 @@ export function FoodForm({
   // correcting a proposal is the one person who edits the ingredients line.
   const [ingredients, setIngredients] = useState(opening?.ingredients_text ?? '')
   const [vitamins, setVitamins] = useState<Micros | null>(opening?.micros ?? null)
+  // The same figures as boxes, for the one person who types them. Sent only
+  // once one has been changed, so opening the fold and closing it writes
+  // nothing.
+  const [microBoxes, setMicroBoxes] = useState<Record<string, string>>(() =>
+    microsDraft(
+      opening?.micros ?? null,
+      baseOf(startingServing(food, prefill ?? null)) ?? 100
+    )
+  )
+  const [microsTouched, setMicrosTouched] = useState(false)
   const [serving, setServingRow] = useState<ServingDraft>(() =>
     startingServing(food, prefill ?? null)
   )
@@ -312,6 +334,10 @@ export function FoodForm({
   const asksSection = (offerable && submitOn) || review !== undefined
   // The reviewer has the box itself, so the fold would be the same line twice.
   const showsIngredients = review === undefined && ingredients.trim() !== ''
+  // A reviewer types the vitamins, on a proposal or on a shared food. The fold
+  // is theirs whether or not the food carries any yet: an empty one is what
+  // they are opening it to fill in.
+  const editsMicros = review !== undefined
   const scannable = onOpenFood !== undefined && food === null
 
   const heading = title ?? (food ? 'Edit food' : 'New food')
@@ -463,6 +489,17 @@ export function FoodForm({
     // scan rather than typed, and the server keeps what the scan brought for
     // anything sent without this.
     if (review !== undefined) body.ingredients_text = ingredients
+    // Also a reviewer's, and only once one of the boxes has been changed. Per
+    // one serving, the way they are typed: the server works out the per-100.
+    // A row left blank is a row nothing stated, so it is left out.
+    if (review !== undefined && microsTouched) {
+      const typedMicros: Micros = {}
+      for (const micro of MICROS) {
+        const amount = num(microBoxes[micro.key] ?? '')
+        if (amount !== null) typedMicros[micro.key] = amount
+      }
+      body.micros = typedMicros
+    }
     // The stamp this form loaded, so a save written against an older copy of
     // the food is refused rather than applied over whoever saved in between.
     if (food) body.as_of = food.updated_at
@@ -880,22 +917,50 @@ export function FoodForm({
           </div>
         )}
 
-        {/* What the scan brought and nobody typed, at the bottom and closed.
-            Read-only on purpose: the ingredients and the vitamins come off the
-            reading, and a member is never asked to check them by hand. */}
-        {(showsIngredients || hasMicros(vitamins)) && (
+        {/* What the scan brought, at the bottom and closed. A member reads it
+            and no more: the ingredients and the vitamins come off the reading,
+            and nobody but a reviewer is asked to check them by hand. */}
+        {(showsIngredients || editsMicros || hasMicros(vitamins)) && (
           <div className="t-card mb-3">
             {showsIngredients && (
               <Fold label="Ingredients">
                 <p className="text-sm whitespace-pre-line">{ingredients}</p>
               </Fold>
             )}
-            {hasMicros(vitamins) && (
+            {editsMicros ? (
               <Fold label="Vitamins & minerals">
-                {/* At the serving the boxes above are filled in per, the way
-                    the food's own page reads them. Never the stored 100. */}
-                <MicroRows micros={vitamins} baseAmount={baseOf(serving) ?? 100} />
+                {/* Twenty-seven boxes, per one serving, the same as the panel
+                    above them. Blank is a row the label does not print. */}
+                {MICROS.map((micro) => (
+                  <div key={micro.key} className="t-row min-h-9 text-sm">
+                    <label className="flex-1 text-muted" htmlFor={`micro-${micro.key}`}>
+                      {micro.label}
+                    </label>
+                    <input
+                      id={`micro-${micro.key}`}
+                      className="t-input t-nums w-24 text-right"
+                      inputMode="decimal"
+                      type="number"
+                      step="any"
+                      min={0}
+                      value={microBoxes[micro.key] ?? ''}
+                      onChange={(event) => {
+                        setMicroBoxes({ ...microBoxes, [micro.key]: event.target.value })
+                        setMicrosTouched(true)
+                      }}
+                    />
+                    <span className="w-10 shrink-0 text-xs text-muted">{micro.unit}</span>
+                  </div>
+                ))}
               </Fold>
+            ) : (
+              hasMicros(vitamins) && (
+                <Fold label="Vitamins & minerals">
+                  {/* At the serving the boxes above are filled in per, the way
+                      the food's own page reads them. Never the stored 100. */}
+                  <MicroRows micros={vitamins} baseAmount={baseOf(serving) ?? 100} />
+                </Fold>
+              )
             )}
           </div>
         )}

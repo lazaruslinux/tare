@@ -69,6 +69,10 @@ WRONG_FAMILY = {
     "ml": "Pick a volume unit for a food measured by volume.",
 }
 
+# Vitamins are a reviewer's to type; a member's form never asks for them.
+MICROS_NOT_YOURS = "Only an administrator can change vitamins."
+NEGATIVE_MICRO = "Vitamins must be zero or more."
+
 # Every retail code printed on food: EAN-8 at the short end, GTIN-14 at the
 # long. Anything else is not a barcode this app has any use for. It lives here
 # rather than beside the lookup because a barcode is something a food carries,
@@ -810,7 +814,27 @@ def note_edit(
     record_changes(submission, [key for key, was in before.items() if after[key] != was])
 
 
-def apply_body(food: models.Food, body: schemas.FoodIn) -> None:
+def apply_micros(food: models.Food, body: schemas.FoodIn, user: models.User) -> None:
+    """An administrator's vitamins, per label serving in, per 100 stored. Left out
+    leaves the row alone; an empty object clears it."""
+    if body.micros is None:
+        return
+    # Refused rather than dropped, so a member's stray payload is heard about.
+    if not reviews(user):
+        raise HTTPException(status.HTTP_403_FORBIDDEN, MICROS_NOT_YOURS)
+    for key, amount in body.micros.items():
+        if key not in micros.BY_KEY:
+            raise HTTPException(status.HTTP_400_BAD_REQUEST, f"Unknown vitamin: {key}.")
+        if amount < 0:
+            raise HTTPException(status.HTTP_400_BAD_REQUEST, NEGATIVE_MICRO)
+    serving = food.servings[0] if food.servings else None
+    kept = micros.clean(micros.per_100(body.micros, serving.base_amount if serving else 100.0))
+    food.micros = kept or None
+    food.micros_source = "admin"
+    food.micros_ref = str(user.id)
+
+
+def apply_body(food: models.Food, body: schemas.FoodIn, user: models.User) -> None:
     """Put a form's answer onto a food, refusing what it cannot mean.
 
     Shared by creating and editing, so the two can never hold a food to
@@ -859,36 +883,39 @@ def apply_body(food: models.Food, body: schemas.FoodIn) -> None:
     for field in FOOD_NUTRIENTS:
         setattr(food, field, getattr(body, field))
 
-    if body.servings is None:
-        return
-    servings = []
-    for serving in body.servings:
-        serving_name = serving.name.strip()
-        if not serving_name:
-            raise HTTPException(status.HTTP_400_BAD_REQUEST, "Every serving needs a name.")
-        if len(serving_name) > MAX_SERVING_NAME:
-            raise HTTPException(
-                status.HTTP_400_BAD_REQUEST,
-                f"A serving name must be at most {MAX_SERVING_NAME} characters.",
+    if body.servings is not None:
+        servings = []
+        for serving in body.servings:
+            serving_name = serving.name.strip()
+            if not serving_name:
+                raise HTTPException(status.HTTP_400_BAD_REQUEST, "Every serving needs a name.")
+            if len(serving_name) > MAX_SERVING_NAME:
+                raise HTTPException(
+                    status.HTTP_400_BAD_REQUEST,
+                    f"A serving name must be at most {MAX_SERVING_NAME} characters.",
+                )
+            if serving.unit not in units.UNIT_TO_BASE:
+                raise HTTPException(status.HTTP_400_BAD_REQUEST, UNKNOWN_UNIT)
+            if units.base_unit_of(serving.unit) != food.base_unit:
+                raise HTTPException(status.HTTP_400_BAD_REQUEST, WRONG_FAMILY[food.base_unit])
+            servings.append(
+                models.FoodServing(
+                    name=serving_name,
+                    amount=serving.amount,
+                    unit=serving.unit,
+                    # The one sum, and the server's: within a family it is the
+                    # factor and nothing else, because nothing was assumed.
+                    base_amount=serving.amount * units.UNIT_TO_BASE[serving.unit],
+                    position=serving.position,
+                )
             )
-        if serving.unit not in units.UNIT_TO_BASE:
-            raise HTTPException(status.HTTP_400_BAD_REQUEST, UNKNOWN_UNIT)
-        if units.base_unit_of(serving.unit) != food.base_unit:
-            raise HTTPException(status.HTTP_400_BAD_REQUEST, WRONG_FAMILY[food.base_unit])
-        servings.append(
-            models.FoodServing(
-                name=serving_name,
-                amount=serving.amount,
-                unit=serving.unit,
-                # The one sum, and the server's: within a family it is the
-                # factor and nothing else, because nothing was assumed.
-                base_amount=serving.amount * units.UNIT_TO_BASE[serving.unit],
-                position=serving.position,
-            )
-        )
-    # Wholesale, never merged. A list that arrived without a row is a row the
-    # person deleted, and matching them up by name would resurrect it.
-    food.servings = servings
+        # Wholesale, never merged. A list that arrived without a row is a row the
+        # person deleted, and matching them up by name would resurrect it.
+        food.servings = servings
+
+    # Last, so the vitamins are counted against the serving this form has just
+    # set rather than the one the food was carrying.
+    apply_micros(food, body, user)
 
 
 def adopt_scan(db: Session, food: models.Food, code: str) -> None:
@@ -1578,7 +1605,7 @@ def create_food(
         source="user",
         barcode=code or None,
     )
-    apply_body(food, body)
+    apply_body(food, body, user)
     if code:
         adopt_scan(db, food, code)
     db.add(food)
@@ -1604,9 +1631,15 @@ def update_food(
     before = review_snapshot(food)
     # The barcode is not among what an edit changes. It is what the row was
     # scanned from, and a code that moves is a code the scanner cannot trust.
-    apply_body(food, body)
+    apply_body(food, body, user)
     db.flush()
     note_edit(db, user, food, before)
+    # Typed by an administrator, on a proposal or on the shared food itself, so
+    # the record carries it either way. How many rows they left on it is enough.
+    if body.micros is not None:
+        kept = len(micros.clean(food.micros))
+        detail = f"{kept} value" if kept == 1 else f"{kept} values"
+        log_review(db, user, "micros_edited", "food", food.id, food.name, detail)
     # Correcting a shared food is a review action, and the record says which
     # parts of it moved. Somebody editing their own food is not one.
     if food.status == "approved":

@@ -550,3 +550,71 @@ def test_one_diary_s_vitamins_are_nobody_else_s(client, db_session, signed_in, m
         client.post("/api/auth/login", json={"username": "stranger", "password": PASSWORD})
     ).status_code == 200
     assert day_micros(client) == {}
+
+
+# ---- What an administrator types
+
+
+def edit_body(**fields):
+    """A whole food, the way the form sends one: the panel, the label serving,
+    and whatever the case is about."""
+    return {
+        "name": "Broccoli",
+        "base_unit": "g",
+        "calories": 34,
+        "protein_g": 2.8,
+        "carbs_g": 6.6,
+        "fat_g": 0.4,
+        "servings": [{"name": "1 cup", "amount": 91, "unit": "g", "position": 0}],
+        **fields,
+    }
+
+
+def test_an_administrator_types_the_vitamins_per_serving(admin_client, db_session, admin):
+    food = put_food(db_session, status="approved", name="Broccoli")
+    response = admin_client.patch(
+        f"/api/foods/{food.id}", json=edit_body(micros={"vitamin_c": 12, "iron": 0.7})
+    )
+    assert response.status_code == 200
+
+    # Stored per 100 g, whatever serving they were read against.
+    row = db_session.get(models.Food, food.id)
+    assert row.micros == {"vitamin_c": round(1200 / 91, 6), "iron": round(70 / 91, 6)}
+    assert row.micros_source == "admin"
+    assert row.micros_ref == str(admin.id)
+    # And handed back at the serving they were typed per.
+    read = response.json()["micros"]
+    assert read["vitamin_c"] * 91 / 100 == pytest.approx(12, rel=1e-4)
+    assert read["iron"] * 91 / 100 == pytest.approx(0.7, rel=1e-4)
+
+    logged = db_session.query(models.ReviewLog).filter_by(action="micros_edited").one()
+    assert logged.detail == "2 values"
+
+    # An empty object is a value: it is the row cleared.
+    assert admin_client.patch(f"/api/foods/{food.id}", json=edit_body(micros={})).status_code == 200
+    assert db_session.get(models.Food, food.id).micros is None
+
+
+def test_a_member_may_not_send_vitamins(client, db_session, signed_in):
+    made = client.post("/api/foods", json=edit_body())
+    assert made.status_code == 201
+    response = client.patch(f"/api/foods/{made.json()['id']}", json=edit_body(micros={"iron": 1}))
+    assert response.status_code == 403
+    assert response.json()["detail"] == "Only an administrator can change vitamins."
+    assert db_session.get(models.Food, made.json()["id"]).micros is None
+
+
+def test_a_vitamin_below_zero_is_refused(admin_client, db_session):
+    food = put_food(db_session, status="approved", name="Broccoli")
+    response = admin_client.patch(
+        f"/api/foods/{food.id}", json=edit_body(micros={"vitamin_c": -1})
+    )
+    assert response.status_code == 400
+    assert response.json()["detail"] == "Vitamins must be zero or more."
+
+
+def test_a_nutrient_the_catalogue_has_never_heard_of_is_refused(admin_client, db_session):
+    food = put_food(db_session, status="approved", name="Broccoli")
+    response = admin_client.patch(f"/api/foods/{food.id}", json=edit_body(micros={"vitamin_q": 1}))
+    assert response.status_code == 400
+    assert response.json()["detail"] == "Unknown vitamin: vitamin_q."

@@ -162,3 +162,10 @@ def fill_empty(food: Food, found: dict[str, float], source: str, ref: str) -> li
         food.micros_source = source
         food.micros_ref = ref[:32]
     return added
+
+
+def per_100(values: dict[str, float], base_amount: float) -> dict[str, float]:
+    """Per-serving readings scaled back to the per-100 a row keeps."""
+    size = base_amount if base_amount > 0 else 100.0
+    # Six places so a typed per-serving figure reads back unchanged.
+    return {key: round(value * 100 / size, 6) for key, value in values.items()}
