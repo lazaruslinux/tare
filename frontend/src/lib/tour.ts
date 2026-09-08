@@ -56,8 +56,8 @@ export const TOUR: TourStep[] = [
   },
   {
     id: 'sync',
-    title: 'Connect your phone',
-    body: 'Set up Health data sync once and your steps and workouts flow in on their own.',
+    title: 'Import your workouts & metrics',
+    body: 'Upload your workouts to Tare and receive insights and calorie adjustments',
     target: { phone: 'more-sync', wide: 'more-sync' },
     go: 'more',
   },
