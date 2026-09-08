@@ -66,7 +66,13 @@ export function TabBar({
         {TABS.filter((tab) => !tab.railOnly).map(({ id, label, Icon }) => {
           if (id === 'plus') {
             return (
-              <button key={id} onClick={onPlus} aria-label={label} className="t-plus">
+              <button
+                key={id}
+                data-tour="tab-plus"
+                onClick={onPlus}
+                aria-label={label}
+                className="t-plus"
+              >
                 <Icon className="h-6 w-6" strokeWidth={2.25} />
               </button>
             )

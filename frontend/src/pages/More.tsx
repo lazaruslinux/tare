@@ -118,6 +118,7 @@ function Row({
   icon: Icon,
   count,
   note,
+  tour,
   onOpen,
 }: {
   label: string
@@ -126,10 +127,17 @@ function Row({
   // What this row is already showing, said under it. Only the rows that have
   // something to report carry one.
   note?: string
+  // The name the welcome tour points at this row by, on the rows it stops at.
+  tour?: string
   onOpen: () => void
 }) {
   return (
-    <button type="button" className="t-row w-full text-left" onClick={onOpen}>
+    <button
+      type="button"
+      data-tour={tour}
+      className="t-row w-full text-left"
+      onClick={onOpen}
+    >
       <Icon className="h-4 w-4 shrink-0 text-muted" strokeWidth={2} />
       <span className="min-w-0 flex-1">
         <span className="block text-sm">{label}</span>
@@ -152,6 +160,7 @@ export function More({
   onChanged,
   onOpenBiometrics,
   onOpenFood,
+  onTour,
   start,
   onStarted,
   onScreen,
@@ -180,6 +189,8 @@ export function More({
   onOpenBiometrics: () => void
   // A food a submission is about, opened on the tab it lives on.
   onOpenFood: (foodId: number) => void
+  // Take the welcome tour again. The row that asks for it is under Guide.
+  onTour: () => void
   // Which screen to open on. Only ever set by something outside this tab
   // sending somebody straight to it, and handed back the moment it is read.
   start?: Screen
@@ -393,7 +404,7 @@ export function More({
     )
   }
 
-  if (screen === 'guide') return <Guide />
+  if (screen === 'guide') return <Guide onTour={onTour} />
 
   if (screen === 'about') return <About onOpenGuide={() => go('guide')} />
 
@@ -697,18 +708,22 @@ export function More({
       <div className="t-card mb-3">
         <Row label="Account" icon={UserRound} onOpen={() => go('account')} />
         <Row label="Profile" icon={IdCard} onOpen={() => go('profile')} />
-        {!railed && <Row label="Targets" icon={Target} onOpen={() => go('targets')} />}
+        {!railed && (
+          <Row label="Targets" icon={Target} tour="more-targets" onOpen={() => go('targets')} />
+        )}
         {!railed && <Row label="Fitness" icon={HeartPulse} onOpen={() => go('fitness')} />}
         {!railed && <Row label="Biometrics" icon={ScaleGlyph} onOpen={onOpenBiometrics} />}
         <Row
           label="Health data sync"
           icon={Smartphone}
+          tour="more-sync"
           note={syncNote(sync)}
           onOpen={() => go('sync')}
         />
         <Row
           label="Members"
           icon={Users}
+          tour="more-members"
           note={requests > 0 ? requestsNote(requests) : undefined}
           onOpen={() => go('members')}
         />

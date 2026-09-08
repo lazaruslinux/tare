@@ -146,6 +146,9 @@ def me_payload(db: Session, user: models.User) -> dict[str, object]:
         # the door it came through, so meeting the verify screen first does not
         # cost somebody the first-run screen.
         "first_run_pending": user.first_run_at is None,
+        # Whether the welcome tour is still to be walked. Read the same way,
+        # from the account rather than from the browser.
+        "tour_pending": user.tour_seen_at is None,
         "location": user.location,
         # The picture other members are shown beside this account's name, or
         # null when it has none.

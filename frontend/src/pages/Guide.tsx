@@ -1,5 +1,5 @@
 import { AnimatePresence, motion, useReducedMotion } from 'framer-motion'
-import { ChevronDown } from 'lucide-react'
+import { ChevronDown, ChevronRight, Compass } from 'lucide-react'
 import { useState } from 'react'
 
 // The questions somebody actually asks, answered in the words the app uses.
@@ -76,7 +76,7 @@ const QUESTIONS: { q: string; a: string }[] = [
   },
 ]
 
-export function Guide() {
+export function Guide({ onTour }: { onTour: () => void }) {
   // Which question is open, by its place in the list. One at a time, so the
   // list stays a list.
   const [open, setOpen] = useState<number | null>(null)
@@ -84,6 +84,11 @@ export function Guide() {
 
   return (
     <div className="t-card mb-3">
+      <button type="button" className="t-row w-full text-left" onClick={onTour}>
+        <Compass className="h-4 w-4 shrink-0 text-muted" strokeWidth={2} />
+        <span className="min-w-0 flex-1 text-sm">Take the tour</span>
+        <ChevronRight className="h-4 w-4 shrink-0 text-muted" strokeWidth={2} />
+      </button>
       {QUESTIONS.map((row, index) => {
         const showing = open === index
         return (

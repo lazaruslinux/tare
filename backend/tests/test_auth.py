@@ -173,6 +173,7 @@ def test_login_answers_with_the_me_payload(client, make_user):
         # The fixture builds accounts straight into the database, so this one
         # has never been through the screen.
         "first_run_pending": True,
+        "tour_pending": True,
         "location": None,
         "avatar_url": None,
         "feed_hidden": [],

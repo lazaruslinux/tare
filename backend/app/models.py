@@ -122,6 +122,8 @@ class User(Base):
     )
     # Null until the first-run screen has been answered or skipped.
     first_run_at: Mapped[dt.datetime | None] = mapped_column(UtcDateTime, nullable=True)
+    # Null until the welcome tour has been finished or skipped.
+    tour_seen_at: Mapped[dt.datetime | None] = mapped_column(UtcDateTime, nullable=True)
     created_at: Mapped[dt.datetime] = mapped_column(UtcDateTime, nullable=False, default=now_utc)
 
 

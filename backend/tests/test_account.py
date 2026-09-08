@@ -140,3 +140,29 @@ def test_answering_the_first_run_screen_settles_it_and_asking_twice_changes_noth
 
 def test_answering_the_first_run_screen_needs_a_session(client):
     assert client.post("/api/account/first-run").status_code == 401
+
+
+# ---- The welcome tour, walked once ----
+
+
+def test_a_new_account_still_has_the_welcome_tour_to_walk(client, signed_in):
+    assert client.get("/api/auth/me").json()["tour_pending"] is True
+
+
+def test_walking_the_tour_settles_it_and_saying_so_twice_changes_nothing(
+    client, db_session, signed_in
+):
+    assert client.post("/api/account/tour").status_code == 204
+    db_session.refresh(signed_in)
+    walked = signed_in.tour_seen_at
+    assert walked is not None
+    assert client.get("/api/auth/me").json()["tour_pending"] is False
+
+    # Idempotent: a browser slow to move on must not move the moment.
+    assert client.post("/api/account/tour").status_code == 204
+    db_session.refresh(signed_in)
+    assert signed_in.tour_seen_at == walked
+
+
+def test_finishing_the_tour_needs_a_session(client):
+    assert client.post("/api/account/tour").status_code == 401

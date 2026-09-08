@@ -323,7 +323,7 @@ export function Journal({
       )}
 
       {day !== null && (
-        <BreakdownCard energy={day.energy} reveal={reveal}>
+        <BreakdownCard energy={day.energy} reveal={reveal} tour="journal-top">
           <div className="mb-1 flex items-center justify-between">
             <p className="t-micro">Remaining today</p>
             <button

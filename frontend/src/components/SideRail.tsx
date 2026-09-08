@@ -51,6 +51,7 @@ export function SideRail({
       </span>
       <button
         ref={plus}
+        data-tour="rail-plus"
         onClick={() => onPlus(plus.current?.getBoundingClientRect() ?? null)}
         className="mb-2 flex min-h-11 items-center justify-center gap-2 rounded-[0.625rem] bg-accent px-3 text-sm font-semibold text-bg"
       >
@@ -62,6 +63,7 @@ export function SideRail({
         return (
           <button
             key={id}
+            data-tour={id === 'targets' ? 'rail-targets' : undefined}
             onClick={() => onSelect(target)}
             aria-current={isCurrent(id) ? 'page' : undefined}
             aria-label={counted ? `${label}, ${waiting} waiting` : undefined}

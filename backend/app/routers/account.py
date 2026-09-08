@@ -211,6 +211,21 @@ def finish_first_run(
         db.commit()
 
 
+@router.post("/account/tour", status_code=status.HTTP_204_NO_CONTENT)
+def finish_tour(
+    db: Session = Depends(get_db), user: models.User = Depends(require_user)
+) -> None:
+    """Mark the welcome tour as walked, or skipped.
+
+    Idempotent, and it only ever sets the stamp: the tour is offered once, and
+    a second call from a browser that was slow to move on must not move the
+    moment or offer the tour again.
+    """
+    if user.tour_seen_at is None:
+        user.tour_seen_at = now_utc()
+        db.commit()
+
+
 # A picture of a person, not a shelf: smaller than a food photo, because the
 # screen that sends one has already framed it to the square it will be shown in.
 AVATAR_MAX_BYTES = 5 * 1024 * 1024

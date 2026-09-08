@@ -1,5 +1,5 @@
 import { AnimatePresence, motion, useReducedMotion } from 'framer-motion'
-import { useCallback, useEffect, useState } from 'react'
+import { useCallback, useEffect, useRef, useState } from 'react'
 
 import { api, type Me } from './api'
 import { Aside } from './components/Aside'
@@ -12,14 +12,16 @@ import { ScanFlow } from './components/ScanFlow'
 import { SideRail } from './components/SideRail'
 import { TabBar, type Page, type RailTarget } from './components/TabBar'
 import { TopBar } from './components/TopBar'
+import { Tour } from './components/Tour'
 import { WorkoutDetails } from './components/WorkoutDetails'
 import { entry } from './entry'
 import { useResume } from './hooks/useResume'
 import { TopBarContext, useTopBarState } from './hooks/useTopBar'
 import { useWaitingCount } from './hooks/useWaitingCount'
-import { useWideLayout } from './hooks/useWideLayout'
+import { useRailLayout, useWideLayout } from './hooks/useWideLayout'
 import { setClock } from './lib/clock'
 import { slotByTime, today, type Slot } from './lib/day'
+import { TOUR } from './lib/tour'
 import { Birthdate } from './pages/Birthdate'
 import { Dashboard, type DashScreen } from './pages/Dashboard'
 import { FoodTab } from './pages/Food'
@@ -70,11 +72,20 @@ export default function App() {
   // An invite, a verification link or a reset link is answered before anything
   // asks who is signed in: all three are opened by somebody who is not.
   const [phase, setPhase] = useState<Phase>(
-    entry.kind === 'app' || entry.kind === 'setup' ? 'loading' : entry.kind
+    entry.kind === 'app' || entry.kind === 'setup' || entry.kind === 'tour' ? 'loading' : entry.kind
   )
   // Whether the setup steps are being walked again, asked for by the address
   // the app was opened on. Cleared the moment they are through.
   const [replaying, setReplaying] = useState(entry.kind === 'setup')
+  // Which step of the welcome tour is up, or null for no tour. The tour is a
+  // layer over the shell, so it is held here rather than inside any one tab.
+  const [tour, setTour] = useState<number | null>(null)
+  // Whether the address asked for the tour, which takes it whatever the
+  // account has already seen.
+  const tourAsked = entry.kind === 'tour'
+  // Whether it has been offered this session, so it is started once and not
+  // again every time the account is read back.
+  const offered = useRef(false)
   const [page, setPage] = useState<Page>('dashboard')
   const [adding, setAdding] = useState(false)
   // Where the add menu was opened from. The rail gives its button's place and
@@ -123,6 +134,9 @@ export default function App() {
   // remount is the reset: each tab keeps its own view state inside itself.
   const [reset, setReset] = useState(0)
   const wide = useWideLayout()
+  // Which of a tour step's two anchors is on screen: the rail is what exists
+  // at 900 and up, and the tab bar is what exists below it.
+  const railed = useRailLayout()
   const reduced = useReducedMotion()
   const bar = useTopBarState()
   const { waiting, queue, requests, refresh: refreshWaiting } = useWaitingCount(me)
@@ -240,6 +254,47 @@ export default function App() {
     setAdding((was) => !was)
   }
 
+  // The tour starts once the shell is showing: for a new member that is right
+  // after setup. The wait lets the tab underneath draw before a hole is cut
+  // in it.
+  useEffect(() => {
+    if (phase !== 'signedin' || replaying || me === null || offered.current) return
+    if (!tourAsked && !me.tour_pending) return
+    const timer = setTimeout(() => {
+      offered.current = true
+      setTour(0)
+    }, 400)
+    return () => clearTimeout(timer)
+  }, [phase, replaying, me, tourAsked])
+
+  // Every step stands on the screen it is about, with nothing open over it:
+  // the tour drives the app rather than telling somebody where to tap.
+  useEffect(() => {
+    if (tour === null) return
+    setOverlay(null)
+    setAdding(false)
+    setPicking(false)
+    setScanning(null)
+    setMeasuring(false)
+    setExercising(false)
+    const go = TOUR[tour].go
+    if (go === undefined) return
+    // The More list at its root, which is where the rows the tour points at
+    // are.
+    if (go === 'more') setMoreView(null)
+    select(go)
+  }, [tour])
+
+  // Skipped or finished. The stamp goes down once, so walking it again from
+  // the Guide says nothing to the server.
+  const endTour = () => {
+    setTour(null)
+    if (me === null || !me.tour_pending) return
+    // Nothing on screen waits on it: the tour is over either way.
+    api('/account/tour', { method: 'POST' }).catch(() => undefined)
+    remember({ ...me, tour_pending: false })
+  }
+
   const enter = (who: Me) => {
     remember(who)
     setPhase(landing(who))
@@ -264,6 +319,7 @@ export default function App() {
 
   const leave = () => {
     remember(null)
+    setTour(null)
     setPage('dashboard')
     setPhase('anon')
   }
@@ -384,6 +440,7 @@ export default function App() {
                         setFoodOpen(id)
                         select('food')
                       }}
+                      onTour={() => setTour(0)}
                       start={moreView}
                       onStarted={() => setMoreView(null)}
                       onScreen={noteMoreScreen}
@@ -527,6 +584,17 @@ export default function App() {
               setScanning(null)
               changed()
             }}
+          />
+        )}
+        {tour !== null && (
+          <Tour
+            step={tour}
+            steps={TOUR}
+            wide={railed}
+            onNext={() => setTour(tour + 1)}
+            onBack={() => setTour(tour - 1)}
+            onSkip={endTour}
+            onDone={endTour}
           />
         )}
         {picking && (

@@ -45,6 +45,8 @@ export type Me = {
   // server's fact, so meeting the verify screen first does not cost somebody
   // the first-run screen.
   first_run_pending: boolean
+  // Whether the welcome tour is still to be walked, read the same way.
+  tour_pending: boolean
   location: string | null
   // The picture other members see beside this account's name, or null for its
   // initial.

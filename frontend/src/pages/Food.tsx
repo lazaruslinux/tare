@@ -484,7 +484,7 @@ export function FoodTab({
           this account keeps: type the name, or hold the packet up. The field is
           a button rather than a box, because what it opens is a sheet with a
           box of its own and the database underneath it. */}
-      <div className="mb-3 flex items-center gap-2">
+      <div data-tour="food-search" className="mb-3 flex items-center gap-2">
         <button
           type="button"
           className="t-input flex flex-1 items-center gap-2 text-left text-muted"

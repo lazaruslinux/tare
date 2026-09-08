@@ -45,6 +45,7 @@ const signed = (value: number): string =>
 export function BreakdownCard({
   energy,
   reveal,
+  tour,
   children,
 }: {
   // Null while the budget is typed in by hand or the profile is short of a
@@ -53,6 +54,9 @@ export function BreakdownCard({
   // Bumped by whatever owns the card to open the fold from inside it, the
   // way a badge that stands for one of the five figures does.
   reveal?: number
+  // The name the welcome tour points at this card by, on the one screen whose
+  // card it stops at.
+  tour?: string
   children: ReactNode
 }) {
   // The fold starts closed every time the card is opened. It is the detail
@@ -68,7 +72,7 @@ export function BreakdownCard({
   const toggle = () => setOpen(!open)
 
   return (
-    <div className="mb-3">
+    <div data-tour={tour} className="mb-3">
       <div className={`t-card${energy === null ? '' : ' t-card-tabbed'}`}>
         {children}
         <AnimatePresence initial={false}>

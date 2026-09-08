@@ -1407,7 +1407,7 @@ export function Dashboard({
       {/* Every ring is its own way in, so the card is a plain card and the
           head is a button of its own: a button inside a button is not a thing
           a screen reader can hand anybody. */}
-      <div className="t-card mb-3">
+      <div data-tour="dash-today" className="t-card mb-3">
         <button
           type="button"
           className="t-micro t-tap44 mb-2 flex items-center gap-1"

@@ -12,6 +12,7 @@ export type Entry =
   | { kind: 'verify'; token: string }
   | { kind: 'reset'; token: string }
   | { kind: 'setup' }
+  | { kind: 'tour' }
 
 function read(): Entry {
   const path = window.location.pathname
@@ -26,6 +27,10 @@ function read(): Entry {
   // Walking the setup steps again. It carries nothing but the request.
   if (path === '/' && new URLSearchParams(window.location.search).has('setup')) {
     return { kind: 'setup' }
+  }
+  // Taking the welcome tour again, whatever the account has already seen.
+  if (path === '/' && new URLSearchParams(window.location.search).has('tour')) {
+    return { kind: 'tour' }
   }
   return { kind: 'app' }
 }
