@@ -11,6 +11,7 @@ import {
   type SyncKey,
 } from '../api'
 import { ConfirmSheet } from '../components/ConfirmSheet'
+import { Lightbox } from '../components/Lightbox'
 import { stampText, useClock } from '../lib/clock'
 
 type Platform = 'iphone' | 'android'
@@ -30,26 +31,42 @@ const ALREADY_MADE =
   'click below. Creating a new key will disable the old one.'
 
 // What each phone needs, in the order somebody does it. Written for a person
-// who has never set up an automation, so every step is one thing to do.
-const STEPS: Record<Platform, string[]> = {
-  iphone: [
-    'Install Health Auto Export from the App Store and open it.',
-    'Let it read Apple Health when it asks. Without that it has nothing to send.',
-    'Go to Automations and add one. Set it to REST API, paste the address below into the URL, and add the header below.',
-    'Set the data type to Workouts, turn on route data and workout metrics, and set it to run every 5 minutes.',
-    'For the first run, set Date Range to Previous 30 days, run it once, then set it back to Default.',
-    'Add a second automation the same way, with the data type set to Health Metrics. Turn on the readings you want Tare to keep. Tare stores all of them.',
-    'Run each one once by hand. This screen will say connected within a minute.',
-  ],
-  android: [
-    'Install HC Webhook and open it.',
-    'Let it read Health Connect when it asks. Without that it has nothing to send.',
-    'Paste the address below into its webhook URL and add the header below as a custom header.',
-    'Turn on exercise sessions, heart rate, resting heart rate, active calories, steps, distance, weight and body fat.',
-    'Set it to sync on an interval, 15 minutes.',
-    'Run it once by hand. This screen will say connected within a minute.',
-  ],
-}
+// who has never set up an automation, so every step is one thing to do. A
+// picture under a step is the screen it describes, opened big on a tap.
+type Picture = { src: string; alt: string }
+type Step = { text: string; pictures?: Picture[] }
+
+const IPHONE_STEPS: Step[] = [
+  {
+    text: 'Find and install Health Auto Export from the App Store.',
+    pictures: [{ src: '/guide/hae-app-store.webp', alt: 'Health Auto Export on the App Store' }],
+  },
+  {
+    text: "Open the app and let it read Apple Health when it asks. Without that permission, the export won't work.",
+  },
+  {
+    text:
+      'Inside this app there are several ways to send out your health data. The free ' +
+      'trial lasts 7 days, and the premium version (a one-time fee) offers automated ' +
+      'exports. Tare is not affiliated with this developer in any way, and you can find ' +
+      'other ways to export your health data as JSON if you wish.',
+  },
+  {
+    text:
+      'You can export your workouts and upload them here, or point an automation at the ' +
+      'address below. Here is an example of a Workouts automation that suits Tare. You ' +
+      'can also create an automation for Health Metrics > Step Count to count your steps.',
+    pictures: [
+      { src: '/guide/hae-workouts-1.webp', alt: 'The Tare Workouts automation, top half' },
+      { src: '/guide/hae-workouts-2.webp', alt: 'The Tare Workouts automation, bottom half' },
+    ],
+  },
+]
+
+// Android has a key and an upload like any other phone, and no guide yet.
+const ANDROID_NOTE =
+  'The Android guide is in development, but the ingest link and upload portal is still ' +
+  'available. Android has not been fully tested and may show inaccurate numbers on Tare.'
 
 const PLATFORM_LABEL: Record<Platform, string> = { iphone: 'iPhone', android: 'Android' }
 
@@ -97,6 +114,8 @@ export function SyncDevice() {
   const [asking, setAsking] = useState(false)
   const [wiping, setWiping] = useState(false)
   const [wiped, setWiped] = useState('')
+  // The guide picture opened big, or none.
+  const [enlarged, setEnlarged] = useState<Picture | null>(null)
   const field = useId()
   // The last-sync line is a stamp, so it redraws when the clock changes.
   useClock()
@@ -245,15 +264,37 @@ export function SyncDevice() {
   return (
     <>
       <div className="t-card mb-3">
-        <p className="t-micro mb-2">{PLATFORM_LABEL[platform]}</p>
-        <ol className="ml-4 list-decimal text-sm">
-          {STEPS[platform].map((step) => (
-            <li key={step} className="mb-2">
-              {step}
-            </li>
-          ))}
-        </ol>
+        <p className="t-micro mb-2">{PLATFORM_LABEL[platform]} guide</p>
+        {platform === 'android' ? (
+          <p className="text-sm text-muted">{ANDROID_NOTE}</p>
+        ) : (
+          <ol className="ml-4 list-decimal text-sm">
+            {IPHONE_STEPS.map((step) => (
+              <li key={step.text} className="mb-3">
+                {step.text}
+                {step.pictures !== undefined && (
+                  <div className="mt-2 flex flex-wrap gap-2">
+                    {step.pictures.map((picture) => (
+                      <button
+                        key={picture.src}
+                        type="button"
+                        className="max-w-[12rem] overflow-hidden rounded-lg bg-surface-2"
+                        aria-label={`Open ${picture.alt}`}
+                        onClick={() => setEnlarged(picture)}
+                      >
+                        <img src={picture.src} alt={picture.alt} loading="lazy" className="w-full" />
+                      </button>
+                    ))}
+                  </div>
+                )}
+              </li>
+            ))}
+          </ol>
+        )}
       </div>
+      {enlarged !== null && (
+        <Lightbox src={enlarged.src} alt={enlarged.alt} onClose={() => setEnlarged(null)} />
+      )}
 
       <div className="t-card mb-3">
         <p className="t-micro mb-2">Your sync key</p>
@@ -292,7 +333,7 @@ export function SyncDevice() {
           <p className="t-micro mb-2">Upload an export</p>
           <p className="mb-3 text-sm text-muted">
             Export the last 30 days from Health Auto Export as JSON and pick the file here.
-            Anything already synced is skipped.
+            Anything already synced is skipped. Files up to 15 MB.
           </p>
           <label className="t-btn cursor-pointer" htmlFor={field}>
             {uploading ? 'Uploading.' : 'Choose a file'}
