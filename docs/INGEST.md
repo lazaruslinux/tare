@@ -129,12 +129,11 @@ history in. In Health Auto Export, export the range you want as JSON and save
 the file to your phone. Then open Tare, go to More, then Health data sync, and
 choose the file under Import health data.
 
-It takes one JSON file, up to 15 MB, in the Health Auto Export layout: a
-top-level `data` object holding `metrics` and `workouts` lists. Tare draws Step
-Count, Active Energy, Apple Exercise Time and Resting Heart Rate for the tiles,
-Walking + Running Distance for the hour bars, and keeps every other metric it
-finds. A workout needs a name and a start time; end or duration, calories,
-distance, heart rate and route are read when present. Anything already stored is
+It takes one JSON file, up to 15 MB. Upload your Workouts file and your Health
+Metrics file separately. The only Apple Health metrics Tare currently looks for
+are Step Count, Active Energy, Walking + Running Distance, Apple Exercise Time
+and Resting Heart Rate; everything else can stay unselected when creating the
+export, though anything extra that arrives is kept. Anything already stored is
 skipped. Weigh-ins are never written from a file.
 
 The smallest file it reads whole looks like this, and the screen shows the same

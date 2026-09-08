@@ -74,21 +74,17 @@ const ANDROID_NOTE =
   'The Android guide is in development, but the ingest link and upload portal is still ' +
   'available. Android has not been fully tested and may show inaccurate numbers on Tare.'
 
-// What a file has to hold, said plainly enough that somebody exporting from
-// something other than Health Auto Export knows what to build.
+// What a file is for, in his words, and which metrics the export needs.
 const IMPORT_COPY =
   'If you do not wish to use the sync/automation feature, Tare accepts JSON files ' +
-  'containing exported Apple Health data. Android has not been tested. See the JSON ' +
-  'format below.'
-
-// The rules of the format, kept with the example so another exporter can match it.
-const FORMAT_NOTE =
-  'One file up to 15 MB, in the Health Auto Export layout: a top-level "data" object ' +
-  'holding "metrics" and "workouts" lists. Tare draws Step Count, Active Energy, Apple ' +
-  'Exercise Time and Resting Heart Rate for the tiles, Walking + Running Distance for the ' +
-  'hour bars, and keeps every other metric it finds. A workout needs a name and a start ' +
-  'time; end or duration, calories, distance, heart rate and route are read when present. ' +
-  'Anything already stored is skipped. Weigh-ins are never written from a file.'
+  '(up to 15 MB) containing exported Apple Health data. Android has not been tested. ' +
+  'See the JSON format below.'
+const METRICS_COPY =
+  "Upload your 'Workouts' file and 'Health Metrics' file separately. The only Apple " +
+  'Health Metrics Tare currently looks for are: Step Count, Active Energy, Walking + ' +
+  'Running Distance, Apple Exercise Time and Resting Heart Rate. Everything else can ' +
+  'stay unselected when creating your export. Tare plans to add more insights in the ' +
+  'future.'
 
 // How many recent imports show before the member asks for more.
 const RECENT_PAGE = 5
@@ -445,7 +441,8 @@ export function SyncDevice() {
       {status?.uploads !== false && (
         <div className="t-card mb-3">
           <p className="t-micro mb-2">Import health data</p>
-          <p className="mb-3 text-sm text-muted">{IMPORT_COPY}</p>
+          <p className="mb-2 text-sm text-muted">{IMPORT_COPY}</p>
+          <p className="mb-3 text-sm text-muted">{METRICS_COPY}</p>
           <label className="t-btn cursor-pointer" htmlFor={field}>
             {uploading ? 'Uploading.' : 'Choose a file'}
           </label>
@@ -473,7 +470,6 @@ export function SyncDevice() {
           </button>
           {layoutOpen && (
             <>
-              <p className="mt-2 text-sm text-muted">{FORMAT_NOTE}</p>
               <pre className="mt-2 overflow-x-auto rounded-lg bg-surface-2 p-2 text-[0.75rem]">
                 {FILE_LAYOUT}
               </pre>

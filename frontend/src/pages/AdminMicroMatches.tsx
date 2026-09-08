@@ -9,6 +9,11 @@ import { useTopBar } from '../hooks/useTopBar'
 // are laid out here and an administrator says which is right. Applying fills
 // only the vitamin rows the food has none of. Nothing here touches the panel.
 
+// Why an administrator is being asked at all.
+const WHY_THESE =
+  'These foods have no barcode, so Tare looked each one up by name at USDA FoodData ' +
+  'Central. Pick the record that matches the food and its vitamins and minerals are ' +
+  'copied in. None of these skips it.'
 const NOBODY_WAITING = 'Nothing is waiting on a match.'
 const NONE_OF_THESE = 'None of these'
 
@@ -69,6 +74,10 @@ export function AdminMicroMatches({ onBack }: { onBack: () => void }) {
         <div className="t-card mb-3">
           <p className="text-sm text-muted">{NOBODY_WAITING}</p>
         </div>
+      )}
+
+      {rows !== null && rows.length > 0 && (
+        <p className="mb-3 text-sm text-muted">{WHY_THESE}</p>
       )}
 
       {(rows ?? []).map((row) => (
