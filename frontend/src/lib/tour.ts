@@ -41,7 +41,7 @@ export const TOUR: TourStep[] = [
   {
     id: 'food',
     title: 'Find food',
-    body: 'Search the Tare database and your own foods. Nothing is looked up online, so scanning a barcode is how a new food gets in.',
+    body: 'Search the Tare database and your own foods. A barcode Tare does not know yet is looked up on Open Food Facts; you check the details and submit the food to Tare.',
     target: { phone: 'food-search', wide: 'food-search' },
     go: 'food',
   },
@@ -57,7 +57,7 @@ export const TOUR: TourStep[] = [
   {
     id: 'sync',
     title: 'Connect your phone',
-    body: 'Set up Health data sync once and steps, workouts and weight flow in on their own.',
+    body: 'Set up Health data sync once and your steps and workouts flow in on their own.',
     target: { phone: 'more-sync', wide: 'more-sync' },
     go: 'more',
   },
