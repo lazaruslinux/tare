@@ -1,5 +1,8 @@
-# Development only. Compose reads this file automatically, so a deployment
-# should delete or rename it rather than rely on remembering not to use it.
+# Development only, and opt-in: compose does not read this name on its own.
+# Bring the rig up with
+#   docker compose -f docker-compose.yml -f docker-compose.dev.yml up -d
+# A deployment runs plain `docker compose up`, which is the shape docs/DEPLOY.md
+# describes and never sees anything in this file.
 services:
   db:
     # A port for psql and migration work from the host. Loopback, and an

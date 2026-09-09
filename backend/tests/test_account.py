@@ -1,6 +1,9 @@
 import datetime as dt
+import logging
 
+from app import models, throttle
 from app.routers.auth import CLEARED_BIRTHDATE
+from tests.conftest import PASSWORD
 
 
 def patch(client, **fields):
@@ -173,3 +176,67 @@ def test_walking_the_tour_settles_it_and_saying_so_twice_changes_nothing(
 
 def test_finishing_the_tour_needs_a_session(client):
     assert client.post("/api/account/tour").status_code == 401
+
+
+# ---- Putting an address on an account with no mail server behind it ----
+
+
+def test_with_no_smtp_the_address_is_stored_and_no_link_is_minted_or_logged(
+    client, db_session, make_user, caplog
+):
+    """An instance with no mail settings keeps the address and stops there.
+
+    The old shape minted a token anyway and let the mailer log the live link
+    next to the address at WARNING, which is a working credential written into
+    the container log.
+    """
+    user = make_user("member", verified=True, email=None)
+    client.post("/api/auth/login", json={"username": "member", "password": PASSWORD})
+
+    with caplog.at_level(logging.DEBUG):
+        answer = client.post("/api/account/email", json={"email": "Newly@Example.com"})
+
+    assert answer.status_code == 200
+    assert answer.json()["email"] == "newly@example.com"
+    assert answer.json()["email_verified"] is True
+    db_session.refresh(user)
+    assert user.email == "newly@example.com"
+    assert db_session.query(models.EmailToken).count() == 0
+    assert "Verification link" not in caplog.text
+
+
+def test_with_no_smtp_a_change_applies_at_once_without_a_link(
+    client, db_session, make_user, caplog
+):
+    user = make_user("member", verified=True, email="member@example.com")
+    client.post("/api/auth/login", json={"username": "member", "password": PASSWORD})
+
+    with caplog.at_level(logging.DEBUG):
+        answer = client.post("/api/account/email", json={"email": "moved@example.com"})
+
+    assert answer.status_code == 200
+    assert answer.json()["email"] == "moved@example.com"
+    assert answer.json()["pending_email"] is None
+    db_session.refresh(user)
+    assert user.email == "moved@example.com"
+    assert user.pending_email is None
+    assert db_session.query(models.EmailToken).count() == 0
+    assert "Verification link" not in caplog.text
+
+
+def test_one_account_cannot_probe_address_after_address(client, make_user):
+    """The address-keyed allowance hands out a fresh bucket per address, so
+    without a per-account one this route reads back who is a member here."""
+    make_user("member", verified=True, email="member@example.com")
+    client.post("/api/auth/login", json={"username": "member", "password": PASSWORD})
+
+    for index in range(throttle.email_change_limiter.max_attempts):
+        assert (
+            client.post(
+                "/api/account/email", json={"email": f"probe{index}@example.com"}
+            ).status_code
+            == 200
+        )
+    refused = client.post("/api/account/email", json={"email": "probe99@example.com"})
+    assert refused.status_code == 429
+    assert refused.json() == {"detail": throttle.TOO_MANY}

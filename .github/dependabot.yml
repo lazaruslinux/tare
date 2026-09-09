@@ -1,0 +1,82 @@
+# Monthly rather than weekly. This is a small project with one maintainer, and
+# a daily drip of single-package pull requests is how updates stop being read.
+#
+# One group per ecosystem, so a month's patches arrive as one branch to check
+# out and run the suite against instead of a dozen.
+#
+# Majors are ignored everywhere and are handled by hand. The Postgres image is
+# the reason it is a rule rather than a habit: a major bumps the on-disk format,
+# and starting the new image on the old data directory refuses to come up. The
+# rest earn the same treatment because a major is a release-note read, not a
+# merge button.
+version: 2
+updates:
+  - package-ecosystem: github-actions
+    directory: /
+    schedule:
+      interval: monthly
+    groups:
+      actions:
+        patterns: ['*']
+    ignore:
+      - dependency-name: '*'
+        update-types: [version-update:semver-major]
+
+  - package-ecosystem: npm
+    directory: /frontend
+    schedule:
+      interval: monthly
+    groups:
+      frontend:
+        patterns: ['*']
+    ignore:
+      - dependency-name: '*'
+        update-types: [version-update:semver-major]
+
+  - package-ecosystem: pip
+    directory: /backend
+    schedule:
+      interval: monthly
+    groups:
+      backend:
+        patterns: ['*']
+    ignore:
+      - dependency-name: '*'
+        update-types: [version-update:semver-major]
+
+  # The two Dockerfiles. Both pin by digest with the tag in a comment, so what
+  # arrives here is a new digest for the same tag.
+  - package-ecosystem: docker
+    directory: /backend
+    schedule:
+      interval: monthly
+    groups:
+      images:
+        patterns: ['*']
+    ignore:
+      - dependency-name: '*'
+        update-types: [version-update:semver-major]
+
+  - package-ecosystem: docker
+    directory: /frontend
+    schedule:
+      interval: monthly
+    groups:
+      images:
+        patterns: ['*']
+    ignore:
+      - dependency-name: '*'
+        update-types: [version-update:semver-major]
+
+  # The images named in the compose files, which the Dockerfile ecosystem above
+  # does not read: Postgres, and the development mail catcher.
+  - package-ecosystem: docker-compose
+    directory: /
+    schedule:
+      interval: monthly
+    groups:
+      compose:
+        patterns: ['*']
+    ignore:
+      - dependency-name: '*'
+        update-types: [version-update:semver-major]

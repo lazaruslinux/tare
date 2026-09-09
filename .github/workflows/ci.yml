@@ -3,6 +3,11 @@ name: CI
 on:
   push:
   pull_request:
+  # The audits below only find something when somebody else publishes an
+  # advisory, which does not wait for a push. Sunday, early UTC, off the hour
+  # so it is not queued behind everybody else's midnight cron.
+  schedule:
+    - cron: '17 6 * * 0'
 
 # Nothing here writes anything back.
 permissions:
@@ -68,3 +73,22 @@ jobs:
       - run: npm run build
 
       - run: npm audit --omit=dev
+
+  # The stack as a deployment builds it: the compose file parses, and both
+  # images build. Nothing is started and nothing is pushed.
+  compose:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+
+      # The compose file reads .env, and refuses outright without a database
+      # password. The example values are enough to parse and build with,
+      # because nothing here is started.
+      - name: Configure
+        run: cp .env.example .env
+
+      - name: Config
+        run: docker compose -f docker-compose.yml config
+
+      - name: Build
+        run: docker compose -f docker-compose.yml build

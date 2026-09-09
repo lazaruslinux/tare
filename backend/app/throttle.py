@@ -143,6 +143,11 @@ ingest_token_limiter = RateLimiter(5, 60, "ingest-token")
 # above is spent per address, so a key used from a phone that keeps changing
 # networks would otherwise have as many allowances as it has addresses.
 ingest_user_limiter = RateLimiter(60, 60, "ingest-user")
+# Writing an address onto an account, counted per account rather than per
+# address. The allowance above is spent per address, so a signed-in member
+# could otherwise read the address-taken answer for one address after another,
+# each in a bucket of its own, and walk the member list that way.
+email_change_limiter = RateLimiter(10, 900, "email-change")
 # Spending an emailed link: a verification, an address change, or a reset. The
 # tokens are high entropy, so this guards against a client stuck in a loop and
 # against somebody working through the table, not against a guessing run.

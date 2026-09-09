@@ -58,11 +58,17 @@ These have working defaults and only need setting when the default is wrong.
 
 ## Start
 
-The development override publishes Postgres on the host, which a deployment
-has no use for. Delete or rename it first:
+The development file, `docker-compose.dev.yml`, publishes Postgres on the host
+and runs a mail catcher, neither of which a deployment has any use for. It is
+opt-in: compose does not read that name on its own, so a deployment starts the
+plain way and never sees it.
+
+Make the tiles folder first. Compose bind-mounts `./tiles` into the web
+container, and Docker creates a missing bind-mount source itself, owned by
+root, which the optional basemap below then cannot be written into.
 
 ```
-rm docker-compose.override.yml
+mkdir tiles
 docker compose up -d --build
 ```
 
@@ -241,14 +247,7 @@ Leaving this out costs nothing. With the folder empty the app asks the server
 for a single byte of the archive, is told there is none, and draws the line;
 the renderer is a chunk of its own and is never fetched at all.
 
-Make the folder next to `docker-compose.yml`, before the first
-`docker compose up`, so Docker does not create it owned by root:
-
-```
-mkdir tiles
-```
-
-Cut the area you want out of a Protomaps daily build with their `pmtiles`
+The folder is the `tiles` one made under Start. Cut the area you want out of a Protomaps daily build with their `pmtiles`
 tool. The whole planet is around a hundred gigabytes; one city and the country
 around it is a few hundred megabytes.
 
@@ -326,15 +325,39 @@ while you do it:
 docker compose stop web api
 cat tare-db-2026-01-31.sql | docker compose exec -T db psql -U tare -d tare
 docker compose cp ./tare-data-2026-01-31/. api:/data
+docker compose run --rm --user root api chown -R tare:tare /data
 docker compose start api web
-docker compose exec --user root api chown -R tare:tare /data
 ```
 
 The dump drops what it is replacing on the way in, so restoring over a
 database that already has rows is the same operation as restoring into an
-empty one. The last line is the one that is easy to forget: files copied back
-in arrive owned by root, and the api runs as `tare` and cannot write beside
-them.
+empty one. The chown is the line that is easy to forget: files copied back in
+arrive owned by root, and the api runs as `tare` and cannot write beside them.
+It goes through `run` rather than `exec` because the api is stopped at that
+point, and it runs before the api starts rather than after, so the api never comes up over
+a `/data` it cannot write and start serving broken pictures in the meantime.
+
+### Keeping backups
+
+A cron entry, on the host, run as whoever can drive compose in the project
+directory:
+
+```
+17 3 * * * cd /srv/tare && \
+  docker compose exec -T db pg_dump -U tare -d tare --clean --if-exists \
+    > /srv/tare-backups/db-$(date +\%F).sql && \
+  docker compose cp api:/data /srv/tare-backups/data-$(date +\%F)
+```
+
+Keep a few weeks of daily copies and a monthly one for a year, and delete the
+rest; a backup nobody prunes fills the disk the instance is running on.
+
+Copying `/data` from a live instance can catch a photo mid-write, so either
+`docker compose stop api` around the copy or accept that the database dump is
+the source of truth and a half-written picture is what you lose.
+
+Restore once into a scratch instance to prove it. A backup that has never been
+restored is a guess about a file, not a copy of an instance.
 
 ## If something is wrong
 

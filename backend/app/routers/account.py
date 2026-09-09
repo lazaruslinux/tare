@@ -173,12 +173,26 @@ def set_email(
     mail.
     """
     address = clean_email(body.email)
+    # Counted per account as well, because the allowance below is keyed by the
+    # address: without this one a signed-in member gets a fresh bucket for
+    # every address they try and can read the address-taken answer off each.
+    if throttle.email_change_limiter.hit(str(user.id)):
+        raise HTTPException(status.HTTP_429_TOO_MANY_REQUESTS, throttle.TOO_MANY)
     # Counted against the resend allowance and keyed by the address rather than
     # the caller, because what this spends is somebody else's inbox.
     if throttle.resend_limiter.hit(address):
         raise HTTPException(status.HTTP_429_TOO_MANY_REQUESTS, throttle.TOO_MANY)
     if address_taken(db, address, user.id):
         raise HTTPException(status.HTTP_400_BAD_REQUEST, EMAIL_TAKEN)
+
+    # No mail server, no link: the address is taken as typed, the way sign-up
+    # takes one, and nothing waits on a token that could only be logged.
+    if not mail.configured():
+        user.email = address
+        user.email_verified = True
+        user.pending_email = None
+        db.commit()
+        return me_payload(db, user)
 
     if user.email is None:
         user.email = address
@@ -187,6 +201,7 @@ def set_email(
     else:
         user.pending_email = address
         purpose = "change"
+
     token = security.create_email_token(db, user.id, purpose)
     db.commit()
     # After the response, like every other message this instance sends.

@@ -6,6 +6,8 @@ Tare estimates. It does not diagnose, treat, or prescribe. The equations here ar
 
 Items marked UNVERIFIED were not confirmed against a primary source at the time of writing and must not be promoted to fact without a source.
 
+Sourcing status: a line marked UNVERIFIED cites a value the author has not yet checked against the primary source, usually because the full text was behind a paywall or otherwise not reachable. The app uses those values anyway, so the marker records what is still owed rather than what is held back, and it stays on the line until somebody reads the source.
+
 ## Decisions
 
 ### Energy
@@ -171,7 +173,7 @@ Items marked UNVERIFIED were not confirmed against a primary source at the time 
    | Field | Required for a personal estimate | Fallback when missing |
    |---|---|---|
    | Birthdate | Yes (also required by decision 21) | None; registration refuses without it |
-   | Sex | Yes | Fixed 2,000 kcal defaults (decision 9) |
+   | Gender | Yes | Fixed 2,000 kcal defaults (decision 9) |
    | Height | Yes | Fixed 2,000 kcal defaults |
    | Weight | Yes; latest weigh-in wins | Fixed 2,000 kcal defaults |
    | Activity level | No | Not much (decision 6) |
@@ -235,7 +237,7 @@ Items marked UNVERIFIED were not confirmed against a primary source at the time 
 | Projected goal date | "At this pace, about [Month Year]" | projection, ETA, linear estimate |
 | BMI | not shown | BMI, body mass index, obese, overweight, underweight |
 | Body fat percentage | "body fat" with the member's own number | essential fat, athlete range, obese |
-| Sex field | "Sex", Female / Male, "Used only to estimate how much energy your body uses" | gender, biological sex |
+| Sex field | "Gender", Female / Male, "Used only to estimate how much energy your body uses" | sex, biological sex |
 | Clinician nudge | "Talk to a clinician" | doctor's orders, medical warning, risk |
 | Missing profile | "Add your details for a personal number" | incomplete profile, error |
 
