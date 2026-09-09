@@ -8,7 +8,7 @@ from urllib.parse import quote
 from pydantic import Field
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
-VERSION = "0.3.1"
+VERSION = "0.4.0"
 
 # The literal values shipped in .env.example. An install still carrying one of
 # them has not been configured at all, which is a different fault from a bad
