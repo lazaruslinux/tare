@@ -1,7 +1,7 @@
 # Pinned by digest so two builds of the same commit produce the same image and
 # a moved tag cannot slip a different base in between them. The tag rides in
 # this comment for humans: python:3.13-slim
-FROM python:3.13-slim@sha256:881d80734ee05dca6f7f42dcb080975652a53c7eda9ba1f03bb8da31aa6a6ec2
+FROM python:3.14-slim@sha256:cad9a2c871761c413caa6fdd6441c783451e740a48aaeba60ae62a8b53525ef6
 
 ENV PYTHONDONTWRITEBYTECODE=1 \
     PYTHONUNBUFFERED=1
