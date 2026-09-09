@@ -92,7 +92,7 @@ const unitOf = (tile: Tile, units: Units): string => tile.read(0, units).unit
 // What each trend row is called and the colour it is read in.
 const TREND_LOOK: Record<TrendRow['key'], { label: string; tone: string }> = {
   steps: { label: 'Steps', tone: 'text-violet' },
-  exercise_minutes: { label: 'Exercise', tone: 'text-accent' },
+  exercise_minutes: { label: 'Activity', tone: 'text-accent' },
   distance: { label: 'Distance', tone: 'text-blue' },
   workouts: { label: 'Workouts', tone: 'text-orange' },
 }

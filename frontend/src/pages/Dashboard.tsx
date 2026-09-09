@@ -382,6 +382,20 @@ function Spark({ series, tall, axis, selected = null, onSelect }: {
       onPointerLeave={pick ? away : undefined}
       onPointerCancel={pick ? away : undefined}
     >
+      {/* A rule at every dated tick, behind the lines, so a dot can be read
+          back down to the date under it. The axis-less variant has no ticks
+          and so gets none. */}
+      {dated.map((index) => (
+        <line
+          key={`grid-${dates[index]}`}
+          x1={`${across(dates[index])}%`}
+          y1="0"
+          x2={`${across(dates[index])}%`}
+          y2="100%"
+          stroke="var(--line-strong)"
+          strokeWidth="1"
+        />
+      ))}
       {/* Where the reader is, straight down through every line at once. */}
       {selected !== null && dates.includes(selected) && (
         <line
@@ -1477,7 +1491,7 @@ export function Dashboard({
 
       <div className="t-card mb-3">
         <CardHead
-          label="Exercise"
+          label="Activity"
           onOpen={onOpenFitness}
           onAdd={() => setExercising(true)}
         />
@@ -1517,7 +1531,7 @@ export function Dashboard({
         ) : (
           <>
             <p className="text-base font-semibold tracking-tight">
-              Exercise on {movedDays} of {dates.length} days
+              Active on {movedDays} of {dates.length} days
             </p>
             <p className="text-xs text-muted">Sync a device to see steps here.</p>
           </>

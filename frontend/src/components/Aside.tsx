@@ -65,7 +65,7 @@ export function Aside({
             }
           />
           <Figure
-            label="Exercise"
+            label="Activity"
             value={
               strip === null || strip.exercise_min === null
                 ? '-'

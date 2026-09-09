@@ -452,7 +452,7 @@ export function Journal({
       {day !== null && (
         <div className="t-card mb-3">
           <div className="mb-1 flex items-center justify-between">
-            <p className="t-micro">Exercise</p>
+            <p className="t-micro">Activity</p>
             {day.exercise_kcal > 0 && (
               <span className="t-nums text-xs text-muted">+{day.exercise_kcal} cal</span>
             )}

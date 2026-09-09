@@ -248,6 +248,22 @@ export function DayBars({
         onPointerLeave={pick ? away : undefined}
         onPointerCancel={pick ? away : undefined}
       >
+        {/* A rule on each column boundary, behind everything, so a bar can be
+            read against the days beside it. Fainter than the dashed target
+            line, which has to stay the strongest rule on the chart. */}
+        <div className="pointer-events-none absolute inset-0">
+          {bars.slice(1).map((row, index) => (
+            <span
+              key={row.date}
+              className="absolute inset-y-0 w-px"
+              style={{
+                left: `${((index + 1) / bars.length) * 100}%`,
+                background: 'var(--line-strong)',
+                opacity: 0.5,
+              }}
+            />
+          ))}
+        </div>
         {/* The ground the bars stand on: a hairline across the whole row, so a
             week with little in it reads as a quiet week rather than as a box
             of empty slabs. */}

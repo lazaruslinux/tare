@@ -1,4 +1,4 @@
-import { Scale } from 'lucide-react'
+import { Check, Scale } from 'lucide-react'
 import { useState } from 'react'
 
 import {
@@ -166,22 +166,32 @@ export function PortionSheet({
   }
 }) {
   const [start] = useState(() =>
-    opening(food, entry, autoLog?.standing.find((row) => row.slot === slot) ?? null)
+    opening(
+      food,
+      entry,
+      autoLog?.standing.find((row) => row.slot === slot) ?? autoLog?.standing[0] ?? null
+    )
   )
   const [amount, setAmount] = useState(start.amount)
   const [choice, setChoice] = useState(start.choice)
-  const [meal, setMeal] = useState<Slot>(slot)
+  // The mealtimes this is for. One everywhere but Auto-log, where a food can
+  // stand for several at once: the ones it already stands for, and the one the
+  // sheet was opened on.
+  const [meals, setMeals] = useState<Slot[]>(() =>
+    autoLog === undefined
+      ? [slot]
+      : SLOTS.filter(
+          (option) => option === slot || autoLog.standing.some((row) => row.slot === option)
+        )
+  )
+  const meal = meals[0] ?? slot
   const [error, setError] = useState('')
   const [saving, setSaving] = useState(false)
-  // Whether the question about stopping this standing auto-log is up.
+  // Whether the question about stopping this food's auto-logs is up.
   const [stopping, setStopping] = useState(false)
   // A change to a row an auto-log wrote is meant for the days to come as well
   // unless somebody says otherwise, which is what the day off looks like.
   const [follow, setFollow] = useState(true)
-
-  // The instruction for the meal now chosen, or null while that meal has none
-  // and this is a new one.
-  const standing = autoLog?.standing.find((row) => row.slot === meal) ?? null
 
   const typed = Number(amount.trim())
   const valid = Number.isFinite(typed) && typed > 0
@@ -223,17 +233,19 @@ export function PortionSheet({
     setChoice(next)
   }
 
-  // Which meal is being set. One this food already auto-logs into is that
-  // instruction being edited, so its portion is what the fields read back; a
-  // meal without one keeps whatever is typed.
+  // Which mealtimes are being set. Auto-log takes any of them at once, so a
+  // chip there is a check; everywhere else one meal replaces the other. The
+  // amount is left alone either way: it is the one portion for all of them.
   const chooseMeal = (option: Slot) => {
-    setMeal(option)
-    const row = autoLog?.standing.find((one) => one.slot === option)
-    if (row === undefined || food === null) return
-    const next = autoChoice(food, row)
-    if (next === null) return
-    setAmount(String(row.amount))
-    setChoice(next)
+    if (autoLog === undefined) {
+      setMeals([option])
+      return
+    }
+    setMeals((current) =>
+      current.includes(option)
+        ? current.filter((one) => one !== option)
+        : SLOTS.filter((one) => one === option || current.includes(one))
+    )
   }
 
   // What the portion comes to in the food's own unit, and in servings as well
@@ -274,23 +286,12 @@ export function PortionSheet({
       return
     }
     if (autoLog && food !== null && pick !== null) {
-      setSaving(true)
-      setError('')
-      try {
-        await api(standing === null ? '/diary/auto-logs' : `/diary/auto-logs/${standing.id}`, {
-          method: standing === null ? 'POST' : 'PATCH',
-          body: {
-            ...(standing === null ? { food_id: food.id } : {}),
-            amount: sending,
-            unit: chosenUnit(food, pick),
-            slot: meal,
-          },
-        })
-        autoLog.onSaved()
-      } catch (failure) {
-        setError(errorText(failure))
-        setSaving(false)
+      // Nothing checked is how somebody stops it, and every removal asks first.
+      if (meals.length === 0) {
+        setStopping(true)
+        return
       }
+      await saveAuto(food, pick)
       return
     }
     setSaving(true)
@@ -308,16 +309,34 @@ export function PortionSheet({
     }
   }
 
-  // Turning off the one meal that is chosen. Any other meal this food logs
-  // into is a separate instruction and stands. What it already wrote is eaten
-  // and stays.
-  const stop = async () => {
-    if (standing === null || !autoLog) return
+  // The checked mealtimes against the ones this food already stands for: a
+  // newly checked one is set up, an unchecked one is stopped, and a kept one
+  // is only rewritten when the portion changed. Days already written stand.
+  const saveAuto = async (row: Food, chosen: Pick) => {
+    if (!autoLog) return
+    const unit = chosenUnit(row, chosen)
     setSaving(true)
     setError('')
     try {
-      await api(`/diary/auto-logs/${standing.id}`, { method: 'DELETE' })
-      autoLog.onStopped()
+      for (const one of autoLog.standing) {
+        if (!meals.includes(one.slot)) {
+          await api(`/diary/auto-logs/${one.id}`, { method: 'DELETE' })
+        } else if (one.amount !== sending || one.unit !== unit) {
+          await api(`/diary/auto-logs/${one.id}`, {
+            method: 'PATCH',
+            body: { amount: sending, unit, slot: one.slot },
+          })
+        }
+      }
+      for (const option of meals) {
+        if (autoLog.standing.some((one) => one.slot === option)) continue
+        await api('/diary/auto-logs', {
+          method: 'POST',
+          body: { food_id: row.id, amount: sending, unit, slot: option },
+        })
+      }
+      if (meals.length === 0) autoLog.onStopped()
+      else autoLog.onSaved()
     } catch (failure) {
       setError(errorText(failure))
       setSaving(false)
@@ -474,20 +493,29 @@ export function PortionSheet({
 
         {!picking && (
           <>
-            <p className="t-micro mt-3 mb-2">Meal</p>
+            <p className="t-micro mt-3 mb-2">{autoLog ? 'Mealtimes' : 'Meal'}</p>
             <div className="flex flex-wrap gap-2">
               {SLOTS.map((option) => (
                 <button
                   key={option}
                   type="button"
-                  aria-pressed={meal === option}
+                  aria-pressed={meals.includes(option)}
                   className="t-chip aria-pressed:border-accent aria-pressed:text-text"
                   onClick={() => chooseMeal(option)}
                 >
+                  {/* A check, because several of these can be on at once. */}
+                  {autoLog !== undefined && meals.includes(option) && (
+                    <Check className="h-3.5 w-3.5 text-accent" strokeWidth={2.5} />
+                  )}
                   {SLOT_LABEL[option]}
                 </button>
               ))}
             </div>
+            {autoLog !== undefined && (
+              <p className="mt-2 text-xs text-muted">
+                One amount, at every mealtime you pick. Clearing them all stops it.
+              </p>
+            )}
           </>
         )}
 
@@ -518,42 +546,22 @@ export function PortionSheet({
               Delete
             </button>
           ) : (
-            !autoLog && (
-              <button type="button" className="t-btn" onClick={onClose}>
-                Cancel
-              </button>
-            )
+            <button type="button" className="t-btn" onClick={onClose}>
+              Cancel
+            </button>
           )}
         </div>
-        {autoLog !== undefined && (
-          <div className="mt-3 flex gap-3">
-            {standing === null ? (
-              <button type="button" className="t-btn flex-1" onClick={onClose}>
-                Cancel
-              </button>
-            ) : (
-              <button
-                type="button"
-                className="t-btn flex-1 text-danger"
-                disabled={saving}
-                onClick={() => setStopping(true)}
-              >
-                Stop auto-logging
-              </button>
-            )}
-          </div>
-        )}
       </Sheet>
       <ConfirmSheet
         open={stopping}
         label="Stop auto-logging"
-        question={`Stop auto-logging ${name} at ${SLOT_LABEL[meal]}?`}
+        question={`Stop auto-logging ${name}?`}
         note="Days already written keep their entries."
         verb="Stop"
         busy={saving}
         onConfirm={() => {
           setStopping(false)
-          void stop()
+          if (food !== null && pick !== null) void saveAuto(food, pick)
         }}
         onClose={() => setStopping(false)}
       />
