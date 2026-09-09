@@ -154,6 +154,7 @@ function Row({
 
 export function More({
   me,
+  version,
   onChange,
   onSignedOut,
   waiting,
@@ -171,6 +172,9 @@ export function More({
   fitnessDate,
 }: {
   me: Me
+  // What the instance is running, read once above this tab and shown on
+  // About.
+  version: string
   onChange: (me: Me) => void
   onSignedOut: () => void
   // How many submissions are waiting. Read once above this screen, because the
@@ -409,7 +413,7 @@ export function More({
 
   if (screen === 'guide') return <Guide onTour={onTour} />
 
-  if (screen === 'about') return <About onOpenGuide={() => go('guide')} />
+  if (screen === 'about') return <About version={version} onOpenGuide={() => go('guide')} />
 
   if (screen === 'feedback') {
     return (
@@ -511,7 +515,7 @@ export function More({
           )}
           <button
             type="button"
-            className="mt-2 inline-flex min-h-11 items-center text-sm text-accent underline underline-offset-4"
+            className="t-textlink mt-2"
             onClick={() => {
               setChangingEmail(!changingEmail)
               setEmailError('')

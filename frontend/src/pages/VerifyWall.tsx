@@ -1,6 +1,7 @@
 import { useState, type FormEvent } from 'react'
 
 import { api, errorText, type Me } from '../api'
+import { Footer } from '../components/Footer'
 import { TareWordmark } from '../components/TareWordmark'
 
 // The one screen an account that has not answered its verification mail can
@@ -9,10 +10,12 @@ import { TareWordmark } from '../components/TareWordmark'
 // different address, a second look, and the door.
 export function VerifyWall({
   me,
+  version,
   onVerified,
   onSignOut,
 }: {
   me: Me
+  version: string
   // Reads the account again. True means it is verified now, and the app has
   // already moved on by the time this answers.
   onVerified: () => Promise<boolean>
@@ -147,7 +150,7 @@ export function VerifyWall({
                   they are, so opening the field is never a way to lose them. */}
               <button
                 type="button"
-                className="inline-flex min-h-11 items-center justify-center text-sm text-accent underline underline-offset-4"
+                className="t-textlink justify-center"
                 onClick={() => {
                   setChanging(!changing)
                   setNote('')
@@ -166,12 +169,13 @@ export function VerifyWall({
         <div className="mt-4 flex justify-center">
           <button
             type="button"
-            className="inline-flex min-h-11 items-center text-sm text-accent underline underline-offset-4"
+            className="t-textlink"
             onClick={() => void signOut()}
           >
             Sign out
           </button>
         </div>
+        <Footer version={version} />
       </div>
     </div>
   )

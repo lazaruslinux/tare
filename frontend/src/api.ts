@@ -1195,7 +1195,6 @@ export type FitnessDays = { days: FitnessDay[] }
 
 export type FitnessHours = { date: string; metric: HourMetric; hours: (number | null)[] }
 
-export type WorkoutPage = { workouts: Workout[]; cursor: number | null }
 
 // What is said about a sync key, which never includes the key itself except in
 // the answer that made it.

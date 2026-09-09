@@ -4,6 +4,7 @@ import { useCallback, useEffect, useRef, useState } from 'react'
 import { api, type Me } from './api'
 import { Aside } from './components/Aside'
 import { ExerciseSheet } from './components/ExerciseSheet'
+import { Footer } from './components/Footer'
 import { FoodPicker } from './components/FoodPicker'
 import { MeasurementsSheet } from './components/MeasurementsSheet'
 import { MemberView } from './components/MemberView'
@@ -69,6 +70,9 @@ export default function App() {
   // Whether this instance sends mail. Null until it has said, and nothing that
   // decides between the wall and the app runs before then.
   const [mail, setMail] = useState<boolean | null>(null)
+  // What the instance is running, shown in the footer and on About. Empty
+  // until it has said, and nothing waits on it.
+  const [version, setVersion] = useState('')
   // An invite, a verification link or a reset link is answered before anything
   // asks who is signed in: all three are opened by somebody who is not.
   const [phase, setPhase] = useState<Phase>(
@@ -181,7 +185,11 @@ export default function App() {
   useEffect(() => {
     let alive = true
     api<Version>('/version')
-      .then((instance) => alive && setMail(instance.mail))
+      .then((instance) => {
+        if (!alive) return
+        setMail(instance.mail)
+        setVersion(instance.version)
+      })
       // An instance that will not say is read as one that sends nothing. The
       // server refuses the routes either way; this only picks the screen.
       .catch(() => alive && setMail(false))
@@ -328,23 +336,23 @@ export default function App() {
   // colour, and a spinner for a request this short is a flicker.
   if (phase === 'loading') return null
   if (phase === 'welcome' && entry.kind === 'welcome') {
-    return <Welcome code={entry.code} onReady={enterFirstRun} />
+    return <Welcome code={entry.code} version={version} onReady={enterFirstRun} />
   }
   if (phase === 'verify' && entry.kind === 'verify') {
     // Back to the first load: with a session it reads the account and lands
     // where it belongs, and without one it falls through to the sign-in screen.
-    return <VerifyEmail token={entry.token} onContinue={() => setPhase('loading')} />
+    return <VerifyEmail token={entry.token} version={version} onContinue={() => setPhase('loading')} />
   }
   if (phase === 'reset' && entry.kind === 'reset') {
     // Spending the link signs the browser in, so this lands where a sign-in
     // does, birthdate question included.
-    return <ResetPassword token={entry.token} onSignedIn={enter} />
+    return <ResetPassword token={entry.token} version={version} onSignedIn={enter} />
   }
   if (phase === 'anon' || me === null) return <Login onSignedIn={enter} />
   // Nothing else on this instance answers until the link is opened, so this
   // stands ahead of every screen the app has.
   if (phase === 'unverified') {
-    return <VerifyWall me={me} onVerified={recheck} onSignOut={leave} />
+    return <VerifyWall me={me} version={version} onVerified={recheck} onSignOut={leave} />
   }
   if (phase === 'birthdate') return <Birthdate onDone={enter} />
   if (phase === 'firstrun') return <Setup me={me} replay={false} onDone={enter} />
@@ -428,6 +436,7 @@ export default function App() {
                   ) : page === 'more' ? (
                     <More
                       me={me}
+                      version={version}
                       onChange={remember}
                       onSignedOut={leave}
                       waiting={queue}
@@ -507,6 +516,7 @@ export default function App() {
                   )}
                 </motion.div>
               </AnimatePresence>
+              <Footer version={version} />
             </div>
             <TabBar
               active={page}

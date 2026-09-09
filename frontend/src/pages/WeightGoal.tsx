@@ -13,7 +13,7 @@ import {
   PACE_NOTES,
   asNumber,
   calText,
-  dateText,
+  isoDayText,
   ACKNOWLEDGE_FROM,
   READ_THE_REVIEW,
   notesFor,
@@ -252,7 +252,7 @@ export function WeightGoal({
         <Tile
           glyph={<Trophy className="h-5 w-5" strokeWidth={2} />}
           label="Goal forecast"
-          value={forecast === null ? 'No date yet' : dateText(forecast.date)}
+          value={forecast === null ? 'No date yet' : isoDayText(forecast.date)}
           muted={forecast === null}
         />
       </div>

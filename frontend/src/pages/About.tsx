@@ -1,31 +1,20 @@
 import { BookOpen, ChevronRight } from 'lucide-react'
-import { useEffect, useState } from 'react'
 
-import { api } from '../api'
 import { TareStory } from '../components/TareStory'
 import { TareWordmark } from '../components/TareWordmark'
 import { DISCLAIMER } from '../lib/targets'
 
-type Version = { version: string; mail: boolean }
-
 // What this is, where its numbers come from, and who made it. The version is
 // the server's, never package.json: what a member is looking at is whatever
-// the instance is running.
-export function About({ onOpenGuide }: { onOpenGuide: () => void }) {
-  const [version, setVersion] = useState('')
-
-  useEffect(() => {
-    let alive = true
-    api<Version>('/version')
-      .then((instance) => alive && setVersion(instance.version))
-      // An instance that will not say leaves the line off rather than
-      // guessing at a number.
-      .catch(() => undefined)
-    return () => {
-      alive = false
-    }
-  }, [])
-
+// the instance is running. An instance that would not say leaves the line off
+// rather than guessing at a number.
+export function About({
+  version,
+  onOpenGuide,
+}: {
+  version: string
+  onOpenGuide: () => void
+}) {
   return (
     <>
       <div className="t-card mb-3">
@@ -66,7 +55,10 @@ export function About({ onOpenGuide }: { onOpenGuide: () => void }) {
           . This project was built with Claude Code, an agentic coding platform, through hundreds of
           human iterations and thousands of prompts.
         </p>
-        <p className="t-note mt-3">Tare is open-source under the AGPL-3.0 license.</p>
+        <p className="t-note mt-3">
+          Tare is open source under the AGPL-3.0 license. The source code is available
+          through Lazarus Labs.
+        </p>
       </div>
 
       <div className="t-card mb-3">

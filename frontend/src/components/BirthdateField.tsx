@@ -1,4 +1,4 @@
-import { useState } from 'react'
+import { useEffect, useState } from 'react'
 
 // Typed rather than picked: a phone's date wheel makes a birth year a long
 // spin. Digits go in, the slashes come by themselves, and the field says an
@@ -36,6 +36,11 @@ export function BirthdateField({
   onChange: (iso: string) => void
 }) {
   const [text, setText] = useState(fromIso(value))
+  // A value that arrives after mount (Profile loads it) or is rolled back by
+  // the caller replaces the text; a part-typed date reads as '' and is kept.
+  useEffect(() => {
+    setText((current) => (toIso(current) === value ? current : fromIso(value)))
+  }, [value])
   return (
     <input
       id={id}

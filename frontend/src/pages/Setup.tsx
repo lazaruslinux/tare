@@ -29,7 +29,6 @@ const HEADINGS = [
   'Add your workouts and more to Tare',
 ]
 
-
 const SEXES: { value: Sex; label: string }[] = [
   { value: 'female', label: 'Female' },
   { value: 'male', label: 'Male' },
@@ -211,7 +210,6 @@ export function Setup({
       <p className="mb-4 text-sm text-muted">
         Every one of these can be left for later, and changed under More.
       </p>
-
 
       <div className="mb-4">
         <label className="t-label" htmlFor="setup-display-name">

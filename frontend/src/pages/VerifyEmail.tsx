@@ -1,11 +1,20 @@
 import { useEffect, useState } from 'react'
 
 import { api, errorText } from '../api'
+import { Footer } from '../components/Footer'
 
 // Spends the link from the verification mail and says how it went. Nothing to
 // fill in: the token was in the address, and by the time this renders it has
 // already been taken out of it.
-export function VerifyEmail({ token, onContinue }: { token: string; onContinue: () => void }) {
+export function VerifyEmail({
+  token,
+  version,
+  onContinue,
+}: {
+  token: string
+  version: string
+  onContinue: () => void
+}) {
   const [message, setMessage] = useState('')
 
   useEffect(() => {
@@ -29,6 +38,7 @@ export function VerifyEmail({ token, onContinue }: { token: string; onContinue: 
         <button className="t-btn t-btn-primary" type="button" onClick={onContinue}>
           Continue
         </button>
+        <Footer version={version} />
       </div>
     </div>
   )

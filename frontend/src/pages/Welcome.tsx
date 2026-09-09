@@ -3,6 +3,7 @@ import { BirthdateField } from '../components/BirthdateField'
 
 import { api, errorText } from '../api'
 import { strength } from '../lib/password'
+import { Footer } from '../components/Footer'
 import { TareStory } from '../components/TareStory'
 import { TareWordmark } from '../components/TareWordmark'
 
@@ -16,14 +17,22 @@ function SignIn({ className }: { className?: string }) {
   return (
     <p className={`text-center text-sm text-muted ${className ?? ''}`}>
       Already have a Tare account?{' '}
-      <a className="inline-flex min-h-11 items-center text-accent underline underline-offset-4" href="/">
+      <a className="t-textlink" href="/">
         Sign in
       </a>
     </p>
   )
 }
 
-export function Welcome({ code, onReady }: { code: string; onReady: () => void }) {
+export function Welcome({
+  code,
+  version,
+  onReady,
+}: {
+  code: string
+  version: string
+  onReady: () => void
+}) {
   const [invite, setInvite] = useState<Invite | null>(null)
   const [dead, setDead] = useState('')
   // The story, opened in place on a phone. Nothing about the address changes,
@@ -124,7 +133,7 @@ export function Welcome({ code, onReady }: { code: string; onReady: () => void }
             <div className="mb-2 flex justify-center min-[900px]:hidden">
               <button
                 type="button"
-                className="inline-flex min-h-11 items-center text-sm text-accent underline underline-offset-4"
+                className="t-textlink"
                 onClick={() => setAbout(true)}
               >
                 Show me more
@@ -164,9 +173,7 @@ export function Welcome({ code, onReady }: { code: string; onReady: () => void }
                   Date of birth
                 </label>
                 <BirthdateField id="new-birthdate" value={birthdate} onChange={setBirthdate} />
-                <p className="mt-1 text-xs text-muted">
-                  Tare is for users aged 18+. Kids accounts are in plans to be developed.
-                </p>
+                <p className="mt-1 text-xs text-muted">Tare is for adults, 18 and over.</p>
               </div>
               <div>
                 <label className="t-label" htmlFor="new-email">
@@ -205,6 +212,7 @@ export function Welcome({ code, onReady }: { code: string; onReady: () => void }
               </button>
             </form>
             <SignIn className="mt-4" />
+            <Footer version={version} />
           </div>
         </div>
       </div>

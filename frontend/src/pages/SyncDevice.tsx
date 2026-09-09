@@ -60,8 +60,8 @@ const IPHONE_STEPS: Step[] = [
       'Make two automations pointed at the address below, or export the files and upload ' +
       'them here. One with Data Type set to Workouts, like the example below. One more with ' +
       'Data Type set to Health Metrics, where you pick what Tare shows: Step Count, Active ' +
-      'Energy, Walking + Running Distance, Apple Exercise Time and Resting Heart Rate. ' +
-      'Everything else can stay unselected.',
+      'Energy, Walking + Running Distance, Apple Exercise Time, Resting Heart Rate and ' +
+      'Heart Rate. Everything else can stay unselected.',
     pictures: [
       { src: '/guide/hae-workouts-1.webp', alt: 'The Tare Workouts automation, top half' },
       { src: '/guide/hae-workouts-2.webp', alt: 'The Tare Workouts automation, bottom half' },
@@ -71,20 +71,17 @@ const IPHONE_STEPS: Step[] = [
 
 // Android has a key and an upload like any other phone, and no guide yet.
 const ANDROID_NOTE =
-  'The Android guide is in development, but the ingest link and upload portal is still ' +
-  'available. Android has not been fully tested and may show inaccurate numbers on Tare.'
+  'Android is not yet tested. The sync address and file upload work the same way.'
 
 // What a file is for, and which metrics the export needs.
 const IMPORT_COPY =
   'If you do not wish to use the sync/automation feature, Tare accepts JSON files ' +
-  '(up to 15 MB) containing exported Apple Health data. Android has not been tested. ' +
-  'See the JSON format below.'
+  '(up to 15 MB) containing exported Apple Health data. See the JSON format below.'
 const METRICS_COPY =
   "Upload your 'Workouts' file and 'Health Metrics' file separately. The only Apple " +
   'Health Metrics Tare currently looks for are: Step Count, Active Energy, Walking + ' +
-  'Running Distance, Apple Exercise Time and Resting Heart Rate. Everything else can ' +
-  'stay unselected when creating your export. Tare plans to add more insights in the ' +
-  'future.'
+  'Running Distance, Apple Exercise Time, Resting Heart Rate and Heart Rate. Everything ' +
+  'else can stay unselected when creating your export.'
 
 // How many recent imports show before the member asks for more.
 const RECENT_PAGE = 5

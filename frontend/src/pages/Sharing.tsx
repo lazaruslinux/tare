@@ -171,7 +171,7 @@ export function Sharing({
       </div>
       <div className="t-card mb-3">
         <Switch
-          label="Share when I’ve synced a workout"
+          label="Share when I've synced a workout"
           checked={workouts}
           onChange={shareWorkouts}
         />

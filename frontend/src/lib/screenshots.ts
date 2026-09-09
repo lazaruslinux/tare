@@ -1,13 +1,11 @@
 // The pictures the invite page shows, in one place and in this order. `line` is
-// the bullet on the invite the picture belongs beside. src is null until a real
-// file lands in public/screenshots, and a null one draws a frame saying what
-// belongs there rather than an empty box.
+// the bullet on the invite the picture belongs beside.
 export type Shot = {
   id: string
   line: number
   shape: 'phone' | 'desktop'
   caption: string
-  src: string | null
+  src: string
 }
 
 export const SHOTS: Shot[] = [

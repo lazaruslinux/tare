@@ -5,7 +5,7 @@
 // invent one. What is still asked for is a serving, said in the words of the
 // two boxes it is typed in rather than in the rule behind them.
 
-import { HEADLINE, LABEL_ORDER, type Nutrient } from '../components/NutritionLabel'
+import { LABEL_ORDER, type Nutrient } from '../components/NutritionLabel'
 
 // The eleven, in the order a label prints them, which is the order the server
 // names them in too, so the field named on screen is the field the server
@@ -33,32 +33,6 @@ export const SENT_FOR_REVIEW = 'Sent for review'
 // Said where a serving is entered rather than where it is refused, so it names
 // the two boxes instead of the rule behind them.
 export const NO_SERVING = 'Give the serving a name and a size.'
-
-// Said when the panel contradicts itself rather than when it is incomplete.
-export const MACRO_WARNING = 'These numbers do not add up; check them against the label.'
-
-// Below this the sum is built out of figures the label rounded, and rounding is
-// not a mistake worth telling anybody about.
-const FLOOR_MIN = 20
-// How far under its own macronutrients a calorie figure may sit before it is
-// worth asking about. Roomier than the server's own repair, because this is a
-// question put to somebody holding the packet, not a correction made behind
-// their back.
-const TOLERANCE = 0.75
-
-// The first number worth looking at again, or nothing. A headline box left
-// empty is the plainest case; after that it is energy that its own protein,
-// sugar and fat cannot account for. Sugars rather than carbohydrate, so a
-// sweetener's honest label is not flagged every time.
-export function macroDoubt(values: Values): Nutrient | null {
-  for (const fact of HEADLINE) {
-    if (values[fact.key] === null) return fact.key
-  }
-  const { calories, protein_g: protein, fat_g: fat, sugar_g: sugar } = values
-  if (calories === null || protein === null || fat === null || sugar === null) return null
-  const floor = 4 * protein + 4 * sugar + 9 * fat
-  return floor >= FLOOR_MIN && calories < TOLERANCE * floor ? 'calories' : null
-}
 
 // Where a request stands, in the words somebody reads rather than the word the
 // column stores.

@@ -1,6 +1,7 @@
 import { useEffect, useState, type FormEvent } from 'react'
 
 import { api, errorText, type Me } from '../api'
+import { Footer } from '../components/Footer'
 import { TareWordmark } from '../components/TareWordmark'
 
 type Version = { version: string; mail: boolean }
@@ -11,6 +12,7 @@ type Answer = { detail: string }
 // a mail server, since there is nowhere to send one without it.
 export function Login({ onSignedIn }: { onSignedIn: (me: Me) => void }) {
   const [mail, setMail] = useState(false)
+  const [version, setVersion] = useState('')
   const [forgot, setForgot] = useState(false)
   const [username, setUsername] = useState('')
   const [password, setPassword] = useState('')
@@ -24,7 +26,11 @@ export function Login({ onSignedIn }: { onSignedIn: (me: Me) => void }) {
   useEffect(() => {
     let alive = true
     api<Version>('/version')
-      .then((instance) => alive && setMail(instance.mail))
+      .then((instance) => {
+        if (!alive) return
+        setMail(instance.mail)
+        setVersion(instance.version)
+      })
       // An instance that will not say is one that cannot help, so the link
       // stays off rather than offering something that goes nowhere.
       .catch(() => alive && setMail(false))
@@ -107,12 +113,13 @@ export function Login({ onSignedIn }: { onSignedIn: (me: Me) => void }) {
           <div className="mt-4 flex justify-center">
             <button
               type="button"
-              className="inline-flex min-h-11 items-center text-sm text-accent underline underline-offset-4"
+              className="t-textlink"
               onClick={backToSignIn}
             >
               Back to sign in
             </button>
           </div>
+          <Footer version={version} />
         </div>
       </div>
     )
@@ -161,7 +168,7 @@ export function Login({ onSignedIn }: { onSignedIn: (me: Me) => void }) {
           {mail && (
             <button
               type="button"
-              className="inline-flex min-h-11 items-center text-sm text-accent underline underline-offset-4"
+              className="t-textlink"
               onClick={() => {
                 setForgot(true)
                 setError('')
@@ -171,6 +178,7 @@ export function Login({ onSignedIn }: { onSignedIn: (me: Me) => void }) {
             </button>
           )}
         </div>
+        <Footer version={version} />
       </div>
     </div>
   )

@@ -37,10 +37,11 @@ function read(): Entry {
 
 export const entry: Entry = read()
 
-if (entry.kind !== 'app') {
+if (entry.kind !== 'app' || window.location.pathname !== '/') {
   // Put the address back to the root now that it has been read. A reload
   // should land on the app rather than replay a link that has been spent, and
   // an emailed token has no business sitting in the address bar to be copied
-  // out of it.
+  // out of it. An address nothing here recognises is rewritten for the same
+  // reason: the app it draws is the one at the root.
   window.history.replaceState(null, '', '/')
 }

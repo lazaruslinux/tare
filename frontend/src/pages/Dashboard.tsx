@@ -34,7 +34,7 @@ import { useTopBar } from '../hooks/useTopBar'
 import { useWideLayout } from '../hooks/useWideLayout'
 import { dateText as stampDate } from '../lib/clock'
 import { dayLabel, shiftDay, slotByTime, today, weekday } from '../lib/day'
-import { calText, dateText } from '../lib/targets'
+import { calText, isoDayText } from '../lib/targets'
 import {
   distanceIn,
   distanceUnit,
@@ -958,7 +958,7 @@ export function Dashboard({
   const goalMonth =
     targets === null || targets.projection === null
       ? ''
-      : ` · Goal ${dateText(targets.projection.date)}`
+      : ` · Goal ${isoDayText(targets.projection.date)}`
   // The week somebody is standing in, Monday first, the way a week is read.
   // Sunday closes the week that began six days ago rather than opening one.
   const isWeek = span === WEEK

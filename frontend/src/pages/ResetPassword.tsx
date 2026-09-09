@@ -2,6 +2,7 @@ import { useState, type FormEvent } from 'react'
 
 import { api, errorText, type Me } from '../api'
 import { strength } from '../lib/password'
+import { Footer } from '../components/Footer'
 import { TareWordmark } from '../components/TareWordmark'
 
 // Spends the link from the reset mail. Asked twice, because there is no old
@@ -9,9 +10,11 @@ import { TareWordmark } from '../components/TareWordmark'
 // form is a session, and the next sign-in is the only place a typo would show.
 export function ResetPassword({
   token,
+  version,
   onSignedIn,
 }: {
   token: string
+  version: string
   onSignedIn: (me: Me) => void
 }) {
   const [password, setPassword] = useState('')
@@ -78,6 +81,7 @@ export function ResetPassword({
             This signs you in here and signs out every other device.
           </p>
         </form>
+        <Footer version={version} />
       </div>
     </div>
   )

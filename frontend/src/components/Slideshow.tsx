@@ -23,19 +23,13 @@ function Picture({ shot, alone, onOpen }: { shot: Shot; alone: boolean; onOpen: 
       className={`t-phototile overflow-hidden rounded-lg ${size}`}
       onClick={onOpen}
     >
-      {shot.src === null ? (
-        <span className="p-2 text-center text-xs leading-tight text-muted">
-          Put screenshot of {shot.caption} here
-        </span>
-      ) : (
-        <img
-          src={shot.src}
-          alt={shot.caption}
-          loading="lazy"
-          decoding="async"
-          className="h-full w-full rounded-lg object-cover object-top"
-        />
-      )}
+      <img
+        src={shot.src}
+        alt={shot.caption}
+        loading="lazy"
+        decoding="async"
+        className="h-full w-full rounded-lg object-cover object-top"
+      />
     </button>
   )
 }

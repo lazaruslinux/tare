@@ -41,7 +41,7 @@ const DUPLICATE =
 // Read off the start of it, because the name that follows is the useful part.
 const DECIDED_ALREADY = 'Already decided by'
 
-function nutrientText(key: string, value: number | null): string {
+function queueNutrientText(key: string, value: number | null): string {
   if (value === null) return '-'
   return String(key === 'calories' ? Math.round(value) : Math.round(value * 10) / 10)
 }
@@ -74,8 +74,8 @@ function comparison(now: Proposed, proposed: Proposed): Line[] {
   for (const fact of SHARED_FACTS) {
     lines.push({
       label: fact.unit ? `${fact.label} (${fact.unit})` : fact.label,
-      now: nutrientText(fact.key, now[fact.key]),
-      proposed: nutrientText(fact.key, proposed[fact.key]),
+      now: queueNutrientText(fact.key, now[fact.key]),
+      proposed: queueNutrientText(fact.key, proposed[fact.key]),
     })
   }
   const most = Math.max(now.servings.length, proposed.servings.length)
@@ -213,7 +213,7 @@ function Panel({ food, ingredients }: { food: Proposed; ingredients?: string | n
           <div key={fact.key} className="t-row min-h-8 text-sm">
             <span className="flex-1 text-muted">{fact.label}</span>
             <span className="t-nums">
-              {nutrientText(fact.key, each(food[fact.key]))} {fact.unit}
+              {queueNutrientText(fact.key, each(food[fact.key]))} {fact.unit}
             </span>
           </div>
         ))}
