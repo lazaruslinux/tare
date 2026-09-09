@@ -1,4 +1,5 @@
 import { useEffect, useRef, useState, type ChangeEvent } from 'react'
+import { BirthdateField } from '../components/BirthdateField'
 import { CircleHelp } from 'lucide-react'
 import { ConfirmSheet } from '../components/ConfirmSheet'
 import { Sheet } from '../components/Sheet'
@@ -349,15 +350,12 @@ export function Profile({
         <label className="t-label" htmlFor="profile-birthdate">
           Date of birth
         </label>
-        <input
+        <BirthdateField
           id="profile-birthdate"
-          className="t-input"
-          type="date"
-          autoComplete="bday"
           value={birthdate}
-          onChange={(event) => {
-            setBirthdate(event.target.value)
-            commitBirthdate(event.target.value)
+          onChange={(iso) => {
+            setBirthdate(iso)
+            commitBirthdate(iso)
           }}
         />
         <p className="mt-1 text-xs text-muted">Tare is for adults 18 and over.</p>

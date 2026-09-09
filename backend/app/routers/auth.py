@@ -268,7 +268,10 @@ def register(
     # date-only field.
     birthdate = checked_birthdate(body.birthdate, now_utc().date())
     email = signup_email(body.email)
-    display_name = body.display_name.strip()[:60] or None
+    try:
+        display_name = profiles.checked_display_name(body.display_name)
+    except ValueError as refused:
+        raise HTTPException(status.HTTP_400_BAD_REQUEST, str(refused)) from None
     # A browser sends whatever zone it is set to, and one tare does not offer
     # is not worth refusing a signup over: the instance's own zone stands in,
     # and the Display screen can change it.

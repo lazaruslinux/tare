@@ -43,7 +43,7 @@ UNITS = ("imperial", "metric")
 # what this app's members read; the other is here for whoever prefers it.
 CLOCKS = ("12h", "24h")
 
-MAX_DISPLAY_NAME = 60
+MAX_DISPLAY_NAME = profiles.MAX_DISPLAY_NAME
 
 # Free text, "City, State". Never geocoded, never looked up, never checked
 # against a list: it is the member's own words for where they are.
@@ -93,15 +93,12 @@ def update_account(
     sent = body.model_fields_set
 
     if "display_name" in sent:
-        name = (body.display_name or "").strip()
-        if len(name) > MAX_DISPLAY_NAME:
-            raise HTTPException(
-                status.HTTP_400_BAD_REQUEST,
-                f"Display name must be at most {MAX_DISPLAY_NAME} characters.",
-            )
         # Blank clears it, and the account falls back to its username wherever
         # a name is shown.
-        user.display_name = name or None
+        try:
+            user.display_name = profiles.checked_display_name(body.display_name)
+        except ValueError as refused:
+            raise HTTPException(status.HTTP_400_BAD_REQUEST, str(refused)) from None
 
     if "units" in sent:
         if body.units not in UNITS:

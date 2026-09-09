@@ -7,6 +7,13 @@ def patch(client, **fields):
     return client.patch("/api/account", json=fields)
 
 
+def test_an_email_address_is_refused_as_a_display_name(client, db_session, signed_in):
+    response = patch(client, display_name="someone@example.com")
+    assert response.status_code == 400
+    assert response.json()["detail"] == "A display name cannot be an email address."
+    assert signed_in.display_name != "someone@example.com"
+
+
 def test_the_display_name_is_trimmed(client, db_session, signed_in):
     response = patch(client, display_name="  Casey  ")
     assert response.status_code == 200

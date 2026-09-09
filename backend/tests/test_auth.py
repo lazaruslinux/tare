@@ -40,6 +40,13 @@ def signup(client, invite, **overrides):
     return client.post("/api/auth/register", json=body)
 
 
+def test_register_refuses_an_email_address_as_the_display_name(client, db_session, invite):
+    response = signup(client, invite, display_name="newcomer@example.com")
+    assert response.status_code == 400
+    assert response.json()["detail"] == "A display name cannot be an email address."
+    assert db_session.query(models.User).filter_by(username="newcomer").count() == 0
+
+
 def test_register_without_mail_signs_the_account_straight_in(client, db_session, invite):
     response = signup(client, invite)
     assert response.status_code == 200

@@ -1,4 +1,5 @@
 import { useEffect, useState, type FormEvent } from 'react'
+import { BirthdateField } from '../components/BirthdateField'
 
 import { api, errorText } from '../api'
 import { strength } from '../lib/password'
@@ -162,14 +163,7 @@ export function Welcome({ code, onReady }: { code: string; onReady: () => void }
                 <label className="t-label" htmlFor="new-birthdate">
                   Date of birth
                 </label>
-                <input
-                  id="new-birthdate"
-                  className="t-input"
-                  type="date"
-                  autoComplete="bday"
-                  value={birthdate}
-                  onChange={(event) => setBirthdate(event.target.value)}
-                />
+                <BirthdateField id="new-birthdate" value={birthdate} onChange={setBirthdate} />
                 <p className="mt-1 text-xs text-muted">
                   Tare is for users aged 18+. Kids accounts are in plans to be developed.
                 </p>
@@ -203,6 +197,7 @@ export function Welcome({ code, onReady }: { code: string; onReady: () => void }
                   value={displayName}
                   onChange={(event) => setDisplayName(event.target.value)}
                 />
+                <p className="mt-1 text-xs text-muted">The name other members see.</p>
               </div>
               {error && <p className="t-error">{error}</p>}
               <button className="t-btn t-btn-primary mt-1" type="submit" disabled={busy}>

@@ -22,6 +22,25 @@ from app import models
 REVIEWER_THRESHOLD = 100
 
 
+MAX_DISPLAY_NAME = 60
+NO_EMAIL_NAME = "A display name cannot be an email address."
+
+
+def checked_display_name(raw: str | None) -> str | None:
+    """A display name as stored: trimmed, capped, blank meaning none.
+
+    An address is refused outright. A display name is drawn on the feed and
+    beside every food a member submits, and a phone that autofills its owner's
+    email into the field would otherwise put that address in front of everyone.
+    """
+    name = (raw or "").strip()
+    if "@" in name:
+        raise ValueError(NO_EMAIL_NAME)
+    if len(name) > MAX_DISPLAY_NAME:
+        raise ValueError(f"Display name must be at most {MAX_DISPLAY_NAME} characters.")
+    return name or None
+
+
 def role_of(user: models.User) -> str | None:
     """What this account is, wherever its name is shown to another member.
 

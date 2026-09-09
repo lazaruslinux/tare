@@ -1,4 +1,5 @@
 import { useState, type FormEvent } from 'react'
+import { BirthdateField } from '../components/BirthdateField'
 
 import { api, errorText, type Me } from '../api'
 
@@ -31,14 +32,7 @@ export function Birthdate({ onDone }: { onDone: (me: Me) => void }) {
         <label className="t-label" htmlFor="ask-birthdate">
           Date of birth
         </label>
-        <input
-          id="ask-birthdate"
-          className="t-input"
-          type="date"
-          autoComplete="bday"
-          value={birthdate}
-          onChange={(event) => setBirthdate(event.target.value)}
-        />
+        <BirthdateField id="ask-birthdate" value={birthdate} onChange={setBirthdate} />
         <p className="mt-2 text-xs text-muted">
           It is used to work out your targets, and nobody else can see it.
         </p>
