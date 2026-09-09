@@ -80,8 +80,9 @@ def test_a_shared_workout_reaches_the_other_member(client, db_session, make_user
     assert row["mine"] is False
     assert "hidden" not in row
     assert body["next_cursor"] is None
-    # That they synced a session, and when. Every figure on it is behind a
-    # switch, so none of them is on the row.
+    # That they synced a session, and when. No figure from it is on the row,
+    # only whether there is anything behind it.
+    assert row["open"] is True
     assert set(row) == {
         "kind",
         "id",
@@ -89,6 +90,7 @@ def test_a_shared_workout_reaches_the_other_member(client, db_session, make_user
         "display_name",
         "role",
         "mine",
+        "open",
         "activity",
         "date",
         "started_at",
@@ -229,14 +231,17 @@ def held(client, db_session, make_user, parts):
     return client.get(f"/api/workouts/{workout.id}").json()
 
 
-def test_held_back_stats_take_the_whole_numbers_card(client, db_session, make_user):
-    body = held(client, db_session, make_user, ["stats"])
+def test_open_details_read_whole_for_a_friend(client, db_session, make_user):
+    body = held(client, db_session, make_user, [])
 
-    # The pace is worked out from the first two, so it goes with them.
-    for figure in ("duration_s", "distance_m", "kcal", "avg_hr", "max_hr"):
-        assert figure not in body
-    # The minutes and the splits are their own switches and are still here.
+    assert body["mine"] is False
+    assert body["duration_s"] is not None and body["distance_m"] is not None
+    assert body["kcal"] is not None and body["avg_hr"] is not None
+    assert body["route"] is not None
     assert body["samples"] != [] and body["splits"] != []
+    assert "fastest" in body
+    # What Tare made of the numbers is still the owner's alone.
+    assert "flags" not in body
 
 
 def test_a_held_back_route_takes_the_climb_with_it(client, db_session, make_user):
@@ -244,27 +249,30 @@ def test_a_held_back_route_takes_the_climb_with_it(client, db_session, make_user
 
     assert "route" not in body
     assert "elevation_gain_m" not in body
+    # Everything else the details carry is still here.
     assert body["duration_s"] is not None
+    assert body["samples"] != [] and body["splits"] != []
 
 
-def test_held_back_minutes_leave_no_samples_at_all(client, db_session, make_user):
-    body = held(client, db_session, make_user, ["minutes"])
+def test_held_back_details_answer_what_a_missing_workout_answers(
+    client, db_session, make_user
+):
+    runner = make_user("runner")
+    runner.feed_hidden = ["details"]
+    db_session.commit()
+    workout = synced(client, db_session, runner)
 
-    assert "samples" not in body
-    # The splits are worked out on the server, so they survive without them.
-    assert body["splits"] != []
+    befriend(db_session, runner, make_user("member"))
+    sign_in(client, "member")
+    refused = client.get(f"/api/workouts/{workout.id}")
 
-
-def test_held_back_splits_take_the_fastest_one_with_them(client, db_session, make_user):
-    body = held(client, db_session, make_user, ["splits"])
-
-    assert "splits" not in body and "fastest" not in body
-    assert body["samples"] != []
+    assert refused.status_code == 404
+    assert refused.json() == {"detail": "There is no such workout."}
 
 
 def test_the_owner_still_reads_everything_they_held_back(client, db_session, make_user):
     runner = make_user("runner")
-    runner.feed_hidden = ["stats", "route", "minutes", "splits"]
+    runner.feed_hidden = ["details", "route"]
     db_session.commit()
     workout = synced(client, db_session, runner)
 
@@ -279,32 +287,39 @@ def test_the_owner_still_reads_everything_they_held_back(client, db_session, mak
     assert "fastest" in body
     assert body["flags"] == []
 
-    # And the friend beside them reads none of it.
+
+def test_a_row_says_whether_there_is_anything_behind_it(client, db_session, make_user):
+    runner = make_user("runner")
+    runner.feed_hidden = ["details"]
+    db_session.commit()
+    synced(client, db_session, runner)
     befriend(db_session, runner, make_user("member"))
+
     sign_in(client, "member")
-    theirs = client.get(f"/api/workouts/{workout.id}").json()
-    for key in (
-        "duration_s",
-        "distance_m",
-        "kcal",
-        "avg_hr",
-        "max_hr",
-        "elevation_gain_m",
-        "route",
-        "samples",
-        "splits",
-        "fastest",
-        "flags",
-    ):
-        assert key not in theirs
-    assert theirs["activity"] == "Outdoor Run"
+    row = client.get("/api/feed").json()["items"][0]
+
+    assert row["kind"] == "workout" and row["mine"] is False
+    assert row["open"] is False
+    # The row itself still says what it always said.
+    assert row["activity"] == "Outdoor Run"
+
+    # Opened, and the same row is a way in.
+    runner.feed_hidden = []
+    db_session.commit()
+    assert client.get("/api/feed").json()["items"][0]["open"] is True
+
+    # The owner's own row is always a way in, whatever they hold back.
+    runner.feed_hidden = ["details", "route"]
+    db_session.commit()
+    sign_in(client, "runner")
+    assert client.get("/api/feed").json()["items"][0]["open"] is True
 
 
 def test_a_name_tare_cannot_hide_is_refused(client, make_user):
     make_user("member")
     sign_in(client, "member")
 
-    refused = client.patch("/api/account", json={"feed_hidden": ["route", "weight"]})
+    refused = client.patch("/api/account", json={"feed_hidden": ["route", "stats"]})
 
     assert refused.status_code == 400
     assert refused.json() == {"detail": "That is not something Tare can hide."}
@@ -316,10 +331,10 @@ def test_what_is_hidden_is_said_back_with_the_account(client, make_user):
 
     saved = client.patch(
         "/api/account",
-        json={"feed_hidden": ["stats"], "share_age": True, "share_location": True},
+        json={"feed_hidden": ["details"], "share_age": True, "share_location": True},
     ).json()
 
-    assert saved["feed_hidden"] == ["stats"]
+    assert saved["feed_hidden"] == ["details"]
     assert saved["share_age"] is True
     assert saved["share_sex"] is False
     assert saved["share_location"] is True

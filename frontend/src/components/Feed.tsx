@@ -211,8 +211,9 @@ function Row({
   onOpenMember: () => void
   onPrivate: () => void
 }) {
-  return (
-    <button type="button" className="t-row w-full text-left" onClick={onOpen}>
+  // The line is the same either way; only whether the row is a way in changes.
+  const said = (
+    <>
       <span className="flex min-w-0 flex-1 items-center gap-2">
         <ActivityIcon name={row.activity} className="h-4 w-4 shrink-0 text-muted" />
         <span className="min-w-0 flex-1">
@@ -234,6 +235,14 @@ function Row({
         </span>
       </span>
       {row.hidden === true && <PrivateLock onOpen={onPrivate} />}
+    </>
+  )
+  // A member who keeps their workout details to themselves shares the row and
+  // nothing under it, so there is no chevron and nothing to tap.
+  if (!row.open) return <div className="t-row">{said}</div>
+  return (
+    <button type="button" className="t-row w-full text-left" onClick={onOpen}>
+      {said}
       <ChevronRight className="h-4 w-4 shrink-0 text-muted" strokeWidth={2} />
     </button>
   )

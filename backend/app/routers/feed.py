@@ -24,7 +24,7 @@ from app.models import now_utc
 from app.profiles import avatar_url, contribution_counts, role_of
 from app.routers.admin import name_match
 from app.routers.diary import fill_auto_logs, total
-from app.routers.fitness import day_exercise, steps_on, workouts_on
+from app.routers.fitness import day_exercise, kept_back, steps_on, workouts_on
 from app.routers.health import Reckoning, exercise_on
 
 router = APIRouter(prefix="/feed", tags=["feed"])
@@ -393,9 +393,10 @@ def read_feed(
             items.append(journal)
             continue
 
-        # That somebody synced a session, and when. Every figure on it is
-        # behind a switch, so none of them is on the row: the row is a way in
-        # to the workout, and the workout answers what was shared.
+        # That somebody synced a session, and when. No figure from it is on the
+        # row: the row says a workout happened, and the workout itself answers
+        # what was shared. Whether there is anything to open is on the row, so
+        # a row that leads nowhere is not drawn as a way in.
         item: dict[str, object] = {
             "kind": WORKOUT,
             "id": each.id,
@@ -403,6 +404,7 @@ def read_feed(
             "display_name": name,
             "role": role,
             "mine": mine,
+            "open": mine or (owner is not None and "details" not in kept_back(owner)),
             "activity": each.activity,
             "date": each.date_for.isoformat(),
             "started_at": each.started_at.isoformat(),

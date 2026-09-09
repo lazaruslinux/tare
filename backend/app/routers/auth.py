@@ -311,7 +311,9 @@ def register(
         is_admin=False,
         units="imperial",
         timezone=timezone,
-        feed_hidden=[],
+        # The breakdown of a workout is the member's own until they say
+        # otherwise; the row on the feed is not.
+        feed_hidden=["details"],
         created_at=now,
     )
     db.add(user)

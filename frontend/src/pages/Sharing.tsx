@@ -12,9 +12,9 @@ import { useTopBar } from '../hooks/useTopBar'
 
 const GENDER_LABEL: Record<string, string> = { female: 'Female', male: 'Male' }
 
-// The four parts of a workout a member may keep back, by the names the server
+// The two things a member may keep back on a workout, by the names the server
 // holds them under.
-const HIDEABLE = ['stats', 'route', 'minutes', 'splits'] as const
+const HIDEABLE = ['details', 'route'] as const
 
 function ageOf(birthdate: string): number {
   const born = new Date(`${birthdate}T00:00:00Z`)
@@ -85,10 +85,12 @@ export function Sharing({
       }
     })
 
-  // The master switch takes the four with it: off folds them away and turns
-  // them off, on brings them back at their defaults, all shown.
+  // The master switch takes the rest with it: off folds them away and holds
+  // everything back.
   const shareWorkouts = (next: boolean) => {
-    const parts = next ? [] : [...HIDEABLE]
+    // Turning it back on brings back the row, not the breakdown: details are
+    // held until the switch under this one is turned.
+    const parts = next ? ['details'] : [...HIDEABLE]
     const wasHidden = hidden
     setWorkouts(next)
     setHidden(parts)
@@ -168,7 +170,11 @@ export function Sharing({
         {workoutSave.saved && <span className="t-chip text-accent">Saved.</span>}
       </div>
       <div className="t-card mb-3">
-        <Switch label="Share my workouts" checked={workouts} onChange={shareWorkouts} />
+        <Switch
+          label="Share when I’ve synced a workout"
+          checked={workouts}
+          onChange={shareWorkouts}
+        />
         <AnimatePresence initial={false}>
           {workouts && (
             <motion.div
@@ -180,29 +186,32 @@ export function Sharing({
               transition={{ duration: 0.18 }}
             >
               <Switch
-                label="Share stats"
-                note="Time, distance, calories, pace, heart rate"
-                checked={shows('stats')}
-                onChange={(next) => show('stats', next)}
+                label="Allow other members to see my workout details"
+                note="Stats, minute-by-minute and splits. Off unless you turn it on."
+                checked={shows('details')}
+                onChange={(next) => show('details', next)}
               />
-              <Switch
-                label="Share route maps"
-                note="Tare automatically hides the first 200 meters of the start and end of all activities with route data."
-                checked={shows('route')}
-                onChange={(next) => show('route', next)}
-              />
-              <Switch
-                label="Share minute-by-minute"
-                note="Heart rate and pace across the workout"
-                checked={shows('minutes')}
-                onChange={(next) => show('minutes', next)}
-              />
-              <Switch
-                label="Share splits"
-                note="Pace for each mile or kilometer"
-                checked={shows('splits')}
-                onChange={(next) => show('splits', next)}
-              />
+              {/* The route only means anything once the details are open, so
+                  it is only offered there. */}
+              <AnimatePresence initial={false}>
+                {shows('details') && (
+                  <motion.div
+                    key="route"
+                    className="overflow-hidden"
+                    initial={reduced ? false : { height: 0, opacity: 0 }}
+                    animate={{ height: 'auto', opacity: 1 }}
+                    exit={reduced ? undefined : { height: 0, opacity: 0 }}
+                    transition={{ duration: 0.18 }}
+                  >
+                    <Switch
+                      label="Show route maps"
+                      note="Tare automatically hides the first 200 meters of the start and end of all activities with route data."
+                      checked={shows('route')}
+                      onChange={(next) => show('route', next)}
+                    />
+                  </motion.div>
+                )}
+              </AnimatePresence>
             </motion.div>
           )}
         </AnimatePresence>

@@ -28,11 +28,10 @@ BAD_DATE = "That is not a date."
 BAD_METRIC = "That is not something Tare keeps."
 MISSING_WORKOUT = "There is no such workout."
 
-# The four parts of a shared session a member may keep back, by the names the
-# account's own list holds: the numbers card, the line and the climb, the
-# minute-by-minute rows, and the splits table. Anything else is a name Tare has
-# never had.
-HIDEABLE = ("stats", "route", "minutes", "splits")
+# The two things a member may keep back on a shared session, by the names the
+# account's own list holds: the whole breakdown, and the route with the climb
+# that goes with it. Anything else is a name Tare has never had.
+HIDEABLE = ("details", "route")
 BAD_HIDDEN = "That is not something Tare can hide."
 
 # What a day of movement may be aimed at. Wide enough for anybody's day and
@@ -702,9 +701,8 @@ def read_workouts(
 def kept_back(owner: models.User) -> set[str]:
     """What this account keeps to itself on a workout somebody else is reading.
 
-    Read through the four names Tare knows rather than trusted as stored: a
-    list is JSON, and a name nothing recognises must not quietly widen what is
-    shown.
+    Read through the names Tare knows rather than trusted as stored: a list is
+    JSON, and a name nothing recognises must not quietly widen what is shown.
     """
     held = owner.feed_hidden or []
     return {name for name in HIDEABLE if name in held}
@@ -714,8 +712,10 @@ def readable_workout(db: Session, workout_id: int, user: models.User) -> models.
     """One session this account may read: its own, or one a friend shared.
 
     A workout that is not there, one somebody kept out of the feed, one whose
-    owner shares none, and one belonging to somebody this account never added
-    all answer the same sentence.
+    owner shares none, one whose owner keeps the breakdown to themselves, and
+    one belonging to somebody this account never added all answer the same
+    sentence. Details are held by default, so most sessions open for their
+    owner alone.
     """
     row = db.get(models.Workout, workout_id)
     if row is None:
@@ -726,6 +726,7 @@ def readable_workout(db: Session, workout_id: int, user: models.User) -> models.
             row.hidden_from_feed
             or owner is None
             or not owner.share_workouts
+            or "details" in kept_back(owner)
             or owner.id not in friend_ids(db, user)
         ):
             raise HTTPException(status.HTTP_404_NOT_FOUND, MISSING_WORKOUT)
@@ -744,12 +745,13 @@ def read_workout(
 ) -> dict[str, object]:
     """One session, whole: its numbers, its minutes, its line and its splits.
 
-    The owner reads all of it, whatever their own switches say. Another member
-    reads what was shared: the parts the owner holds back are left out of the
-    answer rather than sent as null, so nothing on the far side has to tell a
-    hidden number from a missing one. The splits are worked out here rather
-    than drawn from the minutes, so sharing one without the other is possible;
-    they are measured in whoever is reading's own miles or kilometres.
+    The owner reads all of it, whatever their own switches say. A friend only
+    gets here when the owner opened the details, and then reads the same
+    breakdown minus the route if that is held: what is held back is left out of
+    the answer rather than sent as null, so nothing on the far side has to tell
+    a hidden number from a missing one. The splits are worked out here rather
+    than drawn from the minutes; they are measured in whoever is reading's own
+    miles or kilometres.
     """
     row = readable_workout(db, workout_id, user)
     mine = row.user_id == user.id
@@ -786,23 +788,16 @@ def read_workout(
     if not mine:
         # What Tare thought of the numbers is between Tare and whoever ran it.
         detail.pop("flags", None)
-    if "stats" in hidden:
-        # The pace on the card is worked out from the first two, so it goes
-        # with them rather than being a fifth thing to hold back.
-        for figure in ("duration_s", "distance_m", "kcal", "avg_hr", "max_hr"):
-            detail.pop(figure, None)
     if "route" in hidden:
+        # The climb is read off the route, so it goes with it.
         detail.pop("elevation_gain_m", None)
     else:
         detail["route"] = None if route is None else route.points
-    if "minutes" not in hidden:
-        detail["samples"] = samples
-    if "splits" not in hidden:
-        parts = splits.splits_of(minutes, user.units)
-        detail["splits"] = parts
-        # Which of them was quickest, which the table marks in colour. It says
-        # nothing without the list, so it is held back with it.
-        detail["fastest"] = splits.fastest_of(parts)
+    detail["samples"] = samples
+    parts = splits.splits_of(minutes, user.units)
+    detail["splits"] = parts
+    # Which of them was quickest, which the table marks in colour.
+    detail["fastest"] = splits.fastest_of(parts)
     return detail
 
 

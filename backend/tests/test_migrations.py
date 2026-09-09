@@ -324,7 +324,7 @@ def test_the_three_old_hide_names_become_the_four_new_ones(tmp_path):
                     },
                 )
 
-        command.upgrade(config, "head")
+        command.upgrade(config, "0044_workout_sharing")
         with engine.connect() as connection:
             after = dict(
                 connection.execute(sa.text("SELECT id, feed_hidden FROM users")).all()
@@ -349,4 +349,69 @@ def test_the_three_old_hide_names_become_the_four_new_ones(tmp_path):
         2: '["avg_hr", "kcal"]',
         3: '["avg_hr", "kcal"]',
         4: "[]",
+    }
+
+
+def test_the_four_hide_names_become_one_switch_that_starts_off(tmp_path):
+    """The breakdown is one thing rather than three, and it is held back by
+    default, so every account that did not already hold it comes out holding
+    it."""
+    database = tmp_path / "tare.db"
+    config = Config(str(BACKEND / "alembic.ini"))
+    config.set_main_option("script_location", str(BACKEND / "migrations"))
+    config.set_main_option("sqlalchemy.url", f"sqlite:///{database}")
+
+    command.upgrade(config, "0044_workout_sharing")
+    engine = sa.create_engine(f"sqlite:///{database}")
+    was = {
+        1: '["stats", "route", "minutes"]',
+        2: '["stats"]',
+        3: '["route"]',
+        4: "[]",
+    }
+    try:
+        with engine.begin() as connection:
+            for user_id, held in was.items():
+                connection.execute(
+                    sa.text(
+                        "INSERT INTO users (id, username, password_hash, created_at,"
+                        " feed_hidden, share_age, share_sex, share_location,"
+                        " share_workouts, share_journal, share_weight_loss, clock)"
+                        " VALUES (:id, :name, 'x', :at, :held, 0, 0, 0, 0, 0, 0, '12h')"
+                    ),
+                    {
+                        "id": user_id,
+                        "name": f"member{user_id}",
+                        "at": "2026-09-01 08:00:00",
+                        "held": held,
+                    },
+                )
+
+        command.upgrade(config, "head")
+        with engine.connect() as connection:
+            after = dict(
+                connection.execute(sa.text("SELECT id, feed_hidden FROM users")).all()
+            )
+
+        command.downgrade(config, "0044_workout_sharing")
+        with engine.connect() as connection:
+            back = dict(
+                connection.execute(sa.text("SELECT id, feed_hidden FROM users")).all()
+            )
+    finally:
+        engine.dispose()
+
+    assert after == {
+        1: '["details", "route"]',
+        2: '["details"]',
+        3: '["details", "route"]',
+        # Nobody was holding anything, and everybody holds the breakdown now.
+        4: '["details"]',
+    }
+    # Best-effort back: the one name says what the three said between them.
+    assert back == {
+        1: '["stats", "route", "minutes", "splits"]',
+        2: '["stats", "minutes", "splits"]',
+        3: '["stats", "route", "minutes", "splits"]',
+        4: '["stats", "minutes", "splits"]',
     }

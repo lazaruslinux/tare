@@ -970,33 +970,28 @@ export type WorkoutSplit = {
 // One session read whole. Every field the owner may hold back is optional
 // here: another member is served the workout without them, key and all, so
 // absent is what hidden looks like and null stays what was never measured.
-export type WorkoutDetail = Omit<
-  Workout,
-  'duration_s' | 'distance_m' | 'avg_hr' | 'max_hr' | 'kcal' | 'elevation_gain_m' | 'flags'
-> & {
+export type WorkoutDetail = Omit<Workout, 'elevation_gain_m' | 'flags'> & {
   user_id: number
   display_name: string
   mine: boolean
-  duration_s?: number
-  distance_m?: number | null
-  avg_hr?: number | null
-  max_hr?: number | null
-  kcal?: number | null
+  // The two things that can be absent on somebody else's workout: what Tare
+  // made of the numbers is the owner's alone, and the route takes the climb
+  // with it when it is held back.
   elevation_gain_m?: number | null
   flags?: string[]
-  samples?: WorkoutSample[]
+  samples: WorkoutSample[]
   // The line, with both its ends already thrown away, or null for a session
   // that recorded no route.
   route?: [number, number][] | null
-  splits?: WorkoutSplit[]
+  splits: WorkoutSplit[]
   // Which split was quickest, by its index, or null where no whole one stands
-  // out. It says nothing without the list and is held back with it.
-  fastest?: number | null
+  // out.
+  fastest: number | null
 }
 
 // One workout as the community feed lists it: that somebody synced a session,
-// and when. Every figure on it is behind a switch, so the row carries none of
-// them and the workout itself answers what was shared.
+// and when. No figure from it is on the row, and the workout itself answers
+// what was shared.
 export type FeedWorkout = {
   kind: 'workout'
   id: number
@@ -1004,6 +999,9 @@ export type FeedWorkout = {
   display_name: string
   role: Role
   mine: boolean
+  // Whether there is anything behind the row: your own always, somebody
+  // else's only where they opened their workout details.
+  open: boolean
   // Only ever on your own rows: a workout you kept out of everybody's feed.
   hidden?: boolean
   activity: string

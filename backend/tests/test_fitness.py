@@ -162,7 +162,7 @@ def test_a_shared_workout_reads_for_another_member_without_what_was_held_back(
     client, db_session, make_user
 ):
     stranger = make_user("stranger")
-    stranger.feed_hidden = ["stats", "minutes"]
+    stranger.feed_hidden = ["route"]
     db_session.commit()
     token = token_for(db_session, stranger)
     post(client, token, {"data": {"workouts": [run(yesterday())]}})
@@ -182,13 +182,14 @@ def test_a_shared_workout_reads_for_another_member_without_what_was_held_back(
 
     assert body["mine"] is False
     assert body["display_name"] == "stranger"
-    assert "avg_hr" not in body and "max_hr" not in body and "kcal" not in body
-    assert "duration_s" not in body and "distance_m" not in body
-    assert "flags" not in body
-    assert "samples" not in body
-    assert body["route"] is not None
-    # The splits are the one card they left on, and they still read.
+    # The breakdown is open, so the numbers, the minutes and the splits read.
+    assert body["avg_hr"] is not None and body["kcal"] is not None
+    assert body["duration_s"] is not None and body["distance_m"] is not None
+    assert body["samples"] != []
     assert body["splits"][0]["pace_s_per_unit"] > 0
+    # The route and the climb are theirs, and so is what Tare made of it all.
+    assert "route" not in body and "elevation_gain_m" not in body
+    assert "flags" not in body
 
 
 # Splits

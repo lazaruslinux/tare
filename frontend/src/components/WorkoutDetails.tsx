@@ -53,8 +53,8 @@ class MapGuard extends Component<
   }
 }
 
-// What another member's sharing left out is absent from the answer, so
-// everything drawn from one is asked whether it is there at all.
+// The climb is absent rather than null where the owner holds their route back,
+// so it is asked whether it is there at all.
 const present = (value: number | null | undefined): value is number =>
   value !== null && value !== undefined
 
@@ -258,13 +258,13 @@ export function WorkoutDetails({
   if (failed !== '') return <p className="t-error">{failed}</p>
   if (detail === null) return <p className="text-sm text-muted">Loading.</p>
 
-  // What the sharing left out is absent, so each of these can be empty.
-  const samples = detail.samples ?? []
-  const splits = detail.splits ?? []
+  const samples = detail.samples
+  const splits = detail.splits
   const pace =
-    present(detail.duration_s) && present(detail.distance_m)
+    detail.distance_m !== null
       ? paceText(detail.distance_m, detail.duration_s, me.units)
       : null
+  // Absent where the owner keeps their routes to themselves.
   const route = detail.route ?? null
   // Whether there is a line to find anything on. A workout whose route is
   // hidden, missing, or too short to draw has none.
@@ -273,17 +273,6 @@ export function WorkoutDetails({
   // of them is found on the line. Worked out only where there is one.
   const spans = lined ? spansOf(splits) : []
   const places = lined ? placesOf(samples) : new Map<number, number>()
-  // Whether the numbers card has a figure in it at all.
-  const stats =
-    present(detail.duration_s) ||
-    present(detail.distance_m) ||
-    present(detail.kcal) ||
-    present(detail.avg_hr) ||
-    present(detail.max_hr) ||
-    present(detail.elevation_gain_m)
-  // A friend whose sharing left every card out reads the header and one line.
-  const bare =
-    !detail.mine && !stats && !lined && samples.length === 0 && splits.length === 0
 
   // The switch moves at once and moves back if the server says no: a member
   // deciding who sees a morning should not wait on a round trip.
@@ -328,37 +317,26 @@ export function WorkoutDetails({
           {dayLabel(detail.date, today(me.timezone))}
           {detail.indoor ? ' · Indoors' : ''}
         </p>
-        {bare && (
-          <p className="text-sm text-muted">
-            {detail.display_name} shares only the activity and the date.
-          </p>
-        )}
-        {stats && (
-          <div className="grid grid-cols-2 gap-4 sm:grid-cols-4">
-            {present(detail.duration_s) && (
-              <Stat label="Time" value={durationText(detail.duration_s)} />
-            )}
-            {present(detail.distance_m) && (
-              <Stat label="Distance" value={distanceText(detail.distance_m, me.units)} />
-            )}
-            {present(detail.kcal) && <Stat label="Calories" value={`${detail.kcal} cal`} />}
-            {pace !== null && <Stat label="Pace" value={pace} />}
-            {present(detail.avg_hr) && (
-              <Stat label="AVG H.R" value={`${detail.avg_hr} bpm`} />
-            )}
-            {present(detail.max_hr) && <Stat label="MAX H.R" value={`${detail.max_hr} bpm`} />}
-            {present(detail.elevation_gain_m) && (
-              <Stat
-                label="Climb"
-                value={
-                  me.units === 'metric'
-                    ? `${Math.round(detail.elevation_gain_m)} m`
-                    : `${Math.round(detail.elevation_gain_m / 0.3048)} ft`
-                }
-              />
-            )}
-          </div>
-        )}
+        <div className="grid grid-cols-2 gap-4 sm:grid-cols-4">
+          <Stat label="Time" value={durationText(detail.duration_s)} />
+          {detail.distance_m !== null && (
+            <Stat label="Distance" value={distanceText(detail.distance_m, me.units)} />
+          )}
+          {detail.kcal !== null && <Stat label="Calories" value={`${detail.kcal} cal`} />}
+          {pace !== null && <Stat label="Pace" value={pace} />}
+          {detail.avg_hr !== null && <Stat label="AVG H.R" value={`${detail.avg_hr} bpm`} />}
+          {detail.max_hr !== null && <Stat label="MAX H.R" value={`${detail.max_hr} bpm`} />}
+          {present(detail.elevation_gain_m) && (
+            <Stat
+              label="Climb"
+              value={
+                me.units === 'metric'
+                  ? `${Math.round(detail.elevation_gain_m)} m`
+                  : `${Math.round(detail.elevation_gain_m / 0.3048)} ft`
+              }
+            />
+          )}
+        </div>
         {(detail.flags ?? []).map((flag) => (
           <p key={flag} className="mt-3 text-xs text-muted">
             {FLAG_TEXT[flag] ?? 'One of these numbers looked unusual to Tare.'}
@@ -417,7 +395,7 @@ export function WorkoutDetails({
       />
       <Splits
         splits={splits}
-        fastest={detail.fastest ?? null}
+        fastest={detail.fastest}
         units={me.units}
         chosen={chosen}
         lined={lined}

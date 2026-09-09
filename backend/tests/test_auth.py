@@ -65,6 +65,17 @@ def test_register_without_mail_signs_the_account_straight_in(client, db_session,
     assert client.get("/api/auth/me").status_code == 200
 
 
+def test_a_new_account_keeps_its_workout_details_to_itself(client, db_session, invite):
+    signup(client, invite)
+
+    user = db_session.query(models.User).filter_by(username="newcomer").one()
+
+    assert user.feed_hidden == ["details"]
+    # The row on the feed is still shared; only the breakdown behind it is not.
+    assert user.share_workouts is True
+    assert client.get("/api/auth/me").json()["feed_hidden"] == ["details"]
+
+
 def test_register_with_mail_signs_in_and_waits_for_the_link(
     client, db_session, invite, with_mail
 ):
