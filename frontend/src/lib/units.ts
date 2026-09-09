@@ -235,6 +235,10 @@ export const distanceIn = (metres: number, units: 'imperial' | 'metric'): number
 export const distanceText = (metres: number, units: 'imperial' | 'metric'): string =>
   `${round1(distanceIn(metres, units)).toLocaleString()} ${distanceUnit(units)}`
 
+// One mile or one kilometre, in the metres everything is stored in.
+export const stepOf = (units: 'imperial' | 'metric'): number =>
+  units === 'metric' ? 1000 : M_PER_MILE
+
 // How long a session ran, in the shortest words that are still exact.
 export function durationText(seconds: number): string {
   const whole = Math.max(0, Math.round(seconds))
@@ -258,6 +262,11 @@ export function paceText(
   const carried = rest === 60 ? { minutes: minutes + 1, rest: 0 } : { minutes, rest }
   return `${carried.minutes}:${String(carried.rest).padStart(2, '0')} /${distanceUnit(units)}`
 }
+
+// A pace already worked out per mile or kilometre, written the way every other
+// pace is. Empty where there is no pace to write.
+export const paceFromUnit = (seconds: number, units: 'imperial' | 'metric'): string =>
+  paceText(stepOf(units), seconds, units) ?? ''
 
 // The feed's tighter spellings. A row is one line of small text, so a distance
 // there keeps a fixed shape of two decimals rather than the rounded one.

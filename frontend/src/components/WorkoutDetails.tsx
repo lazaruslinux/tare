@@ -9,19 +9,19 @@ import {
   type ReactNode,
 } from 'react'
 
-import { api, errorText, type Me, type WorkoutDetail } from '../api'
+import { api, errorText, type Me, type WorkoutDetail, type WorkoutSplit } from '../api'
 import { useTopBar } from '../hooks/useTopBar'
 import { basemapInstalled, canDrawMaps } from '../lib/basemap'
 import { dayLabel, today } from '../lib/day'
 import { placesOf, spansOf } from '../lib/route'
 import {
-  fastestSplit,
-  secondsPerUnit,
-  splitShare,
-  splitsOf,
-  type Split,
-} from '../lib/splits'
-import { distanceIn, distanceText, distanceUnit, durationText, paceText } from '../lib/units'
+  distanceIn,
+  distanceText,
+  distanceUnit,
+  durationText,
+  paceFromUnit,
+  paceText,
+} from '../lib/units'
 import { ActivityIcon } from './ActivityIcon'
 import { LaneGraph } from './LaneGraph'
 import { RouteLine, type RouteMarker } from './RouteLine'
@@ -58,6 +58,22 @@ class MapGuard extends Component<
 const present = (value: number | null | undefined): value is number =>
   value !== null && value !== undefined
 
+// The floor a split's bar never goes under, so the slowest split of a session
+// still reads as a bar rather than as nothing at all.
+const SPLIT_FLOOR = 30
+
+// Where one split sits in the range this session actually ran: the quickest
+// fills its row, the slowest keeps the floor, and everything between is spread
+// evenly across the gap. Measuring every bar against the quickest alone made a
+// steady session read as identical full bars, because five miles within four
+// seconds of each other are almost exactly one another. A session with one
+// split, or with every split inside a second of the rest, has no range to
+// spread over and every bar is full.
+function splitShare(pace: number, fastest: number, slowest: number): number {
+  if (!(pace > 0) || !(slowest - fastest >= 1)) return 100
+  return 100 - (100 - SPLIT_FLOOR) * ((pace - fastest) / (slowest - fastest))
+}
+
 // The words for what looked odd about a session. A flag is never a refusal:
 // the workout is here, and this is Tare saying it does not quite believe one
 // of the numbers on it.
@@ -75,20 +91,23 @@ function Stat({ label, value }: { label: string; value: string }) {
 }
 
 // The fastest split said in words, under the list that marks it in colour.
-function fastestLine(split: Split, units: 'imperial' | 'metric'): string {
-  const said = (paceText(split.distance, split.seconds, units) ?? '').split(' ')[0]
+function fastestLine(split: WorkoutSplit, units: 'imperial' | 'metric'): string {
+  const said = paceFromUnit(split.pace_s_per_unit, units).split(' ')[0]
   const word = units === 'metric' ? 'kilometer' : 'mile'
   return `Fastest ${word}: ${said} (${word} ${split.index})`
 }
 
 function Splits({
   splits,
+  fastest: named,
   units,
   chosen,
   lined,
   onChoose,
 }: {
-  splits: Split[]
+  splits: WorkoutSplit[]
+  // Which split the server called the quickest whole one, or null.
+  fastest: number | null
   units: 'imperial' | 'metric'
   // Which split is picked out on the route, by its place in the list.
   chosen: number | null
@@ -101,12 +120,12 @@ function Splits({
   const unit = distanceUnit(units)
   // The range the bars are spread across: this session's own quickest and
   // slowest split, rather than the quickest one alone.
-  const paces = splits.map((split) => secondsPerUnit(split, units)).filter((pace) => pace > 0)
+  const paces = splits.map((split) => split.pace_s_per_unit).filter((pace) => pace > 0)
   const fastest = paces.length === 0 ? 0 : Math.min(...paces)
   const slowest = paces.length === 0 ? 0 : Math.max(...paces)
   // The quickest whole split, which the bars alone do not name. The tail is in
   // the range above and is never the one marked.
-  const quickest = fastestSplit(splits, units)
+  const quickest = splits.find((split) => split.index === named) ?? null
 
   return (
     <div className="t-card mb-3">
@@ -122,7 +141,7 @@ function Splits({
             <span className="w-16 shrink-0">
               {split.whole
                 ? `${split.index} ${unit}`
-                : `${distanceIn(split.distance, units).toFixed(2)} ${unit}`}
+                : `${distanceIn(split.distance_m, units).toFixed(2)} ${unit}`}
             </span>
             {/* The quickest whole split is marked on its own pace, which is the
                 figure the mark is about. Colour and nothing else, because the
@@ -132,7 +151,7 @@ function Splits({
                 quickest !== null && quickest.index === split.index ? 'text-blue' : ''
               }`}
             >
-              {paceText(split.distance, split.seconds, units) ?? ''}
+              {paceFromUnit(split.pace_s_per_unit, units)}
             </span>
             <span
               className="h-1.5 min-w-6 flex-1 rounded-full"
@@ -141,7 +160,7 @@ function Splits({
               <span
                 className="block h-full rounded-full"
                 style={{
-                  width: `${splitShare(secondsPerUnit(split, units), fastest, slowest).toFixed(1)}%`,
+                  width: `${splitShare(split.pace_s_per_unit, fastest, slowest).toFixed(1)}%`,
                   background: 'var(--blue)',
                 }}
               />
@@ -239,17 +258,32 @@ export function WorkoutDetails({
   if (failed !== '') return <p className="t-error">{failed}</p>
   if (detail === null) return <p className="text-sm text-muted">Loading.</p>
 
+  // What the sharing left out is absent, so each of these can be empty.
+  const samples = detail.samples ?? []
+  const splits = detail.splits ?? []
   const pace =
-    detail.distance_m === null ? null : paceText(detail.distance_m, detail.duration_s, me.units)
+    present(detail.duration_s) && present(detail.distance_m)
+      ? paceText(detail.distance_m, detail.duration_s, me.units)
+      : null
   const route = detail.route ?? null
   // Whether there is a line to find anything on. A workout whose route is
   // hidden, missing, or too short to draw has none.
   const lined = route !== null && route.length > 1
-  const splits = splitsOf(detail.samples, me.units)
   // Where each split and each minute fall along the session, which is how each
   // of them is found on the line. Worked out only where there is one.
   const spans = lined ? spansOf(splits) : []
-  const places = lined ? placesOf(detail.samples) : new Map<number, number>()
+  const places = lined ? placesOf(samples) : new Map<number, number>()
+  // Whether the numbers card has a figure in it at all.
+  const stats =
+    present(detail.duration_s) ||
+    present(detail.distance_m) ||
+    present(detail.kcal) ||
+    present(detail.avg_hr) ||
+    present(detail.max_hr) ||
+    present(detail.elevation_gain_m)
+  // A friend whose sharing left every card out reads the header and one line.
+  const bare =
+    !detail.mine && !stats && !lined && samples.length === 0 && splits.length === 0
 
   // The switch moves at once and moves back if the server says no: a member
   // deciding who sees a morning should not wait on a round trip.
@@ -294,28 +328,37 @@ export function WorkoutDetails({
           {dayLabel(detail.date, today(me.timezone))}
           {detail.indoor ? ' · Indoors' : ''}
         </p>
-        <div className="grid grid-cols-2 gap-4 sm:grid-cols-4">
-          <Stat label="Time" value={durationText(detail.duration_s)} />
-          {detail.distance_m !== null && (
-            <Stat label="Distance" value={distanceText(detail.distance_m, me.units)} />
-          )}
-          {present(detail.kcal) && <Stat label="Calories" value={`${detail.kcal} cal`} />}
-          {pace !== null && <Stat label="Pace" value={pace} />}
-          {present(detail.avg_hr) && (
-            <Stat label="AVG H.R" value={`${detail.avg_hr} bpm`} />
-          )}
-          {present(detail.max_hr) && <Stat label="MAX H.R" value={`${detail.max_hr} bpm`} />}
-          {present(detail.elevation_gain_m) && (
-            <Stat
-              label="Climb"
-              value={
-                me.units === 'metric'
-                  ? `${Math.round(detail.elevation_gain_m)} m`
-                  : `${Math.round(detail.elevation_gain_m / 0.3048)} ft`
-              }
-            />
-          )}
-        </div>
+        {bare && (
+          <p className="text-sm text-muted">
+            {detail.display_name} shares only the activity and the date.
+          </p>
+        )}
+        {stats && (
+          <div className="grid grid-cols-2 gap-4 sm:grid-cols-4">
+            {present(detail.duration_s) && (
+              <Stat label="Time" value={durationText(detail.duration_s)} />
+            )}
+            {present(detail.distance_m) && (
+              <Stat label="Distance" value={distanceText(detail.distance_m, me.units)} />
+            )}
+            {present(detail.kcal) && <Stat label="Calories" value={`${detail.kcal} cal`} />}
+            {pace !== null && <Stat label="Pace" value={pace} />}
+            {present(detail.avg_hr) && (
+              <Stat label="AVG H.R" value={`${detail.avg_hr} bpm`} />
+            )}
+            {present(detail.max_hr) && <Stat label="MAX H.R" value={`${detail.max_hr} bpm`} />}
+            {present(detail.elevation_gain_m) && (
+              <Stat
+                label="Climb"
+                value={
+                  me.units === 'metric'
+                    ? `${Math.round(detail.elevation_gain_m)} m`
+                    : `${Math.round(detail.elevation_gain_m / 0.3048)} ft`
+                }
+              />
+            )}
+          </div>
+        )}
         {(detail.flags ?? []).map((flag) => (
           <p key={flag} className="mt-3 text-xs text-muted">
             {FLAG_TEXT[flag] ?? 'One of these numbers looked unusual to Tare.'}
@@ -366,7 +409,7 @@ export function WorkoutDetails({
       )}
 
       <LaneGraph
-        samples={detail.samples}
+        samples={samples}
         units={me.units}
         places={places}
         marker={marker}
@@ -374,6 +417,7 @@ export function WorkoutDetails({
       />
       <Splits
         splits={splits}
+        fastest={detail.fastest ?? null}
         units={me.units}
         chosen={chosen}
         lined={lined}
@@ -384,7 +428,7 @@ export function WorkoutDetails({
         <div className="t-card mb-3">
           <Switch
             label="Show in the community feed"
-            note="Friends see the activity, time, distance and route line. Heart rate, calories and route follow your Sharing settings."
+            note="Friends see what your Sharing settings allow."
             checked={!detail.hidden_from_feed}
             onChange={(next) => setHidden(!next)}
           />

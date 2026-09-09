@@ -6,8 +6,7 @@
 // the session's distance lands a little early or late on it, which is accepted
 // because the ends are hidden on purpose.
 
-import type { WorkoutSample } from '../api'
-import type { Split } from './splits'
+import type { WorkoutSample, WorkoutSplit } from '../api'
 
 // One place on a drawing: x and y inside the box the route was fitted into.
 export type Spot = [number, number]
@@ -94,13 +93,13 @@ export function placesOf(samples: WorkoutSample[]): Map<number, number> {
 // Where each split begins and ends, as shares of the distance the session
 // covered. The route is one line and a split is a stretch of miles, so a split
 // is found on the line by how far along the session it fell.
-export function spansOf(splits: Split[]): { from: number; to: number }[] {
-  const total = splits.reduce((sum, split) => sum + split.distance, 0)
+export function spansOf(splits: WorkoutSplit[]): { from: number; to: number }[] {
+  const total = splits.reduce((sum, split) => sum + split.distance_m, 0)
   if (!(total > 0)) return splits.map(() => ({ from: 0, to: 0 }))
   let far = 0
   return splits.map((split) => {
     const from = far / total
-    far += split.distance
+    far += split.distance_m
     return { from, to: far / total }
   })
 }

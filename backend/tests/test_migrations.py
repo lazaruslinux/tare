@@ -288,3 +288,65 @@ def test_every_account_that_already_exists_is_past_the_first_run_screen(tmp_path
         engine.dispose()
     assert len(stamps) == 1
     assert stamps[0] is not None
+
+
+def test_the_three_old_hide_names_become_the_four_new_ones(tmp_path):
+    """Calories were part of the numbers card and the heart rate was on the
+    card and in the graph both, so one old name can become two new ones."""
+    database = tmp_path / "tare.db"
+    config = Config(str(BACKEND / "alembic.ini"))
+    config.set_main_option("script_location", str(BACKEND / "migrations"))
+    config.set_main_option("sqlalchemy.url", f"sqlite:///{database}")
+
+    command.upgrade(config, "0043_micros")
+    engine = sa.create_engine(f"sqlite:///{database}")
+    was = {
+        1: '["avg_hr", "kcal", "route"]',
+        2: '["kcal"]',
+        3: '["avg_hr"]',
+        4: "[]",
+    }
+    try:
+        with engine.begin() as connection:
+            for user_id, held in was.items():
+                connection.execute(
+                    sa.text(
+                        "INSERT INTO users (id, username, password_hash, created_at,"
+                        " feed_hidden, share_age, share_sex, share_location,"
+                        " share_workouts, share_journal, share_weight_loss, clock)"
+                        " VALUES (:id, :name, 'x', :at, :held, 0, 0, 0, 0, 0, 0, '12h')"
+                    ),
+                    {
+                        "id": user_id,
+                        "name": f"member{user_id}",
+                        "at": "2026-09-01 08:00:00",
+                        "held": held,
+                    },
+                )
+
+        command.upgrade(config, "head")
+        with engine.connect() as connection:
+            after = dict(
+                connection.execute(sa.text("SELECT id, feed_hidden FROM users")).all()
+            )
+
+        command.downgrade(config, "0043_micros")
+        with engine.connect() as connection:
+            back = dict(
+                connection.execute(sa.text("SELECT id, feed_hidden FROM users")).all()
+            )
+    finally:
+        engine.dispose()
+    assert after == {
+        1: '["stats", "route", "minutes"]',
+        2: '["stats"]',
+        3: '["stats", "minutes"]',
+        4: "[]",
+    }
+    # Best-effort back: stats says what the two old figures said between them.
+    assert back == {
+        1: '["avg_hr", "kcal", "route"]',
+        2: '["avg_hr", "kcal"]',
+        3: '["avg_hr", "kcal"]',
+        4: "[]",
+    }

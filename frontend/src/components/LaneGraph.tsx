@@ -6,8 +6,7 @@
 import { useRef, useState, type PointerEvent, type RefObject } from 'react'
 
 import type { WorkoutSample } from '../api'
-import { stepOf } from '../lib/splits'
-import { distanceIn, elapsedText, paceText } from '../lib/units'
+import { distanceIn, elapsedText, paceFromUnit, paceText } from '../lib/units'
 import { RouteLine, type RouteMarker } from './RouteLine'
 
 // A lane's own coordinates. The height is also its height on the page, in
@@ -77,15 +76,10 @@ function typicalBounds(values: number[]): [number, number] {
   return [kept[0], kept[kept.length - 1]]
 }
 
-// A pace of so many seconds a mile or kilometre, written the way the app writes
-// every other pace.
-const paceOf = (seconds: number, units: 'imperial' | 'metric'): string =>
-  paceText(stepOf(units), seconds, units) ?? ''
-
-// The same figure without the unit, which is what goes down the side of a lane:
-// naming /mi three times on one axis says nothing the readout does not.
+// A pace without the unit, which is what goes down the side of a lane: naming
+// /mi three times on one axis says nothing the readout does not.
 const paceLabel = (seconds: number, units: 'imperial' | 'metric'): string =>
-  paceOf(seconds, units).split(' ')[0]
+  paceFromUnit(seconds, units).split(' ')[0]
 
 // The lanes a session has anything to draw, in the order they are stacked. A
 // lane with fewer than two readings is not a line, and it is left out rather
@@ -156,10 +150,10 @@ function lanesOf(
       key: 'pace',
       name: 'Pace',
       colour: 'var(--blue)',
-      summary: `Pace over ${moving.length} minutes, fastest ${paceOf(
+      summary: `Pace over ${moving.length} minutes, fastest ${paceFromUnit(
         quickest,
         units
-      )}, slowest ${paceOf(slowest, units)}`,
+      )}, slowest ${paceFromUnit(slowest, units)}`,
       line: moving.map((row, index) => spot(row.minute, at(seconds[index]))).join(' '),
       band: '',
       labels: [

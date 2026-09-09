@@ -2,8 +2,9 @@ import datetime as dt
 
 from sqlalchemy import select
 
-from app import models
+from app import models, splits
 from app.models import now_utc
+from app.splits import M_PER_MILE
 from tests.test_ingest import export, post, run, token_for, yesterday
 
 
@@ -161,7 +162,7 @@ def test_a_shared_workout_reads_for_another_member_without_what_was_held_back(
     client, db_session, make_user
 ):
     stranger = make_user("stranger")
-    stranger.feed_hidden = ["avg_hr", "kcal"]
+    stranger.feed_hidden = ["stats", "minutes"]
     db_session.commit()
     token = token_for(db_session, stranger)
     post(client, token, {"data": {"workouts": [run(yesterday())]}})
@@ -182,9 +183,58 @@ def test_a_shared_workout_reads_for_another_member_without_what_was_held_back(
     assert body["mine"] is False
     assert body["display_name"] == "stranger"
     assert "avg_hr" not in body and "max_hr" not in body and "kcal" not in body
+    assert "duration_s" not in body and "distance_m" not in body
     assert "flags" not in body
+    assert "samples" not in body
     assert body["route"] is not None
-    assert "hr_avg" not in body["samples"][0] and "kcal" not in body["samples"][0]
+    # The splits are the one card they left on, and they still read.
+    assert body["splits"][0]["pace_s_per_unit"] > 0
+
+
+# Splits
+# ------
+
+
+def minute_rows(count, metres, hr=150):
+    """A session of even minutes, each covering the same ground."""
+    return [
+        models.WorkoutSample(minute=step, distance_m=metres, hr_avg=hr, steps=100)
+        for step in range(count)
+    ]
+
+
+def test_the_splits_are_whole_units_and_the_ground_left_over():
+    """Twenty-five even minutes at a tenth of a mile: two miles and a half."""
+    rows = minute_rows(25, M_PER_MILE / 10)
+
+    parts = splits.splits_of(rows, "imperial")
+
+    assert [part["whole"] for part in parts] == [True, True, False]
+    assert [round(part["seconds"]) for part in parts] == [600, 600, 300]
+    assert all(round(part["pace_s_per_unit"]) == 600 for part in parts)
+    assert [part["hr"] for part in parts] == [150, 150, 150]
+    # The half mile at the end is quick per mile and is never the fastest one.
+    assert splits.fastest_of(parts) != 3
+
+
+def test_the_quickest_whole_split_is_the_one_named():
+    """A mile at six minutes, then a mile at three."""
+    rows = minute_rows(10, M_PER_MILE / 10) + minute_rows(5, M_PER_MILE / 5)
+
+    parts = splits.splits_of(rows, "imperial")
+
+    assert [round(part["seconds"]) for part in parts] == [600, 300]
+    assert splits.fastest_of(parts) == 2
+
+
+def test_the_splits_are_measured_in_whoever_is_reading_units():
+    rows = minute_rows(25, M_PER_MILE / 10)
+
+    assert len(splits.splits_of(rows, "metric")) == 5
+
+
+def test_one_split_on_its_own_is_not_the_fastest_anything():
+    assert splits.fastest_of(splits.splits_of(minute_rows(10, M_PER_MILE / 10), "imperial")) is None
 
 
 def test_the_fitness_screen_needs_an_account(client):

@@ -24,7 +24,7 @@ from app.models import now_utc
 from app.profiles import avatar_url, contribution_counts, role_of
 from app.routers.admin import name_match
 from app.routers.diary import fill_auto_logs, total
-from app.routers.fitness import day_exercise, kept_back, steps_on, workouts_on
+from app.routers.fitness import day_exercise, steps_on, workouts_on
 from app.routers.health import Reckoning, exercise_on
 
 router = APIRouter(prefix="/feed", tags=["feed"])
@@ -309,9 +309,8 @@ def read_feed(
     more = len(ordered) > PAGE
     page = ordered[:PAGE]
 
-    # Three queries for the whole page rather than three per row: who each one
-    # belongs to, which workouts recorded a line, and the gender a row about a
-    # person is spoken about in.
+    # Two queries for the whole page rather than two per row: who each one
+    # belongs to, and the gender a row about a person is spoken about in.
     owner_ids = {each.user_id for _, _, each in page}
     owners = {
         row.id: row
@@ -329,16 +328,6 @@ def read_feed(
             )
         ).scalars()
     }
-    with_route = set(
-        db.execute(
-            select(models.WorkoutRoute.workout_id).where(
-                models.WorkoutRoute.workout_id.in_(
-                    {each.id for _, of, each in page if of == WORKOUT}
-                )
-            )
-        ).scalars()
-    )
-
     items: list[dict[str, object]] = []
     for _, of, each in page:
         owner = owners.get(each.user_id)
@@ -404,7 +393,9 @@ def read_feed(
             items.append(journal)
             continue
 
-        hidden = set() if owner is None or mine else kept_back(owner)
+        # That somebody synced a session, and when. Every figure on it is
+        # behind a switch, so none of them is on the row: the row is a way in
+        # to the workout, and the workout answers what was shared.
         item: dict[str, object] = {
             "kind": WORKOUT,
             "id": each.id,
@@ -415,11 +406,6 @@ def read_feed(
             "activity": each.activity,
             "date": each.date_for.isoformat(),
             "started_at": each.started_at.isoformat(),
-            "duration_s": each.duration_s,
-            "distance_m": each.distance_m,
-            "has_route": each.id in with_route and "route" not in hidden,
-            "indoor": each.indoor,
-            "source": each.source,
         }
         if mine:
             item["hidden"] = each.hidden_from_feed or not user.share_workouts

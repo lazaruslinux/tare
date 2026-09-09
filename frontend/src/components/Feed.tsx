@@ -1,4 +1,4 @@
-import { ArrowDown, BookCheck, ChevronRight, CircleCheck, Hand } from 'lucide-react'
+import { ArrowDown, BookCheck, ChevronRight, CircleCheck, Hand, Lock } from 'lucide-react'
 import { useEffect, useState } from 'react'
 
 import {
@@ -12,9 +12,10 @@ import {
   type Me,
 } from '../api'
 import { ActivityIcon } from './ActivityIcon'
+import { Sheet } from './Sheet'
 import { clockText, dateText, useClock } from '../lib/clock'
 import { dayLabel, dayOf, today } from '../lib/day'
-import { distanceCompact, hmsText, weightCompact } from '../lib/units'
+import { weightCompact } from '../lib/units'
 
 // What this account's friends are doing, read only. Four kinds of row: a
 // workout somebody did, a day somebody finished, a weigh-in that came in
@@ -29,12 +30,49 @@ function dayText(iso: string, todayIso: string): string {
 
 const JOURNAL_DONE = 'Journal complete'
 
+// A row nobody else can see, and what saying so looks like: a small lock in
+// the colour the app warns in, and a sheet with the one sentence behind it.
+// The lock is on the row rather than in it, so tapping it never opens the
+// workout the row is a way to.
+function PrivateLock({ onOpen }: { onOpen: () => void }) {
+  return (
+    <span
+      role="button"
+      tabIndex={0}
+      aria-label="Private"
+      className="shrink-0 text-over"
+      onClick={(event) => {
+        event.stopPropagation()
+        onOpen()
+      }}
+      onKeyDown={(event) => {
+        if (event.key !== 'Enter' && event.key !== ' ') return
+        event.preventDefault()
+        event.stopPropagation()
+        onOpen()
+      }}
+    >
+      <Lock className="h-4 w-4" strokeWidth={2} aria-hidden="true" />
+    </span>
+  )
+}
+
+function PrivateSheet({ open, onClose }: { open: boolean; onClose: () => void }) {
+  return (
+    <Sheet open={open} label="Private" center onClose={onClose}>
+      <p className="text-base font-semibold">Private</p>
+      <p className="mt-2 text-sm text-muted">Only you can see this.</p>
+      <button type="button" className="t-btn mt-4 w-full" onClick={onClose}>
+        Close
+      </button>
+    </Sheet>
+  )
+}
+
 // Every row has the same skeleton: the kind's icon at the left, then the
-// member's name, a colon and the fact as one line of inline text, then the
-// stamp. Inline, so a narrow column wraps the line like a sentence instead of
-// clipping the distance and the time; each item is one unbreakable piece (the
-// check with the activity, a distance, a time), so a wrap only ever falls
-// between items.
+// member's name and the fact as one line of inline text, then the stamp.
+// Inline, so a narrow column wraps the line like a sentence; each item is one
+// unbreakable piece, so a wrap only ever falls between items.
 
 // The member's name, which is the one thing on a row that opens something.
 // Weight and the accent colour make it the anchor every row starts from.
@@ -66,11 +104,13 @@ function JournalRow({
   row,
   todayIso,
   onOpenMember,
+  onPrivate,
 }: {
   me: Me
   row: FeedJournal
   todayIso: string
   onOpenMember: () => void
+  onPrivate: () => void
 }) {
   return (
     <div className="t-row">
@@ -85,7 +125,7 @@ function JournalRow({
           </span>
         </span>
       </span>
-      {row.hidden === true && <span className="t-chip shrink-0">Only you</span>}
+      {row.hidden === true && <PrivateLock onOpen={onPrivate} />}
     </div>
   )
 }
@@ -129,11 +169,13 @@ function WeightRow({
   row,
   todayIso,
   onOpenMember,
+  onPrivate,
 }: {
   me: Me
   row: FeedWeight
   todayIso: string
   onOpenMember: () => void
+  onPrivate: () => void
 }) {
   return (
     <div className="t-row">
@@ -149,7 +191,7 @@ function WeightRow({
           </span>
         </span>
       </span>
-      {row.hidden === true && <span className="t-chip shrink-0">Only you</span>}
+      {row.hidden === true && <PrivateLock onOpen={onPrivate} />}
     </div>
   )
 }
@@ -160,12 +202,14 @@ function Row({
   todayIso,
   onOpen,
   onOpenMember,
+  onPrivate,
 }: {
   me: Me
   row: FeedWorkout
   todayIso: string
   onOpen: () => void
   onOpenMember: () => void
+  onPrivate: () => void
 }) {
   return (
     <button type="button" className="t-row w-full text-left" onClick={onOpen}>
@@ -173,25 +217,15 @@ function Row({
         <ActivityIcon name={row.activity} className="h-4 w-4 shrink-0 text-muted" />
         <span className="min-w-0 flex-1">
           <span className="block text-sm">
-            <Name row={row} onOpenMember={onOpenMember} />:{' '}
-            <span>
-              <span className="whitespace-nowrap">
-                <CircleCheck
-                  className="inline h-4 w-4 align-[-3px] text-blue"
-                  strokeWidth={2}
-                  aria-hidden="true"
-                />{' '}
-                <span className="text-blue">{row.activity}</span>
-              </span>
-              {row.distance_m !== null && (
-                <>
-                  {' '}
-                  <span className="whitespace-nowrap">
-                    - {distanceCompact(row.distance_m, me.units)}
-                  </span>
-                </>
-              )}{' '}
-              <span className="whitespace-nowrap">- {hmsText(row.duration_s)}</span>
+            <Name row={row} onOpenMember={onOpenMember} />{' '}
+            <span className="text-muted">synced:</span>{' '}
+            <span className="whitespace-nowrap">
+              <CircleCheck
+                className="inline h-4 w-4 align-[-3px] text-blue"
+                strokeWidth={2}
+                aria-hidden="true"
+              />{' '}
+              <span className="text-blue">{row.activity}</span>
             </span>
           </span>
           <span className="block text-xs text-muted">
@@ -199,7 +233,7 @@ function Row({
           </span>
         </span>
       </span>
-      {row.hidden === true && <span className="t-chip shrink-0">Only you</span>}
+      {row.hidden === true && <PrivateLock onOpen={onPrivate} />}
       <ChevronRight className="h-4 w-4 shrink-0 text-muted" strokeWidth={2} />
     </button>
   )
@@ -225,6 +259,9 @@ export function Feed({
   const [rows, setRows] = useState<FeedRow[] | null>(null)
   const [cursor, setCursor] = useState<string | null>(null)
   const [busy, setBusy] = useState(false)
+  // What the lock on one of your own rows says. One sheet for the whole list:
+  // it says the same thing whichever lock opened it.
+  const [askedPrivate, setAskedPrivate] = useState(false)
   const todayIso = today(me.timezone)
   // Every row carries a time, so the whole list redraws when the preference
   // behind them moves.
@@ -278,6 +315,7 @@ export function Feed({
             row={row}
             todayIso={todayIso}
             onOpenMember={() => onOpenMember(row.user_id)}
+            onPrivate={() => setAskedPrivate(true)}
           />
         ) : row.kind === 'weight' ? (
           <WeightRow
@@ -286,6 +324,7 @@ export function Feed({
             row={row}
             todayIso={todayIso}
             onOpenMember={() => onOpenMember(row.user_id)}
+            onPrivate={() => setAskedPrivate(true)}
           />
         ) : row.kind === 'joined' ? (
           <JoinedRow
@@ -303,6 +342,7 @@ export function Feed({
             todayIso={todayIso}
             onOpen={() => onOpenWorkout(row.id)}
             onOpenMember={() => onOpenMember(row.user_id)}
+            onPrivate={() => setAskedPrivate(true)}
           />
         )
       )}
@@ -311,6 +351,7 @@ export function Feed({
           Show more
         </button>
       )}
+      <PrivateSheet open={askedPrivate} onClose={() => setAskedPrivate(false)} />
     </>
   )
 }

@@ -79,8 +79,20 @@ def test_a_shared_workout_reaches_the_other_member(client, db_session, make_user
     assert row["display_name"] == "runner"
     assert row["mine"] is False
     assert "hidden" not in row
-    assert row["has_route"] is True
     assert body["next_cursor"] is None
+    # That they synced a session, and when. Every figure on it is behind a
+    # switch, so none of them is on the row.
+    assert set(row) == {
+        "kind",
+        "id",
+        "user_id",
+        "display_name",
+        "role",
+        "mine",
+        "activity",
+        "date",
+        "started_at",
+    }
 
 
 def test_a_feed_row_never_carries_the_line_itself(client, db_session, make_user):
@@ -93,6 +105,7 @@ def test_a_feed_row_never_carries_the_line_itself(client, db_session, make_user)
 
     assert "route" not in row
     assert "kcal" not in row and "avg_hr" not in row and "flags" not in row
+    assert "distance_m" not in row and "duration_s" not in row
 
 
 def test_a_hidden_workout_is_the_owners_alone(client, db_session, make_user):
@@ -204,57 +217,54 @@ def test_a_page_marker_nobody_minted_is_refused(client, make_user):
 # -------------------------------------
 
 
-def test_a_held_back_heart_rate_is_absent_rather_than_empty(client, db_session, make_user):
+def held(client, db_session, make_user, parts):
+    """One shared workout as a friend reads it, with these parts held back."""
     runner = make_user("runner")
-    runner.feed_hidden = ["avg_hr"]
+    runner.feed_hidden = parts
     db_session.commit()
     workout = synced(client, db_session, runner)
 
     befriend(db_session, runner, make_user("member"))
     sign_in(client, "member")
-    body = client.get(f"/api/workouts/{workout.id}").json()
-
-    assert "avg_hr" not in body and "max_hr" not in body
-    assert "hr_avg" not in body["samples"][0]
-    assert body["kcal"] is not None
+    return client.get(f"/api/workouts/{workout.id}").json()
 
 
-def test_held_back_calories_leave_the_workout_and_its_minutes(
-    client, db_session, make_user
-):
-    runner = make_user("runner")
-    runner.feed_hidden = ["kcal"]
-    db_session.commit()
-    workout = synced(client, db_session, runner)
+def test_held_back_stats_take_the_whole_numbers_card(client, db_session, make_user):
+    body = held(client, db_session, make_user, ["stats"])
 
-    befriend(db_session, runner, make_user("member"))
-    sign_in(client, "member")
-    body = client.get(f"/api/workouts/{workout.id}").json()
-
-    assert "kcal" not in body
-    assert all("kcal" not in sample for sample in body["samples"])
-    assert body["avg_hr"] is not None
+    # The pace is worked out from the first two, so it goes with them.
+    for figure in ("duration_s", "distance_m", "kcal", "avg_hr", "max_hr"):
+        assert figure not in body
+    # The minutes and the splits are their own switches and are still here.
+    assert body["samples"] != [] and body["splits"] != []
 
 
 def test_a_held_back_route_takes_the_climb_with_it(client, db_session, make_user):
-    runner = make_user("runner")
-    runner.feed_hidden = ["route"]
-    db_session.commit()
-    workout = synced(client, db_session, runner)
-
-    befriend(db_session, runner, make_user("member"))
-    sign_in(client, "member")
-    body = client.get(f"/api/workouts/{workout.id}").json()
-    row = client.get("/api/feed").json()["items"][0]
+    body = held(client, db_session, make_user, ["route"])
 
     assert "route" not in body
     assert "elevation_gain_m" not in body
-    assert row["has_route"] is False
+    assert body["duration_s"] is not None
+
+
+def test_held_back_minutes_leave_no_samples_at_all(client, db_session, make_user):
+    body = held(client, db_session, make_user, ["minutes"])
+
+    assert "samples" not in body
+    # The splits are worked out on the server, so they survive without them.
+    assert body["splits"] != []
+
+
+def test_held_back_splits_take_the_fastest_one_with_them(client, db_session, make_user):
+    body = held(client, db_session, make_user, ["splits"])
+
+    assert "splits" not in body and "fastest" not in body
+    assert body["samples"] != []
 
 
 def test_the_owner_still_reads_everything_they_held_back(client, db_session, make_user):
     runner = make_user("runner")
-    runner.feed_hidden = ["avg_hr", "kcal", "route"]
+    runner.feed_hidden = ["stats", "route", "minutes", "splits"]
     db_session.commit()
     workout = synced(client, db_session, runner)
 
@@ -262,9 +272,32 @@ def test_the_owner_still_reads_everything_they_held_back(client, db_session, mak
     body = client.get(f"/api/workouts/{workout.id}").json()
 
     assert body["mine"] is True
+    assert body["duration_s"] is not None and body["distance_m"] is not None
     assert body["avg_hr"] is not None and body["kcal"] is not None
     assert body["route"] is not None
+    assert body["samples"] != [] and body["splits"] != []
+    assert "fastest" in body
     assert body["flags"] == []
+
+    # And the friend beside them reads none of it.
+    befriend(db_session, runner, make_user("member"))
+    sign_in(client, "member")
+    theirs = client.get(f"/api/workouts/{workout.id}").json()
+    for key in (
+        "duration_s",
+        "distance_m",
+        "kcal",
+        "avg_hr",
+        "max_hr",
+        "elevation_gain_m",
+        "route",
+        "samples",
+        "splits",
+        "fastest",
+        "flags",
+    ):
+        assert key not in theirs
+    assert theirs["activity"] == "Outdoor Run"
 
 
 def test_a_name_tare_cannot_hide_is_refused(client, make_user):
@@ -283,10 +316,10 @@ def test_what_is_hidden_is_said_back_with_the_account(client, make_user):
 
     saved = client.patch(
         "/api/account",
-        json={"feed_hidden": ["kcal"], "share_age": True, "share_location": True},
+        json={"feed_hidden": ["stats"], "share_age": True, "share_location": True},
     ).json()
 
-    assert saved["feed_hidden"] == ["kcal"]
+    assert saved["feed_hidden"] == ["stats"]
     assert saved["share_age"] is True
     assert saved["share_sex"] is False
     assert saved["share_location"] is True

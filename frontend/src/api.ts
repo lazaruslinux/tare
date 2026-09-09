@@ -949,29 +949,54 @@ export type WorkoutSample = {
   steps: number | null
 }
 
+// One whole mile or kilometre of a session, worked out on the server in the
+// units whoever is reading reads in.
+export type WorkoutSplit = {
+  // 1 for the first, 2 for the second, and so on.
+  index: number
+  // How far this one covered. A full unit for every split but the last.
+  distance_m: number
+  // Unrounded, so the splits of a session still add up to the session.
+  seconds: number
+  // How long it took per mile or kilometre, which is what the bars are scaled
+  // on: fewer seconds is quicker.
+  pace_s_per_unit: number
+  // The average of whatever heart rate readings landed inside it, or null.
+  hr: number | null
+  // Whether it is a whole one. The last split of a session usually is not.
+  whole: boolean
+}
+
 // One session read whole. Every field the owner may hold back is optional
 // here: another member is served the workout without them, key and all, so
 // absent is what hidden looks like and null stays what was never measured.
 export type WorkoutDetail = Omit<
   Workout,
-  'avg_hr' | 'max_hr' | 'kcal' | 'elevation_gain_m' | 'flags'
+  'duration_s' | 'distance_m' | 'avg_hr' | 'max_hr' | 'kcal' | 'elevation_gain_m' | 'flags'
 > & {
   user_id: number
   display_name: string
   mine: boolean
+  duration_s?: number
+  distance_m?: number | null
   avg_hr?: number | null
   max_hr?: number | null
   kcal?: number | null
   elevation_gain_m?: number | null
   flags?: string[]
-  samples: WorkoutSample[]
+  samples?: WorkoutSample[]
   // The line, with both its ends already thrown away, or null for a session
   // that recorded no route.
   route?: [number, number][] | null
+  splits?: WorkoutSplit[]
+  // Which split was quickest, by its index, or null where no whole one stands
+  // out. It says nothing without the list and is held back with it.
+  fastest?: number | null
 }
 
-// One workout as the community feed lists it: enough to recognise it and
-// nothing that belongs to whoever did it.
+// One workout as the community feed lists it: that somebody synced a session,
+// and when. Every figure on it is behind a switch, so the row carries none of
+// them and the workout itself answers what was shared.
 export type FeedWorkout = {
   kind: 'workout'
   id: number
@@ -984,11 +1009,6 @@ export type FeedWorkout = {
   activity: string
   date: string
   started_at: string
-  duration_s: number
-  distance_m: number | null
-  has_route: boolean
-  indoor: boolean
-  source: WorkoutSource
 }
 
 // One finished day. It says that and nothing else: never what was eaten, never

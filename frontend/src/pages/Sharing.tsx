@@ -12,9 +12,9 @@ import { useTopBar } from '../hooks/useTopBar'
 
 const GENDER_LABEL: Record<string, string> = { female: 'Female', male: 'Male' }
 
-// The three parts of a workout a member may keep back, by the names the server
+// The four parts of a workout a member may keep back, by the names the server
 // holds them under.
-const HIDEABLE = ['avg_hr', 'kcal', 'route'] as const
+const HIDEABLE = ['stats', 'route', 'minutes', 'splits'] as const
 
 function ageOf(birthdate: string): number {
   const born = new Date(`${birthdate}T00:00:00Z`)
@@ -85,7 +85,7 @@ export function Sharing({
       }
     })
 
-  // The master switch takes the three with it: off folds them away and turns
+  // The master switch takes the four with it: off folds them away and turns
   // them off, on brings them back at their defaults, all shown.
   const shareWorkouts = (next: boolean) => {
     const parts = next ? [] : [...HIDEABLE]
@@ -180,20 +180,28 @@ export function Sharing({
               transition={{ duration: 0.18 }}
             >
               <Switch
-                label="Heart rate (during workout only)"
-                checked={shows('avg_hr')}
-                onChange={(next) => show('avg_hr', next)}
+                label="Share stats"
+                note="Time, distance, calories, pace, heart rate"
+                checked={shows('stats')}
+                onChange={(next) => show('stats', next)}
               />
               <Switch
-                label="Calories burned"
-                checked={shows('kcal')}
-                onChange={(next) => show('kcal', next)}
-              />
-              <Switch
-                label="Route/Activity Maps"
+                label="Share route maps"
                 note="Tare automatically hides the first 200 meters of the start and end of all activities with route data."
                 checked={shows('route')}
                 onChange={(next) => show('route', next)}
+              />
+              <Switch
+                label="Share minute-by-minute"
+                note="Heart rate and pace across the workout"
+                checked={shows('minutes')}
+                onChange={(next) => show('minutes', next)}
+              />
+              <Switch
+                label="Share splits"
+                note="Pace for each mile or kilometer"
+                checked={shows('splits')}
+                onChange={(next) => show('splits', next)}
               />
             </motion.div>
           )}

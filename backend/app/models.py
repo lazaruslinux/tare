@@ -98,8 +98,8 @@ class User(Base):
     # rather than a fact about the data: every time is stored in UTC either way.
     clock: Mapped[str] = mapped_column(String(4), nullable=False, default="12h")
     # Which parts of a shared workout this account keeps to itself: any of
-    # avg_hr, kcal and route. Another member is served the workout without
-    # them rather than with them emptied.
+    # stats, route, minutes and splits. Another member is served the workout
+    # without them rather than with them emptied.
     feed_hidden: Mapped[list[Any]] = mapped_column(JSON, nullable=False, default=list)
     # The only three facts another member may be shown, each off until it is
     # turned on. Everything else about an account stays private.

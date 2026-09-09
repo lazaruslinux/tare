@@ -16,7 +16,7 @@ from sqlalchemy import func, select
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session
 
-from app import clock, fitness_catalog, health, models
+from app import clock, fitness_catalog, health, models, splits
 from app.db import get_db
 from app.deps import require_user
 from app.friends import friend_ids
@@ -28,9 +28,11 @@ BAD_DATE = "That is not a date."
 BAD_METRIC = "That is not something Tare keeps."
 MISSING_WORKOUT = "There is no such workout."
 
-# The three parts of a shared session a member may keep back, by the names the
-# account's own list holds. Anything else is a name Tare has never had.
-HIDEABLE = ("avg_hr", "kcal", "route")
+# The four parts of a shared session a member may keep back, by the names the
+# account's own list holds: the numbers card, the line and the climb, the
+# minute-by-minute rows, and the splits table. Anything else is a name Tare has
+# never had.
+HIDEABLE = ("stats", "route", "minutes", "splits")
 BAD_HIDDEN = "That is not something Tare can hide."
 
 # What a day of movement may be aimed at. Wide enough for anybody's day and
@@ -700,7 +702,7 @@ def read_workouts(
 def kept_back(owner: models.User) -> set[str]:
     """What this account keeps to itself on a workout somebody else is reading.
 
-    Read through the three names Tare knows rather than trusted as stored: a
+    Read through the four names Tare knows rather than trusted as stored: a
     list is JSON, and a name nothing recognises must not quietly widen what is
     shown.
     """
@@ -740,11 +742,14 @@ def read_workout(
     db: Session = Depends(get_db),
     user: models.User = Depends(require_user),
 ) -> dict[str, object]:
-    """One session, whole: its numbers, its minutes and its line.
+    """One session, whole: its numbers, its minutes, its line and its splits.
 
-    The owner reads all of it. Another member reads what was shared: the parts
-    the owner holds back are left out of the answer rather than sent as null,
-    so nothing on the far side has to tell a hidden number from a missing one.
+    The owner reads all of it, whatever their own switches say. Another member
+    reads what was shared: the parts the owner holds back are left out of the
+    answer rather than sent as null, so nothing on the far side has to tell a
+    hidden number from a missing one. The splits are worked out here rather
+    than drawn from the minutes, so sharing one without the other is possible;
+    they are measured in whoever is reading's own miles or kilometres.
     """
     row = readable_workout(db, workout_id, user)
     mine = row.user_id == user.id
@@ -781,21 +786,23 @@ def read_workout(
     if not mine:
         # What Tare thought of the numbers is between Tare and whoever ran it.
         detail.pop("flags", None)
-    if "avg_hr" in hidden:
-        detail.pop("avg_hr", None)
-        detail.pop("max_hr", None)
-        for sample in samples:
-            for beat in ("hr_min", "hr_avg", "hr_max"):
-                sample.pop(beat, None)
-    if "kcal" in hidden:
-        detail.pop("kcal", None)
-        for sample in samples:
-            sample.pop("kcal", None)
+    if "stats" in hidden:
+        # The pace on the card is worked out from the first two, so it goes
+        # with them rather than being a fifth thing to hold back.
+        for figure in ("duration_s", "distance_m", "kcal", "avg_hr", "max_hr"):
+            detail.pop(figure, None)
     if "route" in hidden:
         detail.pop("elevation_gain_m", None)
     else:
         detail["route"] = None if route is None else route.points
-    detail["samples"] = samples
+    if "minutes" not in hidden:
+        detail["samples"] = samples
+    if "splits" not in hidden:
+        parts = splits.splits_of(minutes, user.units)
+        detail["splits"] = parts
+        # Which of them was quickest, which the table marks in colour. It says
+        # nothing without the list, so it is held back with it.
+        detail["fastest"] = splits.fastest_of(parts)
     return detail
 
 
