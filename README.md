@@ -80,7 +80,7 @@ docker compose -f docker-compose.yml -f docker-compose.dev.yml up -d
 
 ## Checks
 
-The backend, in a Python 3.13 virtual environment:
+The backend, in a Python 3.14 virtual environment:
 
 ```
 cd backend

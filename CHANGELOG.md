@@ -4,6 +4,13 @@ Notable changes to Tare, newest first. The format follows
 [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), and Tare uses
 [semantic versioning](https://semver.org/spec/v2.0.0.html).
 
+## Unreleased
+
+### Changed
+
+- The api image runs on Python 3.14; CI tests on the same version. Dependency
+  refresh: nginx image digest, framer-motion, lucide-react, alembic, ruff.
+
 ## 0.5.0 - 2026-09-09
 
 ### Added
