@@ -1,0 +1,500 @@
+import { ChevronLeft, ChevronRight, Plus, Users } from 'lucide-react'
+import { useEffect, useState } from 'react'
+
+import {
+  calendarDays,
+  errorText,
+  readAppointment,
+  type AppointmentRaw,
+  type Me,
+  type Occurrence,
+} from '../api'
+import { AppointmentDetail } from '../components/calendar/AppointmentDetail'
+import { AppointmentSheet } from '../components/calendar/AppointmentSheet'
+import { allDayItems, DayTimeline, tintOf, useNowMinutes } from '../components/calendar/DayTimeline'
+import { useTopBar } from '../hooks/useTopBar'
+import { useRailLayout } from '../hooks/useWideLayout'
+import { dateText, useClock } from '../lib/clock'
+import {
+  formatTime,
+  monthGrid,
+  monthOf,
+  monthTitle,
+  shiftMonth,
+} from '../lib/calendar'
+import { shiftDay, today } from '../lib/day'
+
+// The month, and one day of it against the clock. The month is where the
+// calendar opens: it is the view somebody scans, and every way deeper into a
+// day starts from a cell in it.
+
+const DOW = ['S', 'M', 'T', 'W', 'T', 'F', 'S']
+// How many entries a cell names before it says how many more there are.
+const CELL_MARKS = 3
+// The page's own timeline: an hour is 64px, which fits a title and its times.
+const HOUR_PX = 64
+
+// What the form was opened for: a new appointment on a day, or an existing one
+// as a series or as one of its days.
+type Form =
+  | { kind: 'new'; date: string; hour?: number }
+  | { kind: 'edit'; row: AppointmentRaw; occurrence?: string }
+
+export function Calendar({
+  me,
+  refresh,
+  focusDay,
+  onBack,
+  onChanged,
+  onOpenCalendars,
+}: {
+  me: Me
+  // The app-wide change tick. What is on screen is read again on every bump.
+  refresh: number
+  // A day to open on, from somewhere else in the app. Empty is this month.
+  focusDay?: string
+  onBack: () => void
+  // Something here changed a list the rest of the app shows.
+  onChanged: () => void
+  // The shared calendars sheet, where there is one to open.
+  onOpenCalendars?: () => void
+}) {
+  const clock = useClock()
+  const wide = useRailLayout()
+  const todayIso = today(me.timezone)
+  const nowMinutes = useNowMinutes(me.timezone)
+  const [anchor, setAnchor] = useState(() => monthOf(focusDay || todayIso))
+  const [selected, setSelected] = useState(focusDay || todayIso)
+  // The day being read against the clock, or null for the month.
+  const [day, setDay] = useState<string | null>(null)
+  const [days, setDays] = useState<Map<string, Occurrence[]>>(new Map())
+  const [detail, setDetail] = useState<Occurrence | null>(null)
+  const [form, setForm] = useState<Form | null>(null)
+  const [error, setError] = useState('')
+  const [again, setAgain] = useState(0)
+
+  const weeks = monthGrid(anchor.year, anchor.month)
+  const first = weeks[0][0].date
+  const last = weeks[5][6].date
+
+  // The day names itself in its own header, between the arrows that step it,
+  // so the bar says where back goes rather than saying the date twice.
+  useTopBar(
+    day === null
+      ? { title: 'Calendar', back: { label: 'More', onBack } }
+      : { title: 'Calendar', back: { label: 'Month', onBack: () => setDay(null) } }
+  )
+
+  // A day asked for from outside opens once, and then this screen owns where
+  // it is again.
+  useEffect(() => {
+    if (focusDay === undefined || focusDay === '') return
+    setAnchor(monthOf(focusDay))
+    setSelected(focusDay)
+  }, [focusDay])
+
+  // One request for every day the grid shows, empty days included.
+  useEffect(() => {
+    let alive = true
+    calendarDays(first, last)
+      .then((loaded) => {
+        if (!alive) return
+        setDays(new Map(loaded.days.map((one) => [one.date, one.items])))
+        setError('')
+      })
+      .catch((failure) => alive && setError(errorText(failure)))
+    return () => {
+      alive = false
+    }
+  }, [first, last, refresh, again])
+
+  const itemsOn = (iso: string): Occurrence[] => days.get(iso) ?? []
+
+  const reload = () => {
+    setAgain(again + 1)
+    onChanged()
+  }
+
+  const page = (step: number) => {
+    const next = shiftMonth(anchor.year, anchor.month, step)
+    setAnchor(next)
+    const isoFirst = `${next.year}-${String(next.month).padStart(2, '0')}-01`
+    setSelected(monthOf(todayIso).month === next.month && monthOf(todayIso).year === next.year ? todayIso : isoFirst)
+  }
+
+  const goToday = () => {
+    setAnchor(monthOf(todayIso))
+    setSelected(todayIso)
+    if (day !== null) setDay(todayIso)
+  }
+
+  // Walking a day at a time out of the loaded range takes the month with it,
+  // so the next day is read rather than drawn empty.
+  const stepDay = (step: number) => {
+    const next = shiftDay(day ?? selected, step)
+    if (next < first || next > last) setAnchor(monthOf(next))
+    setSelected(next)
+    setDay(next)
+  }
+
+  const openEdit = async (item: Occurrence, occurrence?: string) => {
+    try {
+      const row = await readAppointment(item.id)
+      setDetail(null)
+      setForm({ kind: 'edit', row, occurrence })
+    } catch (failure) {
+      setError(errorText(failure))
+    }
+  }
+
+  const agenda = itemsOn(selected)
+
+  return (
+    <>
+      {error !== '' && <p className="t-error mb-3">{error}</p>}
+
+      {day === null ? (
+        <>
+          <div className="mb-2 flex items-center gap-1">
+            <p className="t-card-title min-w-0 flex-1 truncate">
+              {monthTitle(anchor.year, anchor.month)}
+            </p>
+            <button
+              type="button"
+              className="t-topbar-icon"
+              aria-label="Previous month"
+              onClick={() => page(-1)}
+            >
+              <ChevronLeft className="h-5 w-5" strokeWidth={2} />
+            </button>
+            <button
+              type="button"
+              className="t-topbar-icon"
+              aria-label="Next month"
+              onClick={() => page(1)}
+            >
+              <ChevronRight className="h-5 w-5" strokeWidth={2} />
+            </button>
+            <button type="button" className="t-chip t-tap44" onClick={goToday}>
+              Today
+            </button>
+            {onOpenCalendars !== undefined && (
+              <button
+                type="button"
+                className="t-topbar-icon"
+                aria-label="Calendars"
+                onClick={onOpenCalendars}
+              >
+                <Users className="h-5 w-5" strokeWidth={2} />
+              </button>
+            )}
+            <button
+              type="button"
+              className="t-topbar-icon"
+              data-tour="calendar-add"
+              aria-label="New appointment"
+              onClick={() => setForm({ kind: 'new', date: selected })}
+            >
+              <Plus className="h-5 w-5" strokeWidth={2} />
+            </button>
+          </div>
+
+          <div className="t-cal-grid">
+            {DOW.map((letter, index) => (
+              <span key={index} className="t-cal-dow">
+                {letter}
+              </span>
+            ))}
+            {weeks.flat().map((cell) => (
+              <Cell
+                key={cell.date}
+                date={cell.date}
+                number={cell.day}
+                items={itemsOn(cell.date)}
+                spillover={cell.spillover}
+                isToday={cell.date === todayIso}
+                selected={cell.date === selected}
+                wide={wide}
+                clock={clock}
+                onSelect={() => setSelected(cell.date)}
+                onOpenDay={() => {
+                  setSelected(cell.date)
+                  setDay(cell.date)
+                }}
+                onOpenItem={setDetail}
+              />
+            ))}
+          </div>
+
+          <p className="t-micro mt-3 mb-1">{dateText(selected)}</p>
+          <div className="t-cal-agenda">
+            {agenda.length === 0 ? (
+              <p className="py-3 text-sm text-muted">Nothing scheduled.</p>
+            ) : (
+              agenda.map((item) => (
+                <button
+                  key={`${item.id}-${item.occurrence_date}`}
+                  type="button"
+                  className="t-row w-full text-left"
+                  onClick={() => setDetail(item)}
+                >
+                  <span className="t-nums w-20 shrink-0 text-xs text-muted">
+                    {item.all_day || item.start === null
+                      ? 'All day'
+                      : formatTime(item.start, clock)}
+                  </span>
+                  <span
+                    aria-hidden="true"
+                    className="h-2 w-2 shrink-0 rounded-full"
+                    style={{ background: tintOf(item) }}
+                  />
+                  <span className="min-w-0 flex-1">
+                    <span
+                      className={`block truncate text-sm ${
+                        item.cancelled ? 'text-muted line-through' : ''
+                      }`}
+                    >
+                      {item.title}
+                    </span>
+                    {(item.calendars.length > 0 || !item.mine) && (
+                      <span className="block truncate text-xs text-muted">
+                        {[
+                          ...item.calendars.map((shelf) => shelf.name),
+                          ...(item.mine ? [] : [item.owner.display_name]),
+                        ].join(' · ')}
+                      </span>
+                    )}
+                  </span>
+                  {item.cancelled && <span className="t-chip shrink-0">Cancelled</span>}
+                </button>
+              ))
+            )}
+          </div>
+        </>
+      ) : (
+        <>
+          <div className="mb-2 flex items-center gap-1">
+            <button
+              type="button"
+              className="t-topbar-icon"
+              aria-label="Previous day"
+              onClick={() => stepDay(-1)}
+            >
+              <ChevronLeft className="h-5 w-5" strokeWidth={2} />
+            </button>
+            <p className="t-card-title min-w-0 flex-1 truncate text-center">{dateText(day)}</p>
+            <button
+              type="button"
+              className="t-topbar-icon"
+              aria-label="Next day"
+              onClick={() => stepDay(1)}
+            >
+              <ChevronRight className="h-5 w-5" strokeWidth={2} />
+            </button>
+            <button
+              type="button"
+              className="t-topbar-icon"
+              aria-label="New appointment"
+              onClick={() => setForm({ kind: 'new', date: day })}
+            >
+              <Plus className="h-5 w-5" strokeWidth={2} />
+            </button>
+          </div>
+
+          <AllDayLane items={itemsOn(day)} onOpen={setDetail} />
+          <DayTimeline
+            items={itemsOn(day)}
+            isToday={day === todayIso}
+            nowMinutes={nowMinutes}
+            hourPx={HOUR_PX}
+            height={Math.round(window.innerHeight * 0.62)}
+            wide={wide}
+            onOpen={setDetail}
+            onAddAt={(hour) => setForm({ kind: 'new', date: day, hour })}
+          />
+          <button type="button" className="t-textlink" onClick={() => setDay(null)}>
+            Back to the month
+          </button>
+        </>
+      )}
+
+      {detail !== null && (
+        <AppointmentDetail
+          me={me}
+          item={detail}
+          onClose={() => setDetail(null)}
+          onEdit={(occurrence) => void openEdit(detail, occurrence)}
+          onChanged={reload}
+        />
+      )}
+
+      {form !== null && (
+        <AppointmentSheet
+          me={me}
+          appointment={form.kind === 'edit' ? form.row : null}
+          startDate={form.kind === 'new' ? form.date : selected}
+          startHour={form.kind === 'new' ? form.hour : undefined}
+          occurrence={form.kind === 'edit' ? form.occurrence : undefined}
+          onClose={() => setForm(null)}
+          onSaved={() => {
+            setForm(null)
+            reload()
+          }}
+          onRemoved={() => {
+            setForm(null)
+            reload()
+          }}
+        />
+      )}
+    </>
+  )
+}
+
+// The entries with no time of day, above the hours, on the day view.
+function AllDayLane({
+  items,
+  onOpen,
+}: {
+  items: Occurrence[]
+  onOpen: (item: Occurrence) => void
+}) {
+  const lane = allDayItems(items)
+  if (lane.length === 0) return null
+  return (
+    <div className="t-cal-allday mb-2 rounded-xl border border-line bg-surface">
+      {lane.map((item) => (
+        <button
+          key={`${item.id}-${item.occurrence_date}`}
+          type="button"
+          className="t-chip t-tap44"
+          style={{ borderColor: tintOf(item) }}
+          onClick={() => onOpen(item)}
+        >
+          <span
+            aria-hidden="true"
+            className="h-2 w-2 shrink-0 rounded-full"
+            style={{ background: tintOf(item) }}
+          />
+          <span className={item.cancelled ? 'text-muted line-through' : ''}>{item.title}</span>
+        </button>
+      ))}
+    </div>
+  )
+}
+
+// One day of the month. The whole cell picks the day, the number opens it
+// against the clock, and each mark opens what it stands for.
+function Cell({
+  date,
+  number,
+  items,
+  spillover,
+  isToday,
+  selected,
+  wide,
+  clock,
+  onSelect,
+  onOpenDay,
+  onOpenItem,
+}: {
+  date: string
+  number: number
+  items: Occurrence[]
+  spillover: boolean
+  isToday: boolean
+  selected: boolean
+  wide: boolean
+  clock: '12h' | '24h'
+  onSelect: () => void
+  onOpenDay: () => void
+  onOpenItem: (item: Occurrence) => void
+}) {
+  const shown = items.slice(0, CELL_MARKS)
+  const extra = items.length - shown.length
+  return (
+    <div
+      className={`t-cal-cell${isToday ? ' t-cal-cell-today' : ''}${
+        spillover ? ' t-cal-cell-dim' : ''
+      }${selected ? ' t-cal-cell-selected' : ''}`}
+    >
+      {/* Under everything else in the cell, so a mark is tapped on its own and
+          anywhere else in the cell picks the day. */}
+      <button
+        type="button"
+        className="absolute inset-0"
+        aria-label={`Select ${dateText(date)}`}
+        onClick={onSelect}
+      />
+      <button
+        type="button"
+        className="t-cal-date t-nums"
+        aria-label={`Open ${dateText(date)}`}
+        onClick={onOpenDay}
+      >
+        {number}
+      </button>
+      {shown.map((item) => {
+        const tint = tintOf(item)
+        const spans = item.all_day || item.date !== item.end_date
+        if (!wide) {
+          return (
+            <button
+              key={`${item.id}-${item.occurrence_date}`}
+              type="button"
+              className="t-cal-bar"
+              style={{ background: tint, opacity: item.cancelled ? 0.5 : 1 }}
+              onClick={() => onOpenItem(item)}
+            >
+              {item.title}
+            </button>
+          )
+        }
+        if (spans) {
+          // A run reads as one band: only the day it starts on carries the
+          // name, and the ends are the only corners that are rounded.
+          const starts = !item.continues_from_previous
+          const ends = !item.continues_to_next
+          return (
+            <button
+              key={`${item.id}-${item.occurrence_date}`}
+              type="button"
+              className={`t-cal-bar -mx-1 w-auto ${starts ? 'ml-0 rounded-l-[5px]' : ''} ${
+                ends ? 'mr-0 rounded-r-[5px]' : ''
+              }`}
+              style={{ background: tint, opacity: item.cancelled ? 0.5 : 1 }}
+              onClick={() => onOpenItem(item)}
+            >
+              <span className={starts ? '' : 'invisible'}>{item.title}</span>
+            </button>
+          )
+        }
+        return (
+          <button
+            key={`${item.id}-${item.occurrence_date}`}
+            type="button"
+            className="t-cal-chip"
+            onClick={() => onOpenItem(item)}
+          >
+            <span
+              aria-hidden="true"
+              className="h-1.5 w-1.5 shrink-0 rounded-full"
+              style={{ background: tint }}
+            />
+            <span className="t-nums shrink-0 text-muted">
+              {item.start === null ? '' : formatTime(item.start, clock)}
+            </span>
+            <span className={`truncate ${item.cancelled ? 'text-muted line-through' : ''}`}>
+              {item.title}
+            </span>
+          </button>
+        )
+      })}
+      {extra > 0 && (
+        <button type="button" className="t-cal-more" onClick={onOpenDay}>
+          +{extra}
+          {wide ? ' more' : ''}
+        </button>
+      )}
+    </div>
+  )
+}

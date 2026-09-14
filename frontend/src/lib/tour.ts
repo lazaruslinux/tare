@@ -26,6 +26,13 @@ export const TOUR: TourStep[] = [
     go: 'dashboard',
   },
   {
+    id: 'calendar',
+    title: 'Your calendar',
+    body: 'Appointments you add show here with the time of day. Share a calendar with a friend under Calendar.',
+    target: { phone: 'dash-calendar', wide: 'dash-calendar' },
+    go: 'dashboard',
+  },
+  {
     id: 'plus',
     title: 'Add anything here',
     body: 'Scan a barcode, add a food, weigh in, or log exercise.',

@@ -42,6 +42,12 @@
   --orange: #efa25a;
   --violet: #b79bdd;
   --gold: #e3c15a;
+  /* The three colours a shared calendar can wear that nothing else here
+     needed. The five above are the rest of that palette; its keys live in
+     backend/app/calendar_colors.py. */
+  --cal-teal: #5fc4b8;
+  --cal-pink: #e796c4;
+  --cal-slate: #9db0c6;
 }
 
 [data-theme='light'] {
@@ -75,6 +81,11 @@
   --orange: #9c5512;
   --violet: #6b4aa0;
   --gold: #8a5a00;
+  /* Darkened for the cream ground, the same way the five above were: a dot
+     and a chip's own text both have to read on it. */
+  --cal-teal: #0f6f68;
+  --cal-pink: #a63f79;
+  --cal-slate: #4a6076;
 }
 
 /* Bridged rather than redeclared, so bg-surface and text-muted resolve to the
@@ -514,6 +525,235 @@
   .t-error {
     color: var(--danger);
     font-size: 0.875rem;
+  }
+
+  /* ---- The calendar. A month of hairline-ruled cells, and one day drawn
+     against the clock. Both are the same on either theme: an entry's colour
+     is the only ink in them that is not a token of the palette. ---- */
+
+  .t-cal-grid {
+    display: grid;
+    grid-template-columns: repeat(7, minmax(0, 1fr));
+    overflow: hidden;
+    border: 1px solid var(--line);
+    border-radius: 0.875rem;
+    background: var(--surface);
+  }
+  /* The seven headings come first, so the cells keep the same count from the
+     left edge and every column but the first carries the rule between them. */
+  .t-cal-grid > *:not(:nth-child(7n + 1)) {
+    border-left: 1px solid var(--line);
+  }
+
+  .t-cal-dow {
+    padding: 0.5rem 0 0.375rem;
+    color: var(--label);
+    font-size: 10px;
+    font-weight: 700;
+    letter-spacing: 0.08em;
+    text-align: center;
+    text-transform: uppercase;
+  }
+
+  .t-cal-cell {
+    position: relative;
+    display: flex;
+    min-height: 50px;
+    flex-direction: column;
+    align-items: center;
+    gap: 2px;
+    border-top: 1px solid var(--line);
+    padding: 4px 3px 5px;
+  }
+  @media (min-width: 900px) {
+    .t-cal-cell {
+      min-height: 104px;
+      align-items: stretch;
+      padding: 4px 4px 6px;
+    }
+  }
+
+  /* The day's number, and the way into that day. A filled circle says today
+     the way the rest of the app fills a ring. */
+  .t-cal-date {
+    position: relative;
+    display: flex;
+    width: 24px;
+    height: 24px;
+    flex: none;
+    align-items: center;
+    justify-content: center;
+    border-radius: 999px;
+    color: var(--muted);
+    font-size: 12px;
+    font-weight: 600;
+  }
+  @media (min-width: 900px) {
+    .t-cal-date {
+      align-self: flex-start;
+    }
+  }
+  .t-cal-cell-today .t-cal-date {
+    background: var(--accent);
+    color: var(--bg);
+  }
+  /* A day from the month either side. Still readable, still tappable, plainly
+     not this month. */
+  .t-cal-cell-dim {
+    opacity: 0.45;
+  }
+  /* The day the list under the grid is about. The ring is what says so: the
+     tint alone is a step no eye catches across six rows of cells. */
+  .t-cal-cell-selected {
+    background: var(--surface-2);
+    box-shadow: inset 0 0 0 1px var(--accent);
+  }
+
+  /* One timed entry in a cell, where there is room to name it. */
+  .t-cal-chip {
+    position: relative;
+    display: flex;
+    width: 100%;
+    align-items: center;
+    gap: 4px;
+    overflow: hidden;
+    margin-top: 3px;
+    border-radius: 5px;
+    padding: 1px 5px;
+    background: var(--surface-2);
+    color: var(--text);
+    font-size: 11px;
+    font-weight: 600;
+    line-height: 1.5;
+    text-align: left;
+    white-space: nowrap;
+  }
+
+  /* An all-day or multi-day run, and every entry at phone width. A thin band
+     on a phone; from 900px it carries its own name and runs into the cells it
+     covers, so a week away reads as one thing and not as seven. */
+  .t-cal-bar {
+    position: relative;
+    display: block;
+    width: 100%;
+    height: 2px;
+    overflow: hidden;
+    margin-top: 3px;
+    border-radius: 999px;
+    color: transparent;
+    font-size: 0;
+  }
+  @media (min-width: 900px) {
+    .t-cal-bar {
+      height: auto;
+      border-radius: 0;
+      padding: 1px 6px;
+      color: var(--bg);
+      font-size: 11px;
+      font-weight: 600;
+      line-height: 1.5;
+      text-align: left;
+      white-space: nowrap;
+      text-overflow: ellipsis;
+    }
+  }
+
+  /* What a cell could not fit, as its last line. */
+  .t-cal-more {
+    position: relative;
+    margin-top: 2px;
+    color: var(--muted);
+    font-size: 11px;
+    font-weight: 600;
+    line-height: 1.4;
+  }
+  @media (min-width: 900px) {
+    .t-cal-more {
+      text-align: left;
+    }
+  }
+
+  /* The chosen day's list, under the grid. Its rows are .t-row, so it is the
+     card around them with the padding a row expects. */
+  .t-cal-agenda {
+    padding: 0.125rem 0.875rem;
+    border: 1px solid var(--line);
+    border-radius: 0.875rem;
+    background: var(--surface);
+  }
+
+  /* The day against the clock. It scrolls inside itself so the header and the
+     month stay where they were. */
+  .t-cal-timeline {
+    position: relative;
+    overflow-x: hidden;
+    overflow-y: auto;
+    overscroll-behavior: contain;
+    border: 1px solid var(--line);
+    border-radius: 0.875rem;
+    background: var(--surface);
+  }
+
+  /* One hour: its hairline across the day and its name in the gutter. */
+  .t-cal-hour {
+    position: absolute;
+    right: 0;
+    left: 0;
+    border-top: 1px solid var(--line);
+  }
+  /* Under its own line rather than across it: a label centred on the line is
+     cut in half wherever the day is scrolled to. */
+  .t-cal-hour > span {
+    position: absolute;
+    top: 2px;
+    left: 0.375rem;
+    color: var(--muted);
+    font-size: 10px;
+    font-weight: 600;
+  }
+
+  /* One timed entry, laid on the hours it covers. The colour is its own, so
+     only the ground and the border are tokens here. */
+  .t-cal-block {
+    position: absolute;
+    display: flex;
+    overflow: hidden;
+    flex-direction: column;
+    border: 1px solid var(--line);
+    border-left-width: 3px;
+    border-radius: 0.5rem;
+    padding: 0.25rem 0.5rem;
+    background: var(--surface-2);
+    text-align: left;
+  }
+
+  /* What time it is, today only. Red, because it is the one line on the day
+     that is not about an appointment. */
+  .t-cal-now-line {
+    position: absolute;
+    right: 0;
+    left: 0;
+    z-index: 10;
+    border-top: 2px solid var(--over);
+  }
+  .t-cal-now-line::before {
+    content: '';
+    position: absolute;
+    top: -4px;
+    left: 0;
+    width: 7px;
+    height: 7px;
+    border-radius: 999px;
+    background: var(--over);
+  }
+
+  /* The lane above the hours, for the entries that have no time of day. */
+  .t-cal-allday {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 0.375rem;
+    border-bottom: 1px solid var(--line);
+    padding: 0.5rem;
   }
 
   /* ---- The responsive shell.

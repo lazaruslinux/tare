@@ -1281,3 +1281,233 @@ export type Upload = {
   flagged: number
   skipped: number
 }
+
+
+// ---- The calendar ----
+//
+// Every path below is under /calendar. A day is an ISO date and a time is
+// "HH:MM" on a twenty-four hour clock, whatever the account reads times on:
+// the words are decided where a screen draws them, never in what is stored.
+
+// Who somebody is, wherever the calendar names one.
+export type Named = { id: number; display_name: string }
+
+// A shared calendar as an entry carries it: enough to draw its dot and say
+// its name, and nothing about who else is on it.
+export type CalendarTag = { id: number; name: string; color: string }
+
+// Somebody asked to an appointment. The status is the owner's to see; anybody
+// else is told who was asked and no more.
+export type Invitee = Named & { status?: 'pending' | 'accepted' | 'declined' }
+
+// What the caller is to one appointment: whoever made it, somebody who shares
+// a calendar it is on, or somebody who was asked to it.
+export type CalendarRole = 'organizer' | 'member' | 'invitee'
+
+export type RepeatType = 'weekly' | 'monthly' | 'yearly'
+
+// How an appointment repeats, as the server reports it. Days are weekday
+// numbers with Monday nought, and a count end has already been walked out
+// into the date it lands on.
+export type RepeatOut = {
+  type: RepeatType
+  days: number[]
+  interval: number
+  month_day: number | null
+  anchor: string | null
+  until: string | null
+}
+
+// The same pattern as a form sends it. A repeat ends by date or after a
+// count, never both.
+export type RepeatIn = {
+  type: RepeatType
+  days?: number[]
+  interval?: number
+  month_day?: number | null
+  anchor?: string | null
+  until?: string | null
+  count?: number | null
+}
+
+// One appointment on one of the viewer's days. date and end_date are the days
+// it covers where the viewer is standing, which is not always the days it was
+// written on; occurrence_date is the appointment's own day, and the value
+// every occurrence route takes as its date.
+export type Occurrence = {
+  id: number
+  occurrence_date: string
+  title: string
+  all_day: boolean
+  date: string
+  end_date: string
+  start: string | null
+  end: string | null
+  continues_from_previous: boolean
+  continues_to_next: boolean
+  location: string | null
+  notes: string
+  owner: Named
+  calendars: CalendarTag[]
+  mine: boolean
+  editable: boolean
+  role: CalendarRole
+  invitees: Invitee[]
+  repeat: RepeatOut | null
+  detached: boolean
+  cancelled: boolean
+  timezone: string
+}
+
+// One appointment in the fields it is stored in, which is what a form reads
+// and writes. A repeating one has no date of its own beyond its anchor.
+export type AppointmentRaw = {
+  id: number
+  title: string
+  notes: string
+  location: string | null
+  all_day: boolean
+  date_for: string | null
+  end_date: string | null
+  time_of_day: string | null
+  end_time: string | null
+  repeat: RepeatOut | null
+  calendars: CalendarTag[]
+  invitees: Invitee[]
+  owner: Named
+  mine: boolean
+  editable: boolean
+  role: CalendarRole
+  detached: boolean
+  timezone: string
+}
+
+// What a form sends. Everything is optional on a change: a field left out is
+// left alone.
+export type AppointmentBody = {
+  title?: string
+  notes?: string
+  location?: string | null
+  all_day?: boolean
+  date_for?: string | null
+  end_date?: string | null
+  time_of_day?: string | null
+  end_time?: string | null
+  repeat?: RepeatIn | null
+  calendar_ids?: number[]
+  invitee_ids?: number[]
+}
+
+// Somebody on a shared calendar, and whether they have said yes yet.
+export type CalendarMember = Named & { accepted: boolean }
+
+export type SharedCalendar = {
+  id: number
+  name: string
+  color: string
+  created_by: number
+  members: CalendarMember[]
+  // Whether the invitation to this one is mine and still unanswered.
+  mine_pending: boolean
+}
+
+// What is waiting on an answer: appointments somebody asked me to, and
+// calendars somebody shared with me.
+export type Invitation = {
+  meetings: {
+    invite_id: number
+    appointment: Occurrence
+    from: Named
+    conflicts: ConflictHit[]
+  }[]
+  calendars: {
+    calendar_id: number
+    name: string
+    color: string
+    from: Named
+    members: string[]
+  }[]
+}
+
+// Something a proposed time would run into, in the caller's own zone. The
+// calendar is named only when the caller is on it themselves.
+export type ConflictHit = {
+  appointment_id: number
+  date: string
+  start: string
+  end: string
+  title: string
+  who: string
+  calendar: string | null
+}
+
+// What a proposal clashes with: mine, and each guest's, keyed by their id as
+// a string because that is how JSON carries an object key.
+export type ConflictReport = { mine: ConflictHit[]; invitees: Record<string, ConflictHit[]> }
+
+// A proposal, asked about before it is saved.
+export type ConflictBody = {
+  date_for: string | null
+  end_date: string | null
+  time_of_day: string | null
+  end_time: string | null
+  all_day: boolean
+  timezone?: string | null
+  repeat?: RepeatIn | null
+  exclude_id?: number | null
+  invitee_ids?: number[]
+}
+
+export type CalendarDays = {
+  start: string
+  end: string
+  days: { date: string; items: Occurrence[] }[]
+}
+
+// One call per visible range, empty days included, so a month is one request.
+export const calendarDays = (start: string, end: string): Promise<CalendarDays> =>
+  api<CalendarDays>(`/calendar/days${queryString({ start, end })}`)
+
+export const readAppointment = (id: number): Promise<AppointmentRaw> =>
+  api<AppointmentRaw>(`/calendar/appointments/${id}`)
+
+// The three writes that make an appointment. Each answers with the whole
+// appointment, which is what the form reads back.
+export const createAppointment = (body: AppointmentBody): Promise<{ appointment: AppointmentRaw }> =>
+  api<{ appointment: AppointmentRaw }>('/calendar/appointments', { method: 'POST', body })
+
+export const patchAppointment = (
+  id: number,
+  body: AppointmentBody
+): Promise<{ appointment: AppointmentRaw }> =>
+  api<{ appointment: AppointmentRaw }>(`/calendar/appointments/${id}`, { method: 'PATCH', body })
+
+// One day of a series saved as a copy of its own. The copy inherits the
+// series' calendars and invitations, so neither is sent.
+export const detachOccurrence = (
+  id: number,
+  date: string,
+  body: AppointmentBody
+): Promise<{ appointment: AppointmentRaw }> =>
+  api<{ appointment: AppointmentRaw }>(
+    `/calendar/appointments/${id}/occurrence${queryString({ date })}`,
+    { method: 'POST', body }
+  )
+
+export const removeAppointment = (id: number): Promise<unknown> =>
+  api(`/calendar/appointments/${id}`, { method: 'DELETE' })
+
+export const removeOccurrence = (id: number, date: string): Promise<unknown> =>
+  api(`/calendar/appointments/${id}/occurrence${queryString({ date })}`, { method: 'DELETE' })
+
+// Called off rather than removed: the day keeps its place, struck through.
+export const cancelOccurrence = (id: number, date: string, off: boolean): Promise<unknown> =>
+  api(`/calendar/appointments/${id}/cancel${queryString({ date })}`, {
+    method: off ? 'POST' : 'DELETE',
+  })
+
+export const sharedCalendars = (): Promise<SharedCalendar[]> =>
+  api<SharedCalendar[]>('/calendar/calendars')
+
+export const calendarConflicts = (body: ConflictBody): Promise<ConflictReport> =>
+  api<ConflictReport>('/calendar/conflicts', { method: 'POST', body })

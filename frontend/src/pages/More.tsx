@@ -1,5 +1,6 @@
 import {
   BookOpen,
+  CalendarDays,
   ChevronRight,
   ClipboardList,
   Eye,
@@ -34,6 +35,7 @@ import { reviews } from '../lib/roles'
 import { ZONES, offList } from '../lib/zones'
 import { applyTheme, rememberTheme, useTheme, type Theme } from '../theme'
 import { About } from './About'
+import { Calendar } from './Calendar'
 import { AdminInvites } from './AdminInvites'
 import { AdminMicroMatches } from './AdminMicroMatches'
 import { AdminQueue } from './AdminQueue'
@@ -61,6 +63,7 @@ export type Screen =
   | 'profile'
   | 'targets'
   | 'fitness'
+  | 'calendar'
   | 'sync'
   | 'sharing'
   | 'members'
@@ -170,6 +173,7 @@ export function More({
   onScreen,
   targetsBack,
   fitnessDate,
+  calendarDate,
 }: {
   me: Me
   // What the instance is running, read once above this tab and shown on
@@ -210,6 +214,8 @@ export function More({
   targetsBack?: { label: string; onBack: () => void }
   // The day the Fitness screen should read, when somebody was sent to one.
   fitnessDate?: string
+  // The day the Calendar should open on, when somebody was sent to one.
+  calendarDate?: string
 }) {
   const theme = useTheme()
   // At rail width the rail already lists Targets and Fitness, so this list
@@ -445,6 +451,18 @@ export function More({
         date={fitnessDate}
         onBack={() => go(null)}
         onOpenSync={() => go('sync')}
+      />
+    )
+  }
+
+  if (screen === 'calendar') {
+    return (
+      <Calendar
+        me={me}
+        refresh={refresh}
+        focusDay={calendarDate}
+        onBack={() => go(null)}
+        onChanged={onChanged}
       />
     )
   }
@@ -752,6 +770,7 @@ export function More({
           note={syncNote(sync)}
           onOpen={() => go('sync')}
         />
+        <Row label="Calendar" icon={CalendarDays} onOpen={() => go('calendar')} />
         <Row
           label="Members"
           icon={Users}

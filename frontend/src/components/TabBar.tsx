@@ -2,6 +2,7 @@ import { motion, useReducedMotion } from 'framer-motion'
 import {
   Apple,
   BookOpen,
+  CalendarDays,
   Ellipsis,
   HeartPulse,
   LayoutDashboard,
@@ -20,10 +21,11 @@ export type Tab =
   | 'targets'
   | 'measurements'
   | 'fitness'
+  | 'calendar'
   | 'more'
 // A page the shell can be on. The centre action is not one, and neither are
 // the two rail rows: each of those opens a screen inside a page.
-export type Page = Exclude<Tab, 'plus' | 'targets' | 'measurements' | 'fitness'>
+export type Page = Exclude<Tab, 'plus' | 'targets' | 'measurements' | 'fitness' | 'calendar'>
 // What the rail can be asked for, which is every row it draws.
 export type RailTarget = Exclude<Tab, 'plus'>
 
@@ -43,6 +45,7 @@ export const TABS: { id: Tab; label: string; Icon: Glyph; railOnly?: true }[] = 
   { id: 'targets', label: 'Targets', Icon: Target, railOnly: true },
   { id: 'measurements', label: 'Biometrics', Icon: ScaleGlyph, railOnly: true },
   { id: 'fitness', label: 'Fitness', Icon: HeartPulse, railOnly: true },
+  { id: 'calendar', label: 'Calendar', Icon: CalendarDays, railOnly: true },
   { id: 'more', label: 'More', Icon: Ellipsis },
 ]
 

@@ -3,6 +3,7 @@ import { useCallback, useEffect, useRef, useState } from 'react'
 
 import { api, type Me } from './api'
 import { Aside } from './components/Aside'
+import { AppointmentSheet } from './components/calendar/AppointmentSheet'
 import { ExerciseSheet } from './components/ExerciseSheet'
 import { Footer } from './components/Footer'
 import { FoodPicker } from './components/FoodPicker'
@@ -123,8 +124,13 @@ export default function App() {
   // there has left, so a later visit opens on today again.
   const [journalWant, setJournalWant] = useState('')
   const [fitnessDay, setFitnessDay] = useState('')
+  // The day the Calendar should open on, set by whatever sent somebody there.
+  // Dropped on the way out, so the next visit opens on this month again.
+  const [calendarDay, setCalendarDay] = useState('')
   const [measuring, setMeasuring] = useState(false)
   const [exercising, setExercising] = useState(false)
+  // Whether a new appointment is being written, which the add menu opens.
+  const [appointing, setAppointing] = useState(false)
   // What the right-hand column opened, shown in the main well as a sub-view of
   // whichever tab is underneath. One state, one place: the column is the same
   // on every tab, so what it opens cannot belong to any one of them.
@@ -168,6 +174,7 @@ export default function App() {
   const noteMoreScreen = useCallback((next: Screen) => {
     setMoreScreen(next)
     if (next !== 'fitness') setFitnessDay('')
+    if (next !== 'calendar') setCalendarDay('')
     // Any other screen under More, and leaving the tab, drops where Targets
     // was opened from.
     if (next !== 'targets') setTargetsFrom('more')
@@ -250,6 +257,11 @@ export default function App() {
     }
     if (target === 'fitness') {
       setMoreView('fitness')
+      select('more')
+      return
+    }
+    if (target === 'calendar') {
+      setMoreView('calendar')
       select('more')
       return
     }
@@ -468,6 +480,7 @@ export default function App() {
                           : undefined
                       }
                       fitnessDate={fitnessDay}
+                      calendarDate={calendarDay}
                     />
                   ) : page === 'food' ? (
                     <FoodTab
@@ -509,6 +522,11 @@ export default function App() {
                       onOpenFitnessDay={(date) => {
                         setFitnessDay(date)
                         setMoreView('fitness')
+                        select('more')
+                      }}
+                      onOpenCalendarDay={(date) => {
+                        setCalendarDay(date)
+                        setMoreView('calendar')
                         select('more')
                       }}
                       onChanged={changed}
@@ -564,7 +582,23 @@ export default function App() {
             setAdding(false)
             setExercising(true)
           }}
+          onAppointment={() => {
+            setAdding(false)
+            setAppointing(true)
+          }}
         />
+        {appointing && (
+          <AppointmentSheet
+            me={me}
+            appointment={null}
+            startDate={today(me.timezone)}
+            onClose={() => setAppointing(false)}
+            onSaved={() => {
+              setAppointing(false)
+              changed()
+            }}
+          />
+        )}
         {measuring && (
           <MeasurementsSheet
             me={me}

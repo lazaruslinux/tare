@@ -36,6 +36,7 @@ export function PlusSheet({
   onAddFood,
   onMeasure,
   onExercise,
+  onAppointment,
 }: {
   open: boolean
   // Where the rail's button is. Null when the tab bar asked, which is the case
@@ -46,6 +47,7 @@ export function PlusSheet({
   onAddFood: () => void
   onMeasure: () => void
   onExercise: () => void
+  onAppointment: () => void
 }) {
   const reduced = useReducedMotion()
   const rows = [
@@ -53,6 +55,7 @@ export function PlusSheet({
     { label: 'Add to Journal', onPick: onAddFood },
     { label: 'Biometrics', onPick: onMeasure },
     { label: 'Manual exercise', onPick: onExercise },
+    { label: 'New appointment', onPick: onAppointment },
   ]
   const popover = anchor !== null && window.matchMedia(WIDE).matches
   // How tall the tab bar stands, read when the sheet opens: the sheet rises

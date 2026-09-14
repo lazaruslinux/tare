@@ -21,6 +21,7 @@ import {
   type Targets,
   type TrendPoint,
 } from '../api'
+import { TodayCard } from '../components/calendar/TodayCard'
 import { ConfirmSheet } from '../components/ConfirmSheet'
 import { barsAverage, DayBars, weekly, type Bar } from '../components/DayBars'
 import { ExerciseSheet } from '../components/ExerciseSheet'
@@ -707,6 +708,7 @@ export function Dashboard({
   onOpenFitness,
   onOpenJournalDay,
   onOpenFitnessDay,
+  onOpenCalendarDay,
   onChanged,
   start,
   onStarted,
@@ -724,6 +726,8 @@ export function Dashboard({
   // The same two, on the day a readout is about rather than on today.
   onOpenJournalDay: (date: string) => void
   onOpenFitnessDay: (date: string) => void
+  // The Calendar, on the day the card at the top is about.
+  onOpenCalendarDay: (date: string) => void
   // Which screen to open on. Only ever set by something outside this tab
   // sending somebody straight to it, and handed back the moment it is read.
   start?: DashScreen
@@ -1392,6 +1396,13 @@ export function Dashboard({
     <>
       {error && <p className="t-error mb-3">{error}</p>}
 
+      <TodayCard
+        me={me}
+        refresh={refresh}
+        onOpenCalendar={onOpenCalendarDay}
+        onChanged={() => onChanged?.()}
+      />
+
       {/* Every ring is its own way in, so the card is a plain card and the
           head is a button of its own: a button inside a button is not a thing
           a screen reader can hand anybody. */}
@@ -1399,10 +1410,10 @@ export function Dashboard({
         <button
           type="button"
           className="t-micro t-tap44 mb-2 flex items-center gap-1"
-          aria-label="Today. Opens the Journal."
+          aria-label="Today's numbers. Opens the Journal."
           onClick={onOpenJournal}
         >
-          Today
+          Today's numbers
           <ChevronRight className="h-3.5 w-3.5" strokeWidth={2.5} />
         </button>
         <Rings rings={rings} />
