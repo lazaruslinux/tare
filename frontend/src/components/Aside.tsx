@@ -1,6 +1,7 @@
 import { useEffect, useState } from 'react'
 
 import { api, type Me, type TodayStrip } from '../api'
+import { useAsideSlotNode } from '../lib/asideSlot'
 import { dayLabel, today } from '../lib/day'
 import { weightText } from '../lib/units'
 import { MiniMonth } from './calendar/MiniMonth'
@@ -10,7 +11,8 @@ import { type Page } from './TabBar'
 // The right-hand column: where today stands, and what the other members have
 // been doing. The Dashboard already says today's numbers in its own cards, so
 // on that tab the top block is the month instead; every other tab keeps the
-// figures, and nothing on the column is said twice on one screen.
+// figures, and nothing on the column is said twice on one screen. A screen
+// with something of its own to put there fills the slot, and that wins.
 
 function Figure({ label, value, note }: { label: string; value: string; note?: string }) {
   return (
@@ -42,6 +44,7 @@ export function Aside({
 }) {
   const [strip, setStrip] = useState<TodayStrip | null>(null)
   const todayIso = today(me.timezone)
+  const slot = useAsideSlotNode()
   const month = page === 'dashboard'
 
   useEffect(() => {
@@ -57,7 +60,9 @@ export function Aside({
 
   return (
     <>
-      {month ? (
+      {slot !== null ? (
+        slot
+      ) : month ? (
         <MiniMonth me={me} refresh={refresh} onOpenDay={onOpenCalendarDay} />
       ) : (
         <div>

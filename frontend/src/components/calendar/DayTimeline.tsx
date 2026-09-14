@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState } from 'react'
+import { useEffect, useRef, useState, type RefObject } from 'react'
 
 import type { Occurrence } from '../../api'
 import { useClock } from '../../lib/clock'
@@ -120,6 +120,8 @@ export function DayTimeline({
   wide = false,
   onOpen,
   onAddAt,
+  scrollerRef,
+  onScroll,
 }: {
   items: Occurrence[]
   // Whether the day on screen is the one the account is standing in. Only
@@ -137,6 +139,10 @@ export function DayTimeline({
   // Tapping an empty hour, which is how a new appointment is started from the
   // day. Absent on the Dashboard, where the card has its own plus.
   onAddAt?: (hour: number) => void
+  // The box that scrolls, handed back so a card around it can move it, and
+  // where it has been moved to. The Calendar's own day view wants neither.
+  scrollerRef?: RefObject<HTMLDivElement | null>
+  onScroll?: (top: number) => void
 }) {
   const clock = useClock()
   const scroller = useRef<HTMLDivElement>(null)
@@ -159,13 +165,20 @@ export function DayTimeline({
         ? Math.min(...placed.map((one) => one.top))
         : 8 * hourPx
     box.scrollTop = Math.max(Math.floor((anchor - top) / hourPx) * hourPx - hourPx, 0)
+    onScroll?.(box.scrollTop)
   }, [])
 
   return (
     <div
-      ref={scroller}
+      ref={(node) => {
+        scroller.current = node
+        if (scrollerRef !== undefined) scrollerRef.current = node
+      }}
       className="t-cal-timeline"
       style={height === undefined ? undefined : { maxHeight: height }}
+      onScroll={
+        onScroll === undefined ? undefined : (event) => onScroll(event.currentTarget.scrollTop)
+      }
     >
       <div className="relative" style={{ height: tall }}>
         {hours.map((hour) => (

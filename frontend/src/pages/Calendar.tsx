@@ -9,12 +9,15 @@ import {
   type Me,
   type Occurrence,
 } from '../api'
+import { AgendaList } from '../components/calendar/AgendaList'
 import { AppointmentDetail } from '../components/calendar/AppointmentDetail'
 import { AppointmentSheet } from '../components/calendar/AppointmentSheet'
 import { allDayItems, DayTimeline, tintOf, useNowMinutes } from '../components/calendar/DayTimeline'
 import { InvitationsCard } from '../components/calendar/InvitationsCard'
+import { MiniMonth } from '../components/calendar/MiniMonth'
 import { useTopBar } from '../hooks/useTopBar'
-import { useRailLayout } from '../hooks/useWideLayout'
+import { useRailLayout, useWideLayout } from '../hooks/useWideLayout'
+import { useAsideSlot } from '../lib/asideSlot'
 import { dateText, useClock } from '../lib/clock'
 import {
   formatTime,
@@ -62,12 +65,20 @@ export function Calendar({
 }) {
   const clock = useClock()
   const wide = useRailLayout()
+  // Whether there is a column beside the page. What it holds is this screen's
+  // to fill, so the day's list and the mini month move into it rather than
+  // being said twice.
+  const beside = useWideLayout()
   const todayIso = today(me.timezone)
   const nowMinutes = useNowMinutes(me.timezone)
   const [anchor, setAnchor] = useState(() => monthOf(focusDay || todayIso))
   const [selected, setSelected] = useState(focusDay || todayIso)
   // The day being read against the clock, or null for the month.
   const [day, setDay] = useState<string | null>(null)
+  // Where the mini month beside an open day has been stepped to, kept with
+  // the day it was stepped from: opening another day brings it back to that
+  // day's own month. The page's range never moves with it.
+  const [mini, setMini] = useState<{ day: string; year: number; month: number } | null>(null)
   const [days, setDays] = useState<Map<string, Occurrence[]>>(new Map())
   const [detail, setDetail] = useState<Occurrence | null>(null)
   const [form, setForm] = useState<Form | null>(null)
@@ -137,14 +148,15 @@ export function Calendar({
     if (day !== null) setDay(todayIso)
   }
 
-  // Walking a day at a time out of the loaded range takes the month with it,
-  // so the next day is read rather than drawn empty.
-  const stepDay = (step: number) => {
-    const next = shiftDay(day ?? selected, step)
+  // Opening a day outside the loaded range takes the month with it, so the
+  // day is read rather than drawn empty.
+  const openDay = (next: string) => {
     if (next < first || next > last) setAnchor(monthOf(next))
     setSelected(next)
     setDay(next)
   }
+
+  const stepDay = (step: number) => openDay(shiftDay(day ?? selected, step))
 
   const openEdit = async (item: Occurrence, occurrence?: string) => {
     try {
@@ -157,6 +169,24 @@ export function Calendar({
   }
 
   const agenda = itemsOn(selected)
+
+  // The column beside the page, where there is one: the day the month is
+  // asking about, or the month the day on screen belongs to.
+  const shown = mini !== null && mini.day === day ? mini : monthOf(day ?? selected)
+  useAsideSlot(
+    !beside ? null : day === null ? (
+      <AgendaList dateIso={selected} items={agenda} clock={clock} onOpen={setDetail} />
+    ) : (
+      <MiniMonth
+        me={me}
+        refresh={refresh}
+        month={`${shown.year}-${String(shown.month).padStart(2, '0')}`}
+        selected={day}
+        onOpenDay={openDay}
+        onStep={(delta) => setMini({ day, ...shiftMonth(shown.year, shown.month, delta) })}
+      />
+    )
+  )
 
   return (
     <>
@@ -228,53 +258,14 @@ export function Calendar({
             ))}
           </div>
 
-          <p className="t-micro mt-3 mb-1">{dateText(selected)}</p>
-          <div className="t-cal-agenda">
-            {agenda.length === 0 ? (
-              <p className="py-3 text-sm text-muted">Nothing scheduled.</p>
-            ) : (
-              agenda.map((item) => (
-                <button
-                  key={`${item.id}-${item.occurrence_date}`}
-                  type="button"
-                  className="t-row w-full text-left"
-                  onClick={() => setDetail(item)}
-                >
-                  <span className="t-nums w-20 shrink-0 text-xs text-muted">
-                    {item.all_day || item.start === null
-                      ? 'All day'
-                      : formatTime(item.start, clock)}
-                  </span>
-                  <span
-                    aria-hidden="true"
-                    className="h-2 w-2 shrink-0 rounded-full"
-                    style={{ background: tintOf(item) }}
-                  />
-                  <span className="min-w-0 flex-1">
-                    <span
-                      className={`block truncate text-sm ${
-                        item.cancelled ? 'text-muted line-through' : ''
-                      }`}
-                    >
-                      {item.title}
-                    </span>
-                    {(item.calendars.length > 0 || !item.mine) && (
-                      <span className="block truncate text-xs text-muted">
-                        {[
-                          ...item.calendars.map((shelf) => shelf.name),
-                          ...(item.mine ? [] : [item.owner.display_name]),
-                        ].join(' · ')}
-                      </span>
-                    )}
-                  </span>
-                  {item.cancelled && <span className="t-chip shrink-0">Cancelled</span>}
-                </button>
-              ))
-            )}
-          </div>
+          {!beside && (
+            <div className="mt-3">
+              <AgendaList dateIso={selected} items={agenda} clock={clock} onOpen={setDetail} />
+            </div>
+          )}
         </>
       ) : (
-        <>
+        <div className="t-cal-day">
           <div className="mb-2 flex items-center gap-1">
             <button
               type="button"
@@ -309,7 +300,7 @@ export function Calendar({
           <button type="button" className="t-textlink" onClick={() => setDay(null)}>
             Back to the month
           </button>
-        </>
+        </div>
       )}
 
       {detail !== null && (
@@ -474,7 +465,7 @@ function Cell({
               className="h-1.5 w-1.5 shrink-0 rounded-full"
               style={{ background: tint }}
             />
-            <span className="t-nums shrink-0 text-muted">
+            <span className="t-cal-chip-time t-nums shrink-0 text-muted">
               {item.start === null ? '' : formatTime(item.start, clock)}
             </span>
             <span className={`truncate ${item.cancelled ? 'text-muted line-through' : ''}`}>

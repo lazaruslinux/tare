@@ -12,6 +12,7 @@ import { registerSW } from 'virtual:pwa-register'
 
 import App from './App'
 import { ErrorBoundary } from './components/ErrorBoundary'
+import { AsideSlotProvider } from './lib/asideSlot'
 import { updateReady } from './lib/update'
 
 // The service worker. Registered from here rather than from a tag the plugin
@@ -30,7 +31,9 @@ const updateSW = registerSW({
 createRoot(document.getElementById('root') as HTMLElement).render(
   <StrictMode>
     <ErrorBoundary>
-      <App />
+      <AsideSlotProvider>
+        <App />
+      </AsideSlotProvider>
     </ErrorBoundary>
   </StrictMode>
 )

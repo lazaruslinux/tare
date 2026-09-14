@@ -23,6 +23,13 @@ Notable changes to Tare, newest first. The format follows
 
 ### Changed
 
+- The calendar reads better on a wide window: a month chip gives the
+  appointment its name and adds the time only where there is room for both,
+  the day against the clock keeps a column's width with the month beside it,
+  and the right-hand column carries the day the month is asking about. The
+  Today card says how many appointments are earlier than the hours it shows.
+- The gold a shared calendar wears is a colour of its own in the light theme,
+  so it is not read as the orange beside it.
 - Every card says its own name in one style, the three rings sit above their
   macro bars rather than beside a second set of rings, journal entries carry
   the picture their food already has, a member's page shows what they have

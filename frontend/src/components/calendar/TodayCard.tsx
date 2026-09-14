@@ -1,5 +1,6 @@
+import { useReducedMotion } from 'framer-motion'
 import { ChevronRight, Plus } from 'lucide-react'
-import { useEffect, useState } from 'react'
+import { useEffect, useRef, useState } from 'react'
 
 import {
   calendarDays,
@@ -15,7 +16,7 @@ import { today } from '../../lib/day'
 import { useRailLayout } from '../../hooks/useWideLayout'
 import { AppointmentDetail } from './AppointmentDetail'
 import { AppointmentSheet } from './AppointmentSheet'
-import { allDayItems, DayTimeline, tintOf, useNowMinutes } from './DayTimeline'
+import { allDayItems, DayTimeline, pack, tintOf, useNowMinutes } from './DayTimeline'
 
 // What is on today, at the top of the Dashboard: the hours around now and what
 // is in them, rather than a list that says nothing about when.
@@ -68,8 +69,13 @@ export function TodayCard({
   onChanged: () => void
 }) {
   const wide = useRailLayout()
+  const reduced = useReducedMotion()
   const todayIso = today(me.timezone)
   const nowMinutes = useNowMinutes(me.timezone)
+  const scroller = useRef<HTMLDivElement>(null)
+  // Where the timeline has been scrolled to, which is what decides whether
+  // anything on the day is sitting above its top edge.
+  const [scrollTop, setScrollTop] = useState(0)
   const [items, setItems] = useState<Occurrence[]>([])
   const [detail, setDetail] = useState<Occurrence | null>(null)
   const [editing, setEditing] = useState<{ row: AppointmentRaw; occurrence?: string } | null>(null)
@@ -109,6 +115,13 @@ export function TodayCard({
   const lane = allDayItems(items)
   const { fromHour, toHour } = windowHours(items, nowMinutes)
   const hourPx = wide ? WIDE_HOUR_PX : HOUR_PX
+  // The card opens an hour above now, so whatever the day already held before
+  // then is out of sight. Only blocks that ended above the edge count: one
+  // half on screen is one somebody can see.
+  const above = pack(
+    items.filter((item) => !item.all_day && item.start !== null),
+    hourPx / MINUTE
+  ).filter((one) => !one.item.cancelled && one.top - fromHour * hourPx + one.height < scrollTop)
 
   return (
     <>
@@ -161,6 +174,23 @@ export function TodayCard({
                 ))}
               </div>
             )}
+            {above.length > 0 && (
+              <button
+                type="button"
+                className="t-row w-full text-left text-sm text-muted"
+                onClick={() => {
+                  const box = scroller.current
+                  if (box === null) return
+                  const first = Math.min(...above.map((one) => one.top)) - fromHour * hourPx
+                  box.scrollTo({
+                    top: Math.max(first - hourPx, 0),
+                    behavior: reduced === true ? 'auto' : 'smooth',
+                  })
+                }}
+              >
+                {above.length} earlier today
+              </button>
+            )}
             <DayTimeline
               items={items}
               isToday
@@ -171,6 +201,8 @@ export function TodayCard({
               height={wide ? WIDE_CAP : CAP}
               wide={wide}
               onOpen={setDetail}
+              scrollerRef={scroller}
+              onScroll={setScrollTop}
             />
           </>
         )}

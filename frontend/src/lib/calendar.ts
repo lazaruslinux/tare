@@ -22,7 +22,7 @@ export const PALETTE: { key: PaletteKey; label: string; token: string }[] = [
   { key: 'violet', label: 'Violet', token: 'var(--violet)' },
   { key: 'orange', label: 'Orange', token: 'var(--orange)' },
   { key: 'coral', label: 'Coral', token: 'var(--coral)' },
-  { key: 'gold', label: 'Gold', token: 'var(--gold)' },
+  { key: 'gold', label: 'Gold', token: 'var(--cal-gold)' },
   { key: 'teal', label: 'Teal', token: 'var(--cal-teal)' },
   { key: 'pink', label: 'Pink', token: 'var(--cal-pink)' },
   { key: 'slate', label: 'Slate', token: 'var(--cal-slate)' },

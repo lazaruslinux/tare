@@ -42,6 +42,9 @@
   --orange: #efa25a;
   --violet: #b79bdd;
   --gold: #e3c15a;
+  /* The gold a shared calendar wears. The same one on this ground; the light
+     theme takes it somewhere the orange beside it cannot be mistaken for. */
+  --cal-gold: #e3c15a;
   /* The three colours a shared calendar can wear that nothing else here
      needed. The five above are the rest of that palette; its keys live in
      backend/app/calendar_colors.py. */
@@ -81,6 +84,9 @@
   --orange: #9c5512;
   --violet: #6b4aa0;
   --gold: #8a5a00;
+  /* Olive rather than a darker gold: 4.9:1 on --surface-2, the darkest of the
+     three light grounds, and a hue the orange above cannot be taken for. */
+  --cal-gold: #6b6c14;
   /* Darkened for the cream ground, the same way the five above were: a dot
      and a chip's own text both have to read on it. */
   --cal-teal: #0f6f68;
@@ -628,6 +634,13 @@
     text-align: left;
     white-space: nowrap;
   }
+  /* A cell this narrow has room for a name or a time, not both, and the name
+     is what a month is scanned for. Chips only exist from 900px up. */
+  @media (max-width: 1599px) {
+    .t-cal-chip-time {
+      display: none;
+    }
+  }
 
   /* An all-day or multi-day run, and every entry at phone width. A thin band
      on a phone; from 900px it carries its own name and runs into the cells it
@@ -804,6 +817,12 @@
   .t-cal-mini-today {
     color: var(--text);
     box-shadow: inset 0 0 0 1.5px var(--accent);
+  }
+  /* The day the page beside it is showing. Filled, so it is never read as the
+     ring today wears, and plain on the day that is both. */
+  .t-cal-mini-selected {
+    background: var(--accent);
+    color: var(--bg);
   }
 
   /* What is on the day, as up to three marks under its number. */
@@ -1082,6 +1101,11 @@
       max-width: none;
       margin: 0;
     }
+    /* The day against the clock keeps a column's width instead of stretching
+       across the well, and stays at its left edge with the month beside it. */
+    .t-cal-day {
+      max-width: 40rem;
+    }
     .t-aside {
       position: sticky;
       top: 0;
@@ -1103,6 +1127,9 @@
   @media (min-width: 1600px) {
     .t-withrail {
       max-width: 84rem;
+    }
+    .t-cal-day {
+      max-width: 48rem;
     }
   }
 
