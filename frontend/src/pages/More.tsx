@@ -24,6 +24,7 @@ import {
 import { useEffect, useState, type FormEvent } from 'react'
 
 import { api, errorText, type Me, type SyncKey, type Units } from '../api'
+import { CalendarsSheet } from '../components/calendar/CalendarsSheet'
 import { ConfirmSheet } from '../components/ConfirmSheet'
 import { Sheet } from '../components/Sheet'
 import { type Glyph } from '../components/TabBar'
@@ -119,6 +120,11 @@ function requestsNote(count: number): string {
   return count === 1 ? '1 request' : `${count} requests`
 }
 
+// The same, for the invitations the calendar is holding.
+function invitationsNote(count: number): string {
+  return count === 1 ? '1 invitation' : `${count} invitations`
+}
+
 function Row({
   label,
   icon: Icon,
@@ -162,6 +168,7 @@ export function More({
   onSignedOut,
   waiting,
   requests,
+  invitations,
   refresh,
   onReviewed,
   onChanged,
@@ -186,6 +193,9 @@ export function More({
   waiting: number
   // How many friend requests nobody has answered, said under the Members row.
   requests: number
+  // How many calendar and meeting invitations are unanswered, said under the
+  // Calendar row.
+  invitations: number
   // The app-wide change tick. What this tab reads from the server is read
   // again on every bump, so a screen left open catches up on its own.
   refresh: number
@@ -235,6 +245,10 @@ export function More({
   const [applyError, setApplyError] = useState('')
   // Which member's profile is open on the Members or Sharing screen, if any.
   const [member, setMember] = useState<number | null>(null)
+  // Whether the shared-calendars sheet is up. It belongs to the tab rather
+  // than to the screen that opens it, so the screen keeps no state of its own
+  // about a sheet it does not draw.
+  const [calendars, setCalendars] = useState(false)
 
   const [units, setUnits] = useState<Units>(me.units)
   const [clock, setClock] = useState<Clock>(me.clock)
@@ -270,12 +284,20 @@ export function More({
 
   const go = (next: Screen) => {
     setMember(null)
+    setCalendars(false)
     setScreen(next)
   }
 
   // A friendship started or ended: the feed lists differently and one fewer
   // request is waiting.
   const friendshipChanged = () => {
+    onChanged()
+    onReviewed()
+  }
+
+  // Something on the calendar changed. An invitation answered there is one
+  // fewer waiting, so the badge is asked about again with the lists.
+  const calendarChanged = () => {
     onChanged()
     onReviewed()
   }
@@ -457,13 +479,23 @@ export function More({
 
   if (screen === 'calendar') {
     return (
-      <Calendar
-        me={me}
-        refresh={refresh}
-        focusDay={calendarDate}
-        onBack={() => go(null)}
-        onChanged={onChanged}
-      />
+      <>
+        <Calendar
+          me={me}
+          refresh={refresh}
+          focusDay={calendarDate}
+          onBack={() => go(null)}
+          onChanged={calendarChanged}
+          onOpenCalendars={() => setCalendars(true)}
+        />
+        {calendars && (
+          <CalendarsSheet
+            me={me}
+            onClose={() => setCalendars(false)}
+            onChanged={calendarChanged}
+          />
+        )}
+      </>
     )
   }
 
@@ -770,7 +802,12 @@ export function More({
           note={syncNote(sync)}
           onOpen={() => go('sync')}
         />
-        <Row label="Calendar" icon={CalendarDays} onOpen={() => go('calendar')} />
+        <Row
+          label="Calendar"
+          icon={CalendarDays}
+          note={invitations > 0 ? invitationsNote(invitations) : undefined}
+          onOpen={() => go('calendar')}
+        />
         <Row
           label="Members"
           icon={Users}

@@ -1,4 +1,4 @@
-import { ChevronLeft, ChevronRight, Plus, Users } from 'lucide-react'
+import { ChevronLeft, ChevronRight, Users } from 'lucide-react'
 import { useEffect, useState } from 'react'
 
 import {
@@ -12,6 +12,7 @@ import {
 import { AppointmentDetail } from '../components/calendar/AppointmentDetail'
 import { AppointmentSheet } from '../components/calendar/AppointmentSheet'
 import { allDayItems, DayTimeline, tintOf, useNowMinutes } from '../components/calendar/DayTimeline'
+import { InvitationsCard } from '../components/calendar/InvitationsCard'
 import { useTopBar } from '../hooks/useTopBar'
 import { useRailLayout } from '../hooks/useWideLayout'
 import { dateText, useClock } from '../lib/clock'
@@ -78,12 +79,20 @@ export function Calendar({
   const last = weeks[5][6].date
 
   // The day names itself in its own header, between the arrows that step it,
-  // so the bar says where back goes rather than saying the date twice.
-  useTopBar(
-    day === null
-      ? { title: 'Calendar', back: { label: 'More', onBack } }
-      : { title: 'Calendar', back: { label: 'Month', onBack: () => setDay(null) } }
-  )
+  // so the bar says where back goes rather than saying the date twice. The
+  // plus is the bar's, the way it is on the Journal: the month's own row is
+  // full at phone width, and the title is what has to fit in it.
+  useTopBar({
+    title: 'Calendar',
+    back:
+      day === null
+        ? { label: 'More', onBack }
+        : { label: 'Month', onBack: () => setDay(null) },
+    action: {
+      label: 'New appointment',
+      onAct: () => setForm({ kind: 'new', date: day ?? selected }),
+    },
+  })
 
   // A day asked for from outside opens once, and then this screen owns where
   // it is again.
@@ -188,16 +197,9 @@ export function Calendar({
                 <Users className="h-5 w-5" strokeWidth={2} />
               </button>
             )}
-            <button
-              type="button"
-              className="t-topbar-icon"
-              data-tour="calendar-add"
-              aria-label="New appointment"
-              onClick={() => setForm({ kind: 'new', date: selected })}
-            >
-              <Plus className="h-5 w-5" strokeWidth={2} />
-            </button>
           </div>
+
+          <InvitationsCard refresh={refresh} onAnswered={reload} />
 
           <div className="t-cal-grid">
             {DOW.map((letter, index) => (
@@ -290,14 +292,6 @@ export function Calendar({
               onClick={() => stepDay(1)}
             >
               <ChevronRight className="h-5 w-5" strokeWidth={2} />
-            </button>
-            <button
-              type="button"
-              className="t-topbar-icon"
-              aria-label="New appointment"
-              onClick={() => setForm({ kind: 'new', date: day })}
-            >
-              <Plus className="h-5 w-5" strokeWidth={2} />
             </button>
           </div>
 

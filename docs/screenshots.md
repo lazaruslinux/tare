@@ -2,7 +2,8 @@
 
 Each line is one slide of the invite's slideshow, with its pictures on it, and they come from
 one manifest, `frontend/src/lib/screenshots.ts`, whose `line` field says which bullet. About
-shows none of them. All eleven are shot and in place.
+shows none of them. All eleven in the list below are shot and in place; the calendar shots
+under Queued are not, and are not in the manifest yet.
 
 ## Adding one
 
@@ -29,3 +30,14 @@ shows none of them. All eleven are shot and in place.
 - [x] sync-setup (line 6, desktop): Health data sync
 - [x] feed-desktop (line 7, desktop): Dashboard on a desktop with the feed column
 - [x] member-page (line 7, phone): A member's page with Contributions
+
+## Queued
+
+Not shot, and not in the manifest: the seven lines on the invite say nothing about the
+calendar yet, so there is no bullet for these to sit beside. Give them a line first, then
+shoot them the way the list above was shot and add them to the manifest.
+
+- [ ] calendar-month (phone): The month with a shared calendar's entries on it
+- [ ] calendar-day (phone): One day against the clock, with its blocks
+- [ ] calendar-shared (desktop): The month at rail width with the Calendars sheet open
+- [ ] calendar-dashboard (desktop): The Dashboard with today's hours and the month beside it

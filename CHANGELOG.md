@@ -6,10 +6,48 @@ Notable changes to Tare, newest first. The format follows
 
 ## Unreleased
 
+### Added
+
+- A calendar. An appointment takes a time or a whole day, can run across
+  several days, and can repeat by week, month or year; it is read as a month,
+  as one day against the clock, or as today's hours at the top of the
+  Dashboard. A calendar can be shared with a friend by invitation, any member
+  can add another friend, rename it or recolor it, and leaving one takes your
+  own appointments with you. A friend can be invited to a single appointment,
+  and anything already in that hour is named before it is saved. Tare sends no
+  reminders.
+- Invitations waiting on an answer sit at the top of the Calendar, the Calendar
+  row under More says how many there are, and the More badge counts them.
+- On a wide window the right-hand column carries the month on the Dashboard
+  instead of repeating the figures the cards beside it already show.
+
 ### Changed
 
+- Every card says its own name in one style, the three rings sit above their
+  macro bars rather than beside a second set of rings, journal entries carry
+  the picture their food already has, a member's page shows what they have
+  shared, and a wide window gives its cards two columns instead of leaving the
+  room as gutter.
+- Roster rows say which way a pending friend request went. An upload-only
+  member is told where sync lives. A removal that fails puts the row back and
+  says why. Sheets keep the keyboard inside them and hand focus back on close.
+  A new version waits behind a Reload bar instead of being swapped in under an
+  open page.
+- Weight readings are read over the last four hundred days rather than the
+  whole history, food lookups for a day's micronutrients and a recipe's weight
+  are batched, and a composite index covers reading a day.
 - The api image runs on Python 3.14; CI tests on the same version. Dependency
   refresh: nginx image digest, framer-motion, lucide-react, alembic, ruff.
+
+### Fixed
+
+- Withdrawing a submission handed the day's allowance back. The daily
+  submission and photo caps now count marks that are only ever added.
+- The Recently used header drew its plus twice.
+
+### Security
+
+- Friend requests are limited to thirty an hour.
 
 ## 0.5.0 - 2026-09-09
 

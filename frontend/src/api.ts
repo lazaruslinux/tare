@@ -1511,3 +1511,49 @@ export const sharedCalendars = (): Promise<SharedCalendar[]> =>
 
 export const calendarConflicts = (body: ConflictBody): Promise<ConflictReport> =>
   api<ConflictReport>('/calendar/conflicts', { method: 'POST', body })
+
+export const calendarInvitations = (): Promise<Invitation> =>
+  api<Invitation>('/calendar/invitations')
+
+// An answer to one meeting invitation. Either way it is gone from the list.
+export const answerInvitation = (
+  inviteId: number,
+  yes: boolean
+): Promise<{ status: string }> =>
+  api<{ status: string }>(`/calendar/invitations/${inviteId}/${yes ? 'accept' : 'decline'}`, {
+    method: 'POST',
+  })
+
+// A shared calendar needs one friend at the start: there is no such thing here
+// as a shared calendar nobody else was asked to.
+export const createCalendar = (body: {
+  name: string
+  color: string
+  friend_id: number
+}): Promise<SharedCalendar> =>
+  api<SharedCalendar>('/calendar/calendars', { method: 'POST', body })
+
+export const patchCalendar = (
+  id: number,
+  body: { name?: string; color?: string }
+): Promise<SharedCalendar> =>
+  api<SharedCalendar>(`/calendar/calendars/${id}`, { method: 'PATCH', body })
+
+export const addCalendarMember = (id: number, userId: number): Promise<SharedCalendar> =>
+  api<SharedCalendar>(`/calendar/calendars/${id}/members`, {
+    method: 'POST',
+    body: { user_id: userId },
+  })
+
+// Myself, which is leaving, or somebody else, which only its creator can do.
+export const removeCalendarMember = (id: number, userId: number): Promise<unknown> =>
+  api(`/calendar/calendars/${id}/members/${userId}`, { method: 'DELETE' })
+
+export const answerCalendar = (id: number, yes: boolean): Promise<{ status: string }> =>
+  api<{ status: string }>(`/calendar/calendars/${id}/${yes ? 'accept' : 'decline'}`, {
+    method: 'POST',
+  })
+
+// What is waiting on an answer, as one number for the badge and the row note.
+export const calendarBadge = (): Promise<{ invitations: number }> =>
+  api<{ invitations: number }>('/calendar/badge')

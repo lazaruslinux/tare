@@ -20,6 +20,8 @@ The journal takes private custom foods, meals, recipes, daily foods that log the
 
 Calorie and macro targets are worked out from a weight goal, with weigh-ins and body measurements behind them. Health sync brings in what a phone records, through Health Auto Export or an uploaded file, and workouts arrive with their routes and an optional map.
 
+A calendar sits beside the journal. An appointment takes a time or a whole day, can run across several days, and can repeat by week, month or year; the month, one day against the clock, and today's hours at the top of the Dashboard are the three ways to read it. A calendar can be shared with a friend by invitation, and either of you can add another friend, rename it or recolor it; leaving one takes your own appointments with you. A friend can also be invited to a single appointment, and anything already in that hour is named before either is saved. Tare sends no reminders. Your calendar is private: only appointments you add to a shared calendar, or invite a friend to, are seen by anyone else.
+
 Beside all of that: a library of stretches and moves, member profiles with avatars, friends by mutual request, a read-only community feed with a sharing switch over every part of it, and a feedback line to the administrator. It installs as a PWA.
 
 ## Screenshots

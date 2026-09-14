@@ -149,17 +149,24 @@ export function AppointmentDetail({
 
       {item.notes !== '' && <p className="mt-2 text-sm whitespace-pre-line">{item.notes}</p>}
 
-      <p className="mt-3 flex flex-wrap items-center gap-2 text-sm text-muted">
-        On:
-        <span className="flex items-center gap-1.5">
-          <Dot color={PERSONAL} /> Personal
-        </span>
-        {item.calendars.map((shelf) => (
-          <span key={shelf.id} className="flex items-center gap-1.5">
-            <Dot color={colorToken(shelf.color)} /> {shelf.name}
-          </span>
-        ))}
-      </p>
+      {(item.mine || item.calendars.length > 0) && (
+        <p className="mt-3 flex flex-wrap items-center gap-2 text-sm text-muted">
+          On:
+          {/* Somebody else's appointment is not on this account's own
+              calendar. It is readable here because a calendar it is on is
+              shared, and that is the only place it sits. */}
+          {item.mine && (
+            <span className="flex items-center gap-1.5">
+              <Dot color={PERSONAL} /> Personal
+            </span>
+          )}
+          {item.calendars.map((shelf) => (
+            <span key={shelf.id} className="flex items-center gap-1.5">
+              <Dot color={colorToken(shelf.color)} /> {shelf.name}
+            </span>
+          ))}
+        </p>
+      )}
 
       {owner && item.invitees.length > 0 && (
         <div className="mt-3">

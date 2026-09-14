@@ -150,7 +150,7 @@ export default function App() {
   const railed = useRailLayout()
   const reduced = useReducedMotion()
   const bar = useTopBarState()
-  const { waiting, queue, requests, refresh: refreshWaiting } = useWaitingCount(me)
+  const { waiting, queue, requests, invitations, refresh: refreshWaiting } = useWaitingCount(me)
   const changed = useCallback(() => setLogged((n) => n + 1), [])
   // Every way the account arrives or changes goes through here, so the clock
   // preference the formatters read is never a save behind what was saved.
@@ -266,6 +266,14 @@ export default function App() {
       return
     }
     select(target)
+  }
+
+  // The calendar, opened on one day, wherever it was picked: a readout on the
+  // Dashboard, or the month in the right-hand column.
+  const openCalendarDay = (date: string) => {
+    setCalendarDay(date)
+    setMoreView('calendar')
+    select('more')
   }
 
   // The bar's centre button stays in reach while its sheet is up, so a second
@@ -456,6 +464,7 @@ export default function App() {
                       onSignedOut={leave}
                       waiting={queue}
                       requests={requests}
+                      invitations={invitations}
                       refresh={logged}
                       onReviewed={refreshWaiting}
                       onChanged={changed}
@@ -524,11 +533,7 @@ export default function App() {
                         setMoreView('fitness')
                         select('more')
                       }}
-                      onOpenCalendarDay={(date) => {
-                        setCalendarDay(date)
-                        setMoreView('calendar')
-                        select('more')
-                      }}
+                      onOpenCalendarDay={openCalendarDay}
                       onChanged={changed}
                       start={dashView}
                       onStarted={() => setDashView(null)}
@@ -555,9 +560,11 @@ export default function App() {
             <aside className="t-aside">
               <Aside
                 me={me}
+                page={page}
                 refresh={logged}
                 onOpenWorkout={(id) => setOverlay({ kind: 'workout', id })}
                 onOpenMember={(id) => setOverlay({ kind: 'member', id })}
+                onOpenCalendarDay={openCalendarDay}
               />
             </aside>
           )}
