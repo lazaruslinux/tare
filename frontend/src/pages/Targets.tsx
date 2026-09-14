@@ -165,23 +165,27 @@ export function Targets({
     <>
       {error && <p className="t-error mb-3">{error}</p>}
 
-      <div className="t-card mb-3">
-        <Row label="Weight goal" value={weightValue} onOpen={() => setView('weight')} />
-        <Row
-          label="Activity level"
-          value={activityValue}
-          onOpen={() => setView('activity')}
-        />
-        <Row
-          label="Macro & Calorie Targets"
-          value={budgetValue}
-          onOpen={() => setView('budget')}
-        />
-      </div>
+      {/* A list of three long readings. Held to a reading width rather than
+          stretched across a desktop window. */}
+      <div className="t-prose">
+        <div className="t-card mb-3">
+          <Row label="Weight goal" value={weightValue} onOpen={() => setView('weight')} />
+          <Row
+            label="Activity level"
+            value={activityValue}
+            onOpen={() => setView('activity')}
+          />
+          <Row
+            label="Macro & Calorie Targets"
+            value={budgetValue}
+            onOpen={() => setView('budget')}
+          />
+        </div>
 
-      <p className="t-note mb-3">
-        These values are not shared anywhere on Tare; not even an administrator can see them.
-      </p>
+        <p className="t-note mb-3">
+          These values are not shared anywhere on Tare; not even an administrator can see them.
+        </p>
+      </div>
     </>
   )
 }

@@ -426,6 +426,7 @@ export default function App() {
                       />
                     ) : (
                       <MemberView
+                        me={me}
                         userId={overlay.id}
                         back={TAB_TITLE[page]}
                         onBack={() => setOverlay(null)}

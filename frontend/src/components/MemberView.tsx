@@ -1,9 +1,10 @@
 import { useEffect, useState, type ReactNode } from 'react'
 
-import { api, errorText, type MemberView as Member } from '../api'
+import { api, errorText, type Me, type MemberView as Member } from '../api'
 import { useTopBar } from '../hooks/useTopBar'
 import { Avatar } from './Avatar'
 import { ConfirmSheet } from './ConfirmSheet'
+import { FeedRows } from './Feed'
 import { Verified } from './FoodRows'
 import { RoleMark } from './RoleMark'
 import { roleLabel } from '../lib/roles'
@@ -43,11 +44,14 @@ function Fact({ label, value }: { label: string; value: ReactNode }) {
 }
 
 export function MemberView({
+  me,
   userId,
   back,
   onBack,
   onChange,
 }: {
+  // The reader, whose clock and units the rows under the profile are read in.
+  me: Me
   userId: number
   // The screen this was opened from, which is what the way back is called.
   back: string
@@ -240,6 +244,17 @@ export function MemberView({
             )}
             {refused !== '' && <p className="t-error mt-3">{refused}</p>}
           </div>
+        )}
+      </div>
+
+      {/* What they have shared lately, read through the feed itself: a reader
+          who is not their friend sees what the feed would show them. */}
+      <div className="t-card mb-3">
+        <p className="t-card-title mb-1">Recent</p>
+        {member.recent.length === 0 ? (
+          <p className="text-sm text-muted">Nothing shared yet.</p>
+        ) : (
+          <FeedRows me={me} rows={member.recent} />
         )}
       </div>
 

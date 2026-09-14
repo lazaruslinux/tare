@@ -26,6 +26,7 @@ import { barsAverage, DayBars, weekly, type Bar } from '../components/DayBars'
 import { ExerciseSheet } from '../components/ExerciseSheet'
 import { FoodPicker } from '../components/FoodPicker'
 import { GoalSheet } from '../components/GoalSheet'
+import { MacroBar } from '../components/MacroBar'
 import { MeasurementsSheet } from '../components/MeasurementsSheet'
 import { Feed } from '../components/Feed'
 import { MemberView } from '../components/MemberView'
@@ -34,6 +35,7 @@ import { useTopBar } from '../hooks/useTopBar'
 import { useWideLayout } from '../hooks/useWideLayout'
 import { dateText as stampDate } from '../lib/clock'
 import { dayLabel, shiftDay, slotByTime, today, weekday } from '../lib/day'
+import { MACRO_BARS, MACRO_COLOR } from '../lib/macros'
 import { calText, isoDayText } from '../lib/targets'
 import {
   distanceIn,
@@ -141,8 +143,7 @@ const RADIUS = 45
 const ROUND = 2 * Math.PI * RADIUS
 
 // What one ring is filled to, what stands in its middle, the words under that,
-// what a screen reader is told, and where tapping it goes. `wide` marks the
-// three that only a wide card has room for.
+// what a screen reader is told, and where tapping it goes.
 type RingSpec = {
   key: string
   filled: number
@@ -151,7 +152,6 @@ type RingSpec = {
   label: string
   color: string
   onOpen: () => void
-  wide?: boolean
 }
 
 function Ring({ filled, color }: { filled: number; color: string }) {
@@ -186,19 +186,17 @@ function Ring({ filled, color }: { filled: number; color: string }) {
 
 // A row of them, side by side and the same size. Each ring takes an even share
 // of the row up to 112px, so a wider phone draws a wider ring instead of
-// leaving the room unused. A wide card holds six, one to a column, and each one
-// is its own way into what it counts.
+// leaving the room unused. A wide card spreads the same three over three
+// columns, and each one is its own way into what it counts.
 function Rings({ rings }: { rings: RingSpec[] }) {
   return (
-    // Spread across a phone, six even columns on a wide card.
-    <div className="flex items-center justify-between gap-2 min-[900px]:grid min-[900px]:grid-cols-6 min-[900px]:gap-0">
+    // Spread across a phone, three even columns on a wide card.
+    <div className="flex items-center justify-between gap-2 min-[900px]:grid min-[900px]:grid-cols-3 min-[900px]:gap-0">
       {rings.map((ring) => (
         <button
           key={ring.key}
           type="button"
-          className={`t-ring relative min-w-0 max-w-28 flex-1 hover:opacity-90 min-[900px]:mx-auto min-[900px]:w-full ${
-            ring.wide === true ? 'hidden min-[900px]:block' : ''
-          }`}
+          className="t-ring relative min-w-0 max-w-28 flex-1 hover:opacity-90 min-[900px]:mx-auto min-[900px]:w-full"
           aria-label={ring.label}
           onClick={ring.onOpen}
         >
@@ -562,11 +560,11 @@ function CardHead({ label, onOpen, onAdd }: {
     <div className="mb-2 flex items-center justify-between">
       <button
         type="button"
-        className="t-micro t-tap44 flex items-center gap-1"
+        className="t-card-title t-tap44 flex items-center gap-1"
         onClick={onOpen}
       >
         {label}
-        <ChevronRight className="h-3.5 w-3.5" strokeWidth={2.5} />
+        <ChevronRight className="h-4 w-4" strokeWidth={2.5} />
       </button>
       <span className="flex items-center gap-2">
         {onAdd === undefined ? (
@@ -1141,32 +1139,14 @@ export function Dashboard({
     return value === null ? [] : [`${spec.word} ${round1(value)}%`]
   })
 
-  // Today as rings: what was walked, what is left to eat, and what was worked,
-  // then the three the day's food is made of. The row is always the same
-  // length, so a phone that sends nothing shows an empty steps ring rather
-  // than moving the other two. The last three only appear where there is room.
+  // Today as rings: what was walked, what is left to eat, and what was worked.
+  // The row is always the same length, so a phone that sends nothing shows an
+  // empty steps ring rather than moving the other two. What the day's food is
+  // made of is read under them, as bars.
   const steps = day?.steps ?? null
   const remaining = day?.remaining_calories ?? 0
   const ringBudget = (day?.budget.calories ?? 0) + (day?.exercise_kcal ?? 0)
   const minutesGoal = day?.exercise_minutes_goal ?? 0
-  const macroRing = (
-    key: 'protein_g' | 'carbs_g' | 'fat_g',
-    word: string,
-    color: string,
-  ): RingSpec => {
-    const eaten = day?.totals[key] ?? 0
-    const budget = day?.budget[key] ?? 0
-    return {
-      key,
-      filled: day === null || budget <= 0 ? 0 : eaten / budget,
-      centre: day === null ? '\u2013' : `${calText(eaten)} g`,
-      caption: `of ${calText(budget)} g ${word}`,
-      label: `${word[0].toUpperCase()}${word.slice(1)} today. Opens the Journal.`,
-      color,
-      onOpen: onOpenJournal,
-      wide: true,
-    }
-  }
   const rings: RingSpec[] = [
     {
       key: 'steps',
@@ -1195,9 +1175,6 @@ export function Dashboard({
       color: 'var(--orange)',
       onOpen: () => setGoaling(true),
     },
-    macroRing('protein_g', 'protein', 'var(--violet)'),
-    macroRing('carbs_g', 'carbs', 'var(--gold)'),
-    macroRing('fat_g', 'fat', 'var(--coral)'),
   ]
 
   // The same calories, said once more in small type on the card that is about
@@ -1247,6 +1224,7 @@ export function Dashboard({
   if (member !== null) {
     return (
       <MemberView
+        me={me}
         userId={member}
         back="Dashboard"
         onBack={() => setMember(null)}
@@ -1343,49 +1321,53 @@ export function Dashboard({
           </div>
         </div>
 
-        <div className="t-card mb-3">
-          <p className="t-micro mb-2">Intake, last {RUN_DAYS} days</p>
-          <DayBars
-            bars={runBars}
-            footer={runFooter}
-            todayIso={todayIso}
-            height={72}
-            mondaysOnly
-            warnOver
-          />
-          <p className="t-nums mt-1 text-xs text-muted">
-            Days completed {completedRun} of {RUN_DAYS}
-          </p>
-        </div>
+        {/* Two cards of a run of days. Side by side once the window is wide
+            enough to read both without either one shrinking. */}
+        <div className="grid gap-3 min-[1200px]:mb-3 min-[1200px]:grid-cols-2 min-[1200px]:items-start">
+          <div className="t-card mb-3 min-[1200px]:mb-0">
+            <p className="t-micro mb-2">Intake, last {RUN_DAYS} days</p>
+            <DayBars
+              bars={runBars}
+              footer={runFooter}
+              todayIso={todayIso}
+              height={72}
+              mondaysOnly
+              warnOver
+            />
+            <p className="t-nums mt-1 text-xs text-muted">
+              Days completed {completedRun} of {RUN_DAYS}
+            </p>
+          </div>
 
-        <div className="t-card mb-3">
-          <p className="t-micro mb-2">History</p>
-          {recorded.length === 0 ? (
-            <>
-              <p className="text-sm text-muted">Nothing measured in this window.</p>
-              <button
-                type="button"
-                className="t-btn t-btn-primary mt-3"
-                onClick={() => openMeasurements(todayIso)}
-              >
-                Log biometrics
-              </button>
-            </>
-          ) : (
-            recorded.map((row, index) => (
-              <div
-                key={row.date}
-                className={index === 0 ? '' : 'mt-3 border-t border-line pt-3'}
-              >
-                <WeighIn
-                  row={row}
-                  units={me.units}
-                  todayIso={todayIso}
-                  onOpen={() => openMeasurements(row.date)}
-                />
-              </div>
-            ))
-          )}
+          <div className="t-card mb-3 min-[1200px]:mb-0">
+            <p className="t-micro mb-2">History</p>
+            {recorded.length === 0 ? (
+              <>
+                <p className="text-sm text-muted">Nothing measured in this window.</p>
+                <button
+                  type="button"
+                  className="t-btn t-btn-primary mt-3"
+                  onClick={() => openMeasurements(todayIso)}
+                >
+                  Log biometrics
+                </button>
+              </>
+            ) : (
+              recorded.map((row, index) => (
+                <div
+                  key={row.date}
+                  className={index === 0 ? '' : 'mt-3 border-t border-line pt-3'}
+                >
+                  <WeighIn
+                    row={row}
+                    units={me.units}
+                    todayIso={todayIso}
+                    onOpen={() => openMeasurements(row.date)}
+                  />
+                </div>
+              ))
+            )}
+          </div>
         </div>
 
         {measuring !== null && (
@@ -1424,6 +1406,22 @@ export function Dashboard({
           <ChevronRight className="h-3.5 w-3.5" strokeWidth={2.5} />
         </button>
         <Rings rings={rings} />
+        {/* What the day's food is made of, under the rings and at every width.
+            The Journal reads the same three off the same list. */}
+        {day !== null && (
+          <div className="mt-4 flex flex-col gap-3">
+            {MACRO_BARS.map((fact) => (
+              <MacroBar
+                key={fact.key}
+                label={fact.label}
+                value={day.totals[fact.key]}
+                target={day.budget[fact.key]}
+                unit={fact.unit}
+                color={MACRO_COLOR[fact.key] ?? 'var(--accent)'}
+              />
+            ))}
+          </div>
+        )}
       </div>
 
       {/* One switch over every card that reads a run of days, standing where
@@ -1431,7 +1429,7 @@ export function Dashboard({
           them says it again. The range wraps under it on a phone. It stays
           under the bar as the cards go by, on the page's own ground and bled
           to the well's edges so they pass behind it rather than beside it. */}
-      <div className="sticky top-[calc(48px_+_env(safe-area-inset-top))] z-10 -mx-3.5 mb-2 mt-1 flex flex-wrap items-center gap-2 bg-bg px-4.5 py-2 min-[900px]:-mx-6 min-[900px]:px-7">
+      <div className="sticky top-[calc(48px_+_env(safe-area-inset-top))] z-10 -mx-3.5 mb-2 mt-1 flex flex-wrap items-center gap-2 border-b border-line bg-bg px-4.5 py-2 min-[900px]:-mx-6 min-[900px]:px-7">
         {SPANS.map((row) => (
           <button
             key={row.days}
@@ -1448,94 +1446,98 @@ export function Dashboard({
         </span>
       </div>
 
-      <div className="t-card mb-3">
-        <CardHead label="Food" onOpen={onOpenJournal} onAdd={() => setPicking(true)} />
-        {foodRead !== null ? (
-          <PointReadout
-            className="mb-2"
-            parts={foodRead.parts}
-            done={foodRead.done}
-            onOpen={
-              foodRead.open === true && foodDate !== null
-                ? () => onOpenJournalDay(foodDate)
-                : undefined
-            }
-          />
-        ) : (
-          day !== null && <p className="t-nums mb-2 text-xs text-muted">{leftToday}</p>
-        )}
-        {logged.length === 0 && (
-          <p className="mb-2 text-sm">
-            Log a day to see {chosen.label === 'This week' ? 'this week' : `the last ${chosen.label.toLowerCase()}`}.
-          </p>
-        )}
-        <div className="mb-3 flex gap-6">
-          <Stat value={`${underTarget} of ${dates.length}`} label="Days within budget" />
-          <Stat value={`${completedDays} of ${dates.length}`} label="Days completed" />
-        </div>
-        <DayBars
-          bars={intake}
-          footer={intakeFooter}
-          todayIso={todayIso}
-          warnOver
-          highlightToday
-          mondaysOnly={!isWeek && !weeks}
-          weeks={weeks}
-          label={labelled ? calText : undefined}
-          titleUnit="cal"
-          weekUnit="calories"
-          selected={foodPick}
-          onSelect={setFoodPick}
-        />
-      </div>
-
-      <div className="t-card mb-3">
-        <CardHead
-          label="Activity"
-          onOpen={onOpenFitness}
-          onAdd={() => setExercising(true)}
-        />
-        {fitness !== null && fitness.connected ? (
-          <>
-            <div className={`flex gap-6 ${isWeek || moveRead !== null ? 'mb-1' : 'mb-3'}`}>
-              <Stat value={`${goalMet} of ${dates.length}`} label="Days at step goal" />
-            </div>
-            {/* How many sessions the week holds. The summary counts no other
-                span, so no other span says it. */}
-            {moveRead !== null ? (
-              <PointReadout
-                className="mb-3"
-                parts={moveRead.parts}
-                onOpen={
-                  moveRead.open === true && moveDate !== null
-                    ? () => onOpenFitnessDay(moveDate)
-                    : undefined
-                }
-              />
-            ) : (
-              isWeek && <p className="mb-3 text-xs text-muted">{sessionsLine}</p>
-            )}
-            <DayBars
-              bars={stepBars}
-              footer={stepsFooter}
-              todayIso={todayIso}
-              highlightToday
-              mondaysOnly={!isWeek && !weeks}
-              weeks={weeks}
-              label={labelled ? stepsLabel : undefined}
-              titleUnit="steps"
-              selected={movePick}
-              onSelect={setMovePick}
+      {/* The two cards a day is read by. Side by side once there is room
+          for both, and one under the other on a phone. */}
+      <div className="grid gap-3 min-[1200px]:mb-3 min-[1200px]:grid-cols-2 min-[1200px]:items-start">
+        <div className="t-card mb-3 min-[1200px]:mb-0">
+          <CardHead label="Food" onOpen={onOpenJournal} onAdd={() => setPicking(true)} />
+          {foodRead !== null ? (
+            <PointReadout
+              className="mb-2"
+              parts={foodRead.parts}
+              done={foodRead.done}
+              onOpen={
+                foodRead.open === true && foodDate !== null
+                  ? () => onOpenJournalDay(foodDate)
+                  : undefined
+              }
             />
-          </>
-        ) : (
-          <>
-            <p className="text-base font-semibold tracking-tight">
-              Active on {movedDays} of {dates.length} days
+          ) : (
+            day !== null && <p className="t-nums mb-2 text-xs text-muted">{leftToday}</p>
+          )}
+          {logged.length === 0 && (
+            <p className="mb-2 text-sm">
+              Log a day to see {chosen.label === 'This week' ? 'this week' : `the last ${chosen.label.toLowerCase()}`}.
             </p>
-            <p className="text-xs text-muted">Sync a device to see steps here.</p>
-          </>
-        )}
+          )}
+          <div className="mb-3 flex gap-6">
+            <Stat value={`${underTarget} of ${dates.length}`} label="Days within budget" />
+            <Stat value={`${completedDays} of ${dates.length}`} label="Days completed" />
+          </div>
+          <DayBars
+            bars={intake}
+            footer={intakeFooter}
+            todayIso={todayIso}
+            warnOver
+            highlightToday
+            mondaysOnly={!isWeek && !weeks}
+            weeks={weeks}
+            label={labelled ? calText : undefined}
+            titleUnit="cal"
+            weekUnit="calories"
+            selected={foodPick}
+            onSelect={setFoodPick}
+          />
+        </div>
+
+        <div className="t-card mb-3 min-[1200px]:mb-0">
+          <CardHead
+            label="Activity"
+            onOpen={onOpenFitness}
+            onAdd={() => setExercising(true)}
+          />
+          {fitness !== null && fitness.connected ? (
+            <>
+              <div className={`flex gap-6 ${isWeek || moveRead !== null ? 'mb-1' : 'mb-3'}`}>
+                <Stat value={`${goalMet} of ${dates.length}`} label="Days at step goal" />
+              </div>
+              {/* How many sessions the week holds. The summary counts no other
+                  span, so no other span says it. */}
+              {moveRead !== null ? (
+                <PointReadout
+                  className="mb-3"
+                  parts={moveRead.parts}
+                  onOpen={
+                    moveRead.open === true && moveDate !== null
+                      ? () => onOpenFitnessDay(moveDate)
+                      : undefined
+                  }
+                />
+              ) : (
+                isWeek && <p className="mb-3 text-xs text-muted">{sessionsLine}</p>
+              )}
+              <DayBars
+                bars={stepBars}
+                footer={stepsFooter}
+                todayIso={todayIso}
+                highlightToday
+                mondaysOnly={!isWeek && !weeks}
+                weeks={weeks}
+                label={labelled ? stepsLabel : undefined}
+                titleUnit="steps"
+                selected={movePick}
+                onSelect={setMovePick}
+              />
+            </>
+          ) : (
+            <>
+              <p className="text-base font-semibold tracking-tight">
+                Active on {movedDays} of {dates.length} days
+              </p>
+              <p className="text-xs text-muted">Sync a device to see steps here.</p>
+            </>
+          )}
+        </div>
       </div>
 
       <div className="t-card mb-3">

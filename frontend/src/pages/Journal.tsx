@@ -17,22 +17,17 @@ import { BreakdownCard } from '../components/BreakdownCard'
 import { ConfirmSheet } from '../components/ConfirmSheet'
 import { ExerciseSheet } from '../components/ExerciseSheet'
 import { FoodPicker } from '../components/FoodPicker'
+import { DishThumb, Thumb } from '../components/FoodRows'
 import { LogSheet } from '../components/LogSheet'
 import { MacroBar } from '../components/MacroBar'
 import { MeasurementsSheet } from '../components/MeasurementsSheet'
 import { HEADLINE, nutrientText } from '../components/NutritionLabel'
-
-// The Dashboard rings' colours, so a macro looks the same on both screens.
-const MACRO_COLOR: Record<string, string> = {
-  protein_g: 'var(--violet)',
-  carbs_g: 'var(--gold)',
-  fat_g: 'var(--coral)',
-}
 import { PortionSheet } from '../components/PortionSheet'
 import { VitaminsSheet } from '../components/VitaminsSheet'
 import { WorkoutDetails } from '../components/WorkoutDetails'
 import { useTopBar } from '../hooks/useTopBar'
 import { SLOTS, SLOT_LABEL, dayLabel, shiftDay, slotByTime, today, type Slot } from '../lib/day'
+import { MACRO_BARS, MACRO_COLOR } from '../lib/macros'
 import { calText } from '../lib/targets'
 import { portionText, round1, servingsText, weightText } from '../lib/units'
 
@@ -362,8 +357,8 @@ export function Journal({
               Includes exercise added: +{day.exercise_kcal} cal
             </span>
           )}
-          <div className="mt-4 flex flex-col gap-3">
-            {HEADLINE.slice(1).map((fact) => (
+          <div className="mt-4 flex flex-col gap-3 border-t border-line pt-4">
+            {MACRO_BARS.map((fact) => (
               <MacroBar
                 key={fact.key}
                 label={fact.label}
@@ -393,10 +388,10 @@ export function Journal({
         <>
           {SLOTS.map((slot) => (
             <div key={slot} className="t-card mb-3">
-              <div className="mb-1 flex items-center justify-between">
-                <p className="t-micro">{SLOT_LABEL[slot]}</p>
+              <div className="mb-1 flex items-center justify-between gap-2">
+                <p className="t-card-title">{SLOT_LABEL[slot]}</p>
                 {day.slots[slot].subtotal_calories !== null && (
-                  <span className="t-nums text-xs text-muted">
+                  <span className="t-nums text-sm">
                     {nutrientText('calories', day.slots[slot].subtotal_calories)} cal
                   </span>
                 )}
@@ -404,16 +399,30 @@ export function Journal({
               {day.slots[slot].entries.map((entry) => {
                 const line = (
                   <>
-                    <span className="min-w-0 flex-1">
-                      <span className="flex items-center gap-1.5">
-                        <span className="truncate text-sm">{entry.name}</span>
-                        {/* Written by a standing auto-log rather than logged
-                            by hand. It is edited and deleted like any row. */}
-                        {entry.auto_log_id !== null && <span className="t-chip shrink-0">Auto</span>}
-                      </span>
-                      {under(entry) && (
-                        <span className="block truncate text-xs text-muted">{under(entry)}</span>
+                    <span className="flex min-w-0 flex-1 items-center gap-3">
+                      {/* The same picture the Food tab draws beside the same
+                          thing, so a row reads alike wherever it is met. */}
+                      {wholeThing(entry) ? (
+                        <DishThumb
+                          kind={entry.recipe_id !== null ? 'recipe' : 'meal'}
+                          url={entry.thumb_url ?? null}
+                        />
+                      ) : (
+                        <Thumb url={entry.thumb_url ?? null} />
                       )}
+                      <span className="min-w-0 flex-1">
+                        <span className="flex items-center gap-1.5">
+                          <span className="truncate text-sm">{entry.name}</span>
+                          {/* Written by a standing auto-log rather than logged
+                              by hand. It is edited and deleted like any row. */}
+                          {entry.auto_log_id !== null && (
+                            <span className="t-chip shrink-0">Auto</span>
+                          )}
+                        </span>
+                        {under(entry) && (
+                          <span className="block truncate text-xs text-muted">{under(entry)}</span>
+                        )}
+                      </span>
                     </span>
                     <span className="t-nums shrink-0 text-sm">
                       {nutrientText('calories', entry.calories)}
@@ -452,7 +461,7 @@ export function Journal({
       {day !== null && (
         <div className="t-card mb-3">
           <div className="mb-1 flex items-center justify-between">
-            <p className="t-micro">Activity</p>
+            <p className="t-card-title">Activity</p>
             {day.exercise_kcal > 0 && (
               <span className="t-nums text-xs text-muted">+{day.exercise_kcal} cal</span>
             )}
@@ -519,7 +528,7 @@ export function Journal({
 
       {day !== null && (
         <div className="t-card mb-3">
-          <p className="t-micro mb-1">Biometrics</p>
+          <p className="t-card-title mb-1">Biometrics</p>
           {weighed === null ? (
             <p className="text-sm text-muted">Nothing measured yet.</p>
           ) : (

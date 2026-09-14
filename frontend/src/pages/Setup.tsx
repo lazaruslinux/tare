@@ -362,7 +362,7 @@ export function Setup({
 
         <div className="mb-2 flex min-h-6 items-center justify-between">
           {step > 1 ? (
-            <button type="button" className="text-sm text-muted" onClick={() => go(step - 1)}>
+            <button type="button" className="t-textlink" onClick={() => go(step - 1)}>
               Back
             </button>
           ) : (
@@ -414,7 +414,7 @@ export function Setup({
           {step === last ? 'Done' : 'Continue'}
         </button>
         <button
-          className="mt-3 w-full text-sm text-muted"
+          className="t-textlink mt-1 w-full justify-center"
           type="button"
           disabled={busy}
           onClick={() => go(step + 1)}

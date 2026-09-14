@@ -169,10 +169,21 @@
     color: var(--label);
   }
 
+  /* The name of the card itself, in the words a person would use. One rule:
+     a card's own name is .t-card-title, and .t-micro is for a caption or the
+     label over a figure ("Remaining today", "Today's numbers"). */
+  .t-card-title {
+    font-size: 15px;
+    font-weight: 600;
+    line-height: 1.25;
+    color: var(--text);
+  }
+
   /* The name of a group of rows, said in the words a person would use. Louder
      than .t-micro and in sentence case: these are headings on a page somebody
-     reads, not labels on a form. The icon leads and anything the group offers
-     sits at the far end of the row it is in. */
+     reads, not labels on a form. Retired as a card head, which now wears
+     .t-card-title; what is left is the line a whole card-sized button reads
+     as, with its icon leading and its chevron at the far end. */
   .t-section {
     display: flex;
     align-items: center;
@@ -545,6 +556,12 @@
     min-width: 0;
   }
 
+  /* A screen that is read rather than scanned. Held to a line length the eye
+     can follow, however wide the window behind it is. */
+  .t-prose {
+    max-width: 38rem;
+  }
+
   /* The header the whole app is read under. What it holds is the screen's own
      call: a large title, the wordmark, or the day chooser, with the way back
      out of a sub-view in the same left slot. It grows to fit rather than
@@ -775,6 +792,14 @@
       /* The feed scrolls in its own card. This is the fallback for a window
          too short to hold both blocks. */
       overflow-y: auto;
+    }
+  }
+
+  /* A window wider than the two columns were drawn for. The group takes more
+     of it rather than leaving the extra as gutter on both sides. */
+  @media (min-width: 1600px) {
+    .t-withrail {
+      max-width: 84rem;
     }
   }
 

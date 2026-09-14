@@ -364,6 +364,35 @@ def test_a_member_shows_nothing_until_they_say_so(client, db_session, make_user)
     assert "birthdate" not in body and "email" not in body and "username" not in body
 
 
+def test_a_member_page_carries_only_the_rows_the_feed_would_show(
+    client, db_session, make_user
+):
+    """The page lists what this member shared, read through the feed itself. A
+    stranger is handed what the feed would hand them, which is nothing."""
+    runner = make_user("runner")
+    runner.share_journal = True
+    other = make_user("walker")
+    db_session.commit()
+    put_workout(db_session, runner, 30)
+    put_journal(db_session, runner, minutes_ago=5)
+    put_workout(db_session, other, 10)
+    reader = make_user("member")
+
+    sign_in(client, "member")
+    body = client.get(f"/api/feed/members/{runner.id}").json()
+
+    assert client.get("/api/feed").json()["items"] == []
+    assert body["recent"] == []
+
+    befriend(db_session, runner, reader)
+    body = client.get(f"/api/feed/members/{runner.id}").json()
+
+    # Newest first, and only this member's: the walker's session is in the
+    # feed beside them and not on their page.
+    assert [row["kind"] for row in body["recent"]] == ["journal", "workout"]
+    assert {row["user_id"] for row in body["recent"]} == {runner.id}
+
+
 def test_each_switch_shows_its_own_fact(client, db_session, make_user):
     runner = make_user("runner")
     runner.location = "Mesa, AZ"

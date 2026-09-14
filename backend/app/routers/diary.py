@@ -254,7 +254,62 @@ def stored_unit(
     return f"{SERVING_PREFIX}{serving.id}"
 
 
-def entry_row(entry: models.DiaryEntry) -> dict[str, object]:
+def entry_thumbs(
+    db: Session, user: models.User, entries: Sequence[models.DiaryEntry]
+) -> dict[int, str | None]:
+    """The small picture each of these entries draws, by entry id.
+
+    The food's own, or the finished dish's for a recipe or a kept meal, read
+    the way every list reads them. A few queries for the whole day rather than
+    one for every row on it.
+    """
+    from app.routers.foods import dish_pictures, dish_thumb, pictures_for
+
+    foods = list(
+        db.execute(
+            select(models.Food).where(
+                models.Food.id.in_({entry.food_id for entry in entries if entry.food_id})
+            )
+        ).scalars()
+    )
+    recipes = {
+        recipe.id: recipe
+        for recipe in db.execute(
+            select(models.Recipe).where(
+                models.Recipe.id.in_({entry.recipe_id for entry in entries if entry.recipe_id})
+            )
+        ).scalars()
+    }
+    meals = {
+        meal.id: meal
+        for meal in db.execute(
+            select(models.MealTemplate).where(
+                models.MealTemplate.id.in_({entry.meal_id for entry in entries if entry.meal_id})
+            )
+        ).scalars()
+    }
+    shots = pictures_for(db, user, foods)
+    dishes = dish_pictures(
+        db,
+        [recipe.photo_id for recipe in recipes.values()]
+        + [meal.photo_id for meal in meals.values()],
+    )
+
+    thumbs: dict[int, str | None] = {}
+    for entry in entries:
+        if entry.recipe_id is not None:
+            recipe = recipes.get(entry.recipe_id)
+            thumbs[entry.id] = None if recipe is None else dish_thumb(dishes, recipe.photo_id)
+        elif entry.meal_id is not None:
+            meal = meals.get(entry.meal_id)
+            thumbs[entry.id] = None if meal is None else dish_thumb(dishes, meal.photo_id)
+        else:
+            shot = None if entry.food_id is None else shots.get(entry.food_id)
+            thumbs[entry.id] = None if shot is None else (shot.thumb or shot.url)
+    return thumbs
+
+
+def entry_row(entry: models.DiaryEntry, thumb: str | None = None) -> dict[str, object]:
     """One entry as a day reads it: what it was, how much, what it came to."""
     return {
         "id": entry.id,
@@ -273,6 +328,9 @@ def entry_row(entry: models.DiaryEntry) -> dict[str, object]:
         # Which standing auto-log wrote this row, and null on one somebody
         # logged themselves.
         "auto_log_id": entry.auto_log_id,
+        # The small picture beside the name, of the food or of the finished
+        # dish. Null on a row whose thing has no photograph.
+        "thumb_url": thumb,
         "calories": entry.calories,
         "protein_g": entry.protein_g,
         "carbs_g": entry.carbs_g,
@@ -1070,6 +1128,7 @@ def read_day(
         )
     )
     eaten = total(entries, "calories") or 0.0
+    thumbs = entry_thumbs(db, user, entries)
     db.commit()
 
     done = completion(db, user, day)
@@ -1085,7 +1144,7 @@ def read_day(
         "micros": day_micros(db, user, entries),
         "slots": {
             slot: {
-                "entries": [entry_row(entry) for entry in in_slot],
+                "entries": [entry_row(entry, thumbs.get(entry.id)) for entry in in_slot],
                 "subtotal_calories": total(in_slot, "calories"),
             }
             for slot, in_slot in by_slot.items()
@@ -1317,7 +1376,7 @@ def add_entry(
 
     db.add(entry)
     db.commit()
-    return entry_row(entry)
+    return entry_row(entry, entry_thumbs(db, user, [entry]).get(entry.id))
 
 
 @router.patch("/{entry_id}")
@@ -1418,7 +1477,7 @@ def update_entry(
         follow_auto_log(db, user, entry, sent, auto_unit)
 
     db.commit()
-    return entry_row(entry)
+    return entry_row(entry, entry_thumbs(db, user, [entry]).get(entry.id))
 
 
 @router.delete("/{entry_id}", status_code=status.HTTP_204_NO_CONTENT)

@@ -6,8 +6,10 @@ poured, with a density of its own.
 """
 
 import datetime as dt
+import io
 
 import pytest
+from PIL import Image
 
 from app import clock
 from app.routers.diary import (
@@ -277,6 +279,29 @@ def test_a_quick_add_has_no_portion_to_stretch(client, signed_in):
     refused = client.patch(f"/api/diary/{made['id']}", json={"amount": 2})
     assert refused.status_code == 400
     assert refused.json() == {"detail": NO_PORTION}
+
+
+def test_a_day_carries_the_picture_beside_every_row(client, chicken, oil):
+    """The Journal draws the same thumbnail the Food tab does, so the day has
+    to hand one over: the food's own where it has been photographed, and null
+    where nobody has."""
+    out = io.BytesIO()
+    Image.new("RGB", (240, 180), (120, 160, 130)).save(out, format="JPEG")
+    photo_id = client.post(
+        "/api/photos",
+        files={"file": ("label.jpg", out.getvalue(), "image/jpeg")},
+        data={"purpose": "front"},
+    ).json()["photo_id"]
+    attached = client.post(f"/api/foods/{chicken['id']}/photo", json={"photo_id": photo_id})
+    assert attached.status_code == 204
+
+    logged = log(client, food_id=chicken["id"], amount=100, unit="g").json()
+    log(client, slot="dinner", food_id=oil["id"], amount=1, unit="tbsp")
+
+    got = day(client)
+    assert logged["thumb_url"] == f"/api/photos/{photo_id}.thumb.webp"
+    assert got["slots"]["breakfast"]["entries"][0]["thumb_url"] == logged["thumb_url"]
+    assert got["slots"]["dinner"]["entries"][0]["thumb_url"] is None
 
 
 def test_the_day_is_split_by_meal(client, chicken, oil):

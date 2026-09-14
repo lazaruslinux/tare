@@ -20,6 +20,7 @@ import { GoalSheet } from '../components/GoalSheet'
 import { HourBars } from '../components/HourBars'
 import { WorkoutDetails } from '../components/WorkoutDetails'
 import { useTopBar } from '../hooks/useTopBar'
+import { useRailLayout } from '../hooks/useWideLayout'
 import { dateText as stampDate, stampText, useClock } from '../lib/clock'
 import { dayLabel, today } from '../lib/day'
 import { distanceIn, distanceUnit, durationText, round1 } from '../lib/units'
@@ -235,7 +236,7 @@ function CardHead({
 }) {
   return (
     <div className="flex items-center gap-2">
-      <p className="t-micro min-w-0 flex-1 truncate">{title}</p>
+      <p className="t-card-title min-w-0 flex-1 truncate">{title}</p>
       {onOpen !== undefined && (
         <button type="button" className="t-tap44 shrink-0" aria-label={aria} onClick={onOpen}>
           <ChevronRight className="h-4 w-4 text-muted" strokeWidth={2} />
@@ -553,6 +554,9 @@ export function Fitness({
   // once they have been changed, so the tiles follow.
   const [goalOpen, setGoalOpen] = useState(false)
   const [again, setAgain] = useState(0)
+  // The tiles are arranged in React rather than in CSS: a phone and the rail
+  // width put the same four cards in a different order, not a different shape.
+  const rail = useRailLayout()
   // The sync line is a stamp, so it redraws when the clock changes.
   useClock()
 
@@ -623,6 +627,22 @@ export function Fitness({
       onOpen={() => setScreen({ kind: 'metric', metric: tile.metric })}
     />
   )
+  // Built once and placed by the layout below, so neither arrangement holds a
+  // second copy of what these two cards are handed.
+  const stepsCard = card(
+    steps,
+    connected || uploadsOnly ? undefined : 'Sync a device to see steps here.'
+  )
+  const sessionsCard = (
+    <SessionsCard
+      units={me.units}
+      workouts={summary?.workouts ?? []}
+      when={when}
+      empty={noSessions}
+      onOpen={(id) => setScreen({ kind: 'workout', id })}
+      onOpenAll={() => setScreen({ kind: 'workouts' })}
+    />
+  )
 
   return (
     <>
@@ -644,22 +664,30 @@ export function Fitness({
         </p>
       )}
 
-      <div className="mb-3 grid grid-cols-2 gap-3">
-        {card(steps, connected || uploadsOnly ? undefined : 'Sync a device to see steps here.')}
-        {card(distance)}
-      </div>
-
-      <div className="mb-3 grid grid-cols-2 gap-3">
-        <SessionsCard
-          units={me.units}
-          workouts={summary?.workouts ?? []}
-          when={when}
-          empty={noSessions}
-          onOpen={(id) => setScreen({ kind: 'workout', id })}
-          onOpenAll={() => setScreen({ kind: 'workouts' })}
-        />
-        {card(calories)}
-      </div>
+      {/* Three readings and the day's sessions. A phone reads them two to a
+          row; from the rail width the three line up and the sessions, which
+          are the longest card, take the width to themselves. */}
+      {rail ? (
+        <>
+          <div className="mb-3 grid grid-cols-3 gap-3">
+            {stepsCard}
+            {card(distance)}
+            {card(calories)}
+          </div>
+          <div className="mb-3">{sessionsCard}</div>
+        </>
+      ) : (
+        <>
+          <div className="mb-3 grid grid-cols-2 gap-3">
+            {stepsCard}
+            {card(distance)}
+          </div>
+          <div className="mb-3 grid grid-cols-2 gap-3">
+            {sessionsCard}
+            {card(calories)}
+          </div>
+        </>
+      )}
 
       {summary !== null && (
         <div className="t-card mb-3">

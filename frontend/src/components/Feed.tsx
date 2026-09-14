@@ -75,8 +75,12 @@ function PrivateSheet({ open, onClose }: { open: boolean; onClose: () => void })
 // unbreakable piece, so a wrap only ever falls between items.
 
 // The member's name, which is the one thing on a row that opens something.
-// Weight and the accent colour make it the anchor every row starts from.
-function Name({ row, onOpenMember }: { row: FeedRow; onOpenMember: () => void }) {
+// Weight and the accent colour make it the anchor every row starts from. On
+// their own page there is nowhere for it to go, so it is only their name.
+function Name({ row, onOpenMember }: { row: FeedRow; onOpenMember?: () => void }) {
+  if (onOpenMember === undefined) {
+    return <span className="font-medium">{row.display_name}</span>
+  }
   return (
     <span
       role="button"
@@ -109,7 +113,7 @@ function JournalRow({
   me: Me
   row: FeedJournal
   todayIso: string
-  onOpenMember: () => void
+  onOpenMember?: () => void
   onPrivate: () => void
 }) {
   return (
@@ -141,7 +145,7 @@ function JoinedRow({
   me: Me
   row: FeedJoined
   todayIso: string
-  onOpenMember: () => void
+  onOpenMember?: () => void
 }) {
   return (
     <div className="t-row">
@@ -174,7 +178,7 @@ function WeightRow({
   me: Me
   row: FeedWeight
   todayIso: string
-  onOpenMember: () => void
+  onOpenMember?: () => void
   onPrivate: () => void
 }) {
   return (
@@ -207,8 +211,10 @@ function Row({
   me: Me
   row: FeedWorkout
   todayIso: string
-  onOpen: () => void
-  onOpenMember: () => void
+  // Absent on a screen with nowhere to send somebody, where the row is read
+  // rather than opened.
+  onOpen?: () => void
+  onOpenMember?: () => void
   onPrivate: () => void
 }) {
   // The line is the same either way; only whether the row is a way in changes.
@@ -239,7 +245,7 @@ function Row({
   )
   // A member who keeps their workout details to themselves shares the row and
   // nothing under it, so there is no chevron and nothing to tap.
-  if (!row.open) return <div className="t-row">{said}</div>
+  if (!row.open || onOpen === undefined) return <div className="t-row">{said}</div>
   return (
     <button type="button" className="t-row w-full text-left" onClick={onOpen}>
       {said}
@@ -268,13 +274,6 @@ export function Feed({
   const [rows, setRows] = useState<FeedRow[] | null>(null)
   const [cursor, setCursor] = useState<string | null>(null)
   const [busy, setBusy] = useState(false)
-  // What the lock on one of your own rows says. One sheet for the whole list:
-  // it says the same thing whichever lock opened it.
-  const [askedPrivate, setAskedPrivate] = useState(false)
-  const todayIso = today(me.timezone)
-  // Every row carries a time, so the whole list redraws when the preference
-  // behind them moves.
-  useClock()
 
   useEffect(() => {
     let alive = true
@@ -316,14 +315,57 @@ export function Feed({
   const shown = limit === undefined ? rows : rows.slice(0, limit)
   return (
     <>
-      {shown.map((row) =>
+      <FeedRows
+        me={me}
+        rows={shown}
+        onOpenWorkout={onOpenWorkout}
+        onOpenMember={onOpenMember}
+      />
+      {limit === undefined && cursor !== null && (
+        <button type="button" className="t-btn mt-3 w-full" disabled={busy} onClick={more}>
+          Show more
+        </button>
+      )}
+    </>
+  )
+}
+
+// The rows themselves, apart from the list that reads them: the member page
+// shows the same four kinds, drawn the same way, without the paging or the
+// empty line around them.
+export function FeedRows({
+  me,
+  rows,
+  onOpenWorkout,
+  onOpenMember,
+}: {
+  me: Me
+  rows: FeedRow[]
+  // Absent where there is nowhere to open a workout, in which case a workout
+  // row is read rather than tapped.
+  onOpenWorkout?: (id: number) => void
+  // Absent on the page of the member every row is about, where their name is
+  // not a way anywhere.
+  onOpenMember?: (userId: number) => void
+}) {
+  // One sheet for the whole list: it says the same thing whichever lock
+  // opened it.
+  const [askedPrivate, setAskedPrivate] = useState(false)
+  const todayIso = today(me.timezone)
+  useClock()
+
+  return (
+    <>
+      {rows.map((row) =>
         row.kind === 'journal' ? (
           <JournalRow
             key={`j${row.id}`}
             me={me}
             row={row}
             todayIso={todayIso}
-            onOpenMember={() => onOpenMember(row.user_id)}
+            onOpenMember={
+              onOpenMember === undefined ? undefined : () => onOpenMember(row.user_id)
+            }
             onPrivate={() => setAskedPrivate(true)}
           />
         ) : row.kind === 'weight' ? (
@@ -332,7 +374,9 @@ export function Feed({
             me={me}
             row={row}
             todayIso={todayIso}
-            onOpenMember={() => onOpenMember(row.user_id)}
+            onOpenMember={
+              onOpenMember === undefined ? undefined : () => onOpenMember(row.user_id)
+            }
             onPrivate={() => setAskedPrivate(true)}
           />
         ) : row.kind === 'joined' ? (
@@ -341,7 +385,9 @@ export function Feed({
             me={me}
             row={row}
             todayIso={todayIso}
-            onOpenMember={() => onOpenMember(row.user_id)}
+            onOpenMember={
+              onOpenMember === undefined ? undefined : () => onOpenMember(row.user_id)
+            }
           />
         ) : (
           <Row
@@ -349,16 +395,13 @@ export function Feed({
             me={me}
             row={row}
             todayIso={todayIso}
-            onOpen={() => onOpenWorkout(row.id)}
-            onOpenMember={() => onOpenMember(row.user_id)}
+            onOpen={onOpenWorkout === undefined ? undefined : () => onOpenWorkout(row.id)}
+            onOpenMember={
+              onOpenMember === undefined ? undefined : () => onOpenMember(row.user_id)
+            }
             onPrivate={() => setAskedPrivate(true)}
           />
         )
-      )}
-      {limit === undefined && cursor !== null && (
-        <button type="button" className="t-btn mt-3 w-full" disabled={busy} onClick={more}>
-          Show more
-        </button>
       )}
       <PrivateSheet open={askedPrivate} onClose={() => setAskedPrivate(false)} />
     </>

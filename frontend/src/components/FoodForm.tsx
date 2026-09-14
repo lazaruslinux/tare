@@ -907,9 +907,10 @@ export function FoodForm({
             <label className="t-label" htmlFor="food-note">
               Comment (optional)
             </label>
-            <input
+            <textarea
               id="food-note"
-              className="t-input"
+              className="t-input min-h-[4.5rem] resize-none"
+              rows={2}
               maxLength={500}
               value={note}
               onChange={(event) => setNote(event.target.value)}

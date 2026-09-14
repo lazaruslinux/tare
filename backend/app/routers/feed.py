@@ -124,19 +124,18 @@ def pronoun_for(member: models.User, profile: models.HealthProfile | None) -> st
     return {"male": "his", "female": "her"}.get(profile.sex or "", "their")
 
 
-@router.get("")
-def read_feed(
+def feed_page(
+    db: Session,
+    user: models.User,
     cursor: str = "",
-    db: Session = Depends(get_db),
-    user: models.User = Depends(require_user),
-) -> dict[str, object]:
-    """Friends' shared workouts, finished days and weigh-ins plus everybody's
-    arrivals, newest first, thirty a page.
+    limit: int = PAGE,
+    only: int | None = None,
+) -> tuple[list[dict[str, object]], str | None, int]:
+    """One page of the feed as this account may read it, and where it stopped.
 
-    Four tables are read with the same "after this marker" filter and merged
-    here, and the marker written back names the last row's time, kind and id
-    so the next page starts exactly after it. A row this account hid stays in
-    its own feed and says so, because that is the only way back to it.
+    The one place the four tables are read, the switches are asked and a row is
+    written, so the member page cannot show anything the feed would not. `only`
+    narrows it to one member's rows without loosening any of that.
     """
     at: dt.datetime | None = None
     kind = ""
@@ -166,7 +165,7 @@ def read_feed(
             ),
         )
         .order_by(models.Workout.started_at.desc(), models.Workout.id.desc())
-        .limit(PAGE + 1)
+        .limit(limit + 1)
     )
     # Arriving is not a fact about a body and there is no switch over it: the
     # row says a member is here, which everybody can already see. An account
@@ -179,7 +178,7 @@ def read_feed(
         select(models.User.id.label("user_id"), models.User.created_at)
         .where(models.User.first_run_at.is_not(None))
         .order_by(models.User.created_at.desc(), models.User.id.desc())
-        .limit(PAGE + 1)
+        .limit(limit + 1)
     )
     journals = (
         select(models.JournalDay)
@@ -196,7 +195,7 @@ def read_feed(
             models.JournalDay.user_id.desc(),
             models.JournalDay.date.desc(),
         )
-        .limit(PAGE + 1)
+        .limit(limit + 1)
     )
 
     # A weigh-in is only a row when it came in under the one before it, which
@@ -233,7 +232,7 @@ def read_feed(
             ),
         )
         .order_by(readings.c.created_at.desc(), readings.c.id.desc())
-        .limit(PAGE + 1)
+        .limit(limit + 1)
     )
 
     if at is not None:
@@ -274,6 +273,14 @@ def read_feed(
             )
         )
 
+    if only is not None:
+        # One member's own rows, out of the same four queries: what is asked
+        # about who may see what has already been asked above.
+        workouts = workouts.where(models.Workout.user_id == only)
+        weights = weights.where(readings.c.user_id == only)
+        journals = journals.where(models.JournalDay.user_id == only)
+        joined = joined.where(models.User.id == only)
+
     sessions = list(db.execute(workouts).scalars())
     finished = list(db.execute(journals).scalars())
     weighed = list(db.execute(weights))
@@ -306,8 +313,8 @@ def read_feed(
         ),
     ]
     ordered.sort(key=lambda each: each[0], reverse=True)
-    more = len(ordered) > PAGE
-    page = ordered[:PAGE]
+    more = len(ordered) > limit
+    page = ordered[:limit]
 
     # Two queries for the whole page rather than two per row: who each one
     # belongs to, and the gender a row about a person is spoken about in.
@@ -414,15 +421,34 @@ def read_feed(
         items.append(item)
 
     last = page[-1] if page else None
-    return {
-        "items": items,
-        "friends": len(friends),
-        "next_cursor": (
+    return (
+        items,
+        (
             write_cursor(last[0][0], last[1], last[0][3] or str(last[0][2]))
             if more and last is not None
             else None
         ),
-    }
+        len(friends),
+    )
+
+
+@router.get("")
+def read_feed(
+    cursor: str = "",
+    db: Session = Depends(get_db),
+    user: models.User = Depends(require_user),
+) -> dict[str, object]:
+    """Friends' shared workouts, finished days and weigh-ins plus everybody's
+    arrivals, newest first, thirty a page.
+
+    Four tables are read with the same "after this marker" filter and merged
+    in the builder above, and the marker written back names the last row's
+    time, kind and id so the next page starts exactly after it. A row this
+    account hid stays in its own feed and says so, because that is the only
+    way back to it.
+    """
+    items, next_cursor, friends = feed_page(db, user, cursor)
+    return {"items": items, "friends": friends, "next_cursor": next_cursor}
 
 
 @router.get("/today")
@@ -544,6 +570,10 @@ def read_members(
     }
 
 
+# How many of a member's own rows their page carries.
+MEMBER_RECENT = 10
+
+
 @router.get("/members/{user_id}")
 def read_member(
     user_id: int,
@@ -571,6 +601,10 @@ def read_member(
         # a count of work done for the group rather than a fact about them, so
         # there is nothing here to keep private.
         "contributions": contribution_counts(db, [member.id])[member.id],
+        # The last few rows of theirs, read through the feed itself: a reader
+        # who is not their friend is handed exactly what the feed would hand
+        # them, which on most accounts is nothing at all.
+        "recent": feed_page(db, user, limit=MEMBER_RECENT, only=member.id)[0],
     }
     # The three opt-in facts are for friends. A switch turned on is an offer to
     # the people this member added, not to the whole instance.

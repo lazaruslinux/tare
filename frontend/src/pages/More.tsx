@@ -411,13 +411,29 @@ export function More({
     )
   }
 
-  if (screen === 'guide') return <Guide onTour={onTour} />
+  // The four screens that are read rather than scanned, each held to a
+  // comfortable line length however wide the window is.
+  if (screen === 'guide') {
+    return (
+      <div className="t-prose">
+        <Guide onTour={onTour} />
+      </div>
+    )
+  }
 
-  if (screen === 'about') return <About version={version} onOpenGuide={() => go('guide')} />
+  if (screen === 'about') {
+    return (
+      <div className="t-prose">
+        <About version={version} onOpenGuide={() => go('guide')} />
+      </div>
+    )
+  }
 
   if (screen === 'feedback') {
     return (
-      <Feedback onSent={() => go(null)} />
+      <div className="t-prose">
+        <Feedback onSent={() => go(null)} />
+      </div>
     )
   }
 
@@ -443,6 +459,7 @@ export function More({
       />
     ) : (
       <MemberView
+        me={me}
         userId={member}
         back="Members"
         onBack={() => setMember(null)}
@@ -461,6 +478,7 @@ export function More({
       />
     ) : (
       <MemberView
+        me={me}
         userId={member}
         back="Sharing"
         onBack={() => setMember(null)}
@@ -482,7 +500,13 @@ export function More({
     )
   }
 
-  if (screen === 'sync') return <SyncDevice />
+  if (screen === 'sync') {
+    return (
+      <div className="t-prose">
+        <SyncDevice />
+      </div>
+    )
+  }
 
   if (screen === 'feedbacklog') return <FeedbackLog />
 

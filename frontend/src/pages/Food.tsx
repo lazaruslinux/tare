@@ -337,6 +337,7 @@ export function FoodTab({
     if (member !== null) {
       return (
         <MemberView
+          me={me}
           userId={member.id}
           back={member.back}
           onBack={() => setMember(null)}
@@ -524,7 +525,7 @@ export function FoodTab({
       <div className="t-card mb-3">
         {/* No plus here: the bar above this tab carries New food, and it opens
             the same form. */}
-        <p className="t-section mb-1">
+        <p className="t-card-title mb-1 flex items-center gap-2">
           <Library className="h-4 w-4" strokeWidth={2} />
           Recently used
         </p>
@@ -566,7 +567,7 @@ export function FoodTab({
       </div>
 
       <div className="t-card mb-3">
-        <p className="t-section mb-1">
+        <p className="t-card-title mb-1 flex items-center gap-2">
           <Star className="h-4 w-4" strokeWidth={2} />
           Favorites
         </p>
@@ -594,7 +595,7 @@ export function FoodTab({
 
       <div className="t-card mb-3">
         <div className="mb-1 flex items-center justify-between">
-          <p className="t-section">
+          <p className="t-card-title flex items-center gap-2">
             <Sandwich className="h-4 w-4" strokeWidth={2} />
             Meals
           </p>
@@ -642,7 +643,7 @@ export function FoodTab({
 
       <div className="t-card mb-3">
         <div className="mb-1 flex items-center justify-between">
-          <p className="t-section">
+          <p className="t-card-title flex items-center gap-2">
             <CookingPot className="h-4 w-4" strokeWidth={2} />
             Recipes
           </p>
@@ -689,7 +690,7 @@ export function FoodTab({
       </div>
 
       <div className="t-card mb-3">
-        <p className="t-section mb-1">
+        <p className="t-card-title mb-1 flex items-center gap-2">
           <CalendarSync className="h-4 w-4" strokeWidth={2} />
           Auto-log
         </p>
@@ -718,7 +719,9 @@ export function FoodTab({
                       {row.kind !== 'food' && <KindMark kind={row.kind} />}
                       {group.length > 1 && <span className="t-chip">x{group.length}</span>}
                     </span>
-                    <span className="block truncate text-xs text-muted">
+                    {/* Several mealtimes on one standing item is a long line;
+                        it wraps to two rather than being cut off at one. */}
+                    <span className="line-clamp-2 text-xs whitespace-normal text-muted">
                       {group.length === 1
                         ? `${autoAmount(row)} · ${SLOT_LABEL[row.slot]}`
                         : group

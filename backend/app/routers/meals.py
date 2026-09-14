@@ -22,6 +22,7 @@ from app.recipes import HEADLINE, settled_weight
 from app.routers.diary import (
     checked_slot,
     entry_row,
+    entry_thumbs,
     measure,
     refuse_if_complete,
     snapshot,
@@ -433,4 +434,5 @@ def log_meal(
     )
     db.add(entry)
     db.commit()
-    return {"entry": entry_row(entry), "skipped": skipped}
+    thumb = entry_thumbs(db, user, [entry]).get(entry.id)
+    return {"entry": entry_row(entry, thumb), "skipped": skipped}

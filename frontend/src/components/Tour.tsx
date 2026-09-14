@@ -272,7 +272,7 @@ export function Tour({
               {last ? 'Done' : 'Next'}
             </button>
             {!last && (
-              <button type="button" className="ml-auto text-sm text-muted" onClick={onSkip}>
+              <button type="button" className="t-textlink ml-auto" onClick={onSkip}>
                 Skip
               </button>
             )}

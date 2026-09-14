@@ -665,6 +665,9 @@ export type DiaryEntry = {
   meal_id: number | null
   // Which standing auto-log wrote this row. Null on one somebody logged.
   auto_log_id: number | null
+  // The small picture of the food or of the finished dish, where there is one.
+  // Absent on the row a write hands back, which the screen redraws from the day.
+  thumb_url?: string | null
   calories: number | null
   protein_g: number | null
   carbs_g: number | null
@@ -1083,6 +1086,9 @@ export type MemberView = {
   age?: number
   sex?: Sex
   location?: string
+  // The last few feed rows of theirs, as this reader may see them. Empty for
+  // anybody the feed would show nothing to.
+  recent: FeedRow[]
 }
 
 // One member in the list of them. The same few things a profile leads with, so
