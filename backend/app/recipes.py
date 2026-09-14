@@ -13,7 +13,7 @@ from sqlalchemy.orm import Session
 
 from app import models, units
 from app.models import NUTRIENTS
-from app.routers.foods import readable_food
+from app.routers.foods import readable_food, readable_foods
 
 # One recipe that is not there and one that is somebody else's read the same.
 MISSING_RECIPE = "There is no such recipe."
@@ -61,9 +61,14 @@ def weight(
     """
     grams = 0.0
     unweighed: list[str] = []
+    # Every part's food in one read: a recipe of twenty ingredients was twenty
+    # of them, and this is called for every recipe on a day.
+    found = readable_foods(
+        db, user, [row.food_id for row in recipe.ingredients if row.food_id is not None]
+    )
     for row in recipe.ingredients:
         each = None
-        food = None if row.food_id is None else readable(db, user, row.food_id)
+        food = None if row.food_id is None else found.get(row.food_id)
         if food is not None:
             each = units.to_grams(food, row.amount, row.unit, row.base_amount)
         if each is None:

@@ -43,6 +43,9 @@ def test_upgrade_head_builds_the_identity_schema(tmp_path):
         tables = set(inspector.get_table_names())
         food_indexes = {index["name"] for index in inspector.get_indexes("foods")}
         photo_indexes = {index["name"] for index in inspector.get_indexes("food_photos")}
+        mark_indexes = {index["name"] for index in inspector.get_indexes("cap_marks")}
+        entry_indexes = {index["name"] for index in inspector.get_indexes("diary_entries")}
+        mark_columns = {column["name"] for column in inspector.get_columns("cap_marks")}
         submission_indexes = {
             index["name"] for index in inspector.get_indexes("food_submissions")
         }
@@ -101,9 +104,9 @@ def test_upgrade_head_builds_the_identity_schema(tmp_path):
     assert "bytes" in log_columns
     assert "source" in daily_columns
     assert "source" in intraday_columns
-    assert "via" in weight_columns
     # A day is the readings on it: a weight that may be absent, the shares a
-    # scale prints beside it, and no visceral rating any more.
+    # scale prints beside it, and no visceral rating any more. Nothing says
+    # what brought one in either: a weigh-in is typed in by hand.
     assert set(weight_columns) == {
         "id",
         "user_id",
@@ -114,12 +117,17 @@ def test_upgrade_head_builds_the_identity_schema(tmp_path):
         "muscle_pct",
         "bone_pct",
         "source",
-        "via",
         "created_at",
     }
     assert weight_columns["weight_kg"]["nullable"] is True
     # And one figure per metric per day, whatever the metric turns out to be.
     assert "uq_fitness_daily_day_metric" in daily_unique
+    # What a daily cap counts, which outlives the row it was written for.
+    assert "cap_marks" in tables
+    assert mark_columns == {"id", "user_id", "kind", "created_at"}
+    assert "ix_cap_marks_user_created" in mark_indexes
+    # And the pair every read of the diary asks on.
+    assert "ix_diary_entries_user_date" in entry_indexes
     assert "location" in user_columns
     # The second role, and the application an administrator answers.
     assert {"is_reviewer", "reviewer_requested_at"} <= user_columns

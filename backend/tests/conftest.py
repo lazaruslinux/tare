@@ -23,7 +23,7 @@ from sqlalchemy.pool import StaticPool  # noqa: E402
 
 from app import models, security, throttle  # noqa: E402
 from app.config import settings  # noqa: E402
-from app.db import Base, get_db  # noqa: E402
+from app.db import Base, get_db, sqlite_transactions  # noqa: E402
 from app.main import create_app  # noqa: E402
 from app.models import now_utc  # noqa: E402
 
@@ -78,6 +78,9 @@ def db_session():
     engine = create_engine(
         "sqlite://", connect_args={"check_same_thread": False}, poolclass=StaticPool
     )
+    # The same transaction handling the deployed database has, so a savepoint
+    # in a route is nested here too rather than committing on its way out.
+    sqlite_transactions(engine)
     Base.metadata.create_all(engine)
     factory = sessionmaker(bind=engine, autoflush=False, expire_on_commit=False)
     session = factory()

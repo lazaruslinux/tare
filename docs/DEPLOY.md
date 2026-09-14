@@ -303,7 +303,8 @@ docker compose up -d --build
 Migrations run as the api starts. The front end is a service worker: a member
 with the app open keeps the build they have until they close it, and the new
 one is downloaded in the background and applied the next time they open it.
-Nothing asks them to reload.
+A slim bar at the top of the app says a new version is ready, and Reload takes
+it at once.
 
 ## Back up
 

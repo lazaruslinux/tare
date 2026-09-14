@@ -761,15 +761,12 @@ def test_a_food_kept_privately_names_nobody(client, signed_in):
 def fill_day(db, user, count):
     """A day's worth of requests already sent, without sending them.
 
-    The cap counts rows, so rows are what a case about the cap needs; offering
-    twenty-five foods through the front door would be a test about photographs.
+    The cap counts a mark per offer, so marks are what a case about the cap
+    needs; offering twenty-five foods through the front door would be a test
+    about photographs.
     """
     for _ in range(count):
-        db.add(
-            models.FoodSubmission(
-                kind="report", status="pending", submitted_by_id=user.id, created_at=now_utc()
-            )
-        )
+        db.add(models.CapMark(user_id=user.id, kind="submission", created_at=now_utc()))
     db.commit()
 
 
@@ -777,6 +774,20 @@ def test_a_member_may_only_offer_so_much_in_one_day(client, db_session, signed_i
     assert caps.DAILY_SUBMISSIONS == 25
     fill_day(db_session, signed_in, caps.DAILY_SUBMISSIONS - 1)
     assert offer(client).status_code == 201
+
+    refused = offer(client, barcode="034000002412")
+    assert refused.status_code == 429
+    assert refused.json()["detail"] == caps.TOO_MANY_SUBMISSIONS
+
+
+def test_taking_a_submission_back_does_not_hand_the_day_back(client, db_session, signed_in):
+    """The cap counts what was offered rather than what survived, so a day of
+    offering and withdrawing is not a way past it."""
+    fill_day(db_session, signed_in, caps.DAILY_SUBMISSIONS - 1)
+    sent = offer(client)
+    assert sent.status_code == 201
+    assert client.delete(f"/api/submissions/{sent.json()['submission_id']}").status_code == 204
+    assert db_session.query(models.FoodSubmission).count() == 0
 
     refused = offer(client, barcode="034000002412")
     assert refused.status_code == 429

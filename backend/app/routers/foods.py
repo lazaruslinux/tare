@@ -11,7 +11,7 @@ from __future__ import annotations
 import base64
 import binascii
 import re
-from collections.abc import Sequence
+from collections.abc import Iterable, Sequence
 from typing import NamedTuple
 
 from fastapi import APIRouter, Depends, HTTPException, status
@@ -691,6 +691,29 @@ def readable_food(db: Session, user: models.User, food_id: int) -> models.Food:
     if food.status == "approved" or food.owner_id == user.id or reviews(user):
         return food
     raise HTTPException(status.HTTP_404_NOT_FOUND, MISSING_FOOD)
+
+
+def readable_foods(
+    db: Session, user: models.User, ids: Iterable[int]
+) -> dict[int, models.Food]:
+    """Every food out of a set this account may read, in one query.
+
+    The same rule as readable_food above, applied to a batch: a day of twenty
+    rows, or a recipe of twenty parts, is one read rather than twenty. A food
+    that is missing or out of reach is simply absent from the answer, which is
+    what each caller already does with it.
+    """
+    wanted = set(ids)
+    if not wanted:
+        return {}
+    rows = db.execute(select(models.Food).where(models.Food.id.in_(wanted))).scalars()
+    may_review = reviews(user)
+    return {
+        food.id: food
+        for food in rows
+        if food.status != "cache"
+        and (food.status == "approved" or food.owner_id == user.id or may_review)
+    }
 
 
 def changeable_food(

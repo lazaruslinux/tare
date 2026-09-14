@@ -341,6 +341,7 @@ def upload_photo(
         uploaded_by_id=user.id, path=name, status="pending", purpose=purpose
     )
     db.add(row)
+    caps.mark(db, user, "photo")
     db.commit()
     return {"photo_id": row.id}
 

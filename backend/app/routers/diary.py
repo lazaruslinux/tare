@@ -30,7 +30,7 @@ from app.routers.fitness import (
     steps_on,
     workouts_on,
 )
-from app.routers.foods import MAX_NAME, readable_food
+from app.routers.foods import MAX_NAME, readable_food, readable_foods
 from app.routers.health import (
     Reckoning,
     day_budget,
@@ -902,20 +902,36 @@ def add_into(running: dict[str, float], found: dict[str, float]) -> None:
         running[key] = running.get(key, 0.0) + value
 
 
+def one_food(
+    db: Session,
+    user: models.User,
+    food_id: int,
+    found: dict[int, models.Food] | None,
+) -> models.Food | None:
+    """The food behind a row: out of the batch a whole day already read, or
+    asked for on its own where there is no batch."""
+    if found is not None:
+        return found.get(food_id)
+    return readable(db, user, food_id)
+
+
 def dish_micros(
-    db: Session, user: models.User, dish: models.Recipe | models.MealTemplate
+    db: Session,
+    user: models.User,
+    dish: models.Recipe | models.MealTemplate,
+    found: dict[int, models.Food] | None = None,
 ) -> dict[str, float]:
     """The whole recipe or the whole kept meal, from the foods in it as they
     stand now. A part whose food is gone adds nothing, the way its calories do."""
     whole: dict[str, float] = {}
     if isinstance(dish, models.Recipe):
         for row in dish.ingredients:
-            food = None if row.food_id is None else readable(db, user, row.food_id)
+            food = None if row.food_id is None else one_food(db, user, row.food_id, found)
             if food is not None:
                 add_into(whole, portion_micros(food, row.base_amount))
         return whole
     for item in dish.items:
-        food = None if item.food_id is None else readable(db, user, item.food_id)
+        food = None if item.food_id is None else one_food(db, user, item.food_id, found)
         if food is None:
             continue
         try:
@@ -926,7 +942,12 @@ def dish_micros(
     return whole
 
 
-def entry_micros(db: Session, user: models.User, entry: models.DiaryEntry) -> dict[str, float]:
+def entry_micros(
+    db: Session,
+    user: models.User,
+    entry: models.DiaryEntry,
+    found: dict[int, models.Food] | None = None,
+) -> dict[str, float]:
     """What one row of a day carries, worked out from what it points at.
 
     Nothing at all from a quick add, from a row whose food or dish has gone,
@@ -936,7 +957,7 @@ def entry_micros(db: Session, user: models.User, entry: models.DiaryEntry) -> di
     if entry.amount is None:
         return {}
     if entry.food_id is not None:
-        food = readable(db, user, entry.food_id)
+        food = one_food(db, user, entry.food_id, found)
         if food is None:
             return {}
         try:
@@ -963,7 +984,27 @@ def entry_micros(db: Session, user: models.User, entry: models.DiaryEntry) -> di
         if weighs is None:
             return {}
         share = entry.amount / weighs
-    return {key: value * share for key, value in dish_micros(db, user, dish).items()}
+    return {key: value * share for key, value in dish_micros(db, user, dish, found).items()}
+
+
+def day_foods(
+    db: Session, user: models.User, entries: list[models.DiaryEntry]
+) -> dict[int, models.Food]:
+    """Every food a day's rows reach, read in one go: what was logged straight,
+    and the parts of the recipes and kept meals on it. The dishes themselves
+    come out of the session, which already has them."""
+    wanted = {entry.food_id for entry in entries if entry.food_id is not None}
+    for entry in entries:
+        dish: models.Recipe | models.MealTemplate | None = None
+        if entry.recipe_id is not None:
+            dish = db.get(models.Recipe, entry.recipe_id)
+        elif entry.meal_id is not None:
+            dish = db.get(models.MealTemplate, entry.meal_id)
+        if isinstance(dish, models.Recipe):
+            wanted.update(row.food_id for row in dish.ingredients if row.food_id is not None)
+        elif dish is not None:
+            wanted.update(item.food_id for item in dish.items if item.food_id is not None)
+    return readable_foods(db, user, wanted)
 
 
 def day_micros(
@@ -977,8 +1018,9 @@ def day_micros(
     none of them, and what it has is nothing said either way.
     """
     running: dict[str, float] = {}
+    found = day_foods(db, user, entries)
     for entry in entries:
-        add_into(running, entry_micros(db, user, entry))
+        add_into(running, entry_micros(db, user, entry, found))
     return {
         key: round(running[key], 4) for key in micros.KEYS if running.get(key, 0.0) > 0
     }
@@ -1020,7 +1062,13 @@ def read_day(
     credit = exercise_credit(kcal)
     # This day's own goal, which is the usual one unless it was set apart.
     _, minutes_goal = goals_on(db, user, day)
-    weighed = next((row for row in state.rows if row.date_for == day), None)
+    # Asked for by the day rather than picked out of the Reckoning, which reads
+    # a window and not the whole history.
+    weighed = db.scalar(
+        select(models.WeightEntry).where(
+            models.WeightEntry.user_id == user.id, models.WeightEntry.date_for == day
+        )
+    )
     eaten = total(entries, "calories") or 0.0
     db.commit()
 

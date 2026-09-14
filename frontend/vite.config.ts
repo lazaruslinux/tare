@@ -12,11 +12,11 @@ export default defineConfig({
   plugins: [
     react(),
     tailwindcss(),
-    // A new build downloads in the background and applies on the next open.
-    // Nothing on screen asks about it: an update bar is a decision nobody
-    // wants to make about a journal.
+    // A new build downloads in the background and waits. The app puts up one
+    // slim bar offering it, so somebody mid-entry is never reloaded out from
+    // under what they were typing.
     VitePWA({
-      registerType: 'autoUpdate',
+      registerType: 'prompt',
       // main.tsx registers it. The content security policy forbids an inline
       // script, which is what the injected tag would be.
       injectRegister: null,

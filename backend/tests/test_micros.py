@@ -6,6 +6,7 @@ Central is one this file wrote, so a case that fails is about the parsing rather
 than about somebody else's server.
 """
 
+import datetime as dt
 import re
 from pathlib import Path
 
@@ -549,6 +550,39 @@ def test_one_diary_s_vitamins_are_nobody_else_s(client, db_session, signed_in, m
     assert (
         client.post("/api/auth/login", json={"username": "stranger", "password": PASSWORD})
     ).status_code == 200
+    assert day_micros(client) == {}
+
+
+def test_an_entry_on_a_food_out_of_reach_adds_nothing(client, db_session, signed_in, make_user):
+    """A day reads every food it needs in one go now, and the batch keeps the
+    rule one lookup at a time kept: somebody else's private food is not there,
+    so the row it is on says nothing about vitamins."""
+    stranger = make_user("stranger")
+    theirs = models.Food(
+        status="custom",
+        owner_id=stranger.id,
+        created_by_id=stranger.id,
+        name="Their broccoli",
+        base_unit="g",
+        calories=34,
+        micros={"vitamin_c": 89.2},
+    )
+    db_session.add(theirs)
+    db_session.commit()
+    db_session.add(
+        models.DiaryEntry(
+            user_id=signed_in.id,
+            date_for=dt.date.fromisoformat(DAY),
+            slot="breakfast",
+            name="Their broccoli",
+            food_id=theirs.id,
+            amount=100,
+            unit="g",
+            calories=34,
+        )
+    )
+    db_session.commit()
+
     assert day_micros(client) == {}
 
 

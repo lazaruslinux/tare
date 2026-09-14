@@ -14,6 +14,7 @@ import { SideRail } from './components/SideRail'
 import { TabBar, type Page, type RailTarget } from './components/TabBar'
 import { TopBar } from './components/TopBar'
 import { Tour } from './components/Tour'
+import { UpdateBar } from './components/UpdateBar'
 import { WorkoutDetails } from './components/WorkoutDetails'
 import { entry } from './entry'
 import { useResume } from './hooks/useResume'
@@ -389,6 +390,7 @@ export default function App() {
         />
         <div className="t-withrail">
           <div className="t-main">
+            <UpdateBar />
             <TopBar
               view={bar.view}
               onBack={bar.goBack}

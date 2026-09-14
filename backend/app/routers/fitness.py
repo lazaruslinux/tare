@@ -277,10 +277,21 @@ def read_summary(
     )
     token = db.get(models.IngestToken, user.id)
     step_goal, minutes_goal = goals_on(db, user, day)
+    # Whether there is anything on this account at all, whatever brought it in.
+    # A member who uploaded a file has numbers without a key, and the screen
+    # tells those two apart rather than asking them both to sync a device.
+    has_data = any(
+        db.scalar(statement.limit(1)) is not None
+        for statement in (
+            select(models.FitnessDaily.id).where(models.FitnessDaily.user_id == user.id),
+            select(models.Workout.id).where(models.Workout.user_id == user.id),
+        )
+    )
 
     return {
         "date": day.isoformat(),
         "connected": token is not None,
+        "has_data": has_data,
         "last_sync": None if token is None or token.last_used_at is None
         else token.last_used_at.isoformat(),
         "today": {key: values.get((day, key)) for key in fitness_catalog.TILE_KEYS},

@@ -238,9 +238,6 @@ def has_uploads(db: Session, user_id: int) -> bool:
         select(models.Workout.id).where(
             models.Workout.user_id == user_id, models.Workout.source == "upload"
         ),
-        select(models.WeightEntry.id).where(
-            models.WeightEntry.user_id == user_id, models.WeightEntry.via == "upload"
-        ),
     ):
         if db.scalar(statement.limit(1)) is not None:
             return True
@@ -292,13 +289,6 @@ def wipe_uploads(
             delete(models.FitnessIntraday).where(
                 models.FitnessIntraday.user_id == user.id,
                 models.FitnessIntraday.source == "upload",
-            )
-        )
-    )
-    removed += rows_touched(
-        db.execute(
-            delete(models.WeightEntry).where(
-                models.WeightEntry.user_id == user.id, models.WeightEntry.via == "upload"
             )
         )
     )

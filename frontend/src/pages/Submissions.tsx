@@ -1,6 +1,6 @@
 import { useEffect, useState } from 'react'
 
-import { api, type Me, type MySubmission } from '../api'
+import { api, errorText, type Me, type MySubmission } from '../api'
 import { ConfirmSheet } from '../components/ConfirmSheet'
 import { useTopBar } from '../hooks/useTopBar'
 import { dayLabel, dayOf, today } from '../lib/day'
@@ -36,6 +36,8 @@ export function Submissions({
   const [rows, setRows] = useState<MySubmission[] | null>(null)
   // The row waiting on the question about taking it back.
   const [taking, setTaking] = useState<MySubmission | null>(null)
+  // What went wrong with the last thing this screen asked for.
+  const [failed, setFailed] = useState('')
 
   useTopBar({ title: 'My submissions', back: { label: 'More', onBack } })
 
@@ -64,12 +66,18 @@ export function Submissions({
   }, [unread, onSeen])
 
   // Off the list and off the server at once, once the question has been
-  // answered.
+  // answered. A refusal puts the row back and says why: a submission that
+  // quietly returns on the next read reads as a bug.
   const withdraw = (submission: MySubmission) => {
-    setRows((held) => (held ?? []).filter((row) => row.id !== submission.id))
+    const was = rows ?? []
+    setFailed('')
+    setRows(was.filter((row) => row.id !== submission.id))
     api(`/submissions/${submission.id}`, { method: 'DELETE' })
       .then(() => onChanged())
-      .catch(() => {})
+      .catch((failure) => {
+        setRows(was)
+        setFailed(errorText(failure))
+      })
   }
 
   // Newest first, sorted here rather than trusted to whichever request last
@@ -78,6 +86,8 @@ export function Submissions({
 
   return (
     <>
+      {failed && <p className="t-error mb-3">{failed}</p>}
+
       <div className="t-card mb-3">
         {rows === null ? (
           <p className="text-sm text-muted">Loading.</p>

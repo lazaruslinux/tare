@@ -240,10 +240,16 @@ export function FoodTab({
     })
 
   // Off the card and off the server at once, once the question has been
-  // answered.
+  // answered. A refusal puts the row back where it was and says why, because
+  // a row that quietly reappears on the next read reads as a bug.
   const removeFavorite = (row: FoodRow) => {
-    setRepeat((rows) => rows.filter((item) => item.id !== row.id))
-    api(`/foods/${row.id}/pin`, { method: 'DELETE' }).then(onChanged, () => {})
+    const was = repeat
+    setError('')
+    setRepeat(was.filter((item) => item.id !== row.id))
+    api(`/foods/${row.id}/pin`, { method: 'DELETE' }).then(onChanged, (failure) => {
+      setRepeat(was)
+      setError(errorText(failure))
+    })
   }
 
   // Taking an item off the card takes off every mealtime it was set for, which
@@ -278,17 +284,29 @@ export function FoodTab({
     return () => window.removeEventListener('keydown', onKey)
   }, [catalog])
 
-  // Both pages ask before they call this, so the request goes at once.
+  // Both pages ask before they call this, so the request goes at once. The
+  // same as the favorite above on a refusal: the row comes back and the list
+  // says what happened.
   const removeRecipe = (recipe: Recipe) => {
-    setRecipes((rows) => rows.filter((row) => row.id !== recipe.id))
+    const was = recipes
+    setError('')
+    setRecipes(was.filter((row) => row.id !== recipe.id))
     setView({ at: 'list' })
-    api(`/recipes/${recipe.id}`, { method: 'DELETE' }).then(onChanged, () => {})
+    api(`/recipes/${recipe.id}`, { method: 'DELETE' }).then(onChanged, (failure) => {
+      setRecipes(was)
+      setError(errorText(failure))
+    })
   }
 
   const removeMeal = (meal: Meal) => {
-    setMeals((rows) => rows.filter((row) => row.id !== meal.id))
+    const was = meals
+    setError('')
+    setMeals(was.filter((row) => row.id !== meal.id))
     setView({ at: 'list' })
-    api(`/meals/${meal.id}`, { method: 'DELETE' }).then(onChanged, () => {})
+    api(`/meals/${meal.id}`, { method: 'DELETE' }).then(onChanged, (failure) => {
+      setMeals(was)
+      setError(errorText(failure))
+    })
   }
 
   // The same sheet the food page opens, on the food this instruction is about.
@@ -504,20 +522,12 @@ export function FoodTab({
       </div>
 
       <div className="t-card mb-3">
-        <div className="mb-1 flex items-center justify-between">
-          <p className="t-section">
-            <Library className="h-4 w-4" strokeWidth={2} />
-            Recently used
-          </p>
-          <button
-            type="button"
-            className="t-tap44 text-accent"
-            aria-label="Add a food"
-            onClick={() => setView({ at: 'form', food: null })}
-          >
-            <Plus className="h-5 w-5" strokeWidth={2.5} />
-          </button>
-        </div>
+        {/* No plus here: the bar above this tab carries New food, and it opens
+            the same form. */}
+        <p className="t-section mb-1">
+          <Library className="h-4 w-4" strokeWidth={2} />
+          Recently used
+        </p>
         {foods.length === 0 ? (
           <>
             <p className="text-sm text-muted">

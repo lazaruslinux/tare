@@ -11,6 +11,18 @@ function holdPage(hold: boolean) {
   for (const root of roots) root.style.overflow = hold ? 'hidden' : ''
 }
 
+// What a keyboard can reach inside the box, in the order it reaches them.
+const FOCUSABLE =
+  'a[href], button:not([disabled]), input:not([disabled]), select:not([disabled]), textarea:not([disabled]), [tabindex]:not([tabindex="-1"])'
+
+function reachable(box: HTMLElement): HTMLElement[] {
+  // Hidden rows are skipped: a sheet that folds a section away must not hand
+  // the keyboard to what is inside it.
+  return Array.from(box.querySelectorAll<HTMLElement>(FOCUSABLE)).filter(
+    (element) => element.offsetParent !== null
+  )
+}
+
 // The one thing that opens over a page. Everything that does uses this, so the
 // backdrop, the corner, the safe area and the motion are decided once instead
 // of drifting apart across three screens.
@@ -82,6 +94,50 @@ export function Sheet({
     window.addEventListener('keydown', onKey)
     return () => window.removeEventListener('keydown', onKey)
   }, [open, onClose])
+  // Focus goes into the box and stays there while it is up, so a keyboard
+  // cannot walk off into the page behind a sheet that covers it. Only the
+  // topmost sheet holds it, the way Escape only closes that one.
+  useEffect(() => {
+    if (!open) return
+    const was = document.activeElement
+    // The box mounts with the sheet, so the first focus waits a frame for it.
+    const settle = window.setTimeout(() => {
+      const box_ = box.current
+      if (box_ === null) return
+      const first = reachable(box_)[0]
+      if (first !== undefined) {
+        first.focus()
+        return
+      }
+      box_.tabIndex = -1
+      box_.focus()
+    }, 0)
+    const onTab = (event: KeyboardEvent) => {
+      if (event.key !== 'Tab') return
+      const box_ = box.current
+      if (box_ === null) return
+      const dialogs = document.querySelectorAll('[role=dialog]')
+      if (dialogs[dialogs.length - 1] !== box_) return
+      const inside = reachable(box_)
+      if (inside.length === 0) {
+        event.preventDefault()
+        box_.focus()
+        return
+      }
+      const edge = event.shiftKey ? inside[0] : inside[inside.length - 1]
+      const wrap = event.shiftKey ? inside[inside.length - 1] : inside[0]
+      if (document.activeElement === edge || !box_.contains(document.activeElement)) {
+        event.preventDefault()
+        wrap.focus()
+      }
+    }
+    window.addEventListener('keydown', onTab)
+    return () => {
+      window.clearTimeout(settle)
+      window.removeEventListener('keydown', onTab)
+      if (was instanceof HTMLElement && document.contains(was)) was.focus()
+    }
+  }, [open])
   return (
     <AnimatePresence>
       {open && (
@@ -98,6 +154,7 @@ export function Sheet({
           <motion.div
             ref={box}
             role="dialog"
+            aria-modal="true"
             aria-label={label}
             // Capped and scrollable: a long list inside must not push the
             // controls at the bottom off the screen.

@@ -466,12 +466,11 @@ def test_every_share_gets_its_own_line_and_an_unread_one_is_empty(client, member
     ).status_code == 200
 
     trends = client.get("/api/health/measurements").json()["trends"]
-    assert sorted(trends) == ["bone", "fat", "muscle", "water"]
+    # Bone is recorded and shown as a reading, and it has no line of its own.
+    assert sorted(trends) == ["fat", "muscle", "water"]
     assert [row["pct"] for row in trends["fat"]] == [25.0, 24.9]
     assert [row["pct"] for row in trends["water"]] == [55.0, 55.1]
     assert [row["pct"] for row in trends["muscle"]] == [40.0, 40.1]
-    # Nobody has read a bone share, so that line has nothing to draw.
-    assert trends["bone"] == []
 
 
 def test_a_day_without_a_weight_is_not_the_latest_weight(client, member):
@@ -730,3 +729,47 @@ def test_two_readings_for_one_day_leave_one_row(client, db_session, member, monk
     assert db_session.query(models.WeightEntry).count() == 1
     assert response.json()["weight_kg"] == 81.0
     assert response.json()["body_fat_pct"] == 20.0
+
+
+def put_reading(db_session, member, days_ago, kg):
+    """A weigh-in straight into the database, for the cases about how far back
+    the numbers are read from."""
+    db_session.add(
+        models.WeightEntry(
+            user_id=member.id,
+            date_for=TODAY - dt.timedelta(days=days_ago),
+            weight_kg=kg,
+            source="manual",
+            created_at=clock.now_utc(),
+        )
+    )
+    db_session.commit()
+
+
+def test_a_reading_older_than_the_window_changes_no_target(client, db_session, member):
+    """The numbers a day is worked out from are read over a window rather than
+    over a whole history, and nothing years back is part of any of them."""
+    assert profile(client, sex="female", height_cm=165, goal_weight_kg=65).status_code == 200
+    for days_ago, kg in ((2, 80.0), (1, 79.6), (0, 79.4)):
+        assert weigh(client, kg, TODAY - dt.timedelta(days=days_ago)).status_code == 200
+    before = client.get("/api/health/targets").json()
+
+    for days_ago in (500, 450):
+        put_reading(db_session, member, days_ago, 140.0)
+
+    assert client.get("/api/health/targets").json() == before
+
+
+def test_a_member_who_has_not_weighed_in_years_still_has_that_weight(
+    client, db_session, member
+):
+    """The window is about how much is read, not about what counts: somebody
+    whose last reading is older than it still has a weight and a trend."""
+    assert profile(client, sex="female", height_cm=165).status_code == 200
+    put_reading(db_session, member, 500, 82.0)
+
+    body = client.get("/api/health/targets").json()
+
+    assert body["complete"] is True
+    assert body["resting_inputs"]["weight_kg"] == 82.0
+    assert client.get("/api/health/profile").json()["latest_weight_kg"] == 82.0

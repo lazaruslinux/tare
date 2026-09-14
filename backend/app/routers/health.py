@@ -58,6 +58,12 @@ MAX_DAYS = 3650
 # Decision 2: older than this and the weight-based estimate is the better one.
 BODY_FAT_FRESH_DAYS = 90
 
+# How far back the numbers a day is worked out from are read. Everything the
+# Reckoning derives is the newest reading or a trend that has long since
+# forgotten anything this old, and every diary day was reading a whole
+# history to get them.
+READING_WINDOW_DAYS = 400
+
 # Decision 20: the window the offer is worked out over.
 REESTIMATE_WINDOW = 28
 
@@ -79,12 +85,12 @@ EXTRA_FIELDS = ("body_fat_pct", "body_water_pct", "muscle_pct", "bone_pct")
 MEASURED = ("weight_kg", *EXTRA_FIELDS)
 
 # The short name each share is drawn under on the chart, which is what its
-# line and its chip are keyed on.
+# line and its chip are keyed on. Bone is recorded and shown as a reading; it
+# has no line, because a share that moves by a tenth in a year is not a trend.
 TREND_KEYS = {
     "body_fat_pct": "fat",
     "body_water_pct": "water",
     "muscle_pct": "muscle",
-    "bone_pct": "bone",
 }
 
 MIN_HEIGHT_CM = 90.0
@@ -390,7 +396,13 @@ class Reckoning:
         self.user = user
         self.today = clock.user_today(user)
         self.profile = profile_of(db, user)
-        self.rows = readings(db, user)
+        self.rows = readings(db, user, self.today - dt.timedelta(days=READING_WINDOW_DAYS))
+        # Somebody who has not stood on a scale in over a year still has a
+        # weight and a trend. The window is about the size of an ordinary read,
+        # so an empty one falls back to the whole history rather than saying
+        # there is nothing.
+        if not self.rows:
+            self.rows = readings(db, user)
         # A day can hold a body fat and no weight, so the weight everything is
         # worked out from is the newest day that has one.
         self.latest = next(
@@ -1026,8 +1038,8 @@ def read_measurements(
     today = clock.user_today(user)
     rows = readings(db, user, today - dt.timedelta(days=window - 1))
     line = health.trend_by_day(weighed_days(rows))
-    # Muscle and bone are lined as the stored share, not the mass they work out
-    # to, so a day with no weight on it does not step the line.
+    # Muscle is lined as the stored share, not the mass it works out to, so a
+    # day with no weight on it does not step the line.
     trends = {
         name: [
             {"date": day.isoformat(), "pct": round(value, 1)}

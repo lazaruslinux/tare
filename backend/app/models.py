@@ -614,6 +614,33 @@ class FoodSubmission(Base):
     created_at: Mapped[dt.datetime] = mapped_column(UtcDateTime, nullable=False, default=now_utc)
 
 
+# What a daily cap counts: an offer to the shared database, or a picture.
+CAP_KINDS = ("submission", "photo")
+
+
+class CapMark(Base):
+    """One thing a member did that a daily cap counts.
+
+    Kept apart from the rows themselves because those can go: a submission
+    taken back and a photo swept up both leave, and counting what survives
+    would hand the day's allowance back every time somebody withdrew something.
+    """
+
+    __tablename__ = "cap_marks"
+    __table_args__ = (
+        # The caps count one member's marks since their midnight, and this is
+        # the order they ask in.
+        Index("ix_cap_marks_user_created", "user_id", "created_at"),
+    )
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True)
+    user_id: Mapped[int] = mapped_column(
+        ForeignKey("users.id", ondelete="CASCADE"), nullable=False
+    )
+    kind: Mapped[str] = mapped_column(String(16), nullable=False)
+    created_at: Mapped[dt.datetime] = mapped_column(UtcDateTime, nullable=False, default=now_utc)
+
+
 # What a logged review action can be about: a request in the queue, a food in
 # the shared database, or somebody's account.
 REVIEW_TARGETS = ("submission", "food", "user")
@@ -672,6 +699,11 @@ class DiaryEntry(Base):
     """
 
     __tablename__ = "diary_entries"
+    __table_args__ = (
+        # Every read of the diary asks for one member's rows on one day, or on
+        # a run of days, and this is the pair it asks on.
+        Index("ix_diary_entries_user_date", "user_id", "date_for"),
+    )
 
     id: Mapped[int] = mapped_column(Integer, primary_key=True)
     user_id: Mapped[int] = mapped_column(
@@ -1118,9 +1150,6 @@ class WeightEntry(Base):
         nullable=False,
         default="manual",
     )
-    # Set only on a weigh-in a file brought in. The source above still reads
-    # "ingest", because that is what it is; this is what takes it away again.
-    via: Mapped[str | None] = mapped_column(String(8), nullable=True)
     created_at: Mapped[dt.datetime] = mapped_column(UtcDateTime, nullable=False, default=now_utc)
 
 

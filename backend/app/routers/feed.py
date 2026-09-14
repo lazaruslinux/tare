@@ -9,14 +9,14 @@ from __future__ import annotations
 import base64
 import binascii
 import datetime as dt
-from collections.abc import Callable
+from collections.abc import Callable, Sequence
 from typing import Any
 
 from fastapi import APIRouter, Depends, HTTPException, status
 from sqlalchemy import and_, func, or_, select
 from sqlalchemy.orm import Session
 
-from app import clock, health, models
+from app import clock, health, models, throttle
 from app.db import get_db
 from app.deps import require_user
 from app.friends import friend_ids
@@ -530,9 +530,14 @@ def read_members(
     more = len(members) > MEMBERS_PAGE
     members = members[:MEMBERS_PAGE]
     friends = friend_ids(db, user)
+    standing = pairs(db, user, [member.id for member in members])
     rows = member_rows(db, members)
-    for row in rows:
-        row["friend"] = row["id"] in friends
+    # The boolean is what a row was listed by; the word beside it is the same
+    # one the member page says, so a request in either direction shows here
+    # rather than reading as a stranger until it is accepted.
+    for member, row in zip(members, rows):
+        row["friend"] = member.id in friends
+        row["friendship"] = state_of(user, member.id, standing.get(member.id))
     return {
         "items": rows,
         "next_offset": start + len(members) if more else None,
@@ -600,6 +605,33 @@ def pair(db: Session, user: models.User, other_id: int) -> models.Friendship | N
             )
         )
     )
+
+
+def pairs(
+    db: Session, user: models.User, others: Sequence[int]
+) -> dict[int, models.Friendship]:
+    """The row between this account and each of these members, keyed by the
+    other member. One read for a page rather than one for every row on it."""
+    if not others:
+        return {}
+    rows = db.execute(
+        select(models.Friendship).where(
+            or_(
+                and_(
+                    models.Friendship.requester_id == user.id,
+                    models.Friendship.addressee_id.in_(others),
+                ),
+                and_(
+                    models.Friendship.addressee_id == user.id,
+                    models.Friendship.requester_id.in_(others),
+                ),
+            )
+        )
+    ).scalars()
+    return {
+        (row.addressee_id if row.requester_id == user.id else row.requester_id): row
+        for row in rows
+    }
 
 
 def state_of(user: models.User, other_id: int, row: models.Friendship | None) -> str:
@@ -677,6 +709,8 @@ def ask_friend(
     row is accepted rather than a second one written the other way round.
     Asking twice says what already stands instead of failing.
     """
+    if throttle.friend_ask_limiter.hit(str(user.id)):
+        raise HTTPException(status.HTTP_429_TOO_MANY_REQUESTS, throttle.TOO_MANY)
     if user_id == user.id:
         raise HTTPException(status.HTTP_400_BAD_REQUEST, NOT_YOURSELF)
     if db.get(models.User, user_id) is None:

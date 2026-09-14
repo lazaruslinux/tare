@@ -451,15 +451,11 @@ def test_a_dish_photo_is_stored_with_a_small_copy_beside_it(client, db_session, 
 
 def test_a_member_may_only_upload_so_many_pictures_in_one_day(client, db_session, signed_in):
     assert caps.DAILY_PHOTOS == 40
+    # The cap counts a mark per upload rather than the pictures themselves,
+    # which is what keeps a swept-up photo from handing the allowance back.
     for _ in range(caps.DAILY_PHOTOS - 1):
         db_session.add(
-            models.FoodPhoto(
-                uploaded_by_id=signed_in.id,
-                path="already.webp",
-                status="pending",
-                purpose="front",
-                created_at=now_utc(),
-            )
+            models.CapMark(user_id=signed_in.id, kind="photo", created_at=now_utc())
         )
     db_session.commit()
     assert upload(client).status_code == 201

@@ -12,7 +12,7 @@ import datetime as dt
 
 from fastapi import HTTPException, status
 from sqlalchemy import func, select
-from sqlalchemy.orm import InstrumentedAttribute, Session
+from sqlalchemy.orm import Session
 
 from app import clock, models
 
@@ -37,31 +37,32 @@ def day_start(user: models.User) -> dt.datetime:
     return midnight.astimezone(dt.timezone.utc)
 
 
-def _made_today(
-    db: Session,
-    whose: InstrumentedAttribute[int | None],
-    when: InstrumentedAttribute[dt.datetime],
-    user: models.User,
-) -> int:
-    """How many of one kind of row this member wrote since their midnight."""
+def _made_today(db: Session, user: models.User, kind: str) -> int:
+    """How many of one kind this member has been marked for since their
+    midnight. Marks rather than the rows themselves, so withdrawing a
+    submission or sweeping a photo up does not hand the allowance back."""
     return int(
         db.execute(
-            select(func.count()).where(whose == user.id, when >= day_start(user))
+            select(func.count()).where(
+                models.CapMark.user_id == user.id,
+                models.CapMark.kind == kind,
+                models.CapMark.created_at >= day_start(user),
+            )
         ).scalar_one()
     )
+
+
+def mark(db: Session, user: models.User, kind: str) -> None:
+    """Count one thing against today. Written in the same transaction as the
+    row it is about, so the two cannot come apart."""
+    db.add(models.CapMark(user_id=user.id, kind=kind))
 
 
 def check_submissions(db: Session, user: models.User) -> None:
     """Refuse a submission from somebody who has offered enough today."""
     if user.is_admin:
         return
-    made = _made_today(
-        db,
-        models.FoodSubmission.submitted_by_id,
-        models.FoodSubmission.created_at,
-        user,
-    )
-    if made >= DAILY_SUBMISSIONS:
+    if _made_today(db, user, "submission") >= DAILY_SUBMISSIONS:
         raise HTTPException(status.HTTP_429_TOO_MANY_REQUESTS, TOO_MANY_SUBMISSIONS)
 
 
@@ -69,8 +70,5 @@ def check_photos(db: Session, user: models.User) -> None:
     """Refuse an upload from somebody who has sent enough pictures today."""
     if user.is_admin:
         return
-    sent = _made_today(
-        db, models.FoodPhoto.uploaded_by_id, models.FoodPhoto.created_at, user
-    )
-    if sent >= DAILY_PHOTOS:
+    if _made_today(db, user, "photo") >= DAILY_PHOTOS:
         raise HTTPException(status.HTTP_429_TOO_MANY_REQUESTS, TOO_MANY_PHOTOS)

@@ -2,7 +2,8 @@ import datetime as dt
 
 import pytest
 from fastapi.testclient import TestClient
-from sqlalchemy.orm import sessionmaker
+from sqlalchemy.exc import IntegrityError
+from sqlalchemy.orm import Session, sessionmaker
 
 from app import mail, main, models, security
 from app.config import settings
@@ -12,6 +13,7 @@ from app.routers.auth import (
     EMAIL_REQUIRED,
     FUTURE_BIRTHDATE,
     IMPOSSIBLE_BIRTHDATE,
+    SIGNUP_TAKEN,
     UNDER_AGE,
 )
 from app.routers.invites import DEAD_INVITE
@@ -122,6 +124,34 @@ def test_a_taken_username_is_answered_plainly_when_the_invite_is_good(
     response = signup(client, invite)
     assert response.status_code == 400
     assert response.json()["detail"] == "That username or email is already taken."
+
+
+def test_two_signups_in_the_same_instant_leave_one_of_them_told_plainly(
+    client, db_session, invite, monkeypatch
+):
+    """The uniqueness check is a read, so two signups a moment apart both pass
+    it. The one the database refuses is told what the check tells everybody
+    else rather than meeting the generic failure."""
+    real_flush = Session.flush
+
+    def clash(self, *args, **kwargs):
+        # Only the write this case is about: the reads before it autoflush
+        # nothing, and the invite claim after it has to go through.
+        if any(isinstance(pending, models.User) for pending in self.new):
+            raise IntegrityError("INSERT INTO users", {}, Exception("duplicate key"))
+        return real_flush(self, *args, **kwargs)
+
+    monkeypatch.setattr(Session, "flush", clash)
+
+    response = signup(client, invite)
+
+    assert response.status_code == 400
+    assert response.json()["detail"] == SIGNUP_TAKEN
+    monkeypatch.undo()
+    assert db_session.query(models.User).filter_by(username="newcomer").count() == 0
+    # And the seat the signup would have taken is still there.
+    db_session.refresh(invite)
+    assert invite.used == 0
 
 
 def test_a_dead_invite_answers_before_the_username_is_looked_at(client, invite, make_user):

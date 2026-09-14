@@ -148,6 +148,10 @@ ingest_user_limiter = RateLimiter(60, 60, "ingest-user")
 # could otherwise read the address-taken answer for one address after another,
 # each in a bucket of its own, and walk the member list that way.
 email_change_limiter = RateLimiter(10, 900, "email-change")
+# Asking a member to be friends, counted per account. Thirty an hour is well
+# past anybody adding the people they know and far under what it takes to put
+# a request in front of every member of an instance one after another.
+friend_ask_limiter = RateLimiter(30, 3600, "friend-ask")
 # Spending an emailed link: a verification, an address change, or a reset. The
 # tokens are high entropy, so this guards against a client stuck in a loop and
 # against somebody working through the table, not against a guessing run.

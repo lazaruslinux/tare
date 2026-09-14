@@ -9,7 +9,7 @@ import datetime as dt
 
 from sqlalchemy import select
 
-from app import models
+from app import models, throttle
 from app.models import now_utc
 from tests.test_feed import befriend, put_journal, put_weigh_in, put_workout, sign_in
 
@@ -337,3 +337,48 @@ def test_a_listed_friend_carries_nothing_their_account_holds(client, db_session,
     row = client.get("/api/feed/friends").json()["friends"][0]
 
     assert "email" not in row and "username" not in row
+
+
+def test_the_roster_says_which_way_a_pending_request_went(client, db_session, make_user):
+    """The word on a roster row is the one the member page says, so a request
+    shows on both sides before anybody has answered it."""
+    asker = make_user("asker")
+    asked = make_user("asked")
+
+    sign_in(client, "asker")
+    assert client.post(f"/api/feed/friends/{asked.id}").status_code == 200
+    mine = {row["display_name"]: row for row in client.get("/api/feed/members").json()["items"]}
+    assert mine["asked"]["friendship"] == "requested"
+    # The boolean the roster was listed by is untouched: nothing is shared yet.
+    assert mine["asked"]["friend"] is False
+    assert mine["asker"]["friendship"] == "self"
+
+    sign_in(client, "asked")
+    theirs = {
+        row["display_name"]: row["friendship"]
+        for row in client.get("/api/feed/members").json()["items"]
+    }
+    assert theirs["asker"] == "incoming"
+
+    assert client.post(f"/api/feed/friends/{asker.id}/accept").status_code == 200
+    settled = {
+        row["display_name"]: row["friendship"]
+        for row in client.get("/api/feed/members").json()["items"]
+    }
+    assert settled["asker"] == "friends"
+
+
+def test_asking_stops_after_thirty_in_an_hour(client, make_user):
+    """Counted per account, because a request lands in front of somebody: the
+    allowance is a person adding the people they know and nowhere near enough
+    to work through an instance."""
+    other = make_user("other")
+    make_user("member")
+    sign_in(client, "member")
+
+    for _ in range(throttle.friend_ask_limiter.max_attempts):
+        assert client.post(f"/api/feed/friends/{other.id}").status_code == 200
+
+    refused = client.post(f"/api/feed/friends/{other.id}")
+    assert refused.status_code == 429
+    assert refused.json()["detail"] == throttle.TOO_MANY

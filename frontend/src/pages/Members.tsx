@@ -30,9 +30,18 @@ function countText(count: number): string {
   return count === 1 ? '1 contribution' : `${count} contributions`
 }
 
+// What a roster row's chip reads, by where the two of them stand. A pending
+// request is worth saying on both sides, so nobody asks twice.
+const STANDING: Record<string, string> = {
+  requested: 'Requested',
+  incoming: 'Asked you',
+  friends: 'Friends',
+}
+
 // One member, the same row in the friends list and in the roster, so the two
-// lists cannot drift apart. The chip is only on roster rows: the server marks
-// a friend there, and the friends list has a heading that already says it.
+// lists cannot drift apart. The chip is only on roster rows: the server says
+// where the two stand there, and the friends list has a heading that already
+// says it.
 function MemberRow({
   row,
   me,
@@ -53,7 +62,9 @@ function MemberRow({
         <span className="block text-xs text-muted">{countText(row.contributions)}</span>
       </span>
       {row.id === me && <span className="t-chip">You</span>}
-      {row.friend === true && <span className="t-chip shrink-0">Friends</span>}
+      {row.friendship !== undefined && STANDING[row.friendship] !== undefined && (
+        <span className="t-chip shrink-0">{STANDING[row.friendship]}</span>
+      )}
       <ChevronRight className="h-4 w-4 shrink-0 text-muted" strokeWidth={2} />
     </button>
   )

@@ -266,6 +266,7 @@ def submit_new_food(
         note=body.note.strip(),
     )
     db.add(submission)
+    caps.mark(db, user, "submission")
     db.commit()
     return {"submission_id": submission.id, "food": food_detail(db, food, user)}
 
@@ -307,6 +308,7 @@ def submit_own_food(
         note=body.note.strip(),
     )
     db.add(submission)
+    caps.mark(db, user, "submission")
     db.commit()
     return {"submission_id": submission.id, "food": food_detail(db, food, user)}
 
@@ -359,6 +361,7 @@ def suggest_edit(
         note=body.note.strip(),
     )
     db.add(submission)
+    caps.mark(db, user, "submission")
     db.commit()
     return {"submission_id": submission.id, "food": food_detail(db, shadow, user)}
 
@@ -386,6 +389,7 @@ def suggest_photo(
         note=body.note.strip(),
     )
     db.add(submission)
+    caps.mark(db, user, "submission")
     db.commit()
     return {"submission_id": submission.id}
 
@@ -417,6 +421,7 @@ def report_food(
         note=issue,
     )
     db.add(submission)
+    caps.mark(db, user, "submission")
     db.commit()
     return {"submission_id": submission.id}
 

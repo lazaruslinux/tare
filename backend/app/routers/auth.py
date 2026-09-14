@@ -15,6 +15,7 @@ from fastapi import (
 )
 from pydantic import BaseModel
 from sqlalchemy import delete, func, or_, select, update
+from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session
 
 from app import mail, models, profiles, security, throttle
@@ -52,6 +53,11 @@ EMAIL_REQUIRED = "Tare needs an email address to sign up."
 # or is waiting to be moved to one. The same sentence at both ends of a change,
 # because the second account may have claimed it while the link sat in an inbox.
 EMAIL_TAKEN = "That email is already taken."
+
+# What a signup is told when the name or the address it picked is spoken for.
+# One sentence for both, said by the check below and again by the database if
+# two signups pick the same one in the same instant.
+SIGNUP_TAKEN = "That username or email is already taken."
 
 # The one answer a reset request ever gets. The same words for an address with
 # an account, an address without one, and an instance that cannot send mail at
@@ -296,9 +302,7 @@ def register(
         # A plain answer, unlike the sentence a dead code gets. Whoever is here
         # holds a working invite, so they are not enumerating anything; they
         # are a person who picked a name somebody else already has.
-        raise HTTPException(
-            status.HTTP_400_BAD_REQUEST, "That username or email is already taken."
-        )
+        raise HTTPException(status.HTTP_400_BAD_REQUEST, SIGNUP_TAKEN)
 
     now = now_utc()
     user = models.User(
@@ -316,8 +320,15 @@ def register(
         feed_hidden=["details"],
         created_at=now,
     )
-    db.add(user)
-    db.flush()
+    # In a savepoint, because the check above is a read and two signups a
+    # moment apart both pass it. The one the database refuses is told what the
+    # check tells everybody else rather than reaching the generic failure.
+    try:
+        with db.begin_nested():
+            db.add(user)
+            db.flush()
+    except IntegrityError:
+        raise HTTPException(status.HTTP_400_BAD_REQUEST, SIGNUP_TAKEN) from None
 
     # The claim itself, as one conditional UPDATE rather than a write to the
     # row read above. Two people spending the last seat at once both pass that

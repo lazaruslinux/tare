@@ -1096,6 +1096,8 @@ export type MemberRow = {
   contributions: number
   // Only on a roster row: the friends lists are already sorted by side.
   friend?: boolean
+  // And which way a pending request went, in the words the member page uses.
+  friendship?: 'self' | 'none' | 'requested' | 'incoming' | 'friends'
 }
 
 // One page of the roster. It is ordered by a name rather than by an id, so the
@@ -1125,6 +1127,9 @@ export type TodayStrip = {
 export type FitnessSummary = {
   date: string
   connected: boolean
+  // Whether this account holds any days or workouts at all, however they got
+  // here. A file brings numbers in without a key ever being minted.
+  has_data: boolean
   last_sync: string | null
   today: FitnessTiles
   week: FitnessWeekDay[]

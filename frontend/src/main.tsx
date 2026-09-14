@@ -12,11 +12,20 @@ import { registerSW } from 'virtual:pwa-register'
 
 import App from './App'
 import { ErrorBoundary } from './components/ErrorBoundary'
+import { updateReady } from './lib/update'
 
 // The service worker. Registered from here rather than from a tag the plugin
 // injects, because the content security policy forbids an inline script. A new
-// build is fetched in the background and applied on the next open.
-registerSW({ immediate: true })
+// build is fetched in the background; the bar it puts up is what applies it,
+// and closing the app applies it anyway.
+const updateSW = registerSW({
+  immediate: true,
+  onNeedRefresh() {
+    updateReady(() => {
+      void updateSW(true)
+    })
+  },
+})
 
 createRoot(document.getElementById('root') as HTMLElement).render(
   <StrictMode>

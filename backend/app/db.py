@@ -5,7 +5,7 @@ from __future__ import annotations
 from collections.abc import Iterator
 from typing import Any, cast
 
-from sqlalchemy import CursorResult, Result, create_engine
+from sqlalchemy import CursorResult, Engine, Result, create_engine, event
 from sqlalchemy.orm import DeclarativeBase, Session, sessionmaker
 
 from app.config import settings
@@ -25,6 +25,28 @@ _pool: dict[str, Any] = (
 # pool_pre_ping: the database container can restart under a running api, and a
 # connection that died with it should be replaced rather than handed out.
 engine = create_engine(_url, pool_pre_ping=True, **_pool)
+
+
+def sqlite_transactions(bound: Engine) -> None:
+    """Let SQLite hold a transaction the way the real database does.
+
+    Its driver opens one only when it sees a write, so a savepoint taken before
+    that becomes the outermost transaction and releasing it commits, which a
+    later rollback then has nothing to undo. Opened here instead, so a nested
+    block is really nested. Postgres needs none of this.
+    """
+
+    @event.listens_for(bound, "connect")
+    def _no_driver_transactions(connection: Any, record: Any) -> None:
+        connection.isolation_level = None
+
+    @event.listens_for(bound, "begin")
+    def _own_begin(connection: Any) -> None:
+        connection.exec_driver_sql("BEGIN")
+
+
+if _url.startswith("sqlite"):
+    sqlite_transactions(engine)
 
 SessionLocal = sessionmaker(bind=engine, autoflush=False, expire_on_commit=False)
 

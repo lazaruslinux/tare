@@ -608,6 +608,9 @@ export function Fitness({
   if (failed !== '') return <p className="t-error">{failed}</p>
 
   const connected = summary !== null && summary.connected
+  // Numbers and no key is an account whose figures came out of a file. It is
+  // not a screen to offer a device on: what it needs is where to find sync.
+  const uploadsOnly = summary !== null && !summary.connected && summary.has_data
   const [steps, distance, calories] = TILES
   const card = (tile: Tile, note?: string) => (
     <HourCard
@@ -623,7 +626,7 @@ export function Fitness({
 
   return (
     <>
-      {summary !== null && !connected && (
+      {summary !== null && !connected && !uploadsOnly && (
         <div className="t-card mb-3">
           <p className="text-sm">Not connected.</p>
           <p className="mt-1 text-sm text-muted">
@@ -635,8 +638,14 @@ export function Fitness({
         </div>
       )}
 
+      {uploadsOnly && (
+        <p className="t-note mb-3">
+          Your numbers come from uploads. Automatic sync is under More &gt; Health data sync.
+        </p>
+      )}
+
       <div className="mb-3 grid grid-cols-2 gap-3">
-        {card(steps, connected ? undefined : 'Sync a device to see steps here.')}
+        {card(steps, connected || uploadsOnly ? undefined : 'Sync a device to see steps here.')}
         {card(distance)}
       </div>
 

@@ -525,6 +525,31 @@ def test_a_workout_belongs_to_the_account_it_arrived_for(client, db_session, mak
     assert client.get("/api/fitness/summary").json()["connected"] is False
 
 
+def test_the_summary_says_whether_there_is_anything_there_at_all(
+    client, db_session, make_user
+):
+    """A member who uploaded a file has numbers and no key, which is not the
+    same as a member with nothing, and the screen tells them apart."""
+    make_user("member")
+    client.post("/api/auth/login", json={"username": "member", "password": "correct-horse-9"})
+    empty = client.get("/api/fitness/summary").json()
+    assert empty["connected"] is False
+    assert empty["has_data"] is False
+
+    day = yesterday()
+    member = db_session.query(models.User).filter_by(username="member").one()
+    db_session.add(
+        models.FitnessDaily(
+            user_id=member.id, date_for=day, metric="steps", value=8500, source="upload"
+        )
+    )
+    db_session.commit()
+
+    body = client.get(f"/api/fitness/summary?date={day.isoformat()}").json()
+    assert body["connected"] is False
+    assert body["has_data"] is True
+
+
 def test_a_key_that_has_never_synced_says_so(client, db_session, signed_in):
     db_session.add(
         models.IngestToken(
