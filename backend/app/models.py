@@ -20,6 +20,7 @@ from sqlalchemy import (
     Integer,
     String,
     Text,
+    Time,
     UniqueConstraint,
     text,
 )
@@ -1370,3 +1371,183 @@ class IngestLog(Base):
     # on rows written before this was kept.
     days: Mapped[int | None] = mapped_column(Integer, nullable=True)
     workouts: Mapped[int | None] = mapped_column(Integer, nullable=True)
+
+
+class Calendar(Base):
+    """A shared calendar: a name, a colour, and the members who accepted it.
+
+    Nobody keeps one alone. A calendar is made by naming a friend, and it is
+    deleted when the last accepted member leaves, so an empty one cannot sit
+    in the list collecting appointments nobody sees.
+    """
+
+    __tablename__ = "calendars"
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True)
+    name: Mapped[str] = mapped_column(String(60), nullable=False)
+    # A key out of app.calendar_colors, never a hex value.
+    color: Mapped[str] = mapped_column(String(16), nullable=False)
+    created_by: Mapped[int] = mapped_column(
+        ForeignKey("users.id", ondelete="CASCADE"), nullable=False
+    )
+    created_at: Mapped[dt.datetime] = mapped_column(UtcDateTime, nullable=False, default=now_utc)
+
+
+class CalendarMember(Base):
+    """One member's standing on one calendar.
+
+    The acceptance stamp is null while an invitation is waiting, which is the
+    same shape a friendship uses: nothing on the calendar reaches somebody who
+    has not answered, and declining deletes the row rather than marking it.
+    """
+
+    __tablename__ = "calendar_members"
+    __table_args__ = (
+        UniqueConstraint("calendar_id", "user_id", name="uq_calendar_members_pair"),
+        Index("ix_calendar_members_user_id", "user_id"),
+    )
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True)
+    calendar_id: Mapped[int] = mapped_column(
+        ForeignKey("calendars.id", ondelete="CASCADE"), nullable=False
+    )
+    user_id: Mapped[int] = mapped_column(
+        ForeignKey("users.id", ondelete="CASCADE"), nullable=False
+    )
+    invited_by: Mapped[int] = mapped_column(
+        ForeignKey("users.id", ondelete="CASCADE"), nullable=False
+    )
+    invited_at: Mapped[dt.datetime] = mapped_column(UtcDateTime, nullable=False, default=now_utc)
+    accepted_at: Mapped[dt.datetime | None] = mapped_column(UtcDateTime, nullable=True)
+
+
+class Appointment(Base):
+    """Something happening, once or on a repeat.
+
+    The zone is the owner's as it stood when they wrote it, and it never moves
+    afterwards: a nine o'clock meeting is nine o'clock where it was arranged,
+    whatever zone anybody reads it in and whatever zone the owner moves to. A
+    repeating one starts on its anchor and carries no end date, because a
+    series of spans has no single day to hang a skip on.
+    """
+
+    __tablename__ = "appointments"
+    __table_args__ = (
+        Index("ix_appointments_owner_id", "owner_id"),
+        Index("ix_appointments_date_for", "date_for"),
+    )
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True)
+    owner_id: Mapped[int] = mapped_column(
+        ForeignKey("users.id", ondelete="CASCADE"), nullable=False
+    )
+    title: Mapped[str] = mapped_column(String(120), nullable=False)
+    notes: Mapped[str] = mapped_column(String(1000), nullable=False, default="")
+    location: Mapped[str | None] = mapped_column(String(120), nullable=True)
+    timezone: Mapped[str] = mapped_column(String(64), nullable=False)
+    date_for: Mapped[dt.date] = mapped_column(Date, nullable=False)
+    # The last day a span covers. Null is a single day, and a repeat has none.
+    end_date: Mapped[dt.date | None] = mapped_column(Date, nullable=True)
+    time_of_day: Mapped[dt.time | None] = mapped_column(Time, nullable=True)
+    end_time: Mapped[dt.time | None] = mapped_column(Time, nullable=True)
+    all_day: Mapped[bool] = mapped_column(Boolean, nullable=False, default=False)
+    repeat_type: Mapped[str | None] = mapped_column(String(8), nullable=True)
+    repeat_days: Mapped[int | None] = mapped_column(Integer, nullable=True)
+    repeat_interval: Mapped[int] = mapped_column(Integer, nullable=False, default=1)
+    repeat_anchor: Mapped[dt.date | None] = mapped_column(Date, nullable=True)
+    repeat_month_day: Mapped[int | None] = mapped_column(Integer, nullable=True)
+    repeat_until: Mapped[dt.date | None] = mapped_column(Date, nullable=True)
+    # Whether this one was cut out of a series. It keeps no link back to the
+    # series it came from, so this is all that is left of where it came from.
+    detached: Mapped[bool] = mapped_column(Boolean, nullable=False, default=False)
+    created_at: Mapped[dt.datetime] = mapped_column(UtcDateTime, nullable=False, default=now_utc)
+    updated_at: Mapped[dt.datetime] = mapped_column(UtcDateTime, nullable=False, default=now_utc)
+
+
+class AppointmentCalendar(Base):
+    """One appointment published to one calendar."""
+
+    __tablename__ = "appointment_calendars"
+    __table_args__ = (
+        UniqueConstraint(
+            "appointment_id", "calendar_id", name="uq_appointment_calendars_pair"
+        ),
+    )
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True)
+    appointment_id: Mapped[int] = mapped_column(
+        ForeignKey("appointments.id", ondelete="CASCADE"), nullable=False
+    )
+    calendar_id: Mapped[int] = mapped_column(
+        ForeignKey("calendars.id", ondelete="CASCADE"), nullable=False
+    )
+
+
+class AppointmentSkip(Base):
+    """A day carved out of a series, for good.
+
+    The pair is unique so two screens carving the same day cannot both write
+    one: whoever loses the race is told there is no occurrence on that day,
+    which by then is the truth.
+    """
+
+    __tablename__ = "appointment_skips"
+    __table_args__ = (
+        UniqueConstraint("appointment_id", "date_for", name="uq_appointment_skips_day"),
+    )
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True)
+    appointment_id: Mapped[int] = mapped_column(
+        ForeignKey("appointments.id", ondelete="CASCADE"), nullable=False
+    )
+    date_for: Mapped[dt.date] = mapped_column(Date, nullable=False)
+
+
+class AppointmentMark(Base):
+    """One day of one appointment called off, and put back by deleting the row.
+
+    Softer than a skip: the day stays on the calendar, struck through, because
+    everybody it was arranged with has it written down too.
+    """
+
+    __tablename__ = "appointment_marks"
+    __table_args__ = (
+        UniqueConstraint("appointment_id", "date_for", name="uq_appointment_marks_day"),
+    )
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True)
+    appointment_id: Mapped[int] = mapped_column(
+        ForeignKey("appointments.id", ondelete="CASCADE"), nullable=False
+    )
+    date_for: Mapped[dt.date] = mapped_column(Date, nullable=False)
+    cancelled: Mapped[bool] = mapped_column(Boolean, nullable=False, default=False)
+    created_at: Mapped[dt.datetime] = mapped_column(UtcDateTime, nullable=False, default=now_utc)
+
+
+class AppointmentInvite(Base):
+    """Somebody asked to one appointment, and what they said.
+
+    One row covers the whole series: an invitation is to the arrangement, not
+    to a day of it. Declining keeps the row, so the same person is not asked
+    again by an owner who cannot see they said no.
+    """
+
+    __tablename__ = "appointment_invites"
+    __table_args__ = (
+        UniqueConstraint("appointment_id", "user_id", name="uq_appointment_invites_pair"),
+        Index("ix_appointment_invites_user_id", "user_id"),
+    )
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True)
+    appointment_id: Mapped[int] = mapped_column(
+        ForeignKey("appointments.id", ondelete="CASCADE"), nullable=False
+    )
+    user_id: Mapped[int] = mapped_column(
+        ForeignKey("users.id", ondelete="CASCADE"), nullable=False
+    )
+    invited_by: Mapped[int] = mapped_column(
+        ForeignKey("users.id", ondelete="CASCADE"), nullable=False
+    )
+    status: Mapped[str] = mapped_column(String(8), nullable=False, default="pending")
+    created_at: Mapped[dt.datetime] = mapped_column(UtcDateTime, nullable=False, default=now_utc)
+    responded_at: Mapped[dt.datetime | None] = mapped_column(UtcDateTime, nullable=True)

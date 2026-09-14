@@ -152,6 +152,14 @@ email_change_limiter = RateLimiter(10, 900, "email-change")
 # past anybody adding the people they know and far under what it takes to put
 # a request in front of every member of an instance one after another.
 friend_ask_limiter = RateLimiter(30, 3600, "friend-ask")
+# Writing something onto the calendar, counted per account. A hundred and
+# twenty an hour is far past anybody filling a week in and far under what it
+# takes to grow the table one request at a time.
+appointments_limiter = RateLimiter(120, 3600, "appointments")
+# Asking somebody to an appointment, sharing a calendar, or adding a member to
+# one. Tighter than the one above because each accepted call puts a row in
+# front of another member, which is the part they cannot turn off.
+calendar_invites_limiter = RateLimiter(60, 3600, "calendar-invites")
 # Spending an emailed link: a verification, an address change, or a reset. The
 # tokens are high entropy, so this guards against a client stuck in a loop and
 # against somebody working through the table, not against a guessing run.

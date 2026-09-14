@@ -23,6 +23,7 @@ from app.friends import friend_ids
 from app.models import now_utc
 from app.profiles import avatar_url, contribution_counts, role_of
 from app.routers.admin import name_match
+from app.routers.calendar import withdraw_pending
 from app.routers.diary import fill_auto_logs, total
 from app.routers.fitness import day_exercise, kept_back, steps_on, workouts_on
 from app.routers.health import Reckoning, exercise_on
@@ -796,4 +797,7 @@ def drop_friend(
     if row is None:
         raise HTTPException(status.HTTP_404_NOT_FOUND, NOTHING_TO_DROP)
     db.delete(row)
+    # And whatever these two had waiting on each other's answer. What they both
+    # already agreed to is theirs and stays.
+    withdraw_pending(db, user.id, user_id)
     db.commit()

@@ -27,6 +27,15 @@ FITNESS_TABLES = {
     "workout_samples",
     "ingest_log",
 }
+CALENDAR_TABLES = {
+    "calendars",
+    "calendar_members",
+    "appointments",
+    "appointment_calendars",
+    "appointment_skips",
+    "appointment_marks",
+    "appointment_invites",
+}
 
 
 def test_upgrade_head_builds_the_identity_schema(tmp_path):
@@ -86,6 +95,22 @@ def test_upgrade_head_builds_the_identity_schema(tmp_path):
             constraint["name"]
             for constraint in inspector.get_unique_constraints("fitness_daily")
         }
+        appointment_columns = {
+            column["name"] for column in inspector.get_columns("appointments")
+        }
+        calendar_unique = {
+            table: {
+                constraint["name"]
+                for constraint in inspector.get_unique_constraints(table)
+            }
+            for table in (
+                "calendar_members",
+                "appointment_calendars",
+                "appointment_skips",
+                "appointment_marks",
+                "appointment_invites",
+            )
+        }
     finally:
         engine.dispose()
     assert IDENTITY_TABLES <= tables
@@ -95,6 +120,27 @@ def test_upgrade_head_builds_the_identity_schema(tmp_path):
     assert RECIPE_TABLES <= tables
     assert HEALTH_TABLES <= tables
     assert FITNESS_TABLES <= tables
+    assert CALENDAR_TABLES <= tables
+    # The zone an appointment was arranged in, which never moves under it, and
+    # the six columns one repeat is kept as.
+    assert {
+        "timezone",
+        "repeat_type",
+        "repeat_days",
+        "repeat_interval",
+        "repeat_anchor",
+        "repeat_month_day",
+        "repeat_until",
+        "detached",
+    } <= appointment_columns
+    # The pairs that make a second row impossible: one standing per member per
+    # calendar, one publication, one carve-out and one call-off a day, and one
+    # invitation per person per appointment.
+    assert "uq_calendar_members_pair" in calendar_unique["calendar_members"]
+    assert "uq_appointment_calendars_pair" in calendar_unique["appointment_calendars"]
+    assert "uq_appointment_skips_day" in calendar_unique["appointment_skips"]
+    assert "uq_appointment_marks_day" in calendar_unique["appointment_marks"]
+    assert "uq_appointment_invites_pair" in calendar_unique["appointment_invites"]
     # The record of a sync keeps the counting and never the export itself.
     assert "payload" not in log_columns
     assert {"dialect", "items", "accepted", "flagged", "skipped", "error"} <= log_columns

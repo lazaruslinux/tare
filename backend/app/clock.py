@@ -15,11 +15,16 @@ from app import models
 from app.models import now_utc
 
 
-def user_tz(user: models.User) -> dt.tzinfo:
+def zone(name: str) -> dt.tzinfo:
+    """The zone by that name, or UTC where this machine has never heard of it."""
     try:
-        return ZoneInfo(user.timezone)
+        return ZoneInfo(name)
     except (ZoneInfoNotFoundError, ValueError):
         return dt.timezone.utc
+
+
+def user_tz(user: models.User) -> dt.tzinfo:
+    return zone(user.timezone)
 
 
 def user_today(user: models.User) -> dt.date:
