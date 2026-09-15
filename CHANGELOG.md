@@ -28,6 +28,8 @@ Notable changes to Tare, newest first. The format follows
   in it; Targets and the calendar's day view take the full width of the page;
   and on the review screens the right column shows what is waiting and the
   last decisions instead of the feed.
+- The workout map follows the new palette: its ground, roads, buildings and
+  lettering are the same warm neutrals as the card around it, in both themes.
 
 ## 0.6.0 - 2026-09-15
 
