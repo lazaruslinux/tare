@@ -4,33 +4,6 @@ Notable changes to Tare, newest first. The format follows
 [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), and Tare uses
 [semantic versioning](https://semver.org/spec/v2.0.0.html).
 
-## Unreleased
-
-### Fixed
-
-- An appointment you accepted an invitation to says Accepted on its card, and
-  its Decline asks first and tells the organizer you backed out instead of
-  dropping you from their guest list.
-- The review log opens again after an administrator has matched vitamins from
-  USDA; the matched row says how many were filled and which record they came
-  from.
-
-### Changed
-
-- Tare's green is quieter. The ground, the text and the hairlines are warm
-  neutrals in both themes, and the accent keeps its colour but stops doing
-  every job: the footer links, the database mark, the plus icons, the selected
-  chips and the names in the feed are neutral now, the waiting count is amber,
-  and the raised plus casts a plain shadow.
-- The desktop stops being a widened phone. More is grouped under Your account,
-  Tracking, Community and Help, in two columns beside the rail; an empty meal,
-  Activity or Biometrics slot in the Journal is one row until it has something
-  in it; Targets and the calendar's day view take the full width of the page;
-  and on the review screens the right column shows what is waiting and the
-  last decisions instead of the feed.
-- The workout map follows the new palette: its ground, roads, buildings and
-  lettering are the same warm neutrals as the card around it, in both themes.
-
 ## 0.6.0 - 2026-09-15
 
 ### Added
@@ -50,6 +23,19 @@ Notable changes to Tare, newest first. The format follows
 
 ### Changed
 
+- Tare's green is quieter. The ground, the text and the hairlines are warm
+  neutrals in both themes, and the accent keeps its colour but stops doing
+  every job: the footer links, the database mark, the plus icons, the selected
+  chips and the names in the feed are neutral now, the waiting count is amber,
+  and the raised plus casts a plain shadow.
+- The desktop stops being a widened phone. More is grouped under Your account,
+  Tracking, Community and Help, in two columns beside the rail; an empty meal,
+  Activity or Biometrics slot in the Journal is one row until it has something
+  in it; Targets and the calendar's day view take the full width of the page;
+  and on the review screens the right column shows what is waiting and the
+  last decisions instead of the feed.
+- The workout map follows the new palette: its ground, roads, buildings and
+  lettering are the same warm neutrals as the card around it, in both themes.
 - The calendar reads better on a wide window: a month chip gives the
   appointment its name and adds the time only where there is room for both,
   the day against the clock keeps a column's width with the month beside it,
@@ -75,6 +61,12 @@ Notable changes to Tare, newest first. The format follows
 
 ### Fixed
 
+- An appointment you accepted an invitation to says Accepted on its card, and
+  its Decline asks first and tells the organizer you backed out instead of
+  dropping you from their guest list.
+- The review log opens again after an administrator has matched vitamins from
+  USDA; the matched row says how many were filled and which record they came
+  from.
 - Withdrawing a submission handed the day's allowance back. The daily
   submission and photo caps now count marks that are only ever added.
 - The Recently used header drew its plus twice.
