@@ -196,7 +196,17 @@ function Evidence({
 // prints, which is what the photograph beside it shows. Position 0 is that
 // serving. A proposal without one is read per the 100 it is stored in, named
 // as the serving it stands in for.
-function Panel({ food, ingredients }: { food: Proposed; ingredients?: string | null }) {
+function Panel({
+  food,
+  ingredients,
+  whenEmpty,
+}: {
+  food: Proposed
+  ingredients?: string | null
+  // What to say in place of the fold when nothing was read. A proposal names
+  // where the reviewer types them; an approved food says nothing.
+  whenEmpty?: string
+}) {
   const serving = food.servings[0] ?? null
   const per =
     serving === null
@@ -232,10 +242,12 @@ function Panel({ food, ingredients }: { food: Proposed; ingredients?: string | n
       {/* What the submitter says is in it, read against the label photo.
           Folded, like the rest of the label: it is long and it is checked
           second. */}
-      {ingredients && (
+      {ingredients ? (
         <Fold label="Ingredients">
           <p className="text-xs text-muted whitespace-pre-line">{ingredients}</p>
         </Fold>
+      ) : (
+        whenEmpty !== undefined && <p className="t-note mt-3">{whenEmpty}</p>
       )}
     </>
   )
@@ -602,7 +614,15 @@ export function AdminQueue({
                   onRemove={(purpose) => setRemoving({ id: item.id, purpose })}
                 />
                 {item.kind === 'new' ? (
-                  <Panel food={proposal} ingredients={proposal.ingredients_text} />
+                  <Panel
+                    food={proposal}
+                    ingredients={proposal.ingredients_text}
+                    whenEmpty={
+                      proposal.barcode
+                        ? 'No ingredients came with the scan. Add them under Edit before approving.'
+                        : 'No ingredients yet. Add them under Edit before approving.'
+                    }
+                  />
                 ) : (
                   <Comparison
                     now={item.current as Proposed}

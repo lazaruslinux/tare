@@ -334,6 +334,9 @@ export function FoodForm({
   const asksSection = (offerable && submitOn) || review !== undefined
   // The reviewer has the box itself, so the fold would be the same line twice.
   const showsIngredients = review === undefined && ingredients.trim() !== ''
+  // A scanned food that came back without any: said, so the silence is not
+  // read as something lost.
+  const scanBroughtNone = review === undefined && barcode !== '' && ingredients.trim() === ''
   // A reviewer types the vitamins, on a proposal or on a shared food. The fold
   // is theirs whether or not the food carries any yet: an empty one is what
   // they are opening it to fill in.
@@ -921,12 +924,15 @@ export function FoodForm({
         {/* What the scan brought, at the bottom and closed. A member reads it
             and no more: the ingredients and the vitamins come off the reading,
             and nobody but a reviewer is asked to check them by hand. */}
-        {(showsIngredients || editsMicros || hasMicros(vitamins)) && (
+        {(showsIngredients || scanBroughtNone || editsMicros || hasMicros(vitamins)) && (
           <div className="t-card mb-3">
             {showsIngredients && (
               <Fold label="Ingredients">
                 <p className="text-sm whitespace-pre-line">{ingredients}</p>
               </Fold>
+            )}
+            {scanBroughtNone && (
+              <p className="t-note">No ingredients came with the scan.</p>
             )}
             {editsMicros ? (
               <Fold label="Vitamins & minerals">
