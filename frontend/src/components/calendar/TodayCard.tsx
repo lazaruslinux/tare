@@ -210,7 +210,6 @@ export function TodayCard({
 
       {detail !== null && (
         <AppointmentDetail
-          me={me}
           item={detail}
           onClose={() => setDetail(null)}
           onEdit={(occurrence) => void openEdit(detail, occurrence)}

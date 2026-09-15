@@ -2,15 +2,16 @@ import { useState } from 'react'
 
 import {
   api,
+  answerInvitation,
   cancelOccurrence,
   errorText,
   removeAppointment,
   removeOccurrence,
-  type Me,
   type Occurrence,
 } from '../../api'
 import { dateText, useClock } from '../../lib/clock'
 import { colorToken, formatTimeRange, PERSONAL } from '../../lib/calendar'
+import { ConfirmSheet } from '../ConfirmSheet'
 import { Sheet } from '../Sheet'
 import { repeatSummary, draftOf } from './RepeatSheet'
 
@@ -38,13 +39,11 @@ const mapUrl = (place: string): string =>
 type Choosing = 'edit' | 'remove' | null
 
 export function AppointmentDetail({
-  me,
   item,
   onClose,
   onEdit,
   onChanged,
 }: {
-  me: Me
   item: Occurrence
   onClose: () => void
   // Editing it: the whole series, or the one day, which is saved as a copy of
@@ -58,11 +57,15 @@ export function AppointmentDetail({
   // A removal is asked twice, the way the rest of the app asks: the second tap
   // on the same button is the answer.
   const [armed, setArmed] = useState<'one' | 'all' | null>(null)
+  // Backing out of an invitation is asked the way every other removal is.
+  const [declining, setDeclining] = useState(false)
   const [busy, setBusy] = useState(false)
   const [error, setError] = useState('')
 
   const repeats = item.repeat !== null
   const owner = item.mine
+  // The reader's own invitation, when that is how they are on it at all.
+  const invitation = item.role === 'invitee' ? item.invitation : null
   const spans = item.end_date !== item.date
   const when = spans
     ? `${dateText(item.date)} to ${dateText(item.end_date)}`
@@ -116,179 +119,192 @@ export function AppointmentDetail({
   }
 
   return (
-    <Sheet open label={item.title} tall onClose={onClose}>
-      <div className="mb-2 flex items-start gap-2">
-        <p
-          className={`min-w-0 flex-1 text-base font-semibold ${
-            item.cancelled ? 'text-muted line-through' : ''
-          }`}
-        >
-          {item.title}
-        </p>
-        {item.cancelled && <span className="t-chip shrink-0">Cancelled</span>}
-      </div>
-
-      <p className="t-nums text-sm">
-        {when} · {hours}
-      </p>
-      {repeats && item.repeat !== null && (
-        <p className="t-note">{repeatSummary(draftOf(item.repeat, item.date))}</p>
-      )}
-
-      {item.location !== null && item.location !== '' && (
-        <p className="mt-2 text-sm">
-          {mappable(item.location) ? (
-            <a className="t-link" href={mapUrl(item.location)} target="_blank" rel="noreferrer">
-              {item.location}
-            </a>
-          ) : (
-            item.location
-          )}
-        </p>
-      )}
-
-      {item.notes !== '' && <p className="mt-2 text-sm whitespace-pre-line">{item.notes}</p>}
-
-      {(item.mine || item.calendars.length > 0) && (
-        <p className="mt-3 flex flex-wrap items-center gap-2 text-sm text-muted">
-          On:
-          {/* Somebody else's appointment is not on this account's own
-              calendar. It is readable here because a calendar it is on is
-              shared, and that is the only place it sits. */}
-          {item.mine && (
-            <span className="flex items-center gap-1.5">
-              <Dot color={PERSONAL} /> Personal
-            </span>
-          )}
-          {item.calendars.map((shelf) => (
-            <span key={shelf.id} className="flex items-center gap-1.5">
-              <Dot color={colorToken(shelf.color)} /> {shelf.name}
-            </span>
-          ))}
-        </p>
-      )}
-
-      {owner && item.invitees.length > 0 && (
-        <div className="mt-3">
-          <p className="t-label">Invited</p>
-          {item.invitees.map((guest) => (
-            <div key={guest.id} className="t-row">
-              <span className="min-w-0 flex-1 truncate text-sm">{guest.display_name}</span>
-              <span className="t-chip">{ANSWER[guest.status ?? 'pending']}</span>
-            </div>
-          ))}
-        </div>
-      )}
-      {!owner && <p className="mt-3 text-sm text-muted">From {item.owner.display_name}</p>}
-
-      {error !== '' && <p className="t-error mt-3">{error}</p>}
-
-      {/* The chooser stands in for the whole list of actions, so there is
-          nothing else to tap while the question is open. */}
-      {choosing !== null ? (
-        <div className="mt-4 flex flex-col gap-2">
-          <p className="text-sm text-muted">
-            {choosing === 'edit'
-              ? 'This appointment repeats. Edit one day, or every day?'
-              : 'This appointment repeats. Remove one day, or every day?'}
+    <>
+      <Sheet open label={item.title} tall onClose={onClose}>
+        <div className="mb-2 flex items-start gap-2">
+          <p
+            className={`min-w-0 flex-1 text-base font-semibold ${
+              item.cancelled ? 'text-muted line-through' : ''
+            }`}
+          >
+            {item.title}
           </p>
-          <button
-            type="button"
-            className={`t-btn ${choosing === 'remove' ? 't-btn-danger' : 't-btn-primary'}`}
-            disabled={busy}
-            onClick={
-              choosing === 'edit' ? () => onEdit(item.occurrence_date) : removeOne
-            }
-          >
-            {choosing === 'remove' && armed === 'one'
-              ? 'Tap again to remove this day'
-              : 'Just this appointment'}
-          </button>
-          <button
-            type="button"
-            className={`t-btn ${choosing === 'remove' ? 't-btn-danger' : ''}`}
-            disabled={busy}
-            onClick={choosing === 'edit' ? () => onEdit() : removeAll}
-          >
-            {choosing === 'remove' && armed === 'all'
-              ? 'Tap again to remove them all'
-              : 'The whole series'}
-          </button>
-          <button
-            type="button"
-            className="t-btn"
-            onClick={() => {
-              setChoosing(null)
-              setArmed(null)
-            }}
-          >
-            Back
-          </button>
+          {item.cancelled && <span className="t-chip shrink-0">Cancelled</span>}
+          {invitation?.status === 'accepted' && <span className="t-chip shrink-0">Accepted</span>}
         </div>
-      ) : (
-        <div className="mt-4 flex flex-col gap-2">
-          {item.editable && (
-            <button type="button" className="t-btn t-btn-primary" disabled={busy} onClick={edit}>
-              Edit
+
+        <p className="t-nums text-sm">
+          {when} · {hours}
+        </p>
+        {repeats && item.repeat !== null && (
+          <p className="t-note">{repeatSummary(draftOf(item.repeat, item.date))}</p>
+        )}
+
+        {item.location !== null && item.location !== '' && (
+          <p className="mt-2 text-sm">
+            {mappable(item.location) ? (
+              <a className="t-link" href={mapUrl(item.location)} target="_blank" rel="noreferrer">
+                {item.location}
+              </a>
+            ) : (
+              item.location
+            )}
+          </p>
+        )}
+
+        {item.notes !== '' && <p className="mt-2 text-sm whitespace-pre-line">{item.notes}</p>}
+
+        {(item.mine || item.calendars.length > 0) && (
+          <p className="mt-3 flex flex-wrap items-center gap-2 text-sm text-muted">
+            On:
+            {/* Somebody else's appointment is not on this account's own
+                calendar. It is readable here because a calendar it is on is
+                shared, and that is the only place it sits. */}
+            {item.mine && (
+              <span className="flex items-center gap-1.5">
+                <Dot color={PERSONAL} /> Personal
+              </span>
+            )}
+            {item.calendars.map((shelf) => (
+              <span key={shelf.id} className="flex items-center gap-1.5">
+                <Dot color={colorToken(shelf.color)} /> {shelf.name}
+              </span>
+            ))}
+          </p>
+        )}
+
+        {owner && item.invitees.length > 0 && (
+          <div className="mt-3">
+            <p className="t-label">Invited</p>
+            {item.invitees.map((guest) => (
+              <div key={guest.id} className="t-row">
+                <span className="min-w-0 flex-1 truncate text-sm">{guest.display_name}</span>
+                <span className="t-chip">{ANSWER[guest.status ?? 'pending']}</span>
+              </div>
+            ))}
+          </div>
+        )}
+        {!owner && <p className="mt-3 text-sm text-muted">From {item.owner.display_name}</p>}
+
+        {error !== '' && <p className="t-error mt-3">{error}</p>}
+
+        {/* The chooser stands in for the whole list of actions, so there is
+            nothing else to tap while the question is open. */}
+        {choosing !== null ? (
+          <div className="mt-4 flex flex-col gap-2">
+            <p className="text-sm text-muted">
+              {choosing === 'edit'
+                ? 'This appointment repeats. Edit one day, or every day?'
+                : 'This appointment repeats. Remove one day, or every day?'}
+            </p>
+            <button
+              type="button"
+              className={`t-btn ${choosing === 'remove' ? 't-btn-danger' : 't-btn-primary'}`}
+              disabled={busy}
+              onClick={
+                choosing === 'edit' ? () => onEdit(item.occurrence_date) : removeOne
+              }
+            >
+              {choosing === 'remove' && armed === 'one'
+                ? 'Tap again to remove this day'
+                : 'Just this appointment'}
             </button>
-          )}
-          {owner && (
+            <button
+              type="button"
+              className={`t-btn ${choosing === 'remove' ? 't-btn-danger' : ''}`}
+              disabled={busy}
+              onClick={choosing === 'edit' ? () => onEdit() : removeAll}
+            >
+              {choosing === 'remove' && armed === 'all'
+                ? 'Tap again to remove them all'
+                : 'The whole series'}
+            </button>
             <button
               type="button"
               className="t-btn"
-              disabled={busy}
-              onClick={() =>
-                void run(() =>
-                  cancelOccurrence(item.id, item.occurrence_date, !item.cancelled)
-                )
-              }
+              onClick={() => {
+                setChoosing(null)
+                setArmed(null)
+              }}
             >
-              {item.cancelled ? 'Un-cancel this appointment' : 'Cancel this appointment'}
+              Back
             </button>
-          )}
-          {owner && (
-            <button type="button" className="t-btn t-btn-danger" disabled={busy} onClick={startRemove}>
-              {armed === 'all' ? 'Tap again to remove' : 'Remove'}
-            </button>
-          )}
-          {/* Somebody who shares a calendar it is on takes it off that
-              calendar rather than deleting what is not theirs. */}
-          {!owner &&
-            item.role === 'member' &&
-            item.calendars.map((shelf) => (
+          </div>
+        ) : (
+          <div className="mt-4 flex flex-col gap-2">
+            {item.editable && (
+              <button type="button" className="t-btn t-btn-primary" disabled={busy} onClick={edit}>
+                Edit
+              </button>
+            )}
+            {owner && (
               <button
-                key={shelf.id}
                 type="button"
                 className="t-btn"
                 disabled={busy}
                 onClick={() =>
                   void run(() =>
-                    api(`/calendar/appointments/${item.id}/calendars/${shelf.id}`, {
-                      method: 'DELETE',
-                    })
+                    cancelOccurrence(item.id, item.occurrence_date, !item.cancelled)
                   )
                 }
               >
-                Remove from {shelf.name}
+                {item.cancelled ? 'Un-cancel this appointment' : 'Cancel this appointment'}
               </button>
-            ))}
-          {item.role === 'invitee' && (
-            <button
-              type="button"
-              className="t-btn"
-              disabled={busy}
-              onClick={() =>
-                void run(() =>
-                  api(`/calendar/appointments/${item.id}/invites/${me.id}`, { method: 'DELETE' })
-                )
-              }
-            >
-              Decline
-            </button>
-          )}
-        </div>
-      )}
-    </Sheet>
+            )}
+            {owner && (
+              <button type="button" className="t-btn t-btn-danger" disabled={busy} onClick={startRemove}>
+                {armed === 'all' ? 'Tap again to remove' : 'Remove'}
+              </button>
+            )}
+            {/* Somebody who shares a calendar it is on takes it off that
+                calendar rather than deleting what is not theirs. */}
+            {!owner &&
+              item.role === 'member' &&
+              item.calendars.map((shelf) => (
+                <button
+                  key={shelf.id}
+                  type="button"
+                  className="t-btn"
+                  disabled={busy}
+                  onClick={() =>
+                    void run(() =>
+                      api(`/calendar/appointments/${item.id}/calendars/${shelf.id}`, {
+                        method: 'DELETE',
+                      })
+                    )
+                  }
+                >
+                  Remove from {shelf.name}
+                </button>
+              ))}
+            {invitation !== null && (
+              <button
+                type="button"
+                className="t-btn"
+                disabled={busy}
+                onClick={() => setDeclining(true)}
+              >
+                Decline
+              </button>
+            )}
+          </div>
+        )}
+      </Sheet>
+
+      <ConfirmSheet
+        open={declining}
+        label="Decline invitation"
+        question={`Decline ${item.title}?`}
+        note={`It leaves your calendar, and ${item.owner.display_name} would have to ask you again.`}
+        verb="Decline"
+        busy={busy}
+        error={error}
+        onConfirm={() =>
+          invitation !== null && void run(() => answerInvitation(invitation.id, false))
+        }
+        onClose={() => setDeclining(false)}
+      />
+    </>
   )
 }
 

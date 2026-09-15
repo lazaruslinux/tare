@@ -349,6 +349,8 @@ def test_a_calendar_member_sees_what_is_published_to_it(client, db_session, make
     assert item["role"] == "member"
     assert item["editable"] is True
     assert item["calendars"] == [{"id": shelf.id, "name": "Home", "color": "blue"}]
+    # On it through the calendar, not through an invitation.
+    assert item["invitation"] is None
 
 
 def test_somebody_who_has_not_accepted_the_calendar_sees_nothing(
@@ -385,6 +387,9 @@ def test_an_invitation_shows_nothing_until_it_is_accepted(
     befriend(db_session, signed_in, other)
     made = kept(client, invitee_ids=[other.id])
 
+    # The organizer was not invited to their own appointment.
+    assert items_on(client, TUESDAY)[0]["invitation"] is None
+
     sign_in(client, "other")
     assert items_on(client, TUESDAY) == []
     assert client.get(f"/api/calendar/appointments/{made['id']}").status_code == 404
@@ -402,6 +407,7 @@ def test_an_invitation_shows_nothing_until_it_is_accepted(
     assert item["title"] == "Dentist"
     assert item["role"] == "invitee"
     assert item["editable"] is False
+    assert item["invitation"] == {"id": waiting[0]["invite_id"], "status": "accepted"}
     assert client.get("/api/calendar/badge").json()["invitations"] == 0
 
 
@@ -416,6 +422,26 @@ def test_declining_an_invitation_hides_it_for_good(client, db_session, make_user
 
     assert items_on(client, TUESDAY) == []
     assert client.get("/api/calendar/invitations").json()["meetings"] == []
+
+
+def test_an_accepted_guest_may_still_decline(client, db_session, make_user, signed_in):
+    other = make_user("other")
+    befriend(db_session, signed_in, other)
+    made = kept(client, invitee_ids=[other.id])
+
+    sign_in(client, "other")
+    invite_id = client.get("/api/calendar/invitations").json()["meetings"][0]["invite_id"]
+    assert client.post(f"/api/calendar/invitations/{invite_id}/accept").status_code == 200
+
+    response = client.post(f"/api/calendar/invitations/{invite_id}/decline")
+    assert response.status_code == 200
+    assert response.json()["status"] == "declined"
+    assert items_on(client, TUESDAY) == []
+
+    # The organizer is told they backed out, rather than losing the name.
+    sign_in(client, "member")
+    listed = client.get(f"/api/calendar/appointments/{made['id']}").json()["invitees"]
+    assert listed == [{"id": other.id, "display_name": "other", "status": "declined"}]
 
 
 def test_the_organizer_sees_what_everybody_answered(client, db_session, make_user, signed_in):

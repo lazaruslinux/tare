@@ -8,6 +8,9 @@ Notable changes to Tare, newest first. The format follows
 
 ### Fixed
 
+- An appointment you accepted an invitation to says Accepted on its card, and
+  its Decline asks first and tells the organizer you backed out instead of
+  dropping you from their guest list.
 - The review log opens again after an administrator has matched vitamins from
   USDA; the matched row says how many were filled and which record they came
   from.

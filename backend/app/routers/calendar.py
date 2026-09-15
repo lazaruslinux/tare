@@ -619,6 +619,16 @@ def invitee_list(
     return sorted(listed, key=lambda shown: str(shown["display_name"]).lower())
 
 
+def my_invitation(
+    row: models.Appointment, sheet: Sheet, user: models.User
+) -> dict[str, object] | None:
+    """The viewer's own invitation to this one, if they were asked at all."""
+    for invite in sheet.invites.get(row.id, []):
+        if invite.user_id == user.id:
+            return {"id": invite.id, "status": invite.status}
+    return None
+
+
 # Where an occurrence lands, and what time it reads as
 # ---------------------------------------------------
 
@@ -743,6 +753,7 @@ def base_of(row: models.Appointment, sheet: Sheet, user: models.User) -> dict[st
         "editable": editable_by(row, sheet, user),
         "role": role_of(row, sheet, user),
         "invitees": invitee_list(row, sheet, True) if row.owner_id == user.id else [],
+        "invitation": my_invitation(row, sheet, user),
         "repeat": repeat_out(row),
         "detached": row.detached,
         "timezone": row.timezone,
@@ -796,6 +807,7 @@ def detail_of(db: Session, user: models.User, row: models.Appointment) -> dict[s
         "repeat": repeat_out(row),
         "calendars": calendars_out(row, sheet),
         "invitees": invitee_list(row, sheet, mine),
+        "invitation": my_invitation(row, sheet, user),
         "owner": named_member(sheet.named.get(row.owner_id)),
         "mine": mine,
         "editable": editable_by(row, sheet, user),

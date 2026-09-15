@@ -1301,6 +1301,10 @@ export type CalendarTag = { id: number; name: string; color: string }
 // else is told who was asked and no more.
 export type Invitee = Named & { status?: 'pending' | 'accepted' | 'declined' }
 
+// The reader's own invitation to an appointment, or null when they are on it
+// some other way. It is what an answer is given against.
+export type MyInvitation = { id: number; status: 'pending' | 'accepted' | 'declined' }
+
 // What the caller is to one appointment: whoever made it, somebody who shares
 // a calendar it is on, or somebody who was asked to it.
 export type CalendarRole = 'organizer' | 'member' | 'invitee'
@@ -1354,6 +1358,7 @@ export type Occurrence = {
   editable: boolean
   role: CalendarRole
   invitees: Invitee[]
+  invitation: MyInvitation | null
   repeat: RepeatOut | null
   detached: boolean
   cancelled: boolean
@@ -1375,6 +1380,7 @@ export type AppointmentRaw = {
   repeat: RepeatOut | null
   calendars: CalendarTag[]
   invitees: Invitee[]
+  invitation: MyInvitation | null
   owner: Named
   mine: boolean
   editable: boolean
