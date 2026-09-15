@@ -4,6 +4,14 @@ Notable changes to Tare, newest first. The format follows
 [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), and Tare uses
 [semantic versioning](https://semver.org/spec/v2.0.0.html).
 
+## Unreleased
+
+### Fixed
+
+- The review log opens again after an administrator has matched vitamins from
+  USDA; the matched row says how many were filled and which record they came
+  from.
+
 ## 0.6.0 - 2026-09-15
 
 ### Added

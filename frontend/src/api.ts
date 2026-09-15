@@ -553,8 +553,9 @@ export type ReviewLogRow = {
   target_id: number | null
   target_name: string
   // Whatever the action is worth saying more about: the reason for a no, the
-  // parts of a panel a correction moved.
-  detail: string[] | string | null
+  // parts of a panel a correction moved, or the USDA record a vitamin match
+  // read and the fields it filled. An older row may carry neither of those two.
+  detail: string[] | string | { fdc_id?: number; keys?: string[] } | null
 }
 
 export type ReviewLogPage = { items: ReviewLogRow[]; next_cursor: string | null }

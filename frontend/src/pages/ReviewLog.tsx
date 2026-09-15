@@ -16,6 +16,7 @@ const SAID: Record<string, string> = {
   resolved: 'resolved the report on',
   food_edited: 'corrected',
   micros_edited: 'typed the vitamins on',
+  micros_applied: 'filled the vitamins on',
   photo_replaced: 'changed a photo on',
   photo_removed: 'removed a photo from',
   role_granted: 'made a reviewer:',
@@ -34,12 +35,19 @@ function sentence(row: ReviewLogRow): string {
   return `${row.actor_name} ${said} ${row.target_name || 'something since deleted'}`
 }
 
-// The reason for a no, or the parts of a panel a correction moved. Nothing at
-// all where the action speaks for itself.
+// The reason for a no, the parts of a panel a correction moved, or what a
+// vitamin match filled. Nothing at all where the action speaks for itself, and
+// nothing rather than a throw where a row carries a shape this screen has not
+// been taught to read: a log that will not open is worse than a quiet row.
 function detailText(detail: ReviewLogRow['detail']): string | null {
   if (detail === null) return null
   if (Array.isArray(detail)) return detail.length === 0 ? null : `Changed: ${detail.join(', ')}`
-  return detail.trim() === '' ? null : detail
+  if (typeof detail === 'string') return detail.trim() === '' ? null : detail
+  const record = typeof detail.fdc_id === 'number' ? ` from USDA record ${detail.fdc_id}` : ''
+  if (!Array.isArray(detail.keys)) return record === '' ? null : `Filled${record}`
+  const filled = detail.keys.length
+  const things = filled === 1 ? 'vitamin or mineral' : 'vitamins and minerals'
+  return `Filled ${filled} ${things}${record}`
 }
 
 export function ReviewLog({ me, onBack }: { me: Me; onBack: () => void }) {
