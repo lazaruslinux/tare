@@ -225,6 +225,14 @@ def test_login_answers_with_the_me_payload(client, make_user):
         "location": None,
         "avatar_url": None,
         "feed_hidden": [],
+        # Never arranged, so the Dashboard's own order comes back.
+        "dashboard_cards": [
+            {"key": "numbers", "shown": True},
+            {"key": "calendar", "shown": True},
+            {"key": "food_activity", "shown": True},
+            {"key": "progress", "shown": True},
+            {"key": "community", "shown": True},
+        ],
         "share_age": False,
         "share_sex": False,
         "share_location": False,

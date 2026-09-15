@@ -2,6 +2,9 @@
 // so the order and the words are read in one place and the layer that draws
 // them knows nothing about what it is pointing at.
 
+import type { DashboardCard, DashboardCardKey } from '../api'
+import { showsCard } from './dashboardCards'
+
 export type TourStep = {
   id: string
   title: string
@@ -10,6 +13,9 @@ export type TourStep = {
   target?: { phone?: string; wide?: string }
   // What the shell must show first.
   go?: 'dashboard' | 'journal' | 'food' | 'more'
+  // Which Dashboard card this step is about. A step pointing at a card the
+  // member has hidden is not walked and is not counted either.
+  needs?: DashboardCardKey
 }
 
 export const TOUR: TourStep[] = [
@@ -24,6 +30,7 @@ export const TOUR: TourStep[] = [
     body: "Steps, calories left and exercise minutes. Tap a card's title to open it.",
     target: { phone: 'dash-today', wide: 'dash-today' },
     go: 'dashboard',
+    needs: 'numbers',
   },
   {
     id: 'calendar',
@@ -31,6 +38,7 @@ export const TOUR: TourStep[] = [
     body: 'Appointments you add show here with the time of day. Share a calendar with a friend under Calendar.',
     target: { phone: 'dash-calendar', wide: 'dash-calendar' },
     go: 'dashboard',
+    needs: 'calendar',
   },
   {
     id: 'plus',
@@ -81,3 +89,7 @@ export const TOUR: TourStep[] = [
     body: 'Take it again any time under More, then Guide.',
   },
 ]
+
+// The tour as one account reads it, which is the list the count is taken from.
+export const tourSteps = (cards: DashboardCard[]): TourStep[] =>
+  TOUR.filter((step) => step.needs === undefined || showsCard(cards, step.needs))

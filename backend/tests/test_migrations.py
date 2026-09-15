@@ -175,6 +175,8 @@ def test_upgrade_head_builds_the_identity_schema(tmp_path):
     # And the pair every read of the diary asks on.
     assert "ix_diary_entries_user_date" in entry_indexes
     assert "location" in user_columns
+    # How this account has arranged the Dashboard, empty until it does.
+    assert "dashboard_cards" in user_columns
     # The second role, and the application an administrator answers.
     assert {"is_reviewer", "reviewer_requested_at"} <= user_columns
     # When the first-run screen was answered, which the account carries rather

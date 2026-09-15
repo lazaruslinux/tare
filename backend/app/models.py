@@ -102,6 +102,9 @@ class User(Base):
     # stats, route, minutes and splits. Another member is served the workout
     # without them rather than with them emptied.
     feed_hidden: Mapped[list[Any]] = mapped_column(JSON, nullable=False, default=list)
+    # Which units the Dashboard shows and in what order, as {"key", "shown"}
+    # objects. Empty until the member arranges it, and read back as the default.
+    dashboard_cards: Mapped[list[Any]] = mapped_column(JSON, nullable=False, default=list)
     # The only three facts another member may be shown, each off until it is
     # turned on. Everything else about an account stays private.
     share_age: Mapped[bool] = mapped_column(Boolean, nullable=False, default=False)

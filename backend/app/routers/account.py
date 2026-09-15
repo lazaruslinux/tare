@@ -18,7 +18,7 @@ from pydantic import BaseModel
 from sqlalchemy import func, select
 from sqlalchemy.orm import Session
 
-from app import clock, mail, models, photos, profiles, security, throttle
+from app import clock, dashboard, mail, models, photos, profiles, security, throttle
 from app.config import settings
 from app.db import get_db
 from app.deps import require_account, require_user
@@ -76,6 +76,9 @@ class AccountPatch(BaseModel):
     # The Sharing screen's switches, saved together because they are one answer
     # to one question: what other members see.
     feed_hidden: list[str] | None = None
+    # The Dashboard's own cards, in the order they are read, saved the same way
+    # and for the same reason: the order is part of the answer.
+    dashboard_cards: list[dict] | None = None
     share_age: bool | None = None
     share_sex: bool | None = None
     share_location: bool | None = None
@@ -137,6 +140,16 @@ def update_account(
                 raise HTTPException(status.HTTP_400_BAD_REQUEST, fitness.BAD_HIDDEN)
         # Kept in the order Tare names them, and each name once.
         user.feed_hidden = [name for name in fitness.HIDEABLE if name in asked]
+
+    if "dashboard_cards" in sent:
+        cards = body.dashboard_cards or []
+        for card in cards:
+            if card.get("key") not in dashboard.KEYS or not isinstance(
+                card.get("shown"), bool
+            ):
+                raise HTTPException(status.HTTP_400_BAD_REQUEST, dashboard.BAD_CARD)
+        # Stored normalized, so what comes back is what the Dashboard reads.
+        user.dashboard_cards = dashboard.normalize(cards)
 
     for field in (
         "share_age",

@@ -1,5 +1,27 @@
 import { useReducedMotion } from 'framer-motion'
 
+// The on/off mark on its own. Split out so a row that cannot be one whole
+// button, because it carries a grip and arrows of its own, still wears the
+// switch every other row wears.
+export function SwitchKnob({ checked }: { checked: boolean }) {
+  const reduced = useReducedMotion()
+  return (
+    <span
+      aria-hidden="true"
+      className={`relative h-6 w-11 shrink-0 rounded-full border ${
+        checked ? 'border-accent bg-accent' : 'border-line bg-surface-2'
+      }`}
+    >
+      <span
+        className={`absolute top-0.5 h-4.5 w-4.5 rounded-full ${
+          checked ? 'left-[1.375rem] bg-bg' : 'left-0.5 bg-muted'
+        }`}
+        style={reduced ? undefined : { transition: 'left 0.18s ease, background-color 0.18s ease' }}
+      />
+    </span>
+  )
+}
+
 // One thing that is on or off, as a row. A button rather than a checkbox: the
 // whole row is the target, the label is part of it, and a button already
 // answers to space and enter without anything here saying so.
@@ -16,7 +38,6 @@ export function Switch({
   checked: boolean
   onChange: (next: boolean) => void
 }) {
-  const reduced = useReducedMotion()
   return (
     <button
       type="button"
@@ -29,19 +50,7 @@ export function Switch({
         <span className="block text-sm">{label}</span>
         {note !== undefined && <span className="block text-xs text-muted">{note}</span>}
       </span>
-      <span
-        aria-hidden="true"
-        className={`relative h-6 w-11 shrink-0 rounded-full border ${
-          checked ? 'border-accent bg-accent' : 'border-line bg-surface-2'
-        }`}
-      >
-        <span
-          className={`absolute top-0.5 h-4.5 w-4.5 rounded-full ${
-            checked ? 'left-[1.375rem] bg-bg' : 'left-0.5 bg-muted'
-          }`}
-          style={reduced ? undefined : { transition: 'left 0.18s ease, background-color 0.18s ease' }}
-        />
-      </span>
+      <SwitchKnob checked={checked} />
     </button>
   )
 }

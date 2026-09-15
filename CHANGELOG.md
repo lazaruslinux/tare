@@ -4,6 +4,22 @@ Notable changes to Tare, newest first. The format follows
 [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), and Tare uses
 [semantic versioning](https://semver.org/spec/v2.0.0.html).
 
+## Unreleased
+
+### Added
+
+- Dashboard layout. Under More, then Display, a member drags or steps the
+  five Dashboard cards into their own order and turns any of them off; the
+  arrangement is kept on the account, so every device agrees. New accounts
+  open on Today's numbers, then the calendar, then Food and Activity,
+  Progress and Community. The tour skips a card that is hidden.
+
+### Changed
+
+- A scanned food that came with no ingredients says so: the member's form
+  reads "No ingredients came with the scan.", and the review queue tells the
+  reviewer where to type them before approving.
+
 ## 0.6.0 - 2026-09-15
 
 ### Added

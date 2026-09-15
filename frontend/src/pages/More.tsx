@@ -1,7 +1,11 @@
+import { Reorder, useDragControls, useReducedMotion } from 'framer-motion'
 import {
   BookOpen,
   CalendarDays,
+  ChevronDown,
   ChevronRight,
+  ChevronUp,
+  GripVertical,
   ClipboardList,
   Eye,
   HeartPulse,
@@ -21,17 +25,31 @@ import {
   UserRound,
   Users,
 } from 'lucide-react'
-import { useEffect, useState, type FormEvent, type ReactNode } from 'react'
+import { useEffect, useRef, useState, type FormEvent, type ReactNode } from 'react'
 
-import { api, errorText, type Me, type SyncKey, type Units } from '../api'
+import {
+  api,
+  errorText,
+  type DashboardCard,
+  type Me,
+  type SyncKey,
+  type Units,
+} from '../api'
 import { CalendarsSheet } from '../components/calendar/CalendarsSheet'
 import { ConfirmSheet } from '../components/ConfirmSheet'
 import { Sheet } from '../components/Sheet'
 import { type Glyph } from '../components/TabBar'
 import { SaveMarks, useInstantSave, useSavedChip } from '../components/SaveMarks'
+import { SwitchKnob } from '../components/Switch'
 import { useTopBar, type TopBarHeader } from '../hooks/useTopBar'
 import { useRailLayout } from '../hooks/useWideLayout'
 import { type Clock } from '../lib/clock'
+import {
+  DASHBOARD_CARDS,
+  DASHBOARD_DEFAULT,
+  isDefaultOrder,
+  sameOrder,
+} from '../lib/dashboardCards'
 import { reviews } from '../lib/roles'
 import { ZONES, offList } from '../lib/zones'
 import { applyTheme, rememberTheme, useTheme, type Theme } from '../theme'
@@ -158,6 +176,158 @@ function Row({
       {count !== undefined && count > 0 && <span className="t-chip t-nums">{count}</span>}
       <ChevronRight className="h-4 w-4 shrink-0 text-muted" strokeWidth={2} />
     </button>
+  )
+}
+
+// One card of the Dashboard as a row somebody can move. The grip drags it, the
+// switch decides whether the Dashboard draws it, and the arrows do the same
+// move without a drag, which is the only way to do it from a keyboard.
+function CardRow({
+  card,
+  first,
+  last,
+  reduced,
+  onDragEnd,
+  onMove,
+  onShow,
+}: {
+  card: DashboardCard
+  first: boolean
+  last: boolean
+  reduced: boolean
+  onDragEnd: () => void
+  onMove: (by: number) => void
+  onShow: (next: boolean) => void
+}) {
+  const controls = useDragControls()
+  const named = DASHBOARD_CARDS.find((one) => one.key === card.key)
+  const label = named?.label ?? card.key
+  return (
+    <Reorder.Item
+      value={card}
+      as="div"
+      className="t-row touch-none"
+      dragListener={false}
+      dragControls={controls}
+      layout={reduced ? undefined : 'position'}
+      transition={{ duration: 0.18 }}
+      onDragEnd={onDragEnd}
+    >
+      <button
+        type="button"
+        className="t-topbar-icon -ml-2 cursor-grab"
+        aria-label={`Drag to move ${label}`}
+        onPointerDown={(event) => controls.start(event)}
+      >
+        <GripVertical className="h-4 w-4" strokeWidth={2} />
+      </button>
+      <span className="min-w-0 flex-1">
+        <span className="block text-sm">{label}</span>
+        {named !== undefined && <span className="block text-xs text-muted">{named.note}</span>}
+      </span>
+      <button
+        type="button"
+        role="switch"
+        aria-checked={card.shown}
+        aria-label={`Show ${label}`}
+        className="t-tap44 flex shrink-0 items-center"
+        onClick={() => onShow(!card.shown)}
+      >
+        <SwitchKnob checked={card.shown} />
+      </button>
+      <span className="flex shrink-0 items-center">
+        <button
+          type="button"
+          className="t-topbar-icon disabled:opacity-40"
+          aria-label={`Move ${label} up`}
+          disabled={first}
+          onClick={() => onMove(-1)}
+        >
+          <ChevronUp className="h-4 w-4" strokeWidth={2} />
+        </button>
+        <button
+          type="button"
+          className="t-topbar-icon -mr-2 disabled:opacity-40"
+          aria-label={`Move ${label} down`}
+          disabled={last}
+          onClick={() => onMove(1)}
+        >
+          <ChevronDown className="h-4 w-4" strokeWidth={2} />
+        </button>
+      </span>
+    </Reorder.Item>
+  )
+}
+
+// The Dashboard's cards, in the order they are read. Every change saves at
+// once, like the rest of this screen; a drag saves when it is let go rather
+// than on every frame.
+function DashboardLayout({
+  cards,
+  onSave,
+}: {
+  cards: DashboardCard[]
+  // The saved list, and what to put back if the server refuses it.
+  onSave: (next: DashboardCard[], undo: () => void) => void
+}) {
+  const reduced = useReducedMotion() === true
+  const [order, setOrder] = useState(cards)
+  // What came back from the server wins: another save on this screen returns
+  // the whole account, and a drag is over by the time one lands.
+  useEffect(() => setOrder(cards), [cards])
+  // The list as it stands this moment, which a second change in the same tick
+  // builds on rather than throwing away.
+  const held = useRef(order)
+  held.current = order
+
+  const put = (next: DashboardCard[]) => {
+    held.current = next
+    setOrder(next)
+  }
+
+  const save = (make: (was: DashboardCard[]) => DashboardCard[]) => {
+    const next = make(held.current)
+    put(next)
+    if (sameOrder(next, cards)) return
+    onSave(next, () => put(cards))
+  }
+
+  return (
+    <>
+      <Reorder.Group axis="y" as="div" values={order} onReorder={setOrder}>
+        {order.map((card, index) => (
+          <CardRow
+            key={card.key}
+            card={card}
+            first={index === 0}
+            last={index === order.length - 1}
+            reduced={reduced}
+            onDragEnd={() => save((was) => was)}
+            onMove={(by) =>
+              save((was) => {
+                const at = was.findIndex((one) => one.key === card.key)
+                const next = was.slice()
+                next.splice(at + by, 0, ...next.splice(at, 1))
+                return next
+              })
+            }
+            onShow={(next) =>
+              save((was) =>
+                was.map((one) => (one.key === card.key ? { ...one, shown: next } : one))
+              )
+            }
+          />
+        ))}
+      </Reorder.Group>
+      <button
+        type="button"
+        className="t-btn mt-3"
+        disabled={isDefaultOrder(order)}
+        onClick={() => save(() => DASHBOARD_DEFAULT)}
+      >
+        Use the default order
+      </button>
+    </>
   )
 }
 
@@ -771,6 +941,17 @@ export function More({
             </select>
           </div>
           {displaySave.error && <p className="t-error mt-2">{displaySave.error}</p>}
+        </div>
+
+        <div className="t-card mb-3">
+          <p className="t-card-title">Dashboard layout</p>
+          <p className="mb-1 text-xs text-muted">
+            Drag a card, or use the arrows. Turn a card off to hide it.
+          </p>
+          <DashboardLayout
+            cards={me.dashboard_cards}
+            onSave={(next, undo) => patchDisplay({ dashboard_cards: next }, undo)}
+          />
         </div>
 
         <div className="t-card mb-3">

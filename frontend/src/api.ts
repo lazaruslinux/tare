@@ -18,6 +18,16 @@ export type Headline = 'calories' | 'protein_g' | 'carbs_g' | 'fat_g'
 // two it is only ever changes the words beside it.
 export type Role = 'admin' | 'reviewer' | null
 
+// The five units the Dashboard is made of. A member arranges them under More,
+// then Display, and the order is the order they are drawn in.
+export type DashboardCardKey =
+  | 'numbers'
+  | 'calendar'
+  | 'food_activity'
+  | 'progress'
+  | 'community'
+export type DashboardCard = { key: DashboardCardKey; shown: boolean }
+
 export type Me = {
   id: number
   username: string
@@ -55,6 +65,9 @@ export type Me = {
   // What this account holds back on a workout other members can see, and the
   // three facts it lets them see about the person.
   feed_hidden: string[]
+  // The Dashboard's five cards in the order this account reads them, each with
+  // whether it is shown. Always the full list, whatever was last saved.
+  dashboard_cards: DashboardCard[]
   share_age: boolean
   share_sex: boolean
   share_location: boolean

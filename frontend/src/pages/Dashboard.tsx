@@ -1,9 +1,17 @@
 import { ChevronRight, CircleCheck, Plus } from 'lucide-react'
-import { useEffect, useRef, useState, type PointerEvent } from 'react'
+import {
+  Fragment,
+  useEffect,
+  useRef,
+  useState,
+  type PointerEvent,
+  type ReactNode,
+} from 'react'
 
 import {
   api,
   errorText,
+  type DashboardCardKey,
   type DayRow,
   type DayWorkout,
   type DiaryDay,
@@ -1392,20 +1400,22 @@ export function Dashboard({
     )
   }
 
-  return (
-    <>
-      {error && <p className="t-error mb-3">{error}</p>}
-
+  // Every unit of the Dashboard, drawn in the order this account arranged
+  // them under More, then Display. The blocks are the ones that were always
+  // here; what changed is who decides the order.
+  const units: Record<DashboardCardKey, () => ReactNode> = {
+    calendar: () => (
       <TodayCard
         me={me}
         refresh={refresh}
         onOpenCalendar={onOpenCalendarDay}
         onChanged={() => onChanged?.()}
       />
-
-      {/* Every ring is its own way in, so the card is a plain card and the
-          head is a button of its own: a button inside a button is not a thing
-          a screen reader can hand anybody. */}
+    ),
+    // Every ring is its own way in, so the card is a plain card and the head
+    // is a button of its own: a button inside a button is not a thing a
+    // screen reader can hand anybody.
+    numbers: () => (
       <div data-tour="dash-today" className="t-card mb-3">
         <button
           type="button"
@@ -1434,31 +1444,10 @@ export function Dashboard({
           </div>
         )}
       </div>
-
-      {/* One switch over every card that reads a run of days, standing where
-          the heading was: the control says what the cards are of, so none of
-          them says it again. The range wraps under it on a phone. It stays
-          under the bar as the cards go by, on the page's own ground and bled
-          to the well's edges so they pass behind it rather than beside it. */}
-      <div className="sticky top-[calc(48px_+_env(safe-area-inset-top))] z-10 -mx-3.5 mb-2 mt-1 flex flex-wrap items-center gap-2 border-b border-line bg-bg px-4.5 py-2 min-[900px]:-mx-6 min-[900px]:px-7">
-        {SPANS.map((row) => (
-          <button
-            key={row.days}
-            type="button"
-            aria-pressed={span === row.days}
-            className={`t-chip ${span === row.days ? 'border-line-strong text-text' : ''}`}
-            onClick={() => setSpan(row.days)}
-          >
-            {row.label}
-          </button>
-        ))}
-        <span className="t-nums w-full text-xs text-muted min-[900px]:ml-auto min-[900px]:w-auto">
-          {monthDay(dates[0])} to {monthDay(dates[dates.length - 1])}
-        </span>
-      </div>
-
-      {/* The two cards a day is read by. Side by side once there is room
-          for both, and one under the other on a phone. */}
+    ),
+    // The two cards a day is read by. Side by side once there is room for
+    // both, and one under the other on a phone.
+    food_activity: () => (
       <div className="grid gap-3 min-[1200px]:mb-3 min-[1200px]:grid-cols-2 min-[1200px]:items-start">
         <div className="t-card mb-3 min-[1200px]:mb-0">
           <CardHead label="Food" onOpen={onOpenJournal} onAdd={() => setPicking(true)} />
@@ -1550,7 +1539,8 @@ export function Dashboard({
           )}
         </div>
       </div>
-
+    ),
+    progress: () => (
       <div className="t-card mb-3">
         <CardHead
           label="Progress"
@@ -1639,19 +1629,72 @@ export function Dashboard({
           </>
         )}
       </div>
+    ),
+    community: () => (
+      <div className="t-card mb-3">
+        <CardHead label="Community" onOpen={() => setScreen('community')} />
+        <Feed
+          me={me}
+          limit={3}
+          refresh={refresh}
+          onOpenWorkout={setWorkout}
+          onOpenMember={setMember}
+        />
+      </div>
+    ),
+  }
 
-      {!wide && (
+  // One switch over every card that reads a run of days, standing where the
+  // heading was: the control says what the cards are of, so none of them says
+  // it again. The range wraps under it on a phone. It stays under the bar as
+  // the cards go by, on the page's own ground and bled to the well's edges so
+  // they pass behind it rather than beside it.
+  const strip = (
+    <div className="sticky top-[calc(48px_+_env(safe-area-inset-top))] z-10 -mx-3.5 mb-2 mt-1 flex flex-wrap items-center gap-2 border-b border-line bg-bg px-4.5 py-2 min-[900px]:-mx-6 min-[900px]:px-7">
+      {SPANS.map((row) => (
+        <button
+          key={row.days}
+          type="button"
+          aria-pressed={span === row.days}
+          className={`t-chip ${span === row.days ? 'border-line-strong text-text' : ''}`}
+          onClick={() => setSpan(row.days)}
+        >
+          {row.label}
+        </button>
+      ))}
+      <span className="t-nums w-full text-xs text-muted min-[900px]:ml-auto min-[900px]:w-auto">
+        {monthDay(dates[0])} to {monthDay(dates[dates.length - 1])}
+      </span>
+    </div>
+  )
+
+  // What this account reads, in its order. The feed has the right-hand column
+  // to itself on a wide window, so this tab does not draw a card for it there.
+  const shown = me.dashboard_cards.filter(
+    (card) => card.shown && !(card.key === 'community' && wide)
+  )
+  // The strip stands once, above the first card it says the span of.
+  const ranged = shown.find(
+    (card) => card.key === 'food_activity' || card.key === 'progress'
+  )?.key
+
+  return (
+    <>
+      {error && <p className="t-error mb-3">{error}</p>}
+
+      {shown.length === 0 && (
         <div className="t-card mb-3">
-          <CardHead label="Community" onOpen={() => setScreen('community')} />
-          <Feed
-            me={me}
-            limit={3}
-            refresh={refresh}
-            onOpenWorkout={setWorkout}
-            onOpenMember={setMember}
-          />
+          <p className="text-sm text-muted">
+            Nothing is shown here. Choose what shows under More &gt; Display.
+          </p>
         </div>
       )}
+      {shown.map((card) => (
+        <Fragment key={card.key}>
+          {card.key === ranged && strip}
+          {units[card.key]()}
+        </Fragment>
+      ))}
 
       {picking && (
         <FoodPicker

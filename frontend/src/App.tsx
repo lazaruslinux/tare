@@ -1,5 +1,5 @@
 import { AnimatePresence, motion, useReducedMotion } from 'framer-motion'
-import { useCallback, useEffect, useRef, useState } from 'react'
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 
 import { api, type Me } from './api'
 import { Aside } from './components/Aside'
@@ -24,7 +24,8 @@ import { useWaitingCount } from './hooks/useWaitingCount'
 import { useRailLayout, useWideLayout } from './hooks/useWideLayout'
 import { setClock } from './lib/clock'
 import { slotByTime, today, type Slot } from './lib/day'
-import { TOUR } from './lib/tour'
+import { DASHBOARD_DEFAULT } from './lib/dashboardCards'
+import { tourSteps } from './lib/tour'
 import { Birthdate } from './pages/Birthdate'
 import { Dashboard, type DashScreen } from './pages/Dashboard'
 import { FoodTab } from './pages/Food'
@@ -290,6 +291,13 @@ export default function App() {
     setAdding((was) => !was)
   }
 
+  // The tour this account walks. A step about a Dashboard card they have
+  // hidden is left out, so the count on the card is the count they are shown.
+  const steps = useMemo(
+    () => tourSteps(me?.dashboard_cards ?? DASHBOARD_DEFAULT),
+    [me?.dashboard_cards]
+  )
+
   // The tour starts once the shell is showing: for a new member that is right
   // after setup. The wait lets the tab underneath draw before a hole is cut
   // in it.
@@ -313,7 +321,7 @@ export default function App() {
     setScanning(null)
     setMeasuring(false)
     setExercising(false)
-    const go = TOUR[tour].go
+    const go = steps[tour].go
     if (go === undefined) return
     // The More list at its root, which is where the rows the tour points at
     // are.
@@ -653,7 +661,7 @@ export default function App() {
         {tour !== null && (
           <Tour
             step={tour}
-            steps={TOUR}
+            steps={steps}
             wide={railed}
             onNext={() => setTour(tour + 1)}
             onBack={() => setTour(tour - 1)}

@@ -240,3 +240,105 @@ def test_one_account_cannot_probe_address_after_address(client, make_user):
     refused = client.post("/api/account/email", json={"email": "probe99@example.com"})
     assert refused.status_code == 429
     assert refused.json() == {"detail": throttle.TOO_MANY}
+
+
+def keys(cards):
+    return [card["key"] for card in cards]
+
+
+def test_a_fresh_account_reads_the_default_dashboard_order(client, signed_in):
+    """Nobody is asked to arrange it, so an account that never has reads the
+    five cards in Tare's own order with every one of them shown."""
+    me = client.get("/api/auth/me").json()
+    assert keys(me["dashboard_cards"]) == [
+        "numbers",
+        "calendar",
+        "food_activity",
+        "progress",
+        "community",
+    ]
+    assert all(card["shown"] for card in me["dashboard_cards"])
+
+
+def test_the_dashboard_cards_round_trip_in_the_order_they_were_sent(
+    client, db_session, signed_in
+):
+    asked = [
+        {"key": "progress", "shown": True},
+        {"key": "numbers", "shown": True},
+        {"key": "community", "shown": True},
+        {"key": "calendar", "shown": True},
+        {"key": "food_activity", "shown": True},
+    ]
+    answer = patch(client, dashboard_cards=asked)
+    assert answer.status_code == 200
+    assert answer.json()["dashboard_cards"] == asked
+    db_session.refresh(signed_in)
+    assert keys(signed_in.dashboard_cards) == keys(asked)
+    assert client.get("/api/auth/me").json()["dashboard_cards"] == asked
+
+
+def test_a_hidden_dashboard_card_stays_hidden(client, signed_in):
+    asked = [{"key": "community", "shown": False}] + [
+        {"key": key, "shown": True}
+        for key in ("numbers", "calendar", "food_activity", "progress")
+    ]
+    assert patch(client, dashboard_cards=asked).json()["dashboard_cards"] == asked
+    back = client.get("/api/auth/me").json()["dashboard_cards"]
+    assert back[0] == {"key": "community", "shown": False}
+
+
+def test_a_dashboard_card_tare_has_never_had_is_refused(client, signed_in):
+    answer = patch(client, dashboard_cards=[{"key": "weather", "shown": True}])
+    assert answer.status_code == 400
+    assert answer.json() == {"detail": "That is not a Dashboard card."}
+
+
+def test_a_dashboard_card_without_a_true_or_false_is_refused(client, signed_in):
+    answer = patch(client, dashboard_cards=[{"key": "numbers", "shown": "yes"}])
+    assert answer.status_code == 400
+    assert answer.json() == {"detail": "That is not a Dashboard card."}
+
+
+def test_a_card_left_out_comes_back_on_the_end_shown(client, signed_in):
+    """A list written by an older client is not a list of hidden cards: what it
+    does not name is appended rather than lost."""
+    answer = patch(
+        client,
+        dashboard_cards=[
+            {"key": "progress", "shown": True},
+            {"key": "numbers", "shown": False},
+        ],
+    )
+    assert answer.status_code == 200
+    cards = answer.json()["dashboard_cards"]
+    assert keys(cards) == [
+        "progress",
+        "numbers",
+        "calendar",
+        "food_activity",
+        "community",
+    ]
+    assert cards[1]["shown"] is False
+    assert all(card["shown"] for card in cards[2:])
+
+
+def test_a_dashboard_card_named_twice_is_kept_once(client, signed_in):
+    """The first mention is the one that counts, so a double drag cannot leave
+    a card in two places."""
+    cards = patch(
+        client,
+        dashboard_cards=[
+            {"key": "progress", "shown": False},
+            {"key": "progress", "shown": True},
+            {"key": "numbers", "shown": True},
+        ],
+    ).json()["dashboard_cards"]
+    assert keys(cards) == [
+        "progress",
+        "numbers",
+        "calendar",
+        "food_activity",
+        "community",
+    ]
+    assert cards[0]["shown"] is False
