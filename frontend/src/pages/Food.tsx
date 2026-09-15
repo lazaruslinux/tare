@@ -601,7 +601,7 @@ export function FoodTab({
           </p>
           <button
             type="button"
-            className="t-tap44 text-accent"
+            className="t-tap44 text-label"
             aria-label="Add a meal"
             onClick={() => setView({ at: 'mealForm', meal: null })}
           >
@@ -649,7 +649,7 @@ export function FoodTab({
           </p>
           <button
             type="button"
-            className="t-tap44 text-accent"
+            className="t-tap44 text-label"
             aria-label="Add a recipe"
             onClick={() => setView({ at: 'recipeForm', recipe: null })}
           >

@@ -9,28 +9,33 @@
    themes are changed in one place. */
 :root {
   color-scheme: dark;
-  --bg: #101312;
-  --surface: #171b19;
-  --surface-2: #1d2220;
-  --line: rgba(214, 228, 219, 0.08);
-  --line-strong: rgba(214, 228, 219, 0.16);
+  /* Graphite, warmed a little rather than tinted. The neutrals here carry no
+     green at all, so the accent below is the only green on a screen and means
+     something wherever it turns up. */
+  --bg: #141211;
+  --surface: #1c1a19;
+  --surface-2: #23211f;
+  --line: rgba(232, 228, 221, 0.08);
+  --line-strong: rgba(232, 228, 221, 0.16);
   /* The empty part of a ring. Lighter than a border, so an unfilled day
      reads as room to fill rather than a wall. */
-  --track: rgba(214, 228, 219, 0.12);
-  --text: #dbe7dd;
-  --muted: #94a89b;
+  --track: rgba(232, 228, 221, 0.12);
+  /* Oat rather than white: warm enough to sit on the graphite without the
+     blue cast a flat grey has. */
+  --text: #e8e4dd;
+  --muted: #a5a19b;
   /* One step up from muted for the small labels, which read as noise at the
      quieter value and as shouting at full text colour. */
-  --label: #b5c6ba;
-  --accent: #8fc7a0;
-  --accent-strong: #a9dcb8;
+  --label: #c4c0ba;
+  --accent: #93c29e;
+  --accent-strong: #9dcba8;
   /* Waiting on somebody else. Amber rather than a third green, because the
      one thing this colour must not read as is done. */
   --pending: #d9a441;
   --danger: #d98b83;
   /* Past a target. A true red, kept apart from the coral the fat bar wears. */
   --over: #e5383b;
-  --ring: rgba(143, 199, 160, 0.35);
+  --ring: rgba(147, 194, 158, 0.35);
   /* One of the lines the Progress chart draws, beside the accent green
      (weight), the pending amber (body fat) and the violet below (muscle). It
      reads at better than 3:1 on the card and sits in a hue of its own, so four
@@ -55,40 +60,46 @@
 
 [data-theme='light'] {
   color-scheme: light;
-  /* Cream with a breath of green in it rather than paper: the cards sit on
-     something that belongs to the same plant as the accent. Every ink below
-     was measured again on the three grounds; the tint lifted each one. */
-  --bg: #f4f7f1;
-  --surface: #fcfdfa;
-  --surface-2: #edf1ea;
-  --line: rgba(46, 79, 63, 0.12);
-  --line-strong: rgba(46, 79, 63, 0.24);
-  --track: rgba(46, 79, 63, 0.11);
-  --text: #2e4f3f;
+  /* Oat rather than paper, and warm rather than tinted: the ground and the
+     ink are neutrals, and the accent is the one green in the theme. The inks
+     below were measured again on all three grounds. */
+  --bg: #f7f3eb;
+  --surface: #fdfcf8;
+  --surface-2: #f1ece3;
+  --line: rgba(56, 53, 48, 0.12);
+  --line-strong: rgba(56, 53, 48, 0.24);
+  --track: rgba(56, 53, 48, 0.11);
+  /* Warm graphite. 10.4:1 on --surface-2, the darkest of the three. */
+  --text: #383530;
   /* Clears the 4.5:1 floor on all three light grounds, --surface-2 included. */
-  --muted: #56705f;
-  --label: #45604f;
-  /* 4.8:1 on --surface-2, the darkest of the three light grounds. */
-  --accent: #3a7257;
-  --accent-strong: #2f5f48;
-  --pending: #b7791f;
+  --muted: #6d6861;
+  --label: #59554e;
+  /* 4.9:1 on --surface-2, the darkest of the three light grounds. */
+  --accent: #416f52;
+  --accent-strong: #386649;
+  /* Darkened from the dark theme's amber until it clears the 4.5:1 floor as
+     text too, which is what it is on this ground: 4.6:1 on --surface-2. The
+     hue is held where it was, so it stays amber rather than turning brown. */
+  --pending: #955e01;
   /* Dark enough to clear 4.5:1 on --surface-2, the same measurement. */
   --danger: #ab4f45;
   --over: #d6003c;
-  --ring: rgba(58, 114, 87, 0.3);
-  /* The same one, darkened for the cream ground. */
+  --ring: rgba(65, 111, 82, 0.3);
+  /* The same one, darkened for the oat ground. */
   --chart-water: #1f6f9c;
   --blue: #2a6ca8;
-  --coral: #b9453b;
+  /* A hair darker than it was, so the fat bar's own label clears 4.5:1 on
+     --surface-2 as well: 4.6:1 there. */
+  --coral: #b7433a;
   /* Orange darkened so chip text clears 4.5:1. */
   --orange: #9c5512;
   --violet: #6b4aa0;
   --gold: #8a5a00;
-  /* Olive rather than a darker gold: 4.9:1 on --surface-2, the darkest of the
+  /* Olive rather than a darker gold: 4.7:1 on --surface-2, the darkest of the
      three light grounds, and a hue the orange above cannot be taken for. */
   --cal-gold: #6b6c14;
-  /* Darkened for the cream ground, the same way the five above were: a dot
-     and a chip's own text both have to read on it. */
+  /* Darkened for the oat ground, the same way the five above were: a dot and
+     a chip's own text both have to read on it. */
   --cal-teal: #0f6f68;
   --cal-pink: #a63f79;
   --cal-slate: #4a6076;
@@ -921,6 +932,9 @@
   }
 
   /* Any single control in the bar's outer slots: a day step, a plus. */
+  /* Every icon a bar or a card head carries: back, forward, complete, plus.
+     One ink for all of them, a step up from muted so a 44px target is found
+     without the accent being spent on furniture. */
   .t-topbar-icon {
     display: flex;
     width: 44px;
@@ -929,7 +943,7 @@
     align-items: center;
     justify-content: center;
     border-radius: 0.625rem;
-    color: var(--muted);
+    color: var(--label);
   }
 
   /* The name of a top-level screen, said once and on the left. */
@@ -956,13 +970,15 @@
   }
 
   /* How many submissions are waiting, said on the way to the screen that
-     shows them rather than only inside it. Placed by whatever it sits on. */
+     shows them rather than only inside it. Amber, because it is the colour
+     this app waits in and a count is never a thing that is done. Placed by
+     whatever it sits on. */
   .t-count {
     position: absolute;
     min-width: 16px;
     padding: 0 4px;
     border-radius: 999px;
-    background: var(--accent);
+    background: var(--pending);
     color: var(--bg);
     font-size: 10px;
     font-weight: 700;
@@ -1022,7 +1038,9 @@
     background: var(--accent);
     /* The ground reads as ink on either theme's accent. */
     color: var(--bg);
-    box-shadow: 0 6px 16px var(--ring);
+    /* A plain shadow rather than a tinted one: the control is raised, and the
+       green under it only made the accent look like more of the screen. */
+    box-shadow: 0 6px 16px rgba(0, 0, 0, 0.35);
     transform: translateY(-14px);
     margin-bottom: -14px;
   }
@@ -1177,10 +1195,11 @@
     .t-tap44:hover {
       color: var(--text);
     }
-    /* A ring under the pointer: its track comes up a step, so the whole ring
-       reads as live without the filled arc changing colour. */
+    /* A ring under the pointer: its track comes up one step, to the hairline
+       the cards are drawn in and never to the accent, so a ring with nothing
+       in it still reads as empty while the pointer is on it. */
     .t-ring:hover circle:first-child {
-      stroke: var(--muted);
+      stroke: var(--line-strong);
     }
     /* A week bar under the pointer, so the tooltip is clearly about that day.
        The cursor stays an arrow: a bar opens nothing. */

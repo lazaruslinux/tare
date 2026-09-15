@@ -5,7 +5,7 @@ export function Footer({ version }: { version?: string }) {
     <p className="t-note mt-4 text-center">
       Tare{version ? ` ${version}` : ''} ·{' '}
       <a
-        className="text-accent"
+        className="text-muted underline underline-offset-2"
         href="https://www.gnu.org/licenses/agpl-3.0.html"
         target="_blank"
         rel="noopener"
@@ -13,7 +13,12 @@ export function Footer({ version }: { version?: string }) {
         AGPL-3.0
       </a>{' '}
       · developed by{' '}
-      <a className="text-accent" href="https://lazaruslinux.com" target="_blank" rel="noopener">
+      <a
+        className="text-muted underline underline-offset-2"
+        href="https://lazaruslinux.com"
+        target="_blank"
+        rel="noopener"
+      >
         Lazarus Labs
       </a>
     </p>

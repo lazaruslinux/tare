@@ -74,7 +74,7 @@ Open product facts: reminders would reopen the no-push rule as its own decision;
 ## Brand Commitments
 
 - Name: Tare, written with a capital T in the wordmark and in all product copy (the owner's pick, 2026-09-06), the kitchen-scale button every food logger presses. Wordmark set in Righteous; body in Figtree Variable. Both are binding and a change to either is a question, never a design call.
-- Two themes: dark is the default on the bare root, graphite ground with a chalky white-green foreground; light is a cream ground with forest green. Keep the identity; a full palette swap is a question first.
+- Two themes: dark is the default on the bare root, a graphite ground with warm off-white text and one sage-green accent; light is an oat paper ground with warm grey text and a forest-green accent. The neutrals carry no green (the 2026-09-15 quieter pass); the accent is kept for the wordmark, the primary action, the active tab, switches and data fills. Keep the identity; a full palette swap is a question first.
 - Voice: plain words for people who have never tracked anything, one-sentence empty states with one action, undo snackbars instead of confirm dialogs, no exclamation marks, no emojis, no em dashes anywhere in copy, comments or docs.
 - The AI disclosure appears once in the README and nowhere else. Open source under AGPL-3.0-or-later, free forever, never sold and never offered as a hosted tier.
 

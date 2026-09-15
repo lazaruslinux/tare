@@ -139,7 +139,7 @@ export function TopBar({
         {action !== null && (
           <button
             type="button"
-            className="t-topbar-icon text-accent"
+            className="t-topbar-icon"
             aria-label={action}
             onClick={onAct}
           >

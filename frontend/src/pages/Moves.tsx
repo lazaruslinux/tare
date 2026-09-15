@@ -94,7 +94,7 @@ export function Moves({ onBack }: { onBack: () => void }) {
           <button
             key={one.key}
             type="button"
-            className="t-chip t-tap44 shrink-0 aria-pressed:border-accent aria-pressed:text-text"
+            className="t-chip t-tap44 shrink-0 aria-pressed:border-line-strong aria-pressed:text-text"
             aria-pressed={chip === one.key}
             onClick={() => pick(one.key)}
           >

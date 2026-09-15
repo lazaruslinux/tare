@@ -426,7 +426,7 @@ export function PortionSheet({
                   key={unit}
                   type="button"
                   aria-pressed={choice === unit}
-                  className="t-chip aria-pressed:border-accent aria-pressed:text-text"
+                  className="t-chip aria-pressed:border-line-strong aria-pressed:text-text"
                   onClick={() => choose(unit)}
                 >
                   {UNIT_LABEL[unit]}
@@ -443,7 +443,7 @@ export function PortionSheet({
             <button
               type="button"
               aria-pressed={weighing}
-              className="t-chip aria-pressed:border-accent aria-pressed:text-text"
+              className="t-chip aria-pressed:border-line-strong aria-pressed:text-text"
               onClick={() => {
                 if (!weighing) choose('g')
               }}
@@ -456,7 +456,7 @@ export function PortionSheet({
                 key={row.id}
                 type="button"
                 aria-pressed={choice === `${SERVING}${index}`}
-                className="t-chip aria-pressed:border-accent aria-pressed:text-text"
+                className="t-chip aria-pressed:border-line-strong aria-pressed:text-text"
                 onClick={() => choose(`${SERVING}${index}`)}
               >
                 {index === 0 ? '1 serving' : row.name}
@@ -500,7 +500,7 @@ export function PortionSheet({
                   key={option}
                   type="button"
                   aria-pressed={meals.includes(option)}
-                  className="t-chip aria-pressed:border-accent aria-pressed:text-text"
+                  className="t-chip aria-pressed:border-line-strong aria-pressed:text-text"
                   onClick={() => chooseMeal(option)}
                 >
                   {/* A check, because several of these can be on at once. */}

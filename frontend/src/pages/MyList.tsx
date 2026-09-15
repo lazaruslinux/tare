@@ -241,7 +241,7 @@ export function MyList({
             <button
               key={one}
               type="button"
-              className="t-chip aria-pressed:border-accent aria-pressed:text-text"
+              className="t-chip aria-pressed:border-line-strong aria-pressed:text-text"
               aria-pressed={view === one}
               onClick={() => choose(one)}
             >
@@ -257,7 +257,7 @@ export function MyList({
             <button
               key={one.key}
               type="button"
-              className="t-chip shrink-0 aria-pressed:border-accent aria-pressed:text-text"
+              className="t-chip shrink-0 aria-pressed:border-line-strong aria-pressed:text-text"
               aria-pressed={chip === one.key}
               onClick={() => setChip(one.key)}
             >

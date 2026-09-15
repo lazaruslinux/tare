@@ -32,8 +32,8 @@ export function rememberTheme(theme: Theme): void {
 // What the browser paints its own chrome with, kept in step with --bg by hand:
 // a meta tag cannot read a custom property, so the values live here too.
 const CHROME: Record<Theme, string> = {
-  dark: '#101312',
-  light: '#f7f4ec',
+  dark: '#141211',
+  light: '#f7f3eb',
 }
 
 let current: Theme = rememberedTheme()

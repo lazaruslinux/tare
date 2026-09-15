@@ -48,10 +48,12 @@ export function Dot({ state }: { state: Community }) {
 
 // The mark a food in the Tare database wears, after its name, everywhere its
 // name is read. One mark, one meaning: this one is the database's, not yours.
+// It reads in the label colour rather than the accent, which is kept for the
+// things a tap does something to.
 export function Verified({ className = 'h-4 w-4' }: { className?: string }) {
   return (
     <BadgeCheck
-      className={`${className} shrink-0 text-accent`}
+      className={`${className} shrink-0 text-label`}
       strokeWidth={2.25}
       role="img"
       aria-label="In the Tare database"

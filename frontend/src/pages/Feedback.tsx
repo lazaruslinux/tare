@@ -44,7 +44,7 @@ function Chips({
             key={option.value}
             type="button"
             aria-pressed={chosen === option.value}
-            className="t-chip t-tap44 aria-pressed:border-accent aria-pressed:text-text"
+            className="t-chip t-tap44 aria-pressed:border-line-strong aria-pressed:text-text"
             onClick={() => onPick(option.value)}
           >
             {option.label}

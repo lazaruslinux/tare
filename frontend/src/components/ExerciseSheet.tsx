@@ -144,7 +144,7 @@ export function ExerciseSheet({
                   key={row.effort}
                   type="button"
                   aria-pressed={picked?.effort === row.effort}
-                  className="t-chip t-tap44 aria-pressed:border-accent aria-pressed:text-text"
+                  className="t-chip t-tap44 aria-pressed:border-line-strong aria-pressed:text-text"
                   onClick={() => setEffort(row.effort)}
                 >
                   {EFFORT_LABEL[row.effort]}

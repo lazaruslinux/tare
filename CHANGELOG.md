@@ -12,6 +12,14 @@ Notable changes to Tare, newest first. The format follows
   USDA; the matched row says how many were filled and which record they came
   from.
 
+### Changed
+
+- Tare's green is quieter. The ground, the text and the hairlines are warm
+  neutrals in both themes, and the accent keeps its colour but stops doing
+  every job: the footer links, the database mark, the plus icons, the selected
+  chips and the names in the feed are neutral now, the waiting count is amber,
+  and the raised plus casts a plain shadow.
+
 ## 0.6.0 - 2026-09-15
 
 ### Added

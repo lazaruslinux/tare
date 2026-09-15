@@ -133,7 +133,7 @@ export function BreakdownCard({
       {energy !== null && (
         <button
           type="button"
-          className="t-tab t-micro t-tap44 text-accent"
+          className="t-tab t-micro t-tap44 text-label"
           aria-expanded={open}
           onClick={toggle}
         >

@@ -123,7 +123,7 @@ export function RecipeDetail({
               <button
                 type="button"
                 aria-pressed={perServing}
-                className="t-chip aria-pressed:border-accent aria-pressed:text-text"
+                className="t-chip aria-pressed:border-line-strong aria-pressed:text-text"
                 onClick={() => setPerServing(true)}
               >
                 Per serving
@@ -131,7 +131,7 @@ export function RecipeDetail({
               <button
                 type="button"
                 aria-pressed={!perServing}
-                className="t-chip aria-pressed:border-accent aria-pressed:text-text"
+                className="t-chip aria-pressed:border-line-strong aria-pressed:text-text"
                 onClick={() => setPerServing(false)}
               >
                 Whole recipe

@@ -1446,7 +1446,7 @@ export function Dashboard({
             key={row.days}
             type="button"
             aria-pressed={span === row.days}
-            className={`t-chip ${span === row.days ? 'border-accent text-accent' : ''}`}
+            className={`t-chip ${span === row.days ? 'border-line-strong text-text' : ''}`}
             onClick={() => setSpan(row.days)}
           >
             {row.label}
