@@ -90,6 +90,11 @@ def nothing_goes_out(request):
     raise AssertionError(f"a request went out to {request.url}")
 
 
+def missing(request):
+    """What Open Food Facts answers for a code it has never seen."""
+    return httpx.Response(404, json={"status": 0, "status_verbose": "product not found"})
+
+
 def sign_in(client, username):
     assert (
         client.post("/api/auth/login", json={"username": username, "password": PASSWORD})
@@ -248,6 +253,44 @@ def test_a_network_that_is_not_there_with_nothing_kept_is_one_sentence(
 def test_a_code_nobody_has_heard_of_answers_with_the_code(client, signed_in, network):
     network(off({"status": 0}))
     assert client.get("/api/barcode/00000000").json() == {"state": "blank", "barcode": "00000000"}
+
+
+def test_a_code_the_database_has_never_seen_opens_the_empty_form(client, signed_in, network):
+    # The real answer for a miss is a 404 with a body, not a 200 with status 0.
+    seen = network(missing)
+    assert client.get(f"/api/barcode/{CODE}").json() == {"state": "blank", "barcode": CODE}
+    assert len(seen) == 1
+
+
+def test_a_stale_reading_still_answers_when_the_record_is_gone(
+    client, db_session, signed_in, network
+):
+    put_cache(db_session, fetched_at=now_utc() - dt.timedelta(days=CACHE_DAYS + 1))
+    network(missing)
+    body = client.get(f"/api/barcode/{CODE}").json()
+    assert body["state"] == "prefill"
+    assert body["prefill"]["name"] == "Cached bar"
+
+
+def test_a_placeholder_record_with_nothing_on_it_is_not_a_hit(client, signed_in, network):
+    network(off({"status": 1, "product": {"code": CODE}}))
+    assert client.get(f"/api/barcode/{CODE}").json() == {"state": "blank", "barcode": CODE}
+
+
+def test_a_name_and_brand_too_long_for_the_row_are_cut_to_fit(client, signed_in, network):
+    record = {
+        "status": 1,
+        "product": {
+            **OFF_PRODUCT["product"],
+            "product_name": "x" * 260,
+            "brands": "y" * 130 + ", Other",
+        },
+    }
+    network(off(record))
+    body = client.get(f"/api/barcode/{CODE}").json()
+    assert body["state"] == "prefill"
+    assert len(body["prefill"]["name"]) == 200
+    assert len(body["prefill"]["brand"]) == 120
 
 
 def test_something_that_is_not_a_barcode_is_refused_in_one_sentence(client, signed_in, network):

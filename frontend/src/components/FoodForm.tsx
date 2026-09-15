@@ -177,6 +177,9 @@ function startingPanel(
   return perServingDraft(panelOf(carrier), amount)
 }
 
+// What the form says when a scan came back with no record at all.
+const NOTHING_ON_FILE = 'Nothing on file for this barcode. Fill it in from the label.'
+
 export function FoodForm({
   food,
   notice,
@@ -187,6 +190,7 @@ export function FoodForm({
   inSheet,
   prefill,
   scannedBarcode,
+  scanMissed,
   review,
   onSaved,
   onCancel,
@@ -216,6 +220,8 @@ export function FoodForm({
   prefill?: Prefill | null
   // The code that scan read, held still the way an in-form scan holds one.
   scannedBarcode?: string | null
+  // That scan found nothing anywhere, and the form opened empty for it.
+  scanMissed?: boolean
   // Open in front of a reviewer, correcting somebody else's proposal. Both
   // pictures belong to the request rather than to the food, which is why they
   // are given here: a food nobody has approved yet serves neither of them to
@@ -296,6 +302,7 @@ export function FoodForm({
   const [scanning, setScanning] = useState(false)
   const [looking, setLooking] = useState(false)
   const [barcode, setBarcode] = useState(scannedBarcode ?? '')
+  const [missed, setMissed] = useState(scanMissed ?? false)
   // A code a lookup answered is the package's own, so it is held still until
   // somebody says otherwise. A code nothing was found for is a code worth
   // checking, so it opens editable.
@@ -407,11 +414,13 @@ export function FoodForm({
       } else if (answer.state === 'prefill') {
         setBarcode(answer.prefill.barcode ?? code)
         setLocked(true)
+        setMissed(false)
         fill(answer.prefill)
       } else {
         // Nothing found. The code stays as it was read and stays editable: a
         // scan that answers nothing is the one worth checking a digit of.
         setBarcode(answer.barcode)
+        setMissed(true)
       }
     } catch (failure) {
       setError(errorText(failure))
@@ -617,6 +626,7 @@ export function FoodForm({
     <>
       {inSheet && <p className="t-micro mb-2">{heading}</p>}
       {notice && <p className="t-card mb-3 text-sm text-muted">{notice}</p>}
+      {missed && <p className="t-card mb-3 text-sm text-muted">{NOTHING_ON_FILE}</p>}
 
       {already !== null && (
         <div className="t-card mb-3">

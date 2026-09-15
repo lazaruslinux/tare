@@ -320,6 +320,10 @@ def lookup_off(barcode: str, client: httpx.Client | None = None) -> FoodResult |
         return None
     product = payload.get("product") or {}
     nutriments = product.get("nutriments") or {}
+    # A record that names nothing and measures nothing is a placeholder the
+    # database keeps for a code somebody once asked about, not a product.
+    if not product.get("product_name") and not nutriments:
+        return None
     serving_text = str(product.get("serving_size") or "").strip()
     measured = measured_serving(
         product.get("serving_quantity"), product.get("serving_quantity_unit"), serving_text
@@ -460,6 +464,10 @@ def _get(url: str, params: dict[str, Any], client: httpx.Client | None) -> dict[
     finally:
         if not borrowed:
             client.close()
+    # A code the database has never seen answers 404 with a body saying so.
+    # That is an answer rather than a failure: the form opens empty for it.
+    if response.status_code == 404:
+        return {}
     if response.status_code >= 400:
         raise FoodApiError("The barcode database did not answer.")
     try:

@@ -20,6 +20,14 @@ Notable changes to Tare, newest first. The format follows
   reads "No ingredients came with the scan.", and the review queue tells the
   reviewer where to type them before approving.
 
+### Fixed
+
+- A barcode that Open Food Facts has never seen opens the empty form with
+  the code filled in, and the form says nothing was on file for it. Before,
+  the scan ended in "The barcode database did not answer." because the
+  lookup's not-found answer was read as a failure. A product name or brand
+  longer than the database allows is cut to fit instead of failing the scan.
+
 ## 0.6.0 - 2026-09-15
 
 ### Added

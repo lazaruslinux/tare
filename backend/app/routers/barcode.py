@@ -23,6 +23,8 @@ from app.routers.foods import (
     BAD_BARCODE,
     BARCODE_PATTERN,
     LISTED,
+    MAX_BRAND,
+    MAX_NAME,
     MAX_SERVING_NAME,
     food_detail,
 )
@@ -95,8 +97,10 @@ def remember(db: Session, code: str, result: foods_api.FoodResult) -> models.Foo
     row.created_by_id = None
     row.source = result.source
     row.source_id = result.source_id
-    row.name = result.name or UNNAMED
-    row.brand = result.brand
+    # Cut to the row's width. A record can carry a name in four languages,
+    # and a reading that does not fit is still worth keeping.
+    row.name = (result.name or UNNAMED)[:MAX_NAME]
+    row.brand = result.brand[:MAX_BRAND]
     row.base_unit = result.base_unit
     row.density_g_per_ml = result.density_g_per_ml
     row.ingredients_text = result.ingredients_text

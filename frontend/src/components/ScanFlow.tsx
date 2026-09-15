@@ -19,7 +19,7 @@ type Stage =
   | { at: 'camera' }
   | { at: 'looking' }
   | { at: 'log'; food: Food }
-  | { at: 'submit'; barcode: string | null; prefill: Prefill | null }
+  | { at: 'submit'; barcode: string | null; prefill: Prefill | null; missed?: boolean }
   | { at: 'sent'; food: Food }
   | { at: 'failed'; message: string }
 
@@ -60,7 +60,9 @@ export function ScanFlow({
       } else if (answer.state === 'prefill') {
         setStage({ at: 'submit', barcode: answer.prefill.barcode, prefill: answer.prefill })
       } else {
-        setStage({ at: 'submit', barcode: answer.barcode, prefill: null })
+        // Nothing on file anywhere. The form says so, because a package in
+        // hand with no record behind it is worth a second look at the digits.
+        setStage({ at: 'submit', barcode: answer.barcode, prefill: null, missed: true })
       }
     } catch (failure) {
       setStage({ at: 'failed', message: errorText(failure) })
@@ -162,6 +164,7 @@ export function ScanFlow({
         submitDefault
         prefill={stage.prefill}
         scannedBarcode={stage.barcode}
+        scanMissed={stage.missed === true}
         onSaved={(food) => {
           setStage({ at: 'sent', food })
           onChanged()
