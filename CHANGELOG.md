@@ -22,6 +22,12 @@ Notable changes to Tare, newest first. The format follows
   every job: the footer links, the database mark, the plus icons, the selected
   chips and the names in the feed are neutral now, the waiting count is amber,
   and the raised plus casts a plain shadow.
+- The desktop stops being a widened phone. More is grouped under Your account,
+  Tracking, Community and Help, in two columns beside the rail; an empty meal,
+  Activity or Biometrics slot in the Journal is one row until it has something
+  in it; Targets and the calendar's day view take the full width of the page;
+  and on the review screens the right column shows what is waiting and the
+  last decisions instead of the feed.
 
 ## 0.6.0 - 2026-09-15
 

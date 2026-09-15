@@ -21,7 +21,7 @@ import {
   UserRound,
   Users,
 } from 'lucide-react'
-import { useEffect, useState, type FormEvent } from 'react'
+import { useEffect, useState, type FormEvent, type ReactNode } from 'react'
 
 import { api, errorText, type Me, type SyncKey, type Units } from '../api'
 import { CalendarsSheet } from '../components/calendar/CalendarsSheet'
@@ -158,6 +158,17 @@ function Row({
       {count !== undefined && count > 0 && <span className="t-chip t-nums">{count}</span>}
       <ChevronRight className="h-4 w-4 shrink-0 text-muted" strokeWidth={2} />
     </button>
+  )
+}
+
+// A named block of rows. The heading is what turns a long list into
+// something somebody can scan.
+function Group({ title, children }: { title: string; children: ReactNode }) {
+  return (
+    <div>
+      <p className="t-micro mb-1">{title}</p>
+      <div className="t-card mb-3">{children}</div>
+    </div>
   )
 }
 
@@ -787,66 +798,77 @@ export function More({
 
   return (
     <>
-      <div className="t-card mb-3">
-        <Row label="Account" icon={UserRound} onOpen={() => go('account')} />
-        <Row label="Profile" icon={IdCard} onOpen={() => go('profile')} />
-        {!railed && (
-          <Row label="Targets" icon={Target} tour="more-targets" onOpen={() => go('targets')} />
-        )}
-        {!railed && <Row label="Fitness" icon={HeartPulse} onOpen={() => go('fitness')} />}
-        {!railed && <Row label="Biometrics" icon={ScaleGlyph} onOpen={onOpenBiometrics} />}
-        <Row
-          label="Health data sync"
-          icon={Smartphone}
-          tour="more-sync"
-          note={syncNote(sync)}
-          onOpen={() => go('sync')}
-        />
-        <Row
-          label="Calendar"
-          icon={CalendarDays}
-          note={invitations > 0 ? invitationsNote(invitations) : undefined}
-          onOpen={() => go('calendar')}
-        />
-        <Row
-          label="Members"
-          icon={Users}
-          tour="more-members"
-          note={requests > 0 ? requestsNote(requests) : undefined}
-          onOpen={() => go('members')}
-        />
-        <Row
-          label="Sharing"
-          icon={Eye}
-          note="What your friends can see"
-          onOpen={() => go('sharing')}
-        />
-        <Row label="Display" icon={Monitor} onOpen={() => go('display')} />
-        <Row label="Send feedback" icon={MessageSquare} onOpen={() => go('feedback')} />
-        <Row label="Guide" icon={BookOpen} onOpen={() => go('guide')} />
-        <Row label="About" icon={Info} onOpen={() => go('about')} />
-        <Row label="My submissions" icon={Inbox} onOpen={() => go('submissions')} />
-        {/* Enough of this account's foods have been taken for them to put
-            their name forward. Never automatic: an administrator decides. */}
-        {me.reviewer_eligible &&
-          (applied ? (
-            <div className="t-row">
-              <ShieldCheck className="h-4 w-4 shrink-0 text-muted" strokeWidth={2} />
-              <span className="min-w-0 flex-1 text-sm text-muted">{APPLY_SENT}</span>
-            </div>
-          ) : (
-            <Row
-              label="Apply to be a reviewer"
-              icon={ShieldCheck}
-              onOpen={() => setApplying(true)}
-            />
-          ))}
-      </div>
+      {/* Grouped under headings rather than one long list, and two columns
+          once the rail is there to give them room. */}
+      <div className={railed ? 'grid grid-cols-2 items-start gap-x-6' : undefined}>
+        <Group title="Your account">
+          <Row label="Account" icon={UserRound} onOpen={() => go('account')} />
+          <Row label="Profile" icon={IdCard} onOpen={() => go('profile')} />
+          <Row
+            label="Health data sync"
+            icon={Smartphone}
+            tour="more-sync"
+            note={syncNote(sync)}
+            onOpen={() => go('sync')}
+          />
+          <Row
+            label="Sharing"
+            icon={Eye}
+            note="What your friends can see"
+            onOpen={() => go('sharing')}
+          />
+          <Row label="Display" icon={Monitor} onOpen={() => go('display')} />
+        </Group>
 
-      {reviews(me) && (
-        <>
-          <p className="t-micro mb-1">{me.is_admin ? 'Administration' : 'Reviewing'}</p>
-          <div className="t-card mb-3">
+        {/* The rail lists all four itself, so this group is the phone's. */}
+        {!railed && (
+          <Group title="Tracking">
+            <Row label="Targets" icon={Target} tour="more-targets" onOpen={() => go('targets')} />
+            <Row label="Biometrics" icon={ScaleGlyph} onOpen={onOpenBiometrics} />
+            <Row label="Fitness" icon={HeartPulse} onOpen={() => go('fitness')} />
+            <Row
+              label="Calendar"
+              icon={CalendarDays}
+              note={invitations > 0 ? invitationsNote(invitations) : undefined}
+              onOpen={() => go('calendar')}
+            />
+          </Group>
+        )}
+
+        <Group title="Community">
+          <Row
+            label="Members"
+            icon={Users}
+            tour="more-members"
+            note={requests > 0 ? requestsNote(requests) : undefined}
+            onOpen={() => go('members')}
+          />
+          <Row label="My submissions" icon={Inbox} onOpen={() => go('submissions')} />
+          {/* Enough of this account's foods have been taken for them to put
+              their name forward. Never automatic: an administrator decides. */}
+          {me.reviewer_eligible &&
+            (applied ? (
+              <div className="t-row">
+                <ShieldCheck className="h-4 w-4 shrink-0 text-muted" strokeWidth={2} />
+                <span className="min-w-0 flex-1 text-sm text-muted">{APPLY_SENT}</span>
+              </div>
+            ) : (
+              <Row
+                label="Apply to be a reviewer"
+                icon={ShieldCheck}
+                onOpen={() => setApplying(true)}
+              />
+            ))}
+        </Group>
+
+        <Group title="Help">
+          <Row label="Guide" icon={BookOpen} onOpen={() => go('guide')} />
+          <Row label="Send feedback" icon={MessageSquare} onOpen={() => go('feedback')} />
+          <Row label="About" icon={Info} onOpen={() => go('about')} />
+        </Group>
+
+        {reviews(me) && (
+          <Group title={me.is_admin ? 'Administration' : 'Reviewing'}>
             <Row
               label="Review queue"
               icon={ClipboardList}
@@ -870,9 +892,9 @@ export function More({
                 <Row label="Feedback log" icon={ScrollText} onOpen={() => go('feedbacklog')} />
               </>
             )}
-          </div>
-        </>
-      )}
+          </Group>
+        )}
+      </div>
 
       <div className="t-card mb-3">
         <button className="t-btn w-full" type="button" onClick={() => setSigningOut(true)}>

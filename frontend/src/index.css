@@ -1119,11 +1119,6 @@
       max-width: none;
       margin: 0;
     }
-    /* The day against the clock keeps a column's width instead of stretching
-       across the well, and stays at its left edge with the month beside it. */
-    .t-cal-day {
-      max-width: 40rem;
-    }
     .t-aside {
       position: sticky;
       top: 0;
@@ -1145,9 +1140,6 @@
   @media (min-width: 1600px) {
     .t-withrail {
       max-width: 84rem;
-    }
-    .t-cal-day {
-      max-width: 48rem;
     }
   }
 

@@ -382,83 +382,130 @@ export function Journal({
         </button>
       )}
 
-      {/* Every meal card is on the page from the start, empty or not, so the
-          day reads the same shape every time and each meal has its own Add. */}
+      {/* Every meal is on the page from the start, so the day reads the same
+          shape every time. One with nothing in it is a single row rather than
+          a card with a hole in it. */}
       {day !== null && (
         <>
-          {SLOTS.map((slot) => (
-            <div key={slot} className="t-card mb-3">
-              <div className="mb-1 flex items-center justify-between gap-2">
-                <p className="t-card-title">{SLOT_LABEL[slot]}</p>
-                {day.slots[slot].subtotal_calories !== null && (
-                  <span className="t-nums text-sm">
-                    {nutrientText('calories', day.slots[slot].subtotal_calories)} cal
-                  </span>
-                )}
-              </div>
-              {day.slots[slot].entries.map((entry) => {
-                const line = (
-                  <>
-                    <span className="flex min-w-0 flex-1 items-center gap-3">
-                      {/* The same picture the Food tab draws beside the same
-                          thing, so a row reads alike wherever it is met. */}
-                      {wholeThing(entry) ? (
-                        <DishThumb
-                          kind={entry.recipe_id !== null ? 'recipe' : 'meal'}
-                          url={entry.thumb_url ?? null}
-                        />
-                      ) : (
-                        <Thumb url={entry.thumb_url ?? null} />
-                      )}
-                      <span className="min-w-0 flex-1">
-                        <span className="flex items-center gap-1.5">
-                          <span className="truncate text-sm">{entry.name}</span>
-                          {/* Written by a standing auto-log rather than logged
-                              by hand. It is edited and deleted like any row. */}
-                          {entry.auto_log_id !== null && (
-                            <span className="t-chip shrink-0">Auto</span>
+          {SLOTS.map((slot) => {
+            if (day.slots[slot].entries.length === 0) {
+              return (
+                <div key={slot} className="t-card mb-3">
+                  {locked ? (
+                    <div className="t-row">
+                      <span className="t-card-title flex-1">{SLOT_LABEL[slot]}</span>
+                    </div>
+                  ) : (
+                    <button
+                      type="button"
+                      className="t-row w-full text-left"
+                      aria-label={`Add to ${SLOT_LABEL[slot]}`}
+                      onClick={() => setPicking(slot)}
+                    >
+                      <span className="t-card-title flex-1">{SLOT_LABEL[slot]}</span>
+                      <span className="shrink-0 text-sm text-muted">+ Add</span>
+                    </button>
+                  )}
+                </div>
+              )
+            }
+            return (
+              <div key={slot} className="t-card mb-3">
+                <div className="mb-1 flex items-center justify-between gap-2">
+                  <p className="t-card-title">{SLOT_LABEL[slot]}</p>
+                  {day.slots[slot].subtotal_calories !== null && (
+                    <span className="t-nums text-sm">
+                      {nutrientText('calories', day.slots[slot].subtotal_calories)} cal
+                    </span>
+                  )}
+                </div>
+                {day.slots[slot].entries.map((entry) => {
+                  const line = (
+                    <>
+                      <span className="flex min-w-0 flex-1 items-center gap-3">
+                        {/* The same picture the Food tab draws beside the same
+                            thing, so a row reads alike wherever it is met. */}
+                        {wholeThing(entry) ? (
+                          <DishThumb
+                            kind={entry.recipe_id !== null ? 'recipe' : 'meal'}
+                            url={entry.thumb_url ?? null}
+                          />
+                        ) : (
+                          <Thumb url={entry.thumb_url ?? null} />
+                        )}
+                        <span className="min-w-0 flex-1">
+                          <span className="flex items-center gap-1.5">
+                            <span className="truncate text-sm">{entry.name}</span>
+                            {/* Written by a standing auto-log rather than logged
+                                by hand. It is edited and deleted like any row. */}
+                            {entry.auto_log_id !== null && (
+                              <span className="t-chip shrink-0">Auto</span>
+                            )}
+                          </span>
+                          {under(entry) && (
+                            <span className="block truncate text-xs text-muted">{under(entry)}</span>
                           )}
                         </span>
-                        {under(entry) && (
-                          <span className="block truncate text-xs text-muted">{under(entry)}</span>
-                        )}
                       </span>
-                    </span>
-                    <span className="t-nums shrink-0 text-sm">
-                      {nutrientText('calories', entry.calories)}
-                    </span>
-                  </>
-                )
-                return locked ? (
-                  <div key={entry.id} className="t-row">
-                    {line}
-                  </div>
-                ) : (
+                      <span className="t-nums shrink-0 text-sm">
+                        {nutrientText('calories', entry.calories)}
+                      </span>
+                    </>
+                  )
+                  return locked ? (
+                    <div key={entry.id} className="t-row">
+                      {line}
+                    </div>
+                  ) : (
+                    <button
+                      key={entry.id}
+                      type="button"
+                      className="t-row w-full text-left"
+                      onClick={() => openEntry(entry, slot)}
+                    >
+                      {line}
+                    </button>
+                  )
+                })}
+                {!locked && (
                   <button
-                    key={entry.id}
                     type="button"
-                    className="t-row w-full text-left"
-                    onClick={() => openEntry(entry, slot)}
+                    className="t-row w-full text-left text-sm text-muted"
+                    aria-label={`Add to ${SLOT_LABEL[slot]}`}
+                    onClick={() => setPicking(slot)}
                   >
-                    {line}
+                    + Add
                   </button>
-                )
-              })}
-              {!locked && (
-                <button
-                  type="button"
-                  className="t-row w-full text-left text-sm text-muted"
-                  onClick={() => setPicking(slot)}
-                >
-                  + Add
-                </button>
-              )}
-            </div>
-          ))}
+                )}
+              </div>
+            )
+          })}
         </>
       )}
 
-      {day !== null && (
+      {/* Nothing logged: the name and its Add are one row rather than a card
+          saying so in a sentence. */}
+      {day !== null && day.exercise.length === 0 && (
+        <div className="t-card mb-3">
+          {locked ? (
+            <div className="t-row">
+              <span className="t-card-title flex-1">Activity</span>
+            </div>
+          ) : (
+            <button
+              type="button"
+              className="t-row w-full text-left"
+              aria-label="Add activity"
+              onClick={() => setExercising(true)}
+            >
+              <span className="t-card-title flex-1">Activity</span>
+              <span className="shrink-0 text-sm text-muted">+ Add</span>
+            </button>
+          )}
+        </div>
+      )}
+
+      {day !== null && day.exercise.length > 0 && (
         <div className="t-card mb-3">
           <div className="mb-1 flex items-center justify-between">
             <p className="t-card-title">Activity</p>
@@ -466,58 +513,55 @@ export function Journal({
               <span className="t-nums text-xs text-muted">+{day.exercise_kcal} cal</span>
             )}
           </div>
-          {day.exercise.length === 0 ? (
-            <p className="text-sm text-muted">Nothing logged yet.</p>
-          ) : (
-            day.exercise.map((row) => {
-              const line = (
-                <span className="flex min-w-0 flex-1 items-center gap-2">
-                  <ActivityIcon name={row.name} className="h-4 w-4 shrink-0 text-muted" />
-                  <span className="min-w-0 flex-1">
-                    <span className="block truncate text-sm">{row.name}</span>
-                    <span className="block text-xs text-muted">
-                      {row.minutes} min
-                      {row.kcal === null ? '' : ` · about ${row.kcal} cal`}
-                      {row.source === 'manual' ? '' : ` · ${SOURCE_LABEL[row.source]}`}
-                    </span>
+          {day.exercise.map((row) => {
+            const line = (
+              <span className="flex min-w-0 flex-1 items-center gap-2">
+                <ActivityIcon name={row.name} className="h-4 w-4 shrink-0 text-muted" />
+                <span className="min-w-0 flex-1">
+                  <span className="block truncate text-sm">{row.name}</span>
+                  <span className="block text-xs text-muted">
+                    {row.minutes} min
+                    {row.kcal === null ? '' : ` · about ${row.kcal} cal`}
+                    {row.source === 'manual' ? '' : ` · ${SOURCE_LABEL[row.source]}`}
                   </span>
                 </span>
-              )
-              // A synced row opens the session it came from. Nothing to delete
-              // there: a workout that arrived from a phone is corrected on the
-              // phone, and this row follows what it sends.
-              return row.workout_id !== null ? (
-                <button
-                  key={`w${row.workout_id}`}
-                  type="button"
-                  className="t-row w-full text-left"
-                  onClick={() => setViewing(row.workout_id as number)}
-                >
-                  {line}
-                  <span className="shrink-0 text-xs text-muted">Synced</span>
-                </button>
-              ) : (
-                <div key={row.id ?? row.name} className="t-row">
-                  {line}
-                  {!locked && (
-                    <button
-                      type="button"
-                      className="t-tap44 shrink-0 text-sm text-muted"
-                      onClick={() =>
-                        setAsking({ kind: 'exercise', id: row.id as number, name: row.name })
-                      }
-                    >
-                      Delete
-                    </button>
-                  )}
-                </div>
-              )
-            })
-          )}
+              </span>
+            )
+            // A synced row opens the session it came from. Nothing to delete
+            // there: a workout that arrived from a phone is corrected on the
+            // phone, and this row follows what it sends.
+            return row.workout_id !== null ? (
+              <button
+                key={`w${row.workout_id}`}
+                type="button"
+                className="t-row w-full text-left"
+                onClick={() => setViewing(row.workout_id as number)}
+              >
+                {line}
+                <span className="shrink-0 text-xs text-muted">Synced</span>
+              </button>
+            ) : (
+              <div key={row.id ?? row.name} className="t-row">
+                {line}
+                {!locked && (
+                  <button
+                    type="button"
+                    className="t-tap44 shrink-0 text-sm text-muted"
+                    onClick={() =>
+                      setAsking({ kind: 'exercise', id: row.id as number, name: row.name })
+                    }
+                  >
+                    Delete
+                  </button>
+                )}
+              </div>
+            )
+          })}
           {!locked && (
             <button
               type="button"
               className="t-row w-full text-left text-sm text-muted"
+              aria-label="Add activity"
               onClick={() => setExercising(true)}
             >
               + Add
@@ -526,52 +570,68 @@ export function Journal({
         </div>
       )}
 
-      {day !== null && (
+      {/* Nothing measured: one row, the same as an empty meal. */}
+      {day !== null && weighed === null && (
+        <div className="t-card mb-3">
+          {locked ? (
+            <div className="t-row">
+              <span className="t-card-title flex-1">Biometrics</span>
+            </div>
+          ) : (
+            <button
+              type="button"
+              className="t-row w-full text-left"
+              aria-label="Log biometrics"
+              onClick={() => setMeasuring(true)}
+            >
+              <span className="t-card-title flex-1">Biometrics</span>
+              <span className="shrink-0 text-sm text-muted">+ Log biometrics</span>
+            </button>
+          )}
+        </div>
+      )}
+
+      {day !== null && weighed !== null && (
         <div className="t-card mb-3">
           <p className="t-card-title mb-1">Biometrics</p>
-          {weighed === null ? (
-            <p className="text-sm text-muted">Nothing measured yet.</p>
-          ) : (
-            <>
-              {weighed.weight_kg !== null && (
-                <div className="t-row min-h-9 text-sm">
-                  <span className="flex-1 text-muted">Weight</span>
-                  <span className="t-nums">{weightText(weighed.weight_kg, me.units)}</span>
-                </div>
-              )}
-              {weighed.body_fat_pct !== null && (
-                <div className="t-row min-h-9 text-sm">
-                  <span className="flex-1 text-muted">Body fat</span>
-                  <span className="t-nums">{round1(weighed.body_fat_pct)}%</span>
-                </div>
-              )}
-              {weighed.body_water_pct !== null && (
-                <div className="t-row min-h-9 text-sm">
-                  <span className="flex-1 text-muted">Body water</span>
-                  <span className="t-nums">{round1(weighed.body_water_pct)}%</span>
-                </div>
-              )}
-              {weighed.muscle_pct !== null && (
-                <div className="t-row min-h-9 text-sm">
-                  <span className="flex-1 text-muted">Muscle</span>
-                  {/* No weight on the day means no mass to show it as, so the
-                      share stands on its own. */}
-                  <span className="t-nums">
-                    {weighed.muscle_kg === null
-                      ? `${round1(weighed.muscle_pct)}%`
-                      : weightText(weighed.muscle_kg, me.units)}
-                  </span>
-                </div>
-              )}
-            </>
+          {weighed.weight_kg !== null && (
+            <div className="t-row min-h-9 text-sm">
+              <span className="flex-1 text-muted">Weight</span>
+              <span className="t-nums">{weightText(weighed.weight_kg, me.units)}</span>
+            </div>
+          )}
+          {weighed.body_fat_pct !== null && (
+            <div className="t-row min-h-9 text-sm">
+              <span className="flex-1 text-muted">Body fat</span>
+              <span className="t-nums">{round1(weighed.body_fat_pct)}%</span>
+            </div>
+          )}
+          {weighed.body_water_pct !== null && (
+            <div className="t-row min-h-9 text-sm">
+              <span className="flex-1 text-muted">Body water</span>
+              <span className="t-nums">{round1(weighed.body_water_pct)}%</span>
+            </div>
+          )}
+          {weighed.muscle_pct !== null && (
+            <div className="t-row min-h-9 text-sm">
+              <span className="flex-1 text-muted">Muscle</span>
+              {/* No weight on the day means no mass to show it as, so the
+                  share stands on its own. */}
+              <span className="t-nums">
+                {weighed.muscle_kg === null
+                  ? `${round1(weighed.muscle_pct)}%`
+                  : weightText(weighed.muscle_kg, me.units)}
+              </span>
+            </div>
           )}
           {!locked && (
             <button
               type="button"
               className="t-row w-full text-left text-sm text-muted"
+              aria-label="Update biometrics"
               onClick={() => setMeasuring(true)}
             >
-              {weighed === null ? '+ Log biometrics' : '+ Update'}
+              + Update
             </button>
           )}
         </div>

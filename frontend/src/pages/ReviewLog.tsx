@@ -27,7 +27,7 @@ const SAID: Record<string, string> = {
   invite_deleted: 'deleted an invite link:',
 }
 
-function sentence(row: ReviewLogRow): string {
+export function sentence(row: ReviewLogRow): string {
   const said = SAID[row.action] ?? row.action
   // Applying is the one line that is about the person alone, so it does not
   // name a target after itself.

@@ -268,6 +268,13 @@ export default function App() {
     select(target)
   }
 
+  // A screen under More, opened from the right-hand column. The same way in as
+  // the rail's own rows.
+  const openMoreScreen = (screen: Screen) => {
+    setMoreView(screen)
+    select('more')
+  }
+
   // The calendar, opened on one day, wherever it was picked: a readout on the
   // Dashboard, or the month in the right-hand column.
   const openCalendarDay = (date: string) => {
@@ -561,10 +568,13 @@ export default function App() {
               <Aside
                 me={me}
                 page={page}
+                moreScreen={moreScreen}
+                queue={queue}
                 refresh={logged}
                 onOpenWorkout={(id) => setOverlay({ kind: 'workout', id })}
                 onOpenMember={(id) => setOverlay({ kind: 'member', id })}
                 onOpenCalendarDay={openCalendarDay}
+                onOpenMore={openMoreScreen}
               />
             </aside>
           )}
