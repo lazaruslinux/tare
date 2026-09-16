@@ -75,7 +75,6 @@ export function Notifications({
   const checkinsSave = useInstantSave()
   const weighSave = useInstantSave()
   const calendarSave = useInstantSave()
-  const reduced = useReducedMotion()
 
   useTopBar({ title: 'Notifications', back: { label: 'More', onBack } })
 
@@ -212,23 +211,6 @@ export function Notifications({
 
   const showMorningTime = prefs.morning.on || prefs.weigh_in.on
 
-  const fold = (key: string, shown: boolean, children: ReactNode) => (
-    <AnimatePresence initial={false}>
-      {shown && (
-        <motion.div
-          key={key}
-          className="overflow-hidden"
-          initial={reduced ? false : { height: 0, opacity: 0 }}
-          animate={{ height: 'auto', opacity: 1 }}
-          exit={reduced ? undefined : { height: 0, opacity: 0 }}
-          transition={{ duration: 0.18 }}
-        >
-          <div className="pt-2 pb-3">{children}</div>
-        </motion.div>
-      )}
-    </AnimatePresence>
-  )
-
   return (
     <>
       <p className="t-micro mb-1">This device</p>
@@ -324,16 +306,14 @@ export function Notifications({
         />
         {/* The weigh-in note goes out at the morning hour too, so the hour is
             still on offer when the morning check-in itself is off. */}
-        {fold(
-          'morning-time',
-          showMorningTime,
+        <Fold shown={showMorningTime}>
           <TimeCombo
             id="notify-morning"
             label="Morning time"
             value={prefs.morning.time}
             onChange={(next) => setTime('morning', next)}
           />
-        )}
+        </Fold>
         <Switch
           label="Evening check-in"
           note="Only when something is missing from today's journal."
@@ -342,16 +322,14 @@ export function Notifications({
             patch(checkinsSave.run, { ...prefs, evening: { ...prefs.evening, on: next } }, prefs)
           }
         />
-        {fold(
-          'evening-time',
-          prefs.evening.on,
+        <Fold shown={prefs.evening.on}>
           <TimeCombo
             id="notify-evening"
             label="Evening time"
             value={prefs.evening.time}
             onChange={(next) => setTime('evening', next)}
           />
-        )}
+        </Fold>
         {checkinsSave.error && <p className="t-error mt-2">{checkinsSave.error}</p>}
       </div>
       <p className="mb-3 text-xs text-muted">
@@ -372,9 +350,7 @@ export function Notifications({
             patch(weighSave.run, { ...prefs, weigh_in: { ...prefs.weigh_in, on: next } }, prefs)
           }
         />
-        {fold(
-          'weigh-in-day',
-          prefs.weigh_in.on,
+        <Fold shown={prefs.weigh_in.on}>
           <div className="t-row">
             <label className="flex-1 text-sm" htmlFor="notify-weekday">
               Weigh-in day
@@ -401,7 +377,7 @@ export function Notifications({
               ))}
             </select>
           </div>
-        )}
+        </Fold>
         {weighSave.error && <p className="t-error mt-2">{weighSave.error}</p>}
       </div>
 
@@ -437,5 +413,29 @@ export function Notifications({
         onClose={() => setRemoving(null)}
       />
     </>
+  )
+}
+
+// A fold that clips only while it moves. Once open it lets the time control's
+// list hang below it; a hidden overflow would cut that list to a sliver.
+function Fold({ shown, children }: { shown: boolean; children: ReactNode }) {
+  const reduced = useReducedMotion()
+  const [moving, setMoving] = useState(false)
+  return (
+    <AnimatePresence initial={false}>
+      {shown && (
+        <motion.div
+          style={{ overflow: moving ? 'hidden' : 'visible' }}
+          initial={reduced ? false : { height: 0, opacity: 0 }}
+          animate={{ height: 'auto', opacity: 1 }}
+          exit={reduced ? undefined : { height: 0, opacity: 0 }}
+          transition={{ duration: 0.18 }}
+          onAnimationStart={() => setMoving(true)}
+          onAnimationComplete={() => setMoving(false)}
+        >
+          <div className="pt-2 pb-3">{children}</div>
+        </motion.div>
+      )}
+    </AnimatePresence>
   )
 }
