@@ -4,7 +4,7 @@
 
 Tare is a food journal and health tracker with a community-built food database. The database starts completely empty. Every food in it was entered by a member and checked by a person before it was published, so the database grows more useful the longer Tare has been running and the less it resembles a generic product catalogue.
 
-Scanning a barcode is the only online step a member ever sets off. A code nobody has entered yet is asked of an online source, and what comes back waits for a reviewer to approve it before it joins the shared database. The one other lookup belongs to an administrator: a food that is already approved can have its vitamins and minerals matched by name against USDA FoodData Central, and an administrator picks the right record by hand. Nothing else leaves the server, and nothing enters the database without a person deciding it should.
+Scanning a barcode is the only online step a member ever sets off. A code nobody has entered yet is asked of an online source, and what comes back waits for a reviewer to approve it before it joins the shared database. The one other lookup belongs to an administrator: a food that is already approved can have its vitamins and minerals matched by name against USDA FoodData Central, and an administrator picks the right record by hand. The only other traffic out is a notification, which goes to the push service the member's own browser named, encrypted so that service cannot read it. Nothing else leaves the server, and nothing enters the database without a person deciding it should.
 
 Beside the journal, Tare records weight, exercise, and the step and workout data a phone sends in, and shows a read-only feed of what the friends you choose have logged. Accounts are created by invitation.
 
@@ -20,9 +20,9 @@ The journal takes private custom foods, meals, recipes, daily foods that log the
 
 Calorie and macro targets are worked out from a weight goal, with weigh-ins and body measurements behind them. Health sync brings in what a phone records, through Health Auto Export or an uploaded file, and workouts arrive with their routes and an optional map.
 
-A calendar sits beside the journal. An appointment takes a time or a whole day, can run across several days, and can repeat by week, month or year; the month, one day against the clock, and today's hours at the top of the Dashboard are the three ways to read it. A calendar can be shared with a friend by invitation, and either of you can add another friend, rename it or recolor it; leaving one takes your own appointments with you. A friend can also be invited to a single appointment, and anything already in that hour is named before either is saved. Tare sends no reminders. Your calendar is private: only appointments you add to a shared calendar, or invite a friend to, are seen by anyone else.
+A calendar sits beside the journal. An appointment takes a time or a whole day, can run across several days, and can repeat by week, month or year; the month, one day against the clock, and today's hours at the top of the Dashboard are the three ways to read it. A calendar can be shared with a friend by invitation, and either of you can add another friend, rename it or recolor it; leaving one takes your own appointments with you. A friend can also be invited to a single appointment, and anything already in that hour is named before either is saved. On an instance that holds push keys, a change to a calendar you share and an invitation to an appointment reach your devices as notifications; there are no timed reminders before an appointment. Your calendar is private: only appointments you add to a shared calendar, or invite a friend to, are seen by anyone else.
 
-Beside all of that: a library of stretches and moves, member profiles with avatars, friends by mutual request, a read-only community feed with a sharing switch over every part of it, and a feedback line to the administrator. It installs as a PWA.
+Beside all of that: a library of stretches and moves, member profiles with avatars, friends by mutual request, a read-only community feed with a sharing switch over every part of it, and a feedback line to the administrator. It installs as a PWA, and once installed it can send a morning and an evening check-in, a weekly Biometrics nudge and calendar changes, each of them switchable under More, then Notifications.
 
 ## Screenshots
 
@@ -63,6 +63,15 @@ Then mint an invite link for everybody else. One code lets one person in unless 
 ```
 docker compose exec api python manage.py create-invite --seats 4
 ```
+
+Notifications are off until the instance holds a pair of keys of its own. Mint them, put both printed lines in `.env`, and recreate the api so it reads them:
+
+```
+docker compose run --rm --no-deps api python manage.py vapid-keys
+docker compose up -d api
+```
+
+Without them the Notifications screen says they are not set up, and nothing else changes.
 
 For a real deployment, with the proxy, the first account, backups and what each setting does, see [docs/DEPLOY.md](docs/DEPLOY.md).
 
@@ -121,6 +130,8 @@ CI runs the same commands on every push, and again once a week so the audits sti
 The barcode scanner first searches the Tare database for existing items. If it doesn't exist, it searches Open Food Facts, whose data is available under the Open Database License (ODbL). Once an item is approved, it's stored on Tare's server and doesn't have to reach out to the internet.
 
 Vitamins and minerals can also come from USDA FoodData Central, which is public domain. Only an administrator reaches it, and only to match a food that is already approved and has no vitamins on it yet; a member's scan never does, and an instance without a FoodData Central key never does at all.
+
+Notifications travel through the push service the member's own browser named, which is Apple, Google or Mozilla depending on the browser. The body is encrypted for that device before it leaves, so the service carries it without being able to read it.
 
 Calorie and nutrient targets follow the Dietary Guidelines for Americans and the American Heart Association. Tare uses math to make estimates, and does not provide medical advice. Talk to your doctor/clinician before changing how you eat, especially if pregnant, breastfeeding, under care for a medical condition, or have a history of eating disorders.
 

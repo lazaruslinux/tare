@@ -16,6 +16,12 @@ export default defineConfig({
     // slim bar offering it, so somebody mid-entry is never reloaded out from
     // under what they were typing.
     VitePWA({
+      // The worker is written by hand in src/sw.ts rather than generated, so
+      // it can answer a push and a tap on the notification it drew. The
+      // plugin only fills in the list of files to precache.
+      strategies: 'injectManifest',
+      srcDir: 'src',
+      filename: 'sw.ts',
       registerType: 'prompt',
       // main.tsx registers it. The content security policy forbids an inline
       // script, which is what the injected tag would be.
@@ -23,11 +29,7 @@ export default defineConfig({
       // public/manifest.webmanifest is hand-written and right; this stops a
       // second one being generated beside it.
       manifest: false,
-      workbox: {
-        navigateFallback: '/index.html',
-        // The api is never answered from a cache: a cached reading would be
-        // yesterday's, and the app refetches on every change and on resume.
-        navigateFallbackDenylist: [/^\/api\//],
+      injectManifest: {
         globPatterns: ['**/*.{js,css,html,ico,png,woff2,wasm}'],
         // The map renderer is not precached. It is only reachable on an
         // instance that installed the basemap, and putting a megabyte of it

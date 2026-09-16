@@ -8,6 +8,16 @@ Notable changes to Tare, newest first. The format follows
 
 ### Added
 
+- Notifications. Under More, then Notifications, a member turns each phone or
+  computer on separately, sees the devices already on and removes any of them,
+  and sends a test to check one. The switches say what would arrive: a morning
+  check-in at an hour of their choosing with the day's budget, an evening
+  check-in only when something is missing from the day, a weekly weigh-in
+  nudge on a chosen weekday in place of that morning's check-in, and calendar
+  changes and invitations. After a quiet week the check-ins pause and one note
+  a week asks how it is going. An instance without keys says so on the screen;
+  an administrator mints a pair with `manage.py vapid-keys`.
+
 - Dashboard layout. Under More, then Display, a member drags or steps the
   five Dashboard cards into their own order and turns any of them off; the
   arrangement is kept on the account, so every device agrees. New accounts

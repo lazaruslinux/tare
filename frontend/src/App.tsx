@@ -17,7 +17,7 @@ import { TopBar } from './components/TopBar'
 import { Tour } from './components/Tour'
 import { UpdateBar } from './components/UpdateBar'
 import { WorkoutDetails } from './components/WorkoutDetails'
-import { entry } from './entry'
+import { entry, parseOpen, type Open } from './entry'
 import { useResume } from './hooks/useResume'
 import { TopBarContext, useTopBarState } from './hooks/useTopBar'
 import { useWaitingCount } from './hooks/useWaitingCount'
@@ -66,7 +66,7 @@ type Phase =
 // Whether this instance sends mail, which is what decides whether an account
 // that has not answered its mail is walled. Without a mail server there is no
 // link to open, and the server gates nothing.
-type Version = { version: string; mail: boolean }
+type Version = { version: string; mail: boolean; push: boolean }
 
 export default function App() {
   const [me, setMe] = useState<Me | null>(null)
@@ -76,10 +76,18 @@ export default function App() {
   // What the instance is running, shown in the footer and on About. Empty
   // until it has said, and nothing waits on it.
   const [version, setVersion] = useState('')
+  // Whether this instance can send notifications at all. False until it has
+  // said, which is the same as an instance without the keys.
+  const [push, setPush] = useState(false)
   // An invite, a verification link or a reset link is answered before anything
   // asks who is signed in: all three are opened by somebody who is not.
   const [phase, setPhase] = useState<Phase>(
-    entry.kind === 'app' || entry.kind === 'setup' || entry.kind === 'tour' ? 'loading' : entry.kind
+    entry.kind === 'app' ||
+      entry.kind === 'setup' ||
+      entry.kind === 'tour' ||
+      entry.kind === 'open'
+      ? 'loading'
+      : entry.kind
   )
   // Whether the setup steps are being walked again, asked for by the address
   // the app was opened on. Cleared the moment they are through.
@@ -198,6 +206,7 @@ export default function App() {
         if (!alive) return
         setMail(instance.mail)
         setVersion(instance.version)
+        setPush(instance.push)
       })
       // An instance that will not say is read as one that sends nothing. The
       // server refuses the routes either way; this only picks the screen.
@@ -283,6 +292,47 @@ export default function App() {
     setMoreView('calendar')
     select('more')
   }
+
+  // Where a notification tap lands. The five addresses a notification can
+  // carry, each opened the same way something inside the app would open it.
+  const applyOpen = (open: Open) => {
+    if (open.target === 'journal') select('journal')
+    else if (open.target === 'biometrics') selectRail('measurements')
+    else if (open.target === 'calendar') {
+      if (open.day === undefined) openMoreScreen('calendar')
+      else openCalendarDay(open.day)
+    }
+    // The invitations card sits at the top of the Calendar screen.
+    else if (open.target === 'invitations') openMoreScreen('calendar')
+    else openMoreScreen('notifications')
+  }
+  // Held in a ref so the two effects below never have to list everything the
+  // handler reads, and never run again when one of those changes.
+  const applyOpenRef = useRef(applyOpen)
+  applyOpenRef.current = applyOpen
+  // The address the app was opened on is spent once. A second visit to the
+  // same tab is somebody navigating, not the notification again.
+  const opened = useRef(false)
+
+  useEffect(() => {
+    if (phase !== 'signedin' || entry.kind !== 'open' || opened.current) return
+    opened.current = true
+    applyOpenRef.current(entry)
+  }, [phase])
+
+  // The same journey when the tap happened while the app was already open:
+  // the worker cannot navigate it, so it says where it was going.
+  useEffect(() => {
+    if (!('serviceWorker' in navigator)) return
+    const onMessage = (event: MessageEvent) => {
+      const data = event.data as { type?: string; url?: string } | null
+      if (data?.type !== 'open' || typeof data.url !== 'string') return
+      const open = parseOpen(new URL(data.url, window.location.origin).search)
+      if (open !== null) applyOpenRef.current(open)
+    }
+    navigator.serviceWorker.addEventListener('message', onMessage)
+    return () => navigator.serviceWorker.removeEventListener('message', onMessage)
+  }, [])
 
   // The bar's centre button stays in reach while its sheet is up, so a second
   // tap closes what the first opened.
@@ -475,6 +525,7 @@ export default function App() {
                     <More
                       me={me}
                       version={version}
+                      push={push}
                       onChange={remember}
                       onSignedOut={leave}
                       waiting={queue}

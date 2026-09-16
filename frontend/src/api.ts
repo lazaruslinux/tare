@@ -28,6 +28,30 @@ export type DashboardCardKey =
   | 'community'
 export type DashboardCard = { key: DashboardCardKey; shown: boolean }
 
+// What an account has asked to be told about, and when. One object rather
+// than a field per switch, the way the Dashboard's cards are kept: the screen
+// saves the lot in one call. Times are "HH:MM" on a twenty-four hour clock
+// whatever clock the account reads, and the weekday counts Monday as 0.
+export type NotifyPrefs = {
+  morning: { on: boolean; time: string }
+  evening: { on: boolean; time: string }
+  weigh_in: { on: boolean; weekday: number }
+  calendar: boolean
+  invitations: boolean
+}
+
+// One device notifications were turned on for. The endpoint is the address
+// the push service hands out, and it is what tells this device from another.
+export type PushSubscriptionRow = {
+  id: number
+  endpoint: string
+  label: string
+  created_at: string
+  last_ok_at: string | null
+}
+export type PushDevices = { devices: PushSubscriptionRow[] }
+export type PushKey = { key: string }
+
 export type Me = {
   id: number
   username: string
@@ -76,6 +100,7 @@ export type Me = {
   share_journal: boolean
   // Whether a weigh-in that came in lower says how much came off.
   share_weight_loss: boolean
+  notify: NotifyPrefs
 }
 
 export type Sex = 'female' | 'male'

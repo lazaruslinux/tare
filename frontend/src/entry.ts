@@ -3,8 +3,14 @@
 // There is no router here and there does not need to be: the app is one screen
 // with tabs, and three addresses arrive from outside it, all by email or by a
 // link somebody was sent. The fourth comes from inside: a link back through
-// setup. Reading them at import rather than in a component means it happens
-// once whatever React does with renders.
+// setup. The fifth comes from a notification the phone drew, which names the
+// screen the tap should land on. Reading them at import rather than in a
+// component means it happens once whatever React does with renders.
+
+// Where a notification tap goes. Each is somewhere the app already is, so
+// nothing here decides anything except which one.
+export type OpenTarget = 'journal' | 'biometrics' | 'calendar' | 'invitations' | 'notifications'
+export type Open = { kind: 'open'; target: OpenTarget; day?: string }
 
 export type Entry =
   | { kind: 'app' }
@@ -13,6 +19,22 @@ export type Entry =
   | { kind: 'reset'; token: string }
   | { kind: 'setup' }
   | { kind: 'tour' }
+  | Open
+
+const TARGETS: OpenTarget[] = ['journal', 'biometrics', 'calendar', 'invitations', 'notifications']
+const DAY = /^\d{4}-\d{2}-\d{2}$/
+
+// The address a notification carries, read strictly: anything this app does
+// not know a screen for is no address at all.
+export function parseOpen(search: string): Open | null {
+  const params = new URLSearchParams(search)
+  const target = params.get('open')
+  if (target === null || !TARGETS.includes(target as OpenTarget)) return null
+  const day = params.get('day')
+  return day !== null && DAY.test(day)
+    ? { kind: 'open', target: target as OpenTarget, day }
+    : { kind: 'open', target: target as OpenTarget }
+}
 
 function read(): Entry {
   const path = window.location.pathname
@@ -23,6 +45,10 @@ function read(): Entry {
   }
   if (path === '/reset-password') {
     return { kind: 'reset', token: new URLSearchParams(window.location.search).get('token') ?? '' }
+  }
+  if (path === '/') {
+    const open = parseOpen(window.location.search)
+    if (open !== null) return open
   }
   // Walking the setup steps again. It carries nothing but the request.
   if (path === '/' && new URLSearchParams(window.location.search).has('setup')) {

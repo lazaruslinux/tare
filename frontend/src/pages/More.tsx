@@ -1,5 +1,6 @@
 import { Reorder, useDragControls, useReducedMotion } from 'framer-motion'
 import {
+  Bell,
   BookOpen,
   CalendarDays,
   ChevronDown,
@@ -50,6 +51,7 @@ import {
   isDefaultOrder,
   sameOrder,
 } from '../lib/dashboardCards'
+import { currentSubscription, support } from '../lib/push'
 import { reviews } from '../lib/roles'
 import { ZONES, offList } from '../lib/zones'
 import { applyTheme, rememberTheme, useTheme, type Theme } from '../theme'
@@ -65,6 +67,7 @@ import { Feedback, FeedbackLog } from './Feedback'
 import { Fitness } from './Fitness'
 import { Guide } from './Guide'
 import { Members } from './Members'
+import { Notifications } from './Notifications'
 import { ReviewLog } from './ReviewLog'
 import { MemberView } from '../components/MemberView'
 import { Profile } from './Profile'
@@ -85,6 +88,7 @@ export type Screen =
   | 'calendar'
   | 'sync'
   | 'sharing'
+  | 'notifications'
   | 'members'
   | 'submissions'
   | 'display'
@@ -345,6 +349,7 @@ function Group({ title, children }: { title: string; children: ReactNode }) {
 export function More({
   me,
   version,
+  push,
   onChange,
   onSignedOut,
   waiting,
@@ -367,6 +372,9 @@ export function More({
   // What the instance is running, read once above this tab and shown on
   // About.
   version: string
+  // Whether this instance can send notifications at all, read with the
+  // version and handed to the one screen that says so.
+  push: boolean
   onChange: (me: Me) => void
   onSignedOut: () => void
   // How many submissions are waiting. Read once above this screen, because the
@@ -416,6 +424,9 @@ export function More({
   // What the sync row says under itself. One request when this tab opens, and
   // nothing after that: it is a line on a row, not a live figure.
   const [sync, setSync] = useState<SyncKey | null>(null)
+  // Whether this device is one of the ones notifications reach. Read once,
+  // because the screen the row opens is where it changes.
+  const [deviceOff, setDeviceOff] = useState(false)
   // Whether the reviewer application sheet is open, and whether it has been
   // sent. The account's own answer opens it, and this keeps it there for the
   // rest of the session without a second read.
@@ -461,6 +472,19 @@ export function More({
     // The screen as well as the tick: coming back from Sync a device is where
     // the line under that row is most likely to be out of date.
   }, [refresh, screen])
+
+  useEffect(() => {
+    if (!push || support() !== 'off') return
+    let alive = true
+    // Under the dev server there is no worker, so this never settles and the
+    // row says nothing. On a built instance it answers in a moment.
+    currentSubscription()
+      .then((held) => alive && setDeviceOff(held === null))
+      .catch(() => undefined)
+    return () => {
+      alive = false
+    }
+  }, [push, screen])
 
 
   const go = (next: Screen) => {
@@ -697,6 +721,10 @@ export function More({
         onChange={friendshipChanged}
       />
     )
+  }
+
+  if (screen === 'notifications') {
+    return <Notifications me={me} push={push} onChange={onChange} onBack={() => go(null)} />
   }
 
   if (screen === 'sharing') {
@@ -999,6 +1027,12 @@ export function More({
             onOpen={() => go('sharing')}
           />
           <Row label="Display" icon={Monitor} onOpen={() => go('display')} />
+          <Row
+            label="Notifications"
+            icon={Bell}
+            note={deviceOff ? 'Off on this device' : undefined}
+            onOpen={() => go('notifications')}
+          />
         </Group>
 
         {/* The rail lists all four itself, so this group is the phone's. */}
