@@ -18,7 +18,7 @@ from sqlalchemy import delete, func, or_, select, update
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session
 
-from app import dashboard, mail, models, profiles, security, throttle
+from app import dashboard, mail, models, notify_prefs, profiles, security, throttle
 from app.config import settings
 from app.db import get_db, rows_touched
 from app.deps import require_account, require_user
@@ -165,6 +165,8 @@ def me_payload(db: Session, user: models.User) -> dict[str, object]:
         # The Dashboard's cards in the order this account reads them. Always a
         # full list, so an account that has never arranged it gets the default.
         "dashboard_cards": dashboard.normalize(user.dashboard_cards),
+        # And what they have asked to be told about, read back the same way.
+        "notify": notify_prefs.normalize(user.notify),
         "share_age": user.share_age,
         "share_sex": user.share_sex,
         "share_location": user.share_location,

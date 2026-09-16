@@ -27,6 +27,7 @@ FITNESS_TABLES = {
     "workout_samples",
     "ingest_log",
 }
+PUSH_TABLES = {"push_subscriptions", "push_sends"}
 CALENDAR_TABLES = {
     "calendars",
     "calendar_members",
@@ -98,6 +99,13 @@ def test_upgrade_head_builds_the_identity_schema(tmp_path):
         appointment_columns = {
             column["name"] for column in inspector.get_columns("appointments")
         }
+        push_unique = {
+            table: {
+                constraint["name"]
+                for constraint in inspector.get_unique_constraints(table)
+            }
+            for table in ("push_subscriptions", "push_sends")
+        }
         calendar_unique = {
             table: {
                 constraint["name"]
@@ -121,6 +129,10 @@ def test_upgrade_head_builds_the_identity_schema(tmp_path):
     assert HEALTH_TABLES <= tables
     assert FITNESS_TABLES <= tables
     assert CALENDAR_TABLES <= tables
+    assert PUSH_TABLES <= tables
+    # A device is its endpoint, and a scheduled kind goes out once a day.
+    assert "uq_push_subscriptions_endpoint" in push_unique["push_subscriptions"]
+    assert "uq_push_sends_user_kind_day" in push_unique["push_sends"]
     # The zone an appointment was arranged in, which never moves under it, and
     # the six columns one repeat is kept as.
     assert {
@@ -177,6 +189,8 @@ def test_upgrade_head_builds_the_identity_schema(tmp_path):
     assert "location" in user_columns
     # How this account has arranged the Dashboard, empty until it does.
     assert "dashboard_cards" in user_columns
+    # And what it has asked to be told about, empty until it answers.
+    assert "notify" in user_columns
     # The second role, and the application an administrator answers.
     assert {"is_reviewer", "reviewer_requested_at"} <= user_columns
     # When the first-run screen was answered, which the account carries rather

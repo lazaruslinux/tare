@@ -78,6 +78,13 @@ class Settings(BaseSettings):
     # a food's vitamins from there, and those two tools then say so and stop.
     usda_api_key: str = ""
 
+    # The key notifications are signed with, as base64url of the raw 32-byte
+    # P-256 scalar, and the contact address the push services may write to.
+    # Both or neither: the public half is derived, so there is nothing else to
+    # set, and an instance with neither simply sends no notifications.
+    vapid_private_key: str = ""
+    vapid_subject: str = ""
+
     media_dir: str = "/data/media"
 
     # Where members' feedback is appended. A file rather than a table: it is
@@ -145,6 +152,31 @@ def check_deploy_config(current: Settings | None = None) -> None:
         problems.append(
             f"TARE_TZ is set to {s.tz!r}, which is not a zone Tare offers. "
             "Use one of: " + ", ".join(US_ZONES)
+        )
+
+    # Imported here rather than at the top, for the same reason as the zones
+    # above: webpush reads settings.
+    from app.webpush import checked_private_key
+
+    if bool(s.vapid_private_key) != bool(s.vapid_subject):
+        problems.append(
+            "VAPID_PRIVATE_KEY and VAPID_SUBJECT go together. Set both to send "
+            "notifications, or neither to send none. Mint a key with: "
+            "python manage.py vapid-keys"
+        )
+    if s.vapid_private_key:
+        try:
+            checked_private_key(s.vapid_private_key)
+        except ValueError as wrong:
+            problems.append(
+                f"VAPID_PRIVATE_KEY is not a key Tare can sign with ({wrong}). "
+                "Mint a fresh one with: python manage.py vapid-keys"
+            )
+    if s.vapid_subject and not s.vapid_subject.startswith(("mailto:", "https://")):
+        problems.append(
+            "VAPID_SUBJECT must be a mailto: address or an https: address. It is "
+            "the contact a push service uses when something is wrong with what "
+            "this instance sends."
         )
 
     if problems:

@@ -14,13 +14,13 @@ import datetime as dt
 from dataclasses import dataclass
 from typing import Literal, NoReturn
 
-from fastapi import APIRouter, Depends, HTTPException, status
+from fastapi import APIRouter, BackgroundTasks, Depends, HTTPException, status
 from pydantic import BaseModel, Field
 from sqlalchemy import and_, delete, func, or_, select, update
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session
 
-from app import clock, models, recurrence, throttle
+from app import clock, models, notifications, recurrence, throttle
 from app.calendar_colors import PALETTE
 from app.db import get_db
 from app.deps import require_user
@@ -399,6 +399,18 @@ REPEAT_FIELDS = (
     "repeat_anchor",
     "repeat_month_day",
     "repeat_until",
+)
+
+# What an appointment says about itself that is worth telling anybody who has
+# it written down. A note or a location moved is not one of them.
+WHEN_FIELDS = (
+    "title",
+    "date_for",
+    "end_date",
+    "time_of_day",
+    "end_time",
+    "all_day",
+    *REPEAT_FIELDS,
 )
 
 
@@ -874,8 +886,13 @@ def checked_friends(db: Session, owner: models.User, ids: list[int]) -> list[int
     return wanted
 
 
-def publish(db: Session, row: models.Appointment, calendar_ids: list[int]) -> None:
-    """The calendars this appointment is on, as they should now stand."""
+def publish(db: Session, row: models.Appointment, calendar_ids: list[int]) -> list[int]:
+    """The calendars this appointment is on, as they should now stand.
+
+    Answers with the ones it was not on before, because the people on those
+    are hearing about the appointment for the first time rather than hearing
+    that it changed.
+    """
     held = {
         link.calendar_id: link
         for link in db.scalars(
@@ -887,11 +904,10 @@ def publish(db: Session, row: models.Appointment, calendar_ids: list[int]) -> No
     for calendar_id, link in held.items():
         if calendar_id not in calendar_ids:
             db.delete(link)
-    for calendar_id in calendar_ids:
-        if calendar_id not in held:
-            db.add(
-                models.AppointmentCalendar(appointment_id=row.id, calendar_id=calendar_id)
-            )
+    added = [calendar_id for calendar_id in calendar_ids if calendar_id not in held]
+    for calendar_id in added:
+        db.add(models.AppointmentCalendar(appointment_id=row.id, calendar_id=calendar_id))
+    return added
 
 
 def held_invites(db: Session, row: models.Appointment) -> dict[int, models.AppointmentInvite]:
@@ -907,8 +923,11 @@ def held_invites(db: Session, row: models.Appointment) -> dict[int, models.Appoi
 
 def replace_invites(
     db: Session, row: models.Appointment, owner: models.User, ids: list[int]
-) -> None:
-    """The invitation list as it should now stand, keeping what people said."""
+) -> list[int]:
+    """The invitation list as it should now stand, keeping what people said.
+
+    Answers with whoever was newly asked, for the same reason publish does.
+    """
     wanted = checked_friends(db, owner, ids)
     if len(wanted) > MAX_INVITEES:
         bad(INVITE_CAP)
@@ -916,16 +935,17 @@ def replace_invites(
     for user_id, invite in held.items():
         if user_id not in wanted:
             db.delete(invite)
-    for user_id in wanted:
-        if user_id not in held:
-            db.add(
-                models.AppointmentInvite(
-                    appointment_id=row.id,
-                    user_id=user_id,
-                    invited_by=owner.id,
-                    status=PENDING,
-                )
+    fresh = [user_id for user_id in wanted if user_id not in held]
+    for user_id in fresh:
+        db.add(
+            models.AppointmentInvite(
+                appointment_id=row.id,
+                user_id=user_id,
+                invited_by=owner.id,
+                status=PENDING,
             )
+        )
+    return fresh
 
 
 def withdraw_pending(db: Session, one_id: int, other_id: int) -> None:
@@ -951,6 +971,142 @@ def withdraw_pending(db: Session, one_id: int, other_id: int) -> None:
             models.CalendarMember.user_id != models.CalendarMember.invited_by,
         )
     )
+
+
+# Who hears about a change, and in what words
+# -------------------------------------------
+
+# One notification waiting to go out: who it is for, and what it says.
+Telling = tuple[list[int], notifications.Event]
+
+
+def accepted_members(db: Session, calendar_ids: list[int]) -> set[int]:
+    """Everybody standing on any of these calendars."""
+    if not calendar_ids:
+        return set()
+    return set(
+        db.scalars(
+            select(models.CalendarMember.user_id).where(
+                models.CalendarMember.calendar_id.in_(calendar_ids),
+                models.CalendarMember.accepted_at.is_not(None),
+            )
+        )
+    )
+
+
+def shared_watchers(db: Session, row: models.Appointment, sheet: Sheet) -> set[int]:
+    return accepted_members(db, sheet.calendars.get(row.id, []))
+
+
+def answered_invitees(row: models.Appointment, sheet: Sheet) -> set[int]:
+    return {
+        invite.user_id for invite in sheet.invites.get(row.id, []) if invite.status == ACCEPTED
+    }
+
+
+def audience(
+    db: Session, row: models.Appointment, sheet: Sheet, actor_id: int
+) -> set[int]:
+    """Everybody who has this written down, apart from whoever changed it."""
+    return (shared_watchers(db, row, sheet) | answered_invitees(row, sheet)) - {actor_id}
+
+
+def calendar_name(row: models.Appointment, sheet: Sheet) -> str:
+    """The calendar a change is announced on, which is the first it is on."""
+    for calendar_id in sorted(sheet.calendars.get(row.id, [])):
+        shelf = sheet.shelves.get(calendar_id)
+        if shelf is not None:
+            return shelf.name
+    return ""
+
+
+def event_day(row: models.Appointment, sheet: Sheet, actor: models.User) -> dt.date:
+    return next_occurrence(row, sheet.skips.get(row.id, set()), clock.user_today(actor))
+
+
+def appointment_event(
+    kind: str,
+    row: models.Appointment,
+    actor: models.User,
+    day: dt.date,
+    on_calendar: str,
+    *,
+    whole_series: bool = False,
+) -> notifications.Event:
+    """One appointment as the notification module reads it."""
+    return notifications.Event(
+        kind,
+        title=row.title,
+        who=display_name(actor),
+        day=day,
+        at=None if row.all_day else row.time_of_day,
+        end_at=None if row.all_day else row.end_time,
+        zone=row.timezone,
+        ref=row.id,
+        calendar=on_calendar,
+        whole_series=whole_series,
+    )
+
+
+def tellings(
+    db: Session,
+    row: models.Appointment,
+    sheet: Sheet,
+    actor: models.User,
+    kind: str,
+    day: dt.date | None = None,
+    *,
+    whole_series: bool = False,
+    skip: set[int] | None = None,
+) -> list[Telling]:
+    """Who hears about this, split by what they are allowed to read.
+
+    The calendar's name belongs to the people on it. Somebody who was only
+    asked along gets the same sentence without it, because the name of a
+    calendar they are not on is not theirs to be told.
+    """
+    when = event_day(row, sheet, actor) if day is None else day
+    held_back = (skip or set()) | {actor.id}
+    watching = shared_watchers(db, row, sheet) - held_back
+    asked = answered_invitees(row, sheet) - watching - held_back
+    items: list[Telling] = []
+    if watching:
+        items.append(
+            (
+                sorted(watching),
+                appointment_event(
+                    kind, row, actor, when, calendar_name(row, sheet),
+                    whole_series=whole_series,
+                ),
+            )
+        )
+    if asked:
+        items.append(
+            (
+                sorted(asked),
+                appointment_event(kind, row, actor, when, "", whole_series=whole_series),
+            )
+        )
+    return items
+
+
+def invite_tellings(
+    row: models.Appointment, sheet: Sheet, actor: models.User, ids: list[int]
+) -> list[Telling]:
+    """Whoever was just asked along, who hear that rather than hearing about
+    a calendar they are not on."""
+    if not ids:
+        return []
+    day = event_day(row, sheet, actor)
+    return [
+        (sorted(ids), appointment_event(notifications.INVITED, row, actor, day, ""))
+    ]
+
+
+def hand_off(background: BackgroundTasks, items: list[Telling]) -> None:
+    """Hand the sends over once the change itself is safely committed."""
+    for ids, event in items:
+        background.add_task(notifications.notify, ids, event)
 
 
 # The calendar itself
@@ -1009,6 +1165,7 @@ def read_appointment(
 @router.post("/appointments", status_code=status.HTTP_201_CREATED)
 def create_appointment(
     body: AppointmentIn,
+    background: BackgroundTasks,
     db: Session = Depends(get_db),
     user: models.User = Depends(require_user),
 ) -> dict[str, object]:
@@ -1025,8 +1182,16 @@ def create_appointment(
     db.add(row)
     db.flush()
     publish(db, row, calendar_ids)
-    replace_invites(db, row, user, body.invitee_ids)
+    invited_now = replace_invites(db, row, user, body.invitee_ids)
     db.commit()
+    sheet = gather(db, user, [row])
+    hand_off(
+        background,
+        tellings(
+            db, row, sheet, user, notifications.APPOINTMENT_ADDED, skip=set(invited_now)
+        )
+        + invite_tellings(row, sheet, user, invited_now),
+    )
     return {"appointment": detail_of(db, user, row)}
 
 
@@ -1063,6 +1228,7 @@ def patched_plan(row: models.Appointment, body: AppointmentPatch, sent: set[str]
 def change_appointment(
     appointment_id: int,
     body: AppointmentPatch,
+    background: BackgroundTasks,
     db: Session = Depends(get_db),
     user: models.User = Depends(require_user),
 ) -> dict[str, object]:
@@ -1075,12 +1241,17 @@ def change_appointment(
         bad(OWNER_ONLY_FIELD)
     owner = db.get(models.User, row.owner_id) or user
     was = tuple(getattr(row, field) for field in REPEAT_FIELDS)
+    # What a notification would be about. A patch that only moves the notes or
+    # the location changes nothing anybody needs telling about.
+    stood = tuple(getattr(row, field) for field in WHEN_FIELDS)
     plan = patched_plan(row, body, sent)
     validate(plan)
+    added_calendars: list[int] = []
+    invited_now: list[int] = []
     if "calendar_ids" in sent:
-        publish(db, row, checked_calendars(db, owner, body.calendar_ids or []))
+        added_calendars = publish(db, row, checked_calendars(db, owner, body.calendar_ids or []))
     if "invitee_ids" in sent:
-        replace_invites(db, row, owner, body.invitee_ids or [])
+        invited_now = replace_invites(db, row, owner, body.invitee_ids or [])
     apply_plan(row, plan)
     if tuple(getattr(row, field) for field in REPEAT_FIELDS) != was:
         # The pattern moved, so the days carved out of the old one mean nothing
@@ -1093,17 +1264,55 @@ def change_appointment(
             )
         )
     db.commit()
+    sheet = gather(db, user, [row])
+    # The people on a calendar it has just been put on hear that it was added,
+    # not that it changed, so they are held back from the change.
+    fresh = accepted_members(db, added_calendars) - {user.id}
+    items: list[Telling] = []
+    if tuple(getattr(row, field) for field in WHEN_FIELDS) != stood:
+        items += tellings(
+            db,
+            row,
+            sheet,
+            user,
+            notifications.APPOINTMENT_CHANGED,
+            skip=fresh | set(invited_now),
+        )
+    if fresh:
+        items.append(
+            (
+                sorted(fresh),
+                appointment_event(
+                    notifications.APPOINTMENT_ADDED,
+                    row,
+                    user,
+                    event_day(row, sheet, user),
+                    calendar_name(row, sheet),
+                ),
+            )
+        )
+    hand_off(background, items + invite_tellings(row, sheet, user, invited_now))
     return {"appointment": detail_of(db, user, row)}
 
 
 @router.delete("/appointments/{appointment_id}", status_code=status.HTTP_204_NO_CONTENT)
 def delete_appointment(
     appointment_id: int,
+    background: BackgroundTasks,
     db: Session = Depends(get_db),
     user: models.User = Depends(require_user),
 ) -> None:
-    row, _ = visible_one(db, user, appointment_id)
+    row, sheet = visible_one(db, user, appointment_id)
     require_owner(row, user, OWNER_ONLY_DELETE)
+    # Worked out before the rows go: afterwards there is nobody left to tell.
+    items = tellings(
+        db,
+        row,
+        sheet,
+        user,
+        notifications.APPOINTMENT_DELETED,
+        whole_series=row.repeat_type is not None,
+    )
     for table in (
         models.AppointmentCalendar,
         models.AppointmentInvite,
@@ -1113,6 +1322,7 @@ def delete_appointment(
         db.execute(delete(table).where(table.appointment_id == row.id))
     db.delete(row)
     db.commit()
+    hand_off(background, items)
 
 
 @router.delete(
@@ -1120,6 +1330,7 @@ def delete_appointment(
 )
 def drop_occurrence(
     appointment_id: int,
+    background: BackgroundTasks,
     date: str = "",
     db: Session = Depends(get_db),
     user: models.User = Depends(require_user),
@@ -1132,6 +1343,7 @@ def drop_occurrence(
         bad(NOT_A_SERIES)
     if not lands_on(row, sheet.skips.get(row.id, set()), day):
         bad(NO_OCCURRENCE)
+    items = tellings(db, row, sheet, user, notifications.OCCURRENCE_CANCELLED, day)
     carve(db, row, day)
     db.execute(
         delete(models.AppointmentMark).where(
@@ -1140,6 +1352,7 @@ def drop_occurrence(
         )
     )
     db.commit()
+    hand_off(background, items)
 
 
 def carve(db: Session, row: models.Appointment, day: dt.date) -> None:
@@ -1162,6 +1375,7 @@ def carve(db: Session, row: models.Appointment, day: dt.date) -> None:
 def detach_occurrence(
     appointment_id: int,
     body: AppointmentIn,
+    background: BackgroundTasks,
     date: str = "",
     db: Session = Depends(get_db),
     user: models.User = Depends(require_user),
@@ -1217,6 +1431,13 @@ def detach_occurrence(
         .values(appointment_id=copy.id, date_for=copy.date_for)
     )
     db.commit()
+    # One day of a series moved is an appointment that changed, told in the
+    # copy's own words: it is the day everybody is holding.
+    copied = gather(db, user, [copy])
+    hand_off(
+        background,
+        tellings(db, copy, copied, user, notifications.APPOINTMENT_CHANGED, copy.date_for),
+    )
     return {"appointment": detail_of(db, user, copy)}
 
 
@@ -1237,6 +1458,7 @@ def mark_day(row: models.Appointment, sheet: Sheet, raw: str, user: models.User)
 @router.post("/appointments/{appointment_id}/cancel")
 def cancel_occurrence(
     appointment_id: int,
+    background: BackgroundTasks,
     date: str = "",
     db: Session = Depends(get_db),
     user: models.User = Depends(require_user),
@@ -1274,7 +1496,9 @@ def cancel_occurrence(
             made.cancelled = True
     else:
         mark.cancelled = True
+    items = tellings(db, row, sheet, user, notifications.OCCURRENCE_CANCELLED, day)
     db.commit()
+    hand_off(background, items)
     return {"cancelled": True, "date": day.isoformat()}
 
 
@@ -1332,6 +1556,7 @@ def unpublish(
 def add_invites(
     appointment_id: int,
     body: InvitesIn,
+    background: BackgroundTasks,
     db: Session = Depends(get_db),
     user: models.User = Depends(require_user),
 ) -> dict[str, object]:
@@ -1346,18 +1571,20 @@ def add_invites(
     held = held_invites(db, row)
     if len(set(held) | set(wanted)) > MAX_INVITEES:
         bad(INVITE_CAP)
-    for user_id in wanted:
-        if user_id not in held:
-            db.add(
-                models.AppointmentInvite(
-                    appointment_id=row.id,
-                    user_id=user_id,
-                    invited_by=user.id,
-                    status=PENDING,
-                )
+    fresh = [user_id for user_id in wanted if user_id not in held]
+    for user_id in fresh:
+        db.add(
+            models.AppointmentInvite(
+                appointment_id=row.id,
+                user_id=user_id,
+                invited_by=user.id,
+                status=PENDING,
             )
+        )
     db.commit()
-    return {"invitees": invitee_list(row, gather(db, user, [row]), True)}
+    sheet = gather(db, user, [row])
+    hand_off(background, invite_tellings(row, sheet, user, fresh))
+    return {"invitees": invitee_list(row, sheet, True)}
 
 
 @router.delete(
@@ -1504,6 +1731,7 @@ def read_calendars(
 @router.post("/calendars", status_code=status.HTTP_201_CREATED)
 def create_calendar(
     body: CalendarIn,
+    background: BackgroundTasks,
     db: Session = Depends(get_db),
     user: models.User = Depends(require_user),
 ) -> dict[str, object]:
@@ -1535,6 +1763,16 @@ def create_calendar(
         )
     )
     db.commit()
+    background.add_task(
+        notifications.notify,
+        [body.friend_id],
+        notifications.Event(
+            notifications.CALENDAR_OFFERED,
+            title=shelf.name,
+            who=display_name(user),
+            ref=shelf.id,
+        ),
+    )
     members = calendar_members(db, [shelf.id]).get(shelf.id, [])
     return calendar_out(shelf, members, people(db, {user.id, body.friend_id}), user)
 
@@ -1563,6 +1801,7 @@ def change_calendar(
 def add_member(
     calendar_id: int,
     body: MemberIn,
+    background: BackgroundTasks,
     db: Session = Depends(get_db),
     user: models.User = Depends(require_user),
 ) -> dict[str, object]:
@@ -1589,6 +1828,16 @@ def add_member(
         db.expire_all()
         bad(ALREADY_MEMBER)
     db.commit()
+    background.add_task(
+        notifications.notify,
+        [body.user_id],
+        notifications.Event(
+            notifications.CALENDAR_OFFERED,
+            title=shelf.name,
+            who=display_name(user),
+            ref=shelf.id,
+        ),
+    )
     members = calendar_members(db, [shelf.id]).get(shelf.id, [])
     return calendar_out(shelf, members, people(db, {row.user_id for row in members}), user)
 
@@ -1940,23 +2189,29 @@ def read_invitations(
 @router.post("/invitations/{invite_id}/accept")
 def accept_invitation(
     invite_id: int,
+    background: BackgroundTasks,
     db: Session = Depends(get_db),
     user: models.User = Depends(require_user),
 ) -> dict[str, object]:
-    return answer_invitation(db, user, invite_id, ACCEPTED)
+    return answer_invitation(db, user, invite_id, ACCEPTED, background)
 
 
 @router.post("/invitations/{invite_id}/decline")
 def decline_invitation(
     invite_id: int,
+    background: BackgroundTasks,
     db: Session = Depends(get_db),
     user: models.User = Depends(require_user),
 ) -> dict[str, object]:
-    return answer_invitation(db, user, invite_id, DECLINED)
+    return answer_invitation(db, user, invite_id, DECLINED, background)
 
 
 def answer_invitation(
-    db: Session, user: models.User, invite_id: int, answer: str
+    db: Session,
+    user: models.User,
+    invite_id: int,
+    answer: str,
+    background: BackgroundTasks,
 ) -> dict[str, object]:
     """Say yes or no. A declined invitation keeps its row and shows nothing."""
     invite = db.get(models.AppointmentInvite, invite_id)
@@ -1965,21 +2220,47 @@ def answer_invitation(
     invite.status = answer
     invite.responded_at = now_utc()
     db.commit()
+    # Only whoever wrote it down hears the answer. Nobody else asked.
+    row = db.get(models.Appointment, invite.appointment_id)
+    if row is not None and row.owner_id != user.id:
+        sheet = gather(db, user, [row])
+        kind = (
+            notifications.INVITATION_ACCEPTED
+            if answer == ACCEPTED
+            else notifications.INVITATION_DECLINED
+        )
+        background.add_task(
+            notifications.notify,
+            [row.owner_id],
+            appointment_event(kind, row, user, event_day(row, sheet, user), ""),
+        )
     return {"status": answer}
 
 
 @router.post("/calendars/{calendar_id}/accept")
 def accept_calendar(
     calendar_id: int,
+    background: BackgroundTasks,
     db: Session = Depends(get_db),
     user: models.User = Depends(require_user),
 ) -> dict[str, object]:
-    _, members = my_calendar(db, user, calendar_id)
+    shelf, members = my_calendar(db, user, calendar_id)
     mine = next((row for row in members if row.user_id == user.id), None)
     if mine is None or mine.accepted_at is not None:
         raise HTTPException(status.HTTP_404_NOT_FOUND, MISSING_INVITATION)
     mine.accepted_at = now_utc()
     db.commit()
+    if shelf.created_by != user.id:
+        background.add_task(
+            notifications.notify,
+            [shelf.created_by],
+            notifications.Event(
+                notifications.MEMBER_JOINED,
+                title=shelf.name,
+                who=display_name(user),
+                ref=shelf.id,
+            ),
+        )
     return {"status": ACCEPTED}
 
 

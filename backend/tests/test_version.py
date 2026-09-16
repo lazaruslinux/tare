@@ -1,18 +1,23 @@
-from app import mail
+from app import mail, webpush
 from app.config import VERSION
 
 
 def test_version_endpoint_answers(client):
     response = client.get("/api/version")
     assert response.status_code == 200
-    # Mail off is the shape of a plain household install, which is what the
-    # test suite runs as.
-    assert response.json() == {"version": VERSION, "mail": False}
+    # Mail off and notifications off is the shape of a plain household
+    # install, which is what the test suite runs as.
+    assert response.json() == {"version": VERSION, "mail": False, "push": False}
 
 
 def test_the_version_says_whether_this_instance_can_send_mail(client, monkeypatch):
     monkeypatch.setattr(mail, "configured", lambda: True)
     assert client.get("/api/version").json()["mail"] is True
+
+
+def test_the_version_says_whether_this_instance_can_send_notifications(client, monkeypatch):
+    monkeypatch.setattr(webpush, "configured", lambda: True)
+    assert client.get("/api/version").json()["push"] is True
 
 
 def test_docs_routes_are_not_served(client):

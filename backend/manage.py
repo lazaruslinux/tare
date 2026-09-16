@@ -15,9 +15,10 @@ import datetime as dt
 import sys
 from getpass import getpass
 
+from cryptography.hazmat.primitives.asymmetric import ec
 from sqlalchemy import func, or_, select
 
-from app import health, models, security, thumbs
+from app import health, models, security, thumbs, webpush
 from app.config import check_deploy_config
 from app.db import SessionLocal
 from app.models import now_utc
@@ -175,6 +176,22 @@ def make_thumbnails(args: argparse.Namespace) -> int:
     return 0
 
 
+def vapid_keys(args: argparse.Namespace) -> int:
+    """Mint the key pair this instance signs notifications with.
+
+    Touches no database and needs no configuration, so it can be run on a
+    fresh checkout before there is an account or even a password: the two
+    lines it prints are what turn notifications on.
+    """
+    scalar = ec.generate_private_key(ec.SECP256R1()).private_numbers().private_value
+    raw = scalar.to_bytes(32, "big")
+    print(f"VAPID_PRIVATE_KEY={webpush.b64url_encode(raw)}")
+    print(f"# public key: {webpush.public_key_of(raw)}")
+    print("# Add both lines to your .env, with a contact address of your own:")
+    print("# VAPID_SUBJECT=mailto:you@example.com")
+    return 0
+
+
 def build_parser() -> argparse.ArgumentParser:
     parser = argparse.ArgumentParser(prog="manage.py", description="Tare administration")
     commands = parser.add_subparsers(dest="command", metavar="command")
@@ -209,18 +226,24 @@ def build_parser() -> argparse.ArgumentParser:
     )
     photos.set_defaults(run=make_thumbnails)
 
+    keys = commands.add_parser("vapid-keys", help="mint the notification signing key")
+    keys.set_defaults(run=vapid_keys, needs_config=False)
+
     return parser
 
 
-def main() -> int:
+def main(argv: list[str] | None = None) -> int:
     parser = build_parser()
-    args = parser.parse_args()
+    args = parser.parse_args(argv)
     if args.command is None:
         parser.print_help()
         return 1
     # The same refusal the application makes. Writing accounts into a
     # half-configured install is how rows end up in a database nobody meant.
-    check_deploy_config()
+    # Minting a key is the exception: it reads nothing and writes nothing, and
+    # it is what an install runs before it is configured.
+    if getattr(args, "needs_config", True):
+        check_deploy_config()
     return int(args.run(args))
 
 

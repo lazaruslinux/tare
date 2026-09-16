@@ -37,12 +37,16 @@ Then open `.env` and go down it. In the file's order:
 | `SMTP_HOST`, `SMTP_PORT`, `SMTP_USER`, `SMTP_PASSWORD`, `SMTP_FROM` | Optional, and all five together or none. An email address is asked for at sign-up either way. With them the instance mails a verification link and keeps the new member on a verify screen until it is opened; without them there is nowhere to send one, so accounts are verified on the spot and the sign-in screen stops offering a password reset. |
 | `SMTP_STARTTLS` | `true`. The one reason to turn it off is a local mail catcher while developing, which has no certificate to offer. |
 | `USDA_API_KEY` | Optional. A free FoodData Central key from https://fdc.nal.usda.gov/api-key-signup. It unlocks the administrator's vitamin match picker and the `python -m app.micros_backfill` command, and nothing else reads it. Left blank, both of those say so and stop, and members never touch it either way. |
+| `VAPID_PRIVATE_KEY` | Optional, and both or neither with the subject below. Base64url of a 32-byte P-256 key, minted by the command under Notifications. It is what notifications are signed with, and the public half is derived from it, so there is nothing else to set. |
+| `VAPID_SUBJECT` | A `mailto:` or `https:` address of your own. The push services use it to reach whoever runs the instance if something is wrong with what it sends. |
 
 `POSTGRES_PASSWORD` and `SECRET_KEY` must change. The api refuses to start
 while either is still the example value, and says which one. It refuses the
 same way when `SITE_URL` begins with `https://` while `COOKIE_SECURE` is false,
 because that pair hands out a session cookie the browser will also send over
-plain http.
+plain http. It refuses again when one of the two VAPID values is set without
+the other, when the key is not 32 bytes, or when the subject is neither a
+`mailto:` nor an `https:` address.
 
 ### Settings the example file does not list
 
@@ -117,6 +121,36 @@ run once after an upgrade and safe to run again:
 ```
 docker compose exec api python manage.py make-thumbnails
 ```
+
+## Notifications
+
+Optional, and off until the instance has a key pair. Mint one with:
+
+```
+docker compose run --rm --no-deps api python manage.py vapid-keys
+```
+
+It touches no database and needs no configuration, so it can be run on a fresh
+checkout before there is an account. Put both printed lines in `.env`, with a
+contact address of your own as the subject, and restart the api.
+
+What goes out: a morning check-in with the day's budget, an evening check-in
+only when something is missing from that day's journal, a weekly weigh-in nudge
+on a weekday each member chooses, and one note a week after a quiet week with
+nothing logged. Changes to a shared calendar go out as they happen: added,
+changed and cancelled appointments, invitations, and the answers to them. Every
+kind is a switch under More, Notifications, and nothing at all is sent until a
+member turns notifications on for a device.
+
+A check-in is sent within ninety minutes of its time or skipped for that day,
+so one whose hour passed while the api was down does not arrive at midnight.
+One api process runs the schedule; the deployment below starts exactly one.
+
+iPhone and iPad need iOS 16.4 or later and the app added to the Home Screen: a
+Safari tab cannot receive notifications. Every other browser works from the tab.
+
+`/api/version` carries a `push` flag saying whether this instance is set up,
+and the Notifications screen says so in words when it is not.
 
 ## Reviewers
 
@@ -306,6 +340,10 @@ one is downloaded in the background and applied the next time they open it.
 A slim bar at the top of the app says a new version is ready, and Reload takes
 it at once.
 
+An update that brings notifications needs the two VAPID values in `.env` and a
+`docker compose up -d api` afterwards so the container reads them; the
+Notifications row is offered to members only once it can send.
+
 ## Back up
 
 Two things are worth keeping: the database, and `/data` inside the api
@@ -380,3 +418,12 @@ restored is a guess about a file, not a copy of an instance.
   than the number of proxies really in front, so no address is read out of the
   forwarded header and everyone shares one bucket under the proxy's own
   address. Lower it by one.
+- The Notifications screen says they are not set up. The VAPID values are
+  missing from `.env`, or one is set without the other.
+  `curl 127.0.0.1:8210/api/version` says which: `"push": false` is an instance
+  with no working pair. Mint one, put both lines in `.env`, and recreate the
+  api container.
+- A phone stopped getting them. The push service reported the subscription as
+  gone, which is what a browser says when it has dropped it, and Tare removed
+  the device. Turn notifications on again on that device. On iPhone the app has
+  to be opened from the Home Screen rather than as a Safari tab.

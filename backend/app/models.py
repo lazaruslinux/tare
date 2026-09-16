@@ -105,6 +105,9 @@ class User(Base):
     # Which units the Dashboard shows and in what order, as {"key", "shown"}
     # objects. Empty until the member arranges it, and read back as the default.
     dashboard_cards: Mapped[list[Any]] = mapped_column(JSON, nullable=False, default=list)
+    # What this account has asked to be told about, and at what hour. Empty
+    # until the Notifications screen is answered, and read back as the default.
+    notify: Mapped[dict[str, Any]] = mapped_column(JSON, nullable=False, default=dict)
     # The only three facts another member may be shown, each off until it is
     # turned on. Everything else about an account stays private.
     share_age: Mapped[bool] = mapped_column(Boolean, nullable=False, default=False)
@@ -1554,3 +1557,53 @@ class AppointmentInvite(Base):
     status: Mapped[str] = mapped_column(String(8), nullable=False, default="pending")
     created_at: Mapped[dt.datetime] = mapped_column(UtcDateTime, nullable=False, default=now_utc)
     responded_at: Mapped[dt.datetime | None] = mapped_column(UtcDateTime, nullable=True)
+
+
+class PushSubscription(Base):
+    """One browser on one device that has been turned on.
+
+    The endpoint is the address the push service hands out, and it is what
+    identifies the device: the same browser resubscribing brings the same one
+    back, so it is unique here rather than one row per attempt.
+    """
+
+    __tablename__ = "push_subscriptions"
+    __table_args__ = (UniqueConstraint("endpoint", name="uq_push_subscriptions_endpoint"),)
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True)
+    user_id: Mapped[int] = mapped_column(
+        ForeignKey("users.id", ondelete="CASCADE"), nullable=False, index=True
+    )
+    endpoint: Mapped[str] = mapped_column(String(1024), nullable=False)
+    # Base64url of the 65-byte public key, and of the 16-byte secret the
+    # payload is sealed against. Stored as the browser wrote them.
+    p256dh: Mapped[str] = mapped_column(String(128), nullable=False)
+    auth: Mapped[str] = mapped_column(String(32), nullable=False)
+    # What the member sees on the list of their devices, worked out from the
+    # user agent at the moment they turned it on.
+    label: Mapped[str] = mapped_column(String(60), nullable=False, default="")
+    created_at: Mapped[dt.datetime] = mapped_column(UtcDateTime, nullable=False, default=now_utc)
+    last_ok_at: Mapped[dt.datetime | None] = mapped_column(UtcDateTime, nullable=True)
+    failures: Mapped[int] = mapped_column(Integer, nullable=False, default=0)
+
+
+class PushSend(Base):
+    """That one scheduled notification already went out today.
+
+    The unique triple is what makes the schedule idempotent: a tick that runs
+    twice, or two processes ticking at once, both find the row and send
+    nothing. The day is the member's own local date, not the server's.
+    """
+
+    __tablename__ = "push_sends"
+    __table_args__ = (
+        UniqueConstraint("user_id", "kind", "day", name="uq_push_sends_user_kind_day"),
+    )
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True)
+    user_id: Mapped[int] = mapped_column(
+        ForeignKey("users.id", ondelete="CASCADE"), nullable=False, index=True
+    )
+    kind: Mapped[str] = mapped_column(String(16), nullable=False)
+    day: Mapped[dt.date] = mapped_column(Date, nullable=False)
+    sent_at: Mapped[dt.datetime] = mapped_column(UtcDateTime, nullable=False, default=now_utc)

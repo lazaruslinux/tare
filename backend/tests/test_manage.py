@@ -10,7 +10,7 @@ from sqlalchemy.orm import sessionmaker
 from sqlalchemy.pool import StaticPool
 
 import manage
-from app import models, security
+from app import models, security, webpush
 from app.db import Base
 from app.models import now_utc
 from tests.conftest import BIRTHDATE, PASSWORD
@@ -82,3 +82,25 @@ def test_a_username_nobody_has_is_refused(sessions, capsys):
     assert run("grant-admin", "--username", "stranger") == 2
     assert capsys.readouterr().err.strip() == "No account has that username."
     assert is_admin(sessions) is False
+
+
+def test_minting_a_key_prints_the_pair_and_touches_no_database(capsys, monkeypatch):
+    """It runs on a fresh checkout, before there is anything to configure."""
+    monkeypatch.setattr(
+        manage, "check_deploy_config", lambda: pytest.fail("minting needs no config")
+    )
+    assert manage.main(["vapid-keys"]) == 0
+    printed = capsys.readouterr().out.splitlines()
+    private = printed[0].removeprefix("VAPID_PRIVATE_KEY=")
+    public = printed[1].removeprefix("# public key: ")
+    assert len(webpush.b64url_decode(private)) == 32
+    assert webpush.public_key_of(webpush.b64url_decode(private)) == public
+    assert any("VAPID_SUBJECT=mailto:" in line for line in printed)
+
+
+def test_every_other_command_still_refuses_a_half_configured_install(monkeypatch):
+    called: list[bool] = []
+    monkeypatch.setattr(manage, "check_deploy_config", lambda: called.append(True))
+    monkeypatch.setattr(manage, "make_thumbnails", lambda args: 0)
+    assert manage.main(["make-thumbnails"]) == 0
+    assert called == [True]

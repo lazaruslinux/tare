@@ -18,7 +18,17 @@ from pydantic import BaseModel
 from sqlalchemy import func, select
 from sqlalchemy.orm import Session
 
-from app import clock, dashboard, mail, models, photos, profiles, security, throttle
+from app import (
+    clock,
+    dashboard,
+    mail,
+    models,
+    notify_prefs,
+    photos,
+    profiles,
+    security,
+    throttle,
+)
 from app.config import settings
 from app.db import get_db
 from app.deps import require_account, require_user
@@ -79,6 +89,9 @@ class AccountPatch(BaseModel):
     # The Dashboard's own cards, in the order they are read, saved the same way
     # and for the same reason: the order is part of the answer.
     dashboard_cards: list[dict] | None = None
+    # What this account has asked to be told about, saved the same way again:
+    # the switches and the hours behind them are one answer.
+    notify: dict | None = None
     share_age: bool | None = None
     share_sex: bool | None = None
     share_location: bool | None = None
@@ -150,6 +163,12 @@ def update_account(
                 raise HTTPException(status.HTTP_400_BAD_REQUEST, dashboard.BAD_CARD)
         # Stored normalized, so what comes back is what the Dashboard reads.
         user.dashboard_cards = dashboard.normalize(cards)
+
+    if "notify" in sent:
+        try:
+            user.notify = notify_prefs.checked(body.notify)
+        except ValueError as refused:
+            raise HTTPException(status.HTTP_400_BAD_REQUEST, str(refused)) from None
 
     for field in (
         "share_age",

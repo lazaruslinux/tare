@@ -5,6 +5,7 @@ sqlalchemy
 psycopg[binary]
 alembic
 argon2-cffi
+cryptography
 httpx
 Pillow
 python-multipart

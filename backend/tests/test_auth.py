@@ -233,6 +233,15 @@ def test_login_answers_with_the_me_payload(client, make_user):
             {"key": "progress", "shown": True},
             {"key": "community", "shown": True},
         ],
+        # Never answered, so every notification is on and nothing is sent
+        # until a device is turned on.
+        "notify": {
+            "morning": {"on": True, "time": "08:00"},
+            "evening": {"on": True, "time": "20:00"},
+            "weigh_in": {"on": True, "weekday": 0},
+            "calendar": True,
+            "invitations": True,
+        },
         "share_age": False,
         "share_sex": False,
         "share_location": False,

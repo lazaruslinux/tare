@@ -160,6 +160,14 @@ appointments_limiter = RateLimiter(120, 3600, "appointments")
 # one. Tighter than the one above because each accepted call puts a row in
 # front of another member, which is the part they cannot turn off.
 calendar_invites_limiter = RateLimiter(60, 3600, "calendar-invites")
+# Turning notifications on for a device, counted per account. Twenty an hour
+# is far past somebody adding their phone and their laptop and turning one off
+# and on again, and it is what stops a row per call filling the table.
+push_subscribe_limiter = RateLimiter(20, 3600, "push-subscribe")
+# Asking for a test notification, counted per account. Each one goes out to
+# every device the member has turned on, so five an hour is the ceiling on
+# using this instance's key to make somebody's phone buzz.
+push_test_limiter = RateLimiter(5, 3600, "push-test")
 # Spending an emailed link: a verification, an address change, or a reset. The
 # tokens are high entropy, so this guards against a client stuck in a loop and
 # against somebody working through the table, not against a guessing run.

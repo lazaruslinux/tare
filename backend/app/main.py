@@ -2,6 +2,8 @@
 
 from __future__ import annotations
 
+import asyncio
+import contextlib
 import logging
 from collections.abc import AsyncIterator
 from contextlib import asynccontextmanager
@@ -13,7 +15,7 @@ from sqlalchemy.exc import SQLAlchemyError
 from starlette.exceptions import HTTPException as StarletteHTTPException
 from starlette.types import ASGIApp, Message, Receive, Scope, Send
 
-from app import mail, security
+from app import mail, scheduler, security, webpush
 from app.config import VERSION, check_deploy_config
 from app.db import SessionLocal
 from app.routers import (
@@ -32,6 +34,7 @@ from app.routers import (
     invites,
     meals,
     photos,
+    push,
     recipes,
     submissions,
 )
@@ -207,7 +210,16 @@ async def lifespan(app: FastAPI) -> AsyncIterator[None]:
         # A database that is not up yet is not a reason to refuse to start.
         # The table waits for the next start rather than the process dying.
         log.warning("expired sessions were not swept up at startup: %s", failure)
-    yield
+    # The check-ins, in this process. The deployment runs one uvicorn worker by
+    # the Dockerfile's own command, and an instance with no keys starts nothing.
+    ticking = asyncio.create_task(scheduler.run()) if webpush.configured() else None
+    try:
+        yield
+    finally:
+        if ticking is not None:
+            ticking.cancel()
+            with contextlib.suppress(asyncio.CancelledError):
+                await ticking
 
 
 def create_app() -> FastAPI:
@@ -236,7 +248,13 @@ def create_app() -> FastAPI:
         # Whether this instance can send mail, which is the one thing the
         # sign-in screen has to know before it can offer a reset link it may
         # have nowhere to send.
-        return {"version": VERSION, "mail": mail.configured()}
+        # And whether it can send a notification, which the Notifications
+        # screen has to know before it offers to turn a device on.
+        return {
+            "version": VERSION,
+            "mail": mail.configured(),
+            "push": webpush.configured(),
+        }
 
     # Every route lives under /api, which is the prefix the web container
     # forwards and the only one the browser ever calls.
@@ -249,6 +267,7 @@ def create_app() -> FastAPI:
     app.include_router(fitness.workouts_router, prefix="/api")
     app.include_router(feed.router, prefix="/api")
     app.include_router(calendar.router, prefix="/api")
+    app.include_router(push.router, prefix="/api")
     app.include_router(ingest.router, prefix="/api")
     app.include_router(feedback.router, prefix="/api")
     app.include_router(health.router, prefix="/api")

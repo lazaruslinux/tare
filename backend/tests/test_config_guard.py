@@ -71,3 +71,51 @@ def test_a_plain_http_instance_may_leave_the_cookie_off():
             cookie_secure=False,
         )
     )
+
+
+def test_one_vapid_value_without_the_other_is_refused():
+    half = Settings(
+        database_url="sqlite://",
+        secret_key="a-real-secret",
+        vapid_private_key="yfWPiYE-n46HLnH0KqZOF1fJJU3MYrct3AELtAQ-oRw",
+    )
+    with pytest.raises(RuntimeError) as raised:
+        check_deploy_config(half)
+    message = str(raised.value)
+    assert "VAPID_PRIVATE_KEY" in message
+    assert "VAPID_SUBJECT" in message
+
+
+def test_a_key_that_is_not_a_key_is_refused():
+    wrong = Settings(
+        database_url="sqlite://",
+        secret_key="a-real-secret",
+        vapid_private_key="too-short",
+        vapid_subject="mailto:admin@example.com",
+    )
+    with pytest.raises(RuntimeError) as raised:
+        check_deploy_config(wrong)
+    assert "VAPID_PRIVATE_KEY" in str(raised.value)
+
+
+def test_a_subject_that_is_neither_mailto_nor_https_is_refused():
+    wrong = Settings(
+        database_url="sqlite://",
+        secret_key="a-real-secret",
+        vapid_private_key="yfWPiYE-n46HLnH0KqZOF1fJJU3MYrct3AELtAQ-oRw",
+        vapid_subject="admin@example.com",
+    )
+    with pytest.raises(RuntimeError) as raised:
+        check_deploy_config(wrong)
+    assert "VAPID_SUBJECT" in str(raised.value)
+
+
+def test_both_vapid_values_together_pass():
+    check_deploy_config(
+        Settings(
+            database_url="sqlite://",
+            secret_key="a-real-secret",
+            vapid_private_key="yfWPiYE-n46HLnH0KqZOF1fJJU3MYrct3AELtAQ-oRw",
+            vapid_subject="mailto:admin@example.com",
+        )
+    )
