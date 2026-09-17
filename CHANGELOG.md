@@ -26,6 +26,22 @@ Notable changes to Tare, newest first. The format follows
 
 ### Changed
 
+- What a workout shares belongs to the workout. The three switches under
+  More, then Sharing, are read once, when a session arrives, and stamped on
+  it: they shape what syncs next rather than reaching back through sessions
+  already in the feed, and the screen says so. Every session then carries the
+  same three switches on its own page, so one morning is opened or closed
+  without moving any other. Existing sessions keep exactly the visibility
+  they had. What a session shares is also grouped the way it reads: the
+  details switch covers the name of the activity and the numbers on the card,
+  the climb among them, and the route switch covers the map, the
+  minute-by-minute readings and the splits together.
+- The community feed is one picture. A row that is not shared is in nobody's
+  feed, its owner's included, so the small red lock and the "Only you can see
+  this." sheet are gone; a member's own sessions, days and weigh-ins are all
+  still theirs to read in Fitness, the Journal and Progress. A session that
+  keeps its details back reads "synced a workout" rather than naming the
+  activity, for everybody alike.
 - A scanned food that came with no ingredients says so: the member's form
   reads "No ingredients came with the scan.", and the review queue tells the
   reviewer where to type them before approving.

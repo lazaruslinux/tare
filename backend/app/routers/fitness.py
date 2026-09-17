@@ -214,8 +214,10 @@ def workout_row(row: models.Workout) -> dict[str, object]:
         "elevation_gain_m": row.elevation_gain_m,
         "indoor": row.indoor,
         "source": row.source,
-        # Whether the owner has kept this one out of the community feed.
+        # Whether the owner has kept this one out of the community feed, and
+        # what it keeps back from whoever does read it.
         "hidden_from_feed": row.hidden_from_feed,
+        "feed_hidden": sorted_hidden(row.feed_hidden),
         # What looked odd about it, so a screen can say so rather than quietly
         # showing a number nobody could have run.
         "flags": sorted(row.flags or {}),
@@ -709,43 +711,50 @@ def read_workouts(
     }
 
 
-def kept_back(owner: models.User) -> set[str]:
-    """What this account keeps to itself on a workout somebody else is reading.
+def kept_back(row: models.Workout) -> set[str]:
+    """What this session keeps to itself from whoever else is reading it.
 
     Read through the names Tare knows rather than trusted as stored: a list is
     JSON, and a name nothing recognises must not quietly widen what is shown.
+    The list is the session's own, stamped when it arrived, so a switch turned
+    today says nothing about a morning last spring.
     """
-    held = owner.feed_hidden or []
+    held = row.feed_hidden or []
     return {name for name in HIDEABLE if name in held}
+
+
+def sorted_hidden(held: object) -> list[str]:
+    """A held list in the server's own order, with anything unknown dropped."""
+    names = held if isinstance(held, list) else []
+    return [name for name in HIDEABLE if name in names]
 
 
 def readable_workout(db: Session, workout_id: int, user: models.User) -> models.Workout:
     """One session this account may read: its own, or one a friend shared.
 
-    A workout that is not there, one somebody kept out of the feed, one whose
-    owner shares none, one whose owner keeps the breakdown to themselves, and
-    one belonging to somebody this account never added all answer the same
-    sentence. Details are held by default, so most sessions open for their
-    owner alone.
+    A workout that is not there, one its owner kept out of the feed, one that
+    keeps its breakdown to itself, and one belonging to somebody this account
+    never added all answer the same sentence. Details are held by default, so
+    most sessions open for their owner alone.
     """
     row = db.get(models.Workout, workout_id)
     if row is None:
         raise HTTPException(status.HTTP_404_NOT_FOUND, MISSING_WORKOUT)
     if row.user_id != user.id:
-        owner = db.get(models.User, row.user_id)
         if (
             row.hidden_from_feed
-            or owner is None
-            or not owner.share_workouts
-            or "details" in kept_back(owner)
-            or owner.id not in friend_ids(db, user)
+            or "details" in kept_back(row)
+            or row.user_id not in friend_ids(db, user)
         ):
             raise HTTPException(status.HTTP_404_NOT_FOUND, MISSING_WORKOUT)
     return row
 
 
 class HidePatch(BaseModel):
-    hidden_from_feed: bool
+    """What one session shares. A field left out is a field left alone."""
+
+    hidden_from_feed: bool | None = None
+    feed_hidden: list[str] | None = None
 
 
 @workouts_router.get("/{workout_id}")
@@ -756,11 +765,12 @@ def read_workout(
 ) -> dict[str, object]:
     """One session, whole: its numbers, its minutes, its line and its splits.
 
-    The owner reads all of it, whatever their own switches say. A friend only
-    gets here when the owner opened the details, and then reads the same
-    breakdown minus the route if that is held: what is held back is left out of
-    the answer rather than sent as null, so nothing on the far side has to tell
-    a hidden number from a missing one. The splits are worked out here rather
+    The owner reads all of it, whatever the session's own switches say. A
+    friend only gets here when the session opened its details, and then reads
+    the numbers alone unless it also shares its route, which carries the line,
+    the minutes and the splits with it: what is held back is left out of the
+    answer rather than sent as null, so nothing on the far side has to tell a
+    hidden number from a missing one. The splits are worked out here rather
     than drawn from the minutes; they are measured in whoever is reading's own
     miles or kilometres.
     """
@@ -795,15 +805,18 @@ def read_workout(
         }
         for sample in minutes
     ]
-    hidden = set() if mine else kept_back(owner)
+    hidden = set() if mine else kept_back(row)
     if not mine:
         # What Tare thought of the numbers is between Tare and whoever ran it.
         detail.pop("flags", None)
     if "route" in hidden:
-        # The climb is read off the route, so it goes with it.
-        detail.pop("elevation_gain_m", None)
-    else:
-        detail["route"] = None if route is None else route.points
+        # The line, the minutes and the splits are one thing: they all say
+        # where somebody was and how the session went from step to step.
+        detail["samples"] = []
+        detail["splits"] = []
+        detail["fastest"] = None
+        return detail
+    detail["route"] = None if route is None else route.points
     detail["samples"] = samples
     parts = splits.splits_of(minutes, user.units)
     detail["splits"] = parts
@@ -819,10 +832,22 @@ def update_workout(
     db: Session = Depends(get_db),
     user: models.User = Depends(require_user),
 ) -> dict[str, object]:
-    """Whether one session is in the community feed. The owner's call alone."""
+    """What one session shares. The owner's call alone, one session at a time.
+
+    The account's own switches are the shape a session arrives in; this is how
+    it is changed afterwards, and changing it here reaches nothing else.
+    """
     row = db.get(models.Workout, workout_id)
     if row is None or row.user_id != user.id:
         raise HTTPException(status.HTTP_404_NOT_FOUND, MISSING_WORKOUT)
-    row.hidden_from_feed = body.hidden_from_feed
+    sent = body.model_fields_set
+    if "hidden_from_feed" in sent and body.hidden_from_feed is not None:
+        row.hidden_from_feed = body.hidden_from_feed
+    if "feed_hidden" in sent:
+        asked = body.feed_hidden or []
+        for name in asked:
+            if name not in HIDEABLE:
+                raise HTTPException(status.HTTP_400_BAD_REQUEST, BAD_HIDDEN)
+        row.feed_hidden = [name for name in HIDEABLE if name in asked]
     db.commit()
     return workout_row(row)

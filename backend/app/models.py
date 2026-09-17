@@ -1292,6 +1292,11 @@ class Workout(Base):
     # Whether the owner keeps this workout out of the community feed. Set from
     # the workout's own page and read by the feed and by that page.
     hidden_from_feed: Mapped[bool] = mapped_column(Boolean, nullable=False, default=False)
+    # What this session keeps back from whoever reads it on the feed, by the
+    # names in fitness.HIDEABLE. Stamped from the account's own list the moment
+    # the session arrives and never touched again by a settings change: the
+    # switches shape what syncs next, not what already happened.
+    feed_hidden: Mapped[list[Any]] = mapped_column(JSON, nullable=False, default=list)
     source: Mapped[str] = mapped_column(
         Enum(*WORKOUT_SOURCES, name="workout_source", native_enum=False), nullable=False
     )

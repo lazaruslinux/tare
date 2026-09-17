@@ -1,3 +1,4 @@
+import { AnimatePresence, motion, useReducedMotion } from 'framer-motion'
 import {
   Component,
   lazy,
@@ -9,7 +10,14 @@ import {
   type ReactNode,
 } from 'react'
 
-import { api, errorText, type Me, type WorkoutDetail, type WorkoutSplit } from '../api'
+import {
+  api,
+  errorText,
+  HIDEABLE,
+  type Me,
+  type WorkoutDetail,
+  type WorkoutSplit,
+} from '../api'
 import { useTopBar } from '../hooks/useTopBar'
 import { basemapInstalled, canDrawMaps } from '../lib/basemap'
 import { dayLabel, today } from '../lib/day'
@@ -214,6 +222,7 @@ export function WorkoutDetails({
   // Hiding a workout changes a list that is very likely on screen already.
   onChanged?: () => void
 }) {
+  const reduced = useReducedMotion()
   const [detail, setDetail] = useState<WorkoutDetail | null>(null)
   const [failed, setFailed] = useState('')
   // What went wrong with the last hide, said under the switch it belongs to.
@@ -276,21 +285,37 @@ export function WorkoutDetails({
 
   // The switch moves at once and moves back if the server says no: a member
   // deciding who sees a morning should not wait on a round trip.
-  const setHidden = async (hidden: boolean) => {
-    const was = detail.hidden_from_feed
+  const share = async (change: Partial<WorkoutDetail>) => {
+    const was = detail
     setHideError('')
-    setDetail({ ...detail, hidden_from_feed: hidden })
+    setDetail({ ...detail, ...change })
     try {
-      await api(`/workouts/${detail.id}`, {
-        method: 'PATCH',
-        body: { hidden_from_feed: hidden },
-      })
+      await api(`/workouts/${detail.id}`, { method: 'PATCH', body: change })
       onChanged?.()
     } catch (failure) {
-      setDetail({ ...detail, hidden_from_feed: was })
+      setDetail(was)
       setHideError(errorText(failure))
     }
   }
+
+  const held = detail.feed_hidden
+  const shows = (name: string) => !held.includes(name)
+  // Kept in the order the server names them, the way the account's own list is.
+  const show = (name: string, next: boolean) => {
+    const kept = new Set(held)
+    if (next) kept.delete(name)
+    else kept.add(name)
+    void share({ feed_hidden: HIDEABLE.filter((each) => kept.has(each)) })
+  }
+  // What this one morning is to everybody else, in a sentence, because four
+  // switch positions are easier to read as one line than to add up.
+  const seen = detail.hidden_from_feed
+    ? 'Nobody else sees this one.'
+    : !shows('details')
+      ? 'Friends see that you synced a workout.'
+      : shows('route')
+        ? "Friends see this workout's details, its route and its splits."
+        : "Friends see this workout's details."
 
   return (
     <>
@@ -404,12 +429,54 @@ export function WorkoutDetails({
 
       {detail.mine && (
         <div className="t-card mb-3">
+          <p className="t-micro mb-1">Sharing</p>
+          <p className="mb-1 text-sm">{seen}</p>
           <Switch
             label="Show in the community feed"
-            note="Friends see what your Sharing settings allow."
             checked={!detail.hidden_from_feed}
-            onChange={(next) => setHidden(!next)}
+            onChange={(next) => void share({ hidden_from_feed: !next })}
           />
+          <AnimatePresence initial={false}>
+            {!detail.hidden_from_feed && (
+              <motion.div
+                key="parts"
+                className="overflow-hidden"
+                initial={reduced ? false : { height: 0, opacity: 0 }}
+                animate={{ height: 'auto', opacity: 1 }}
+                exit={reduced ? undefined : { height: 0, opacity: 0 }}
+                transition={{ duration: 0.18 }}
+              >
+                <Switch
+                  label="Share workout details"
+                  note="The activity, time, distance, calories, pace, heart rate and climb."
+                  checked={shows('details')}
+                  onChange={(next) => show('details', next)}
+                />
+                <AnimatePresence initial={false}>
+                  {shows('details') && (
+                    <motion.div
+                      key="route"
+                      className="overflow-hidden"
+                      initial={reduced ? false : { height: 0, opacity: 0 }}
+                      animate={{ height: 'auto', opacity: 1 }}
+                      exit={reduced ? undefined : { height: 0, opacity: 0 }}
+                      transition={{ duration: 0.18 }}
+                    >
+                      <Switch
+                        label="Share route maps and splits"
+                        note="The map, the minute-by-minute readings and the split times."
+                        checked={shows('route')}
+                        onChange={(next) => show('route', next)}
+                      />
+                    </motion.div>
+                  )}
+                </AnimatePresence>
+              </motion.div>
+            )}
+          </AnimatePresence>
+          <p className="mt-2 text-xs text-muted">
+            This activity only. Your Sharing settings decide what new workouts start with.
+          </p>
           {hideError && <p className="t-error mt-2">{hideError}</p>}
         </div>
       )}

@@ -150,20 +150,16 @@ def feed_page(
     friends = friend_ids(db, user)
     shared_by = friends | {user.id}
 
-    # A row reaches a friend when neither it nor its whole account is held
-    # back. The owner always sees their own.
+    # A session reaches the feed when it is not held back, and it says so
+    # itself: the account's switches were read the day it arrived. The owner
+    # reads the same feed as everybody else, because the feed is one picture
+    # of what was shared rather than a private list of what was not. Their own
+    # sessions are all in Fitness, whole, either way.
     workouts = (
         select(models.Workout)
-        .join(models.User, models.User.id == models.Workout.user_id)
         .where(
             models.Workout.user_id.in_(shared_by),
-            or_(
-                and_(
-                    models.Workout.hidden_from_feed.is_(False),
-                    models.User.share_workouts.is_(True),
-                ),
-                models.Workout.user_id == user.id,
-            ),
+            models.Workout.hidden_from_feed.is_(False),
         )
         .order_by(models.Workout.started_at.desc(), models.Workout.id.desc())
         .limit(limit + 1)
@@ -186,10 +182,7 @@ def feed_page(
         .join(models.User, models.User.id == models.JournalDay.user_id)
         .where(
             models.JournalDay.user_id.in_(shared_by),
-            or_(
-                models.User.share_journal.is_(True),
-                models.JournalDay.user_id == user.id,
-            ),
+            models.User.share_journal.is_(True),
         )
         .order_by(
             models.JournalDay.completed_at.desc(),
@@ -227,10 +220,7 @@ def feed_page(
             readings.c.user_id.in_(shared_by),
             readings.c.prev_kg.is_not(None),
             readings.c.prev_kg - readings.c.weight_kg >= MIN_LOSS_KG,
-            or_(
-                models.User.share_weight_loss.is_(True),
-                readings.c.user_id == user.id,
-            ),
+            models.User.share_weight_loss.is_(True),
         )
         .order_by(readings.c.created_at.desc(), readings.c.id.desc())
         .limit(limit + 1)
@@ -359,8 +349,6 @@ def feed_page(
                 "lost_kg": each.prev_kg - each.weight_kg,
                 "pronoun": said,
             }
-            if mine:
-                lost["hidden"] = not user.share_weight_loss
             items.append(lost)
             continue
 
@@ -396,15 +384,16 @@ def feed_page(
                 "at": each.completed_at.isoformat(),
                 "pronoun": said,
             }
-            if mine:
-                journal["hidden"] = not user.share_journal
             items.append(journal)
             continue
 
         # That somebody synced a session, and when. No figure from it is on the
         # row: the row says a workout happened, and the workout itself answers
-        # what was shared. Whether there is anything to open is on the row, so
-        # a row that leads nowhere is not drawn as a way in.
+        # what was shared. What it is called is part of that answer, so a
+        # session keeping its details back is a workout and nothing more, and
+        # the row is not drawn as a way in to something that will not open.
+        # The owner reads their own row exactly as everybody else reads it.
+        opens = "details" not in kept_back(each)
         item: dict[str, object] = {
             "kind": WORKOUT,
             "id": each.id,
@@ -412,13 +401,12 @@ def feed_page(
             "display_name": name,
             "role": role,
             "mine": mine,
-            "open": mine or (owner is not None and "details" not in kept_back(owner)),
-            "activity": each.activity,
+            "open": opens,
             "date": each.date_for.isoformat(),
             "started_at": each.started_at.isoformat(),
         }
-        if mine:
-            item["hidden"] = each.hidden_from_feed or not user.share_workouts
+        if opens:
+            item["activity"] = each.activity
         items.append(item)
 
     last = page[-1] if page else None
@@ -444,9 +432,9 @@ def read_feed(
 
     Four tables are read with the same "after this marker" filter and merged
     in the builder above, and the marker written back names the last row's
-    time, kind and id so the next page starts exactly after it. A row this
-    account hid stays in its own feed and says so, because that is the only
-    way back to it.
+    time, kind and id so the next page starts exactly after it. Everybody
+    reads the same feed, this account included: a row it kept back is not in
+    it, and Fitness is where its own sessions are all kept anyway.
     """
     items, next_cursor, friends = feed_page(db, user, cursor)
     return {"items": items, "friends": friends, "next_cursor": next_cursor}

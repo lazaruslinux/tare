@@ -2,7 +2,7 @@ import { AnimatePresence, motion, useReducedMotion } from 'framer-motion'
 import { ChevronRight } from 'lucide-react'
 import { useEffect, useState } from 'react'
 
-import { api, type Me, type Profile } from '../api'
+import { api, HIDEABLE, type Me, type Profile } from '../api'
 import { useInstantSave } from '../components/SaveMarks'
 import { Switch } from '../components/Switch'
 import { useTopBar } from '../hooks/useTopBar'
@@ -11,10 +11,6 @@ import { useTopBar } from '../hooks/useTopBar'
 // as it is turned, and each card says so on its own heading.
 
 const GENDER_LABEL: Record<string, string> = { female: 'Female', male: 'Male' }
-
-// The two things a member may keep back on a workout, by the names the server
-// holds them under.
-const HIDEABLE = ['details', 'route'] as const
 
 function ageOf(birthdate: string): number {
   const born = new Date(`${birthdate}T00:00:00Z`)
@@ -86,7 +82,8 @@ export function Sharing({
     })
 
   // The master switch takes the rest with it: off folds them away and holds
-  // everything back.
+  // everything back. All three shape the sessions that arrive next; the ones
+  // already synced carry what they arrived under, on their own pages.
   const shareWorkouts = (next: boolean) => {
     // Turning it back on brings back the row, not the breakdown: details are
     // held until the switch under this one is turned.
@@ -186,8 +183,8 @@ export function Sharing({
               transition={{ duration: 0.18 }}
             >
               <Switch
-                label="Allow other members to see my workout details"
-                note="Stats, minute-by-minute and splits. Off unless you turn it on."
+                label="Share workout details"
+                note="The activity, time, distance, calories, pace, heart rate and climb. Off unless you turn it on."
                 checked={shows('details')}
                 onChange={(next) => show('details', next)}
               />
@@ -204,8 +201,8 @@ export function Sharing({
                     transition={{ duration: 0.18 }}
                   >
                     <Switch
-                      label="Show route maps"
-                      note="Tare automatically hides the first 200 meters of the start and end of all activities with route data."
+                      label="Share route maps and splits"
+                      note="The map, the minute-by-minute readings and the split times. Tare automatically hides the first 200 meters of the start and end of all activities with route data."
                       checked={shows('route')}
                       onChange={(next) => show('route', next)}
                     />
@@ -215,6 +212,10 @@ export function Sharing({
             </motion.div>
           )}
         </AnimatePresence>
+        <p className="mt-2 text-xs text-muted">
+          These settings only apply to newly synced workouts. The visibility of previous
+          activities will not be affected.
+        </p>
         {workoutSave.error && <p className="t-error mt-2">{workoutSave.error}</p>}
       </div>
 

@@ -64,7 +64,7 @@ const QUESTIONS: { q: string; a: string }[] = [
   },
   {
     q: "Who can see what?",
-    a: "Only the friends you add under Members, and only what you switch on under Sharing. Workouts are shared with friends unless you turn them off, along with heart rate, calories and route maps. Age, gender and location show only if you switch them on. Your journal, weight, measurements and targets are always private, even from administrators.",
+    a: "Only the friends you add under Members, and only what you switch on under Sharing. Friends see that you synced a workout unless you turn that off; its details, route maps and splits show only if you switch them on. What you switch under Sharing applies to the workouts you sync from then on, and every workout carries the same switches on its own page. Age, gender and location show only if you switch them on. Your journal, weight, measurements and targets are always private, even from administrators.",
   },
   {
     q: "Where does feedback go?",

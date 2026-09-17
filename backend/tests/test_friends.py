@@ -258,7 +258,9 @@ def test_removing_a_friend_closes_what_it_opened(client, db_session, make_user):
     assert client.get(f"/api/workouts/{workout.id}").status_code == 404
 
 
-def test_own_rows_are_always_there_hidden_ones_marked(client, db_session, make_user):
+def test_own_rows_read_exactly_as_everybody_else_reads_them(
+    client, db_session, make_user
+):
     member = make_user("member")
     put_workout(db_session, member, minutes_ago=5, hidden_from_feed=True)
     put_workout(db_session, member, minutes_ago=6)
@@ -266,7 +268,10 @@ def test_own_rows_are_always_there_hidden_ones_marked(client, db_session, make_u
 
     body = client.get("/api/feed").json()
 
-    assert [row["hidden"] for row in body["items"]] == [True, False]
+    # The hidden one is out of this feed too, and no row wears a mark saying
+    # so: the feed is what was shared, and Fitness is where the rest is.
+    assert len(body["items"]) == 1
+    assert all("hidden" not in row for row in body["items"])
     assert body["friends"] == 0
 
 

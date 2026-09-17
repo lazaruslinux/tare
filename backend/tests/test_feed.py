@@ -15,7 +15,7 @@ from app import models
 from app.health import age_on
 from app.models import now_utc
 from tests.conftest import PASSWORD
-from tests.test_ingest import export, pick, post, token_for, yesterday
+from tests.test_ingest import export, pick, post, run, token_for, yesterday
 
 
 def sign_in(client, username):
@@ -110,19 +110,23 @@ def test_a_feed_row_never_carries_the_line_itself(client, db_session, make_user)
     assert "distance_m" not in row and "duration_s" not in row
 
 
-def test_a_hidden_workout_is_the_owners_alone(client, db_session, make_user):
+def test_a_hidden_workout_is_in_nobodys_feed(client, db_session, make_user):
     runner = make_user("runner")
     workout = synced(client, db_session, runner)
     workout.hidden_from_feed = True
+    db_session.commit()
     befriend(db_session, runner, make_user("member"))
 
     sign_in(client, "member")
     assert client.get("/api/feed").json()["items"] == []
 
+    # The feed is one picture of what was shared, so a row its owner kept back
+    # is not in their own either. It is all still theirs in Fitness.
     sign_in(client, "runner")
-    mine = client.get("/api/feed").json()["items"]
-    assert len(mine) == 1
-    assert mine[0]["mine"] is True and mine[0]["hidden"] is True
+    assert client.get("/api/feed").json()["items"] == []
+    listed = client.get("/api/fitness/workouts").json()["workouts"]
+    assert [row["hidden_from_feed"] for row in listed] == [True]
+    assert client.get(f"/api/workouts/{workout.id}").status_code == 200
 
 
 def test_a_workout_out_of_a_file_starts_hidden(client, db_session, make_user):
@@ -131,9 +135,9 @@ def test_a_workout_out_of_a_file_starts_hidden(client, db_session, make_user):
     raw = json.dumps(export(yesterday())).encode()
     assert pick(client, raw).status_code == 200
 
-    mine = client.get("/api/feed").json()["items"]
-    assert len(mine) == 1
-    assert mine[0]["hidden"] is True
+    assert client.get("/api/feed").json()["items"] == []
+    listed = client.get("/api/fitness/workouts").json()["workouts"]
+    assert [row["hidden_from_feed"] for row in listed] == [True]
 
     befriend(db_session, uploader, make_user("member"))
     sign_in(client, "member")
@@ -164,14 +168,14 @@ def test_the_owner_alone_may_hide_a_workout(client, db_session, make_user):
     assert len(client.get("/api/feed").json()["items"]) == 1
 
 
-def test_a_member_who_shares_no_workouts_is_absent_from_the_feed(
+def test_a_workout_synced_while_the_master_is_off_reaches_nobody(
     client, db_session, make_user
 ):
     runner = make_user("runner")
-    befriend(db_session, runner, make_user("reader"))
-    workout = put_workout(db_session, runner, 30)
     runner.share_workouts = False
     db_session.commit()
+    befriend(db_session, runner, make_user("reader"))
+    workout = synced(client, db_session, runner)
 
     sign_in(client, "reader")
     assert client.get("/api/feed").json()["items"] == []
@@ -179,11 +183,17 @@ def test_a_member_who_shares_no_workouts_is_absent_from_the_feed(
     assert detail.status_code == 404
     assert detail.json() == {"detail": "There is no such workout."}
 
-    # The owner still finds it in their own feed, marked as theirs alone.
     sign_in(client, "runner")
-    rows = client.get("/api/feed").json()["items"]
-    assert [row["hidden"] for row in rows] == [True]
+    assert client.get("/api/feed").json()["items"] == []
     assert client.get(f"/api/workouts/{workout.id}").status_code == 200
+
+    # Turning the switch back on is about what syncs next. This one stays out
+    # until its own page says otherwise.
+    runner.share_workouts = True
+    db_session.commit()
+    assert client.get("/api/feed").json()["items"] == []
+    client.patch(f"/api/workouts/{workout.id}", json={"hidden_from_feed": False})
+    assert len(client.get("/api/feed").json()["items"]) == 1
 
 
 def test_the_feed_pages_without_repeating_itself(client, db_session, make_user):
@@ -244,14 +254,20 @@ def test_open_details_read_whole_for_a_friend(client, db_session, make_user):
     assert "flags" not in body
 
 
-def test_a_held_back_route_takes_the_climb_with_it(client, db_session, make_user):
+def test_a_held_back_route_takes_the_minutes_and_the_splits_with_it(
+    client, db_session, make_user
+):
     body = held(client, db_session, make_user, ["route"])
 
+    # The line, the minutes and the splits all say where somebody was and how
+    # the session went step by step, so they are one thing.
     assert "route" not in body
-    assert "elevation_gain_m" not in body
-    # Everything else the details carry is still here.
-    assert body["duration_s"] is not None
-    assert body["samples"] != [] and body["splits"] != []
+    assert body["samples"] == []
+    assert body["splits"] == [] and body["fastest"] is None
+    # The numbers on the card are the details, the climb among them.
+    assert body["duration_s"] is not None and body["distance_m"] is not None
+    assert body["kcal"] is not None and body["avg_hr"] is not None
+    assert "elevation_gain_m" in body
 
 
 def test_held_back_details_answer_what_a_missing_workout_answers(
@@ -288,11 +304,13 @@ def test_the_owner_still_reads_everything_they_held_back(client, db_session, mak
     assert body["flags"] == []
 
 
-def test_a_row_says_whether_there_is_anything_behind_it(client, db_session, make_user):
+def test_a_session_keeping_its_details_back_is_a_workout_and_nothing_more(
+    client, db_session, make_user
+):
     runner = make_user("runner")
     runner.feed_hidden = ["details"]
     db_session.commit()
-    synced(client, db_session, runner)
+    workout = synced(client, db_session, runner)
     befriend(db_session, runner, make_user("member"))
 
     sign_in(client, "member")
@@ -300,19 +318,110 @@ def test_a_row_says_whether_there_is_anything_behind_it(client, db_session, make
 
     assert row["kind"] == "workout" and row["mine"] is False
     assert row["open"] is False
-    # The row itself still says what it always said.
-    assert row["activity"] == "Outdoor Run"
+    # What it was called is part of the details, so the row does not say it.
+    assert "activity" not in row
 
-    # Opened, and the same row is a way in.
-    runner.feed_hidden = []
+    # The owner reads their own row exactly as the room reads it.
+    sign_in(client, "runner")
+    own = client.get("/api/feed").json()["items"][0]
+    assert own["mine"] is True and own["open"] is False
+    assert "activity" not in own
+
+    # Opened on the session itself, and the same row is a way in for both.
+    client.patch(f"/api/workouts/{workout.id}", json={"feed_hidden": []})
+    for who in ("runner", "member"):
+        sign_in(client, who)
+        opened = client.get("/api/feed").json()["items"][0]
+        assert opened["open"] is True
+        assert opened["activity"] == "Outdoor Run"
+
+
+def test_a_session_keeps_the_switches_it_arrived_under(client, db_session, make_user):
+    """The account's switches are read once, when a session lands. What they
+    say afterwards is about the sessions that land afterwards."""
+    runner = make_user("runner")
+    runner.feed_hidden = ["route"]
     db_session.commit()
-    assert client.get("/api/feed").json()["items"][0]["open"] is True
+    token = token_for(db_session, runner)
+    post(client, token, export(yesterday()))
+    workout = db_session.scalar(select(models.Workout))
+    assert workout is not None
+    befriend(db_session, runner, make_user("member"))
 
-    # The owner's own row is always a way in, whatever they hold back.
+    assert sorted(workout.feed_hidden) == ["route"]
+
+    # Everything closed on the account afterwards, and the morning it already
+    # holds does not move.
     runner.feed_hidden = ["details", "route"]
     db_session.commit()
-    sign_in(client, "runner")
+    sign_in(client, "member")
     assert client.get("/api/feed").json()["items"][0]["open"] is True
+    assert client.get(f"/api/workouts/{workout.id}").status_code == 200
+
+    # And a new one arrives under what the account says now.
+    second = run(yesterday() - dt.timedelta(days=1))
+    second["id"] = "run-two"
+    post(client, token, {"data": {"workouts": [second]}})
+    later = db_session.scalars(
+        select(models.Workout).order_by(models.Workout.id.desc())
+    ).first()
+    assert later is not None and later.id != workout.id
+    assert sorted(later.feed_hidden) == ["details", "route"]
+
+
+def test_one_session_is_opened_and_closed_on_its_own_page(
+    client, db_session, make_user
+):
+    runner = make_user("runner")
+    runner.feed_hidden = ["details", "route"]
+    db_session.commit()
+    workout = synced(client, db_session, runner)
+    befriend(db_session, runner, make_user("member"))
+
+    sign_in(client, "member")
+    assert client.get(f"/api/workouts/{workout.id}").status_code == 404
+
+    sign_in(client, "runner")
+    answered = client.patch(f"/api/workouts/{workout.id}", json={"feed_hidden": []})
+    assert answered.status_code == 200
+    assert answered.json()["feed_hidden"] == []
+
+    sign_in(client, "member")
+    opened = client.get(f"/api/workouts/{workout.id}").json()
+    assert opened["route"] is not None and opened["samples"] != []
+
+    # Back to the numbers alone, this session only.
+    sign_in(client, "runner")
+    client.patch(f"/api/workouts/{workout.id}", json={"feed_hidden": ["route"]})
+    sign_in(client, "member")
+    part = client.get(f"/api/workouts/{workout.id}").json()
+    assert "route" not in part and part["splits"] == []
+    assert part["duration_s"] is not None
+
+
+def test_a_name_no_session_can_hide_is_refused(client, db_session, make_user):
+    runner = make_user("runner")
+    workout = synced(client, db_session, runner)
+    sign_in(client, "runner")
+
+    refused = client.patch(
+        f"/api/workouts/{workout.id}", json={"feed_hidden": ["route", "stats"]}
+    )
+
+    assert refused.status_code == 400
+    assert refused.json() == {"detail": "That is not something Tare can hide."}
+
+
+def test_only_the_owner_changes_what_a_session_shares(client, db_session, make_user):
+    runner = make_user("runner")
+    workout = synced(client, db_session, runner)
+    befriend(db_session, runner, make_user("member"))
+
+    sign_in(client, "member")
+    refused = client.patch(f"/api/workouts/{workout.id}", json={"feed_hidden": []})
+
+    assert refused.status_code == 404
+    assert refused.json() == {"detail": "There is no such workout."}
 
 
 def test_a_name_tare_cannot_hide_is_refused(client, make_user):
@@ -482,19 +591,18 @@ def test_a_finished_day_reaches_the_others_only_once_it_is_shared(
     }
 
 
-def test_an_unshared_finished_day_is_the_owners_alone_and_says_so(
+def test_an_unshared_finished_day_is_in_nobodys_feed(
     client, db_session, make_user
 ):
     keeper = make_user("keeper")
     put_journal(db_session, keeper, minutes_ago=5)
     sign_in(client, "keeper")
 
-    rows = client.get("/api/feed").json()["items"]
-    assert [row["hidden"] for row in rows] == [True]
+    assert client.get("/api/feed").json()["items"] == []
 
     keeper.share_journal = True
     db_session.commit()
-    assert client.get("/api/feed").json()["items"][0]["hidden"] is False
+    assert len(client.get("/api/feed").json()["items"]) == 1
 
 
 def test_unlocking_a_day_takes_its_row_out_of_the_feed(client, db_session, make_user):
@@ -644,22 +752,23 @@ def test_a_loss_too_small_to_read_is_never_a_row(client, db_session, make_user):
     assert client.get("/api/feed").json()["items"] == []
 
 
-def test_an_unshared_loss_is_the_owners_alone_and_says_so(client, db_session, make_user):
+def test_an_unshared_loss_is_in_nobodys_feed(client, db_session, make_user):
     loser = losing(db_session, make_user)
     sign_in(client, "loser")
 
-    rows = client.get("/api/feed").json()["items"]
-    assert [row["hidden"] for row in rows] == [True]
+    assert client.get("/api/feed").json()["items"] == []
 
     loser.share_weight_loss = True
     db_session.commit()
-    assert client.get("/api/feed").json()["items"][0]["hidden"] is False
+    assert len(client.get("/api/feed").json()["items"]) == 1
 
 
 def test_replacing_a_days_weigh_in_moves_the_loss_and_not_the_moment(
     client, db_session, make_user
 ):
-    losing(db_session, make_user)
+    loser = losing(db_session, make_user)
+    loser.share_weight_loss = True
+    db_session.commit()
     sign_in(client, "loser")
     was = client.get("/api/feed").json()["items"][0]
 
@@ -676,7 +785,9 @@ def test_replacing_a_days_weigh_in_moves_the_loss_and_not_the_moment(
 
 
 def test_deleting_the_newer_weigh_in_takes_the_row_out(client, db_session, make_user):
-    losing(db_session, make_user)
+    loser = losing(db_session, make_user)
+    loser.share_weight_loss = True
+    db_session.commit()
     sign_in(client, "loser")
     assert len(client.get("/api/feed").json()["items"]) == 1
 

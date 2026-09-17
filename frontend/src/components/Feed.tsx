@@ -1,4 +1,4 @@
-import { ArrowDown, BookCheck, ChevronRight, CircleCheck, Hand, Lock } from 'lucide-react'
+import { ArrowDown, BookCheck, ChevronRight, CircleCheck, Hand } from 'lucide-react'
 import { useEffect, useState } from 'react'
 
 import {
@@ -12,7 +12,6 @@ import {
   type Me,
 } from '../api'
 import { ActivityIcon } from './ActivityIcon'
-import { Sheet } from './Sheet'
 import { clockText, dateText, useClock } from '../lib/clock'
 import { dayLabel, dayOf, today } from '../lib/day'
 import { weightCompact } from '../lib/units'
@@ -29,45 +28,6 @@ function dayText(iso: string, todayIso: string): string {
 }
 
 const JOURNAL_DONE = 'Journal complete'
-
-// A row nobody else can see, and what saying so looks like: a small lock in
-// the colour the app warns in, and a sheet with the one sentence behind it.
-// The lock is on the row rather than in it, so tapping it never opens the
-// workout the row is a way to.
-function PrivateLock({ onOpen }: { onOpen: () => void }) {
-  return (
-    <span
-      role="button"
-      tabIndex={0}
-      aria-label="Private"
-      className="shrink-0 text-over"
-      onClick={(event) => {
-        event.stopPropagation()
-        onOpen()
-      }}
-      onKeyDown={(event) => {
-        if (event.key !== 'Enter' && event.key !== ' ') return
-        event.preventDefault()
-        event.stopPropagation()
-        onOpen()
-      }}
-    >
-      <Lock className="h-4 w-4" strokeWidth={2} aria-hidden="true" />
-    </span>
-  )
-}
-
-function PrivateSheet({ open, onClose }: { open: boolean; onClose: () => void }) {
-  return (
-    <Sheet open={open} label="Private" center onClose={onClose}>
-      <p className="text-base font-semibold">Private</p>
-      <p className="mt-2 text-sm text-muted">Only you can see this.</p>
-      <button type="button" className="t-btn mt-4 w-full" onClick={onClose}>
-        Close
-      </button>
-    </Sheet>
-  )
-}
 
 // Every row has the same skeleton: the kind's icon at the left, then the
 // member's name and the fact as one line of inline text, then the stamp.
@@ -108,13 +68,11 @@ function JournalRow({
   row,
   todayIso,
   onOpenMember,
-  onPrivate,
 }: {
   me: Me
   row: FeedJournal
   todayIso: string
   onOpenMember?: () => void
-  onPrivate: () => void
 }) {
   return (
     <div className="t-row">
@@ -129,7 +87,6 @@ function JournalRow({
           </span>
         </span>
       </span>
-      {row.hidden === true && <PrivateLock onOpen={onPrivate} />}
     </div>
   )
 }
@@ -173,13 +130,11 @@ function WeightRow({
   row,
   todayIso,
   onOpenMember,
-  onPrivate,
 }: {
   me: Me
   row: FeedWeight
   todayIso: string
   onOpenMember?: () => void
-  onPrivate: () => void
 }) {
   return (
     <div className="t-row">
@@ -195,7 +150,6 @@ function WeightRow({
           </span>
         </span>
       </span>
-      {row.hidden === true && <PrivateLock onOpen={onPrivate} />}
     </div>
   )
 }
@@ -206,7 +160,6 @@ function Row({
   todayIso,
   onOpen,
   onOpenMember,
-  onPrivate,
 }: {
   me: Me
   row: FeedWorkout
@@ -215,24 +168,25 @@ function Row({
   // rather than opened.
   onOpen?: () => void
   onOpenMember?: () => void
-  onPrivate: () => void
 }) {
-  // The line is the same either way; only whether the row is a way in changes.
+  // What a session was called is part of its details, so a session sharing
+  // none is a workout and nothing more. The blue is on whichever of the two
+  // it is: that is the thing the row is about.
   const said = (
     <>
       <span className="flex min-w-0 flex-1 items-center gap-2">
-        <ActivityIcon name={row.activity} className="h-4 w-4 shrink-0 text-muted" />
+        <ActivityIcon name={row.activity ?? ''} className="h-4 w-4 shrink-0 text-muted" />
         <span className="min-w-0 flex-1">
           <span className="block text-sm">
             <Name row={row} onOpenMember={onOpenMember} />{' '}
-            <span className="text-muted">synced:</span>{' '}
+            <span className="text-muted">{row.activity === undefined ? 'synced' : 'synced:'}</span>{' '}
             <span className="whitespace-nowrap">
               <CircleCheck
                 className="inline h-4 w-4 align-[-3px] text-blue"
                 strokeWidth={2}
                 aria-hidden="true"
               />{' '}
-              <span className="text-blue">{row.activity}</span>
+              <span className="text-blue">{row.activity ?? 'a workout'}</span>
             </span>
           </span>
           <span className="block text-xs text-muted">
@@ -240,11 +194,10 @@ function Row({
           </span>
         </span>
       </span>
-      {row.hidden === true && <PrivateLock onOpen={onPrivate} />}
     </>
   )
-  // A member who keeps their workout details to themselves shares the row and
-  // nothing under it, so there is no chevron and nothing to tap.
+  // A session that keeps its details to itself shares the row and nothing
+  // under it, so there is no chevron and nothing to tap.
   if (!row.open || onOpen === undefined) return <div className="t-row">{said}</div>
   return (
     <button type="button" className="t-row w-full text-left" onClick={onOpen}>
@@ -348,9 +301,6 @@ export function FeedRows({
   // not a way anywhere.
   onOpenMember?: (userId: number) => void
 }) {
-  // One sheet for the whole list: it says the same thing whichever lock
-  // opened it.
-  const [askedPrivate, setAskedPrivate] = useState(false)
   const todayIso = today(me.timezone)
   useClock()
 
@@ -366,7 +316,6 @@ export function FeedRows({
             onOpenMember={
               onOpenMember === undefined ? undefined : () => onOpenMember(row.user_id)
             }
-            onPrivate={() => setAskedPrivate(true)}
           />
         ) : row.kind === 'weight' ? (
           <WeightRow
@@ -377,7 +326,6 @@ export function FeedRows({
             onOpenMember={
               onOpenMember === undefined ? undefined : () => onOpenMember(row.user_id)
             }
-            onPrivate={() => setAskedPrivate(true)}
           />
         ) : row.kind === 'joined' ? (
           <JoinedRow
@@ -399,11 +347,9 @@ export function FeedRows({
             onOpenMember={
               onOpenMember === undefined ? undefined : () => onOpenMember(row.user_id)
             }
-            onPrivate={() => setAskedPrivate(true)}
           />
         )
       )}
-      <PrivateSheet open={askedPrivate} onClose={() => setAskedPrivate(false)} />
     </>
   )
 }

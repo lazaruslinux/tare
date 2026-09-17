@@ -241,7 +241,8 @@ A Health Connect bridge export is read too, so anything that can write either
 layout can be used; it does not have to be Health Auto Export.
 
 Everything that arrives from a file is marked as such. Workouts from a file stay
-out of the community feed unless you choose to share them, and the Remove
+out of the community feed unless you choose to share them, one at a time on the
+workout's own page, and the Remove
 everything I uploaded row on the Health data sync screen deletes every number
 that came from a file while leaving synced and typed-in data alone. Uploads are
 limited to five an hour per account, a file that is not shaped like a health

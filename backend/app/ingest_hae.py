@@ -457,8 +457,11 @@ def import_workouts(
             elevation_gain_m=None,
             indoor=bool(entry.get("isIndoor")),
             # A file can carry a year of somebody else's mornings, so nothing
-            # out of one is put in front of anybody until they say so.
-            hidden_from_feed=source == "upload",
+            # out of one is put in front of anybody until they say so. The
+            # account's switches are read once, here, and stamped on the
+            # session: what they say tomorrow is about tomorrow's sessions.
+            hidden_from_feed=source == "upload" or not user.share_workouts,
+            feed_hidden=list(user.feed_hidden or []),
             source=source,
             flags=_pace_flags(activity, duration_s, distance_m),
             created_at=models.now_utc(),

@@ -485,3 +485,79 @@ def test_the_four_hide_names_become_one_switch_that_starts_off(tmp_path):
         3: '["stats", "route", "minutes", "splits"]',
         4: '["stats", "minutes", "splits"]',
     }
+
+
+def test_every_session_is_frozen_at_what_it_shows_today(tmp_path):
+    """Sharing moves onto the session, so each one is stamped with what its
+    account was saying the day this ran: the same feed the morning after, and
+    a switch turned later is about the sessions that come later."""
+    database = tmp_path / "tare.db"
+    config = Config(str(BACKEND / "alembic.ini"))
+    config.set_main_option("script_location", str(BACKEND / "migrations"))
+    config.set_main_option("sqlalchemy.url", f"sqlite:///{database}")
+
+    command.upgrade(config, "0049_push")
+    engine = sa.create_engine(f"sqlite:///{database}")
+    # Three accounts: one sharing the lot, one keeping the route back, one
+    # sharing no workouts at all.
+    accounts = {
+        1: ("[]", 1),
+        2: ('["route"]', 1),
+        3: ('["details"]', 0),
+    }
+    try:
+        with engine.begin() as connection:
+            for user_id, (held, shares) in accounts.items():
+                connection.execute(
+                    sa.text(
+                        "INSERT INTO users (id, username, password_hash, created_at,"
+                        " feed_hidden, share_age, share_sex, share_location,"
+                        " share_workouts, share_journal, share_weight_loss, clock,"
+                        " dashboard_cards, notify)"
+                        " VALUES (:id, :name, 'x', :at, :held, 0, 0, 0, :shares, 0, 0,"
+                        " '12h', '[]', '{}')"
+                    ),
+                    {
+                        "id": user_id,
+                        "name": f"member{user_id}",
+                        "at": "2026-09-01 08:00:00",
+                        "held": held,
+                        "shares": shares,
+                    },
+                )
+                connection.execute(
+                    sa.text(
+                        "INSERT INTO workouts (id, user_id, activity, started_at,"
+                        " date_for, duration_s, indoor, hidden_from_feed, source,"
+                        " flags, created_at)"
+                        " VALUES (:id, :user_id, 'Outdoor Run', :at, '2026-09-01',"
+                        " 1800, 0, 0, 'apple', '{}', :at)"
+                    ),
+                    {"id": user_id, "user_id": user_id, "at": "2026-09-01 08:00:00"},
+                )
+
+        command.upgrade(config, "head")
+        with engine.connect() as connection:
+            after = {
+                row.id: (row.feed_hidden, row.hidden_from_feed)
+                for row in connection.execute(
+                    sa.text("SELECT id, feed_hidden, hidden_from_feed FROM workouts")
+                ).all()
+            }
+
+        command.downgrade(config, "0049_push")
+        with engine.connect() as connection:
+            columns = [
+                row[1]
+                for row in connection.execute(sa.text("PRAGMA table_info(workouts)")).all()
+            ]
+    finally:
+        engine.dispose()
+
+    assert after == {
+        1: ("[]", 0),
+        2: ('["route"]', 0),
+        # The master said no, so the session says it itself from now on.
+        3: ('["details"]', 1),
+    }
+    assert "feed_hidden" not in columns

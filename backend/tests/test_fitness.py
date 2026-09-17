@@ -182,13 +182,15 @@ def test_a_shared_workout_reads_for_another_member_without_what_was_held_back(
 
     assert body["mine"] is False
     assert body["display_name"] == "stranger"
-    # The breakdown is open, so the numbers, the minutes and the splits read.
+    # The breakdown is open, so the numbers on the card read, the climb among
+    # them.
     assert body["avg_hr"] is not None and body["kcal"] is not None
     assert body["duration_s"] is not None and body["distance_m"] is not None
-    assert body["samples"] != []
-    assert body["splits"][0]["pace_s_per_unit"] > 0
-    # The route and the climb are theirs, and so is what Tare made of it all.
-    assert "route" not in body and "elevation_gain_m" not in body
+    assert "elevation_gain_m" in body
+    # The line, the minutes and the splits are theirs, and so is what Tare
+    # made of it all.
+    assert "route" not in body
+    assert body["samples"] == [] and body["splits"] == []
     assert "flags" not in body
 
 

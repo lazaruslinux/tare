@@ -975,9 +975,17 @@ export type Workout = {
   source: WorkoutSource
   // Whether the owner keeps this one out of the community feed.
   hidden_from_feed: boolean
+  // What this one keeps back from whoever reads it on the feed, stamped from
+  // the account's own switches the moment it arrived: 'details', 'route'.
+  feed_hidden: string[]
   // What looked odd about it, by key. Empty on almost every workout.
   flags: string[]
 }
+
+// The two things a session may keep back from the feed, by the names the
+// server holds them under. Both screens that draw these switches read this,
+// so what is sent is a list in the server's own order either way.
+export const HIDEABLE = ['details', 'route'] as const
 
 // One minute of a session. Every reading is optional: the arrays a phone sends
 // start and stop at their own moments.
@@ -1016,9 +1024,8 @@ export type WorkoutDetail = Omit<Workout, 'elevation_gain_m' | 'flags'> & {
   user_id: number
   display_name: string
   mine: boolean
-  // The two things that can be absent on somebody else's workout: what Tare
-  // made of the numbers is the owner's alone, and the route takes the climb
-  // with it when it is held back.
+  // What Tare made of the numbers is the owner's alone. The climb stays with
+  // the rest of the numbers, so it is here whenever the details are.
   elevation_gain_m?: number | null
   flags?: string[]
   samples: WorkoutSample[]
@@ -1041,12 +1048,12 @@ export type FeedWorkout = {
   display_name: string
   role: Role
   mine: boolean
-  // Whether there is anything behind the row: your own always, somebody
-  // else's only where they opened their workout details.
+  // Whether there is anything behind the row, which is whether the session
+  // shares its details. Your own rows read exactly as everybody else's do.
   open: boolean
-  // Only ever on your own rows: a workout you kept out of everybody's feed.
-  hidden?: boolean
-  activity: string
+  // What it was called. Part of the details, so a session that keeps those
+  // back is a workout and nothing more.
+  activity?: string
   date: string
   started_at: string
 }
@@ -1062,7 +1069,6 @@ export type FeedJournal = {
   display_name: string
   role: Role
   mine: boolean
-  hidden?: boolean
   date: string
   at: string
   pronoun: string
@@ -1077,7 +1083,6 @@ export type FeedWeight = {
   display_name: string
   role: Role
   mine: boolean
-  hidden?: boolean
   date: string
   at: string
   lost_kg: number

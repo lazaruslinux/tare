@@ -1,4 +1,11 @@
-import { ChevronDown, ChevronRight, ChevronUp, Minus, StretchHorizontal } from 'lucide-react'
+import {
+  ChevronDown,
+  ChevronRight,
+  ChevronUp,
+  Lock,
+  Minus,
+  StretchHorizontal,
+} from 'lucide-react'
 import { useEffect, useState } from 'react'
 
 import {
@@ -335,7 +342,10 @@ function SessionsCard({
                   <ActivityIcon name={row.activity} className="h-5 w-5 text-accent" />
                 </span>
                 <span className="min-w-0 flex-1">
-                  <span className="block truncate text-sm">{row.activity}</span>
+                  <span className="flex items-center gap-1.5">
+                    <span className="min-w-0 truncate text-sm">{row.activity}</span>
+                    {row.hidden_from_feed && <HiddenMark />}
+                  </span>
                   <span className="t-nums block truncate text-xl font-semibold text-accent">
                     {said.number}
                     {said.unit !== '' && <span className="ml-1 text-xs">{said.unit}</span>}
@@ -410,6 +420,19 @@ function TrendsCard({ rows, units }: { rows: TrendRow[]; units: Units }) {
   )
 }
 
+// A session its owner keeps out of the community feed. The lists say which
+// ones those are and nothing more: what a shared one shares is four words on
+// its own page, where it is also changed.
+function HiddenMark() {
+  return (
+    <Lock
+      className="h-4 w-4 shrink-0 text-over"
+      strokeWidth={2}
+      aria-label="Hidden from the community feed"
+    />
+  )
+}
+
 function WorkoutRows({
   me,
   workouts,
@@ -442,6 +465,7 @@ function WorkoutRows({
               </span>
             </span>
           </span>
+          {row.hidden_from_feed && <HiddenMark />}
           <ChevronRight className="h-4 w-4 shrink-0 text-muted" strokeWidth={2} />
         </button>
       ))}
