@@ -307,15 +307,6 @@ export function WorkoutDetails({
     else kept.add(name)
     void share({ feed_hidden: HIDEABLE.filter((each) => kept.has(each)) })
   }
-  // What this one morning is to everybody else, in a sentence, because four
-  // switch positions are easier to read as one line than to add up.
-  const seen = detail.hidden_from_feed
-    ? 'Nobody else sees this one.'
-    : !shows('details')
-      ? 'Friends see that you synced a workout.'
-      : shows('route')
-        ? "Friends see this workout's details, its route and its splits."
-        : "Friends see this workout's details."
 
   return (
     <>
@@ -430,7 +421,6 @@ export function WorkoutDetails({
       {detail.mine && (
         <div className="t-card mb-3">
           <p className="t-micro mb-1">Sharing</p>
-          <p className="mb-1 text-sm">{seen}</p>
           <Switch
             label="Show in the community feed"
             checked={!detail.hidden_from_feed}
@@ -448,7 +438,6 @@ export function WorkoutDetails({
               >
                 <Switch
                   label="Share workout details"
-                  note="The activity, time, distance, calories, pace, heart rate and climb."
                   checked={shows('details')}
                   onChange={(next) => show('details', next)}
                 />
@@ -464,7 +453,6 @@ export function WorkoutDetails({
                     >
                       <Switch
                         label="Share route maps and splits"
-                        note="The map, the minute-by-minute readings and the split times."
                         checked={shows('route')}
                         onChange={(next) => show('route', next)}
                       />
@@ -474,9 +462,6 @@ export function WorkoutDetails({
               </motion.div>
             )}
           </AnimatePresence>
-          <p className="mt-2 text-xs text-muted">
-            This activity only. Your Sharing settings decide what new workouts start with.
-          </p>
           {hideError && <p className="t-error mt-2">{hideError}</p>}
         </div>
       )}
