@@ -443,7 +443,7 @@ export function Notifications({
         <p className="t-micro mt-3 mb-1">Shared</p>
         <Switch
           label="Calendar updates"
-          note="Changes on calendars you share, invitations, the answers to yours, and a calendar offered to you."
+          note="Notify me about shared calendar changes, invitations & responses."
           checked={prefs.calendar}
           onChange={(next) => patch(calendarSave.run, { ...prefs, calendar: next }, prefs)}
         />
