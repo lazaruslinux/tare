@@ -134,17 +134,23 @@ It touches no database and needs no configuration, so it can be run on a fresh
 checkout before there is an account. Put both printed lines in `.env`, with a
 contact address of your own as the subject, and restart the api.
 
-What goes out: a morning check-in with the day's budget, an evening check-in
-only when something is missing from that day's journal, a weekly weigh-in nudge
-on a weekday each member chooses, and one note a week after a quiet week with
-nothing logged. Changes to a shared calendar go out as they happen: added,
-changed and cancelled appointments, invitations, and the answers to them. Every
-kind is a switch under More, Notifications, and nothing at all is sent until a
-member turns notifications on for a device.
+What goes out: a morning check-in with the day's budget, the weigh-in ask on
+the day it is owed and the first appointment still to come; an evening check-in
+only when something is missing from that day's journal; a weekly weigh-in nudge
+on a weekday each member chooses, for anyone with no morning check-in to carry
+it; and, after a week with nothing logged, the daily check-ins pause and one
+note a week asks how it is going. A reminder goes out fifteen or thirty minutes
+before a timed appointment, whichever the member chose. Changes to a shared
+calendar go out as they happen: added, changed and cancelled appointments,
+invitations, and the answers to them. Every kind is a switch under More,
+Notifications, and nothing at all is sent until a member turns notifications on
+for a device.
 
 A check-in is sent within ninety minutes of its time or skipped for that day,
-so one whose hour passed while the api was down does not arrive at midnight.
-One api process runs the schedule; the deployment below starts exactly one.
+so one whose hour passed while the api was down does not arrive at midnight. A
+reminder is sent inside its own lead time and skipped once the appointment has
+started. One api process runs the schedule; the deployment below starts exactly
+one.
 
 iPhone and iPad need iOS 16.4 or later and the app added to the Home Screen: a
 Safari tab cannot receive notifications. Every other browser works from the tab.

@@ -10,9 +10,10 @@ def test_a_fresh_account_is_told_everything_at_the_usual_hours():
     assert notify_prefs.default() == {
         "morning": {"on": True, "time": "08:00"},
         "evening": {"on": True, "time": "20:00"},
+        "weekly": {"on": True},
         "weigh_in": {"on": True, "weekday": 0},
+        "reminders": {"on": True, "minutes": 30},
         "calendar": True,
-        "invitations": True,
     }
 
 
@@ -47,9 +48,34 @@ def test_a_weekday_out_of_the_week_falls_back_to_monday():
 
 
 def test_a_junk_switch_reads_back_as_a_bool():
-    prefs = notify_prefs.normalize({"calendar": "yes", "invitations": 0})
+    prefs = notify_prefs.normalize({"calendar": "yes", "weekly": {"on": 0}})
     assert prefs["calendar"] is True
-    assert prefs["invitations"] is False
+    assert prefs["weekly"]["on"] is False
+
+
+def test_a_lead_time_nobody_offers_falls_back_to_half_an_hour():
+    assert notify_prefs.normalize({"reminders": {"on": True, "minutes": 20}})[
+        "reminders"
+    ] == {"on": True, "minutes": 30}
+    assert notify_prefs.normalize({"reminders": {"minutes": 15}})["reminders"] == {
+        "on": True,
+        "minutes": 15,
+    }
+    # True is an int in Python and is not a lead time anybody chose.
+    assert (
+        notify_prefs.normalize({"reminders": {"minutes": True}})["reminders"]["minutes"]
+        == 30
+    )
+
+
+def test_a_switch_that_is_gone_is_dropped_rather_than_carried():
+    """An account last saved when invitations had a switch of its own reads
+    back under the shape that folded it into the calendar."""
+    stored = notify_prefs.normalize({"calendar": True, "invitations": False})
+    assert "invitations" not in stored
+    assert set(stored) == set(notify_prefs.KEYS)
+    # And it cannot be sent again.
+    refuses({**notify_prefs.default(), "invitations": True})
 
 
 def refuses(raw):
@@ -72,6 +98,12 @@ def test_a_half_written_slot_is_refused():
     refuses({**notify_prefs.default(), "weigh_in": {"on": True, "weekday": True}})
     refuses({**notify_prefs.default(), "weigh_in": {"on": True, "weekday": 7}})
     refuses({**notify_prefs.default(), "calendar": "yes"})
+    refuses({**notify_prefs.default(), "weekly": {"on": True, "time": "08:00"}})
+    refuses({**notify_prefs.default(), "weekly": True})
+    refuses({**notify_prefs.default(), "reminders": {"on": True}})
+    refuses({**notify_prefs.default(), "reminders": {"on": True, "minutes": 20}})
+    refuses({**notify_prefs.default(), "reminders": {"on": True, "minutes": True}})
+    refuses({**notify_prefs.default(), "reminders": {"on": True, "minutes": "30"}})
 
 
 def test_what_passes_comes_back_normalized():
@@ -79,11 +111,14 @@ def test_what_passes_comes_back_normalized():
         {
             "morning": {"on": False, "time": "07:15"},
             "evening": {"on": True, "time": "19:45"},
+            "weekly": {"on": False},
             "weigh_in": {"on": True, "weekday": 6},
+            "reminders": {"on": True, "minutes": 15},
             "calendar": False,
-            "invitations": True,
         }
     )
     assert saved["morning"] == {"on": False, "time": "07:15"}
+    assert saved["weekly"] == {"on": False}
     assert saved["weigh_in"] == {"on": True, "weekday": 6}
+    assert saved["reminders"] == {"on": True, "minutes": 15}
     assert saved["calendar"] is False

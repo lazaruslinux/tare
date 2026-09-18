@@ -18,12 +18,18 @@ BAD_NOTIFY = "That is not a notification setting."
 # member reads. The zone is the account's own.
 TIME = re.compile(r"^([01]\d|2[0-3]):[0-5]\d$")
 
-KEYS = ("morning", "evening", "weigh_in", "calendar", "invitations")
+KEYS = ("morning", "evening", "weekly", "weigh_in", "reminders", "calendar")
 
 MORNING_TIME = "08:00"
 EVENING_TIME = "20:00"
 # Monday, counted the way date.weekday counts.
 WEIGH_IN_WEEKDAY = 0
+
+# How long before an appointment its reminder goes out. Two choices rather
+# than a free number: the screen is a select, and a reminder that can be set
+# to four minutes is a reminder nobody can act on.
+REMINDER_MINUTES = 30
+MINUTES_ALLOWED = (15, 30)
 
 
 def default() -> dict[str, Any]:
@@ -35,9 +41,10 @@ def default() -> dict[str, Any]:
     return {
         "morning": {"on": True, "time": MORNING_TIME},
         "evening": {"on": True, "time": EVENING_TIME},
+        "weekly": {"on": True},
         "weigh_in": {"on": True, "weekday": WEIGH_IN_WEEKDAY},
+        "reminders": {"on": True, "minutes": REMINDER_MINUTES},
         "calendar": True,
-        "invitations": True,
     }
 
 
@@ -50,8 +57,34 @@ def _slot(raw: Any, time_of_day: str) -> dict[str, Any]:
     }
 
 
+def _switch(raw: Any) -> dict[str, Any]:
+    """A switch with nothing to set beside it."""
+    stored = raw if isinstance(raw, dict) else {}
+    return {"on": bool(stored.get("on", True))}
+
+
+def _reminders(raw: Any) -> dict[str, Any]:
+    stored = raw if isinstance(raw, dict) else {}
+    minutes = stored.get("minutes")
+    return {
+        "on": bool(stored.get("on", True)),
+        "minutes": (
+            minutes
+            if isinstance(minutes, int)
+            and not isinstance(minutes, bool)
+            and minutes in MINUTES_ALLOWED
+            else REMINDER_MINUTES
+        ),
+    }
+
+
 def normalize(raw: Any) -> dict[str, Any]:
-    """The stored answer, repaired. Anything missing or wrong takes its default."""
+    """The stored answer, repaired. Anything missing or wrong takes its default.
+
+    Keys nobody uses any more are dropped rather than carried: the answer is
+    built from KEYS, so an account last saved under an older shape reads back
+    under this one without a migration.
+    """
     stored = raw if isinstance(raw, dict) else {}
     held = stored.get("weigh_in")
     weigh_in: dict[str, Any] = held if isinstance(held, dict) else {}
@@ -59,6 +92,7 @@ def normalize(raw: Any) -> dict[str, Any]:
     return {
         "morning": _slot(stored.get("morning"), MORNING_TIME),
         "evening": _slot(stored.get("evening"), EVENING_TIME),
+        "weekly": _switch(stored.get("weekly")),
         "weigh_in": {
             "on": bool(weigh_in.get("on", True)),
             "weekday": (
@@ -69,18 +103,26 @@ def normalize(raw: Any) -> dict[str, Any]:
                 else WEIGH_IN_WEEKDAY
             ),
         },
+        "reminders": _reminders(stored.get("reminders")),
         "calendar": bool(stored.get("calendar", True)),
-        "invitations": bool(stored.get("invitations", True)),
     }
 
 
-def _checked_slot(raw: Any, extra: str) -> None:
-    if not isinstance(raw, dict) or set(raw) != {"on", extra}:
+def _checked_slot(raw: Any, extra: str | None) -> None:
+    wanted = {"on"} if extra is None else {"on", extra}
+    if not isinstance(raw, dict) or set(raw) != wanted:
         raise ValueError(BAD_NOTIFY)
     if not isinstance(raw["on"], bool):
         raise ValueError(BAD_NOTIFY)
+    if extra is None:
+        return
     if extra == "time":
         if not isinstance(raw["time"], str) or not TIME.match(raw["time"]):
+            raise ValueError(BAD_NOTIFY)
+        return
+    if extra == "minutes":
+        minutes = raw["minutes"]
+        if isinstance(minutes, bool) or minutes not in MINUTES_ALLOWED:
             raise ValueError(BAD_NOTIFY)
         return
     weekday = raw["weekday"]
@@ -96,8 +138,9 @@ def checked(raw: Any) -> dict[str, Any]:
         raise ValueError(BAD_NOTIFY)
     _checked_slot(raw["morning"], "time")
     _checked_slot(raw["evening"], "time")
+    _checked_slot(raw["weekly"], None)
     _checked_slot(raw["weigh_in"], "weekday")
-    for key in ("calendar", "invitations"):
-        if not isinstance(raw[key], bool):
-            raise ValueError(BAD_NOTIFY)
+    _checked_slot(raw["reminders"], "minutes")
+    if not isinstance(raw["calendar"], bool):
+        raise ValueError(BAD_NOTIFY)
     return normalize(raw)

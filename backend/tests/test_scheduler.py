@@ -78,11 +78,12 @@ def test_a_kind_already_sent_today_is_not_sent_again():
     assert scheduler.due(moment(), facts(sent_today=frozenset({MORNING}))) is None
 
 
-def test_the_weekly_weigh_in_replaces_the_morning_check_in_on_its_day():
+def test_the_morning_note_keeps_its_slot_on_the_weigh_in_day():
+    """The ask moved into the morning note, so the note is still what goes."""
     due = scheduler.due(
         moment(day=MONDAY), facts(last_weigh_day=MONDAY - dt.timedelta(days=4))
     )
-    assert due == WEIGH_IN
+    assert due == MORNING
 
 
 def test_the_weigh_in_only_lands_on_the_day_that_was_chosen():
@@ -154,9 +155,18 @@ def test_the_quiet_note_waits_a_week_before_it_asks_again():
     assert scheduler.due(moment(hour=8), a_week_on) == QUIET
 
 
-def test_both_check_ins_off_means_no_quiet_note_either():
+def test_the_weekly_switch_is_what_decides_the_quiet_note():
+    off = quiet_facts(prefs=prefs_with(weekly={"on": False}))
+    assert scheduler.due(moment(hour=8), off) is None
+    # And the dailies stay paused regardless: a switch turned off buys silence,
+    # not a morning check-in in its place.
+    assert scheduler.due(moment(hour=20), off) is None
+
+
+def test_the_quiet_note_does_not_need_either_daily_switch():
+    """The weekly check-in is a switch of its own, so it stands on its own."""
     silent = quiet_facts(prefs=prefs_with(morning={"on": False}, evening={"on": False}))
-    assert scheduler.due(moment(hour=8), silent) is None
+    assert scheduler.due(moment(hour=8), silent) == QUIET
 
 
 def test_a_new_account_with_nothing_in_it_yet_gets_the_dailies():
@@ -244,7 +254,9 @@ def test_one_tick_sends_one_check_in_and_writes_it_down(rig, make_user, monkeypa
 
 def test_a_weigh_in_books_the_morning_slot_as_well(rig, make_user, monkeypatch):
     user = make_user("member", timezone="America/Phoenix")
+    user.notify = {**notify_prefs.default(), "morning": {"on": False, "time": "08:00"}}
     device(rig, user)
+    rig.commit()
     answers(monkeypatch)
 
     assert scheduler.tick(moment(day=MONDAY).astimezone(dt.timezone.utc)) == 1
@@ -335,7 +347,8 @@ def test_the_morning_check_in_carries_the_days_budget(client, rig, signed_in, mo
 
     message = body_of(rig, signed_in, monkeypatch, MORNING, moment())
     assert message.title == "Good morning"
-    assert " cal. Log breakfast when you have it." in message.body
+    assert message.body.startswith("Your budget today is ")
+    assert message.body.endswith(" cal.")
     assert message.url == "/?open=journal"
     assert message.tag == MORNING
 
@@ -344,7 +357,7 @@ def test_a_member_with_no_numbers_gets_the_line_without_one(rig, make_user, monk
     user = make_user("member", timezone="America/Phoenix")
     device(rig, user)
     message = body_of(rig, user, monkeypatch, MORNING, moment())
-    assert message.body == "A new day in your journal. Log breakfast when you have it."
+    assert message.body == "A new day in your journal."
 
 
 def test_the_quiet_note_says_a_week_and_then_a_while(rig, make_user, monkeypatch):
@@ -370,7 +383,10 @@ def test_the_quiet_note_says_a_week_and_then_a_while(rig, make_user, monkeypatch
 
 def test_the_weigh_in_note_reads_differently_before_the_first_one(rig, make_user, monkeypatch):
     user = make_user("member", timezone="America/Phoenix")
+    # Its own note only goes to somebody with no morning check-in to carry it.
+    user.notify = {**notify_prefs.default(), "morning": {"on": False, "time": "08:00"}}
     device(rig, user)
+    rig.commit()
     message = body_of(rig, user, monkeypatch, WEIGH_IN, moment(day=MONDAY))
     assert message.title == "Weigh-in day"
     assert message.body == (
@@ -393,3 +409,306 @@ def test_a_member_with_no_device_is_never_looked_at(rig, make_user, monkeypatch)
     answers(monkeypatch)
     assert scheduler.tick(moment().astimezone(dt.timezone.utc)) == 0
     assert rig.query(models.PushSend).count() == 0
+
+
+# Reminders before an appointment
+# -------------------------------
+
+
+@pytest.fixture()
+def diary(client, rig, signed_in, monkeypatch):
+    """A member in Phoenix with a device on and a push service that answers."""
+    signed_in.timezone = "America/Phoenix"
+    device(rig, signed_in)
+    rig.commit()
+    answers(monkeypatch)
+    return signed_in
+
+
+def an_appointment(client, **fields):
+    """One of this member's own, in the afternoon so the morning slot is shut."""
+    body = {
+        "title": "Dentist",
+        "date_for": TUESDAY.isoformat(),
+        "time_of_day": "14:00",
+        "end_time": "15:00",
+    }
+    body.update(fields)
+    response = client.post("/api/calendar/appointments", json=body)
+    assert response.status_code == 201, response.json()
+    return response.json()["appointment"]
+
+
+def reminders_of(rig):
+    return sorted(
+        (row.kind, row.day)
+        for row in rig.query(models.PushSend).all()
+        if row.kind.startswith("appt-")
+    )
+
+
+def lead(rig, member, minutes):
+    member.notify = {
+        **notify_prefs.default(),
+        "reminders": {"on": True, "minutes": minutes},
+    }
+    rig.commit()
+
+
+def test_a_reminder_goes_out_the_chosen_number_of_minutes_before(client, rig, diary):
+    made = an_appointment(client)
+
+    assert scheduler.tick(moment(hour=13, minute=29).astimezone(dt.timezone.utc)) == 0
+    assert reminders_of(rig) == []
+
+    assert scheduler.tick(moment(hour=13, minute=30).astimezone(dt.timezone.utc)) == 1
+    assert reminders_of(rig) == [(f"appt-{made['id']}", TUESDAY)]
+
+
+def test_a_reminder_is_written_down_so_it_only_goes_once(client, rig, diary):
+    an_appointment(client)
+
+    assert scheduler.tick(moment(hour=13, minute=35).astimezone(dt.timezone.utc)) == 1
+    assert scheduler.tick(moment(hour=13, minute=45).astimezone(dt.timezone.utc)) == 0
+    assert scheduler.tick(moment(hour=13, minute=59).astimezone(dt.timezone.utc)) == 0
+    assert len(reminders_of(rig)) == 1
+
+
+def test_nothing_is_sent_once_the_appointment_has_started(client, rig, diary):
+    an_appointment(client)
+
+    assert scheduler.tick(moment(hour=14).astimezone(dt.timezone.utc)) == 0
+    assert scheduler.tick(moment(hour=14, minute=30).astimezone(dt.timezone.utc)) == 0
+    assert reminders_of(rig) == []
+
+
+def test_a_shorter_lead_time_is_honoured(client, rig, diary):
+    lead(rig, diary, 15)
+    an_appointment(client)
+
+    assert scheduler.tick(moment(hour=13, minute=40).astimezone(dt.timezone.utc)) == 0
+    assert scheduler.tick(moment(hour=13, minute=45).astimezone(dt.timezone.utc)) == 1
+
+
+def test_reminders_can_be_turned_off_on_their_own(client, rig, diary):
+    diary.notify = {
+        **notify_prefs.default(),
+        "reminders": {"on": False, "minutes": 30},
+    }
+    rig.commit()
+    an_appointment(client)
+
+    assert scheduler.tick(moment(hour=13, minute=35).astimezone(dt.timezone.utc)) == 0
+    assert reminders_of(rig) == []
+
+
+def test_an_all_day_appointment_is_never_reminded_about(client, rig, diary):
+    an_appointment(client, all_day=True, time_of_day=None, end_time=None)
+
+    for hour, minute in ((8, 5), (13, 35), (23, 40)):
+        scheduler.tick(moment(hour=hour, minute=minute).astimezone(dt.timezone.utc))
+    assert reminders_of(rig) == []
+
+
+def test_a_cancelled_day_is_not_reminded_about(client, rig, diary):
+    made = an_appointment(client)
+    assert (
+        client.post(
+            f"/api/calendar/appointments/{made['id']}/cancel?date={TUESDAY.isoformat()}"
+        ).status_code
+        == 200
+    )
+
+    assert scheduler.tick(moment(hour=13, minute=35).astimezone(dt.timezone.utc)) == 0
+    assert reminders_of(rig) == []
+
+
+def test_a_day_carved_out_of_a_series_is_not_reminded_about(client, rig, diary):
+    made = an_appointment(client, repeat={"type": "weekly", "days": [1]})
+    assert (
+        client.delete(
+            f"/api/calendar/appointments/{made['id']}/occurrence"
+            f"?date={TUESDAY.isoformat()}"
+        ).status_code
+        == 204
+    )
+
+    assert scheduler.tick(moment(hour=13, minute=35).astimezone(dt.timezone.utc)) == 0
+    assert reminders_of(rig) == []
+
+
+def test_every_day_of_a_series_gets_its_own_reminder(client, rig, diary):
+    made = an_appointment(client, repeat={"type": "weekly", "days": [1]})
+    next_week = TUESDAY + dt.timedelta(days=7)
+
+    assert scheduler.tick(moment(hour=13, minute=35).astimezone(dt.timezone.utc)) == 1
+    assert (
+        scheduler.tick(
+            moment(day=next_week, hour=13, minute=35).astimezone(dt.timezone.utc)
+        )
+        == 1
+    )
+    assert reminders_of(rig) == [
+        (f"appt-{made['id']}", TUESDAY),
+        (f"appt-{made['id']}", next_week),
+    ]
+
+
+def test_an_appointment_nobody_showed_this_member_is_not_reminded_about(
+    client, rig, db_session, make_user, diary, monkeypatch
+):
+    stranger = make_user("stranger", timezone="America/Phoenix")
+    row = models.Appointment(
+        owner_id=stranger.id,
+        title="Theirs",
+        timezone="America/Phoenix",
+        date_for=TUESDAY,
+        time_of_day=dt.time(14, 0),
+        end_time=dt.time(15, 0),
+    )
+    db_session.add(row)
+    db_session.commit()
+
+    assert scheduler.tick(moment(hour=13, minute=35).astimezone(dt.timezone.utc)) == 0
+    assert reminders_of(rig) == []
+
+
+def test_a_member_in_another_zone_is_reminded_on_their_own_clock(
+    client, rig, db_session, signed_in, monkeypatch
+):
+    signed_in.timezone = "America/New_York"
+    device(rig, signed_in)
+    rig.commit()
+    answers(monkeypatch)
+    an_appointment(client)
+
+    # Two in the afternoon in New York is half past ten in Phoenix, so the
+    # reminder is owed at ten to one Phoenix time and not at half past one.
+    assert scheduler.tick(moment(hour=13, minute=35).astimezone(dt.timezone.utc)) == 0
+    assert scheduler.tick(moment(hour=10, minute=35).astimezone(dt.timezone.utc)) == 1
+
+
+# What a reminder says
+# --------------------
+
+
+def reminder_body(rig, monkeypatch, when=None):
+    said: list[notifications.Message] = []
+    real = notifications.deliver
+
+    def watching(db, member, message, **rest):
+        said.append(message)
+        return real(db, member, message, **rest)
+
+    monkeypatch.setattr(notifications, "deliver", watching)
+    monkeypatch.setattr(scheduler.notifications, "deliver", watching)
+    scheduler.tick(
+        (when or moment(hour=13, minute=35)).astimezone(dt.timezone.utc)
+    )
+    assert said, "nothing was sent"
+    return said[0]
+
+
+def test_a_reminder_names_the_hour_and_nothing_else(client, rig, diary, monkeypatch):
+    made = an_appointment(client)
+    message = reminder_body(rig, monkeypatch)
+
+    assert message.title == "Dentist in 30 minutes"
+    assert message.body == "2:00PM"
+    assert message.url == f"/?open=calendar&day={TUESDAY.isoformat()}"
+    assert message.tag == f"appt-{made['id']}"
+
+
+def test_a_reminder_names_a_place_when_one_was_written_down(
+    client, rig, diary, monkeypatch
+):
+    an_appointment(client, location="Dr Alvarez")
+    assert reminder_body(rig, monkeypatch).body == "2:00PM at Dr Alvarez"
+
+
+def test_a_reminder_prefers_the_calendar_it_is_shared_on(
+    client, rig, db_session, make_user, diary, monkeypatch
+):
+    from tests.test_calendar import shelf_for
+    from tests.test_feed import befriend
+
+    other = make_user("other")
+    befriend(db_session, diary, other)
+    shelf = shelf_for(db_session, diary, other)
+    an_appointment(client, location="Dr Alvarez", calendar_ids=[shelf.id])
+
+    assert reminder_body(rig, monkeypatch).body == "2:00PM · Home"
+
+
+def test_a_shorter_lead_time_says_so(client, rig, diary, monkeypatch):
+    lead(rig, diary, 15)
+    an_appointment(client)
+    message = reminder_body(rig, monkeypatch, moment(hour=13, minute=50))
+    assert message.title == "Dentist in 15 minutes"
+
+
+# What the morning note says about the day ahead
+# ----------------------------------------------
+
+
+def test_the_morning_note_asks_for_the_weigh_in_on_its_day(rig, make_user, monkeypatch):
+    user = make_user("member", timezone="America/Phoenix")
+    device(rig, user)
+    message = body_of(rig, user, monkeypatch, MORNING, moment(day=MONDAY))
+
+    assert message.title == "Good morning"
+    assert message.body.startswith("Weigh-in day: log it under Biometrics.")
+
+
+def test_the_morning_note_leaves_the_weigh_in_out_when_the_scale_is_recent(
+    rig, make_user, monkeypatch
+):
+    user = make_user("member", timezone="America/Phoenix")
+    device(rig, user)
+    rig.add(
+        models.WeightEntry(
+            user_id=user.id, date_for=MONDAY - dt.timedelta(days=1), weight_kg=90
+        )
+    )
+    rig.commit()
+
+    message = body_of(rig, user, monkeypatch, MORNING, moment(day=MONDAY))
+    assert "Weigh-in day" not in message.body
+
+
+def test_the_morning_note_names_the_first_appointment_still_to_come(
+    client, rig, signed_in, monkeypatch
+):
+    signed_in.timezone = "America/Phoenix"
+    device(rig, signed_in)
+    rig.commit()
+    an_appointment(client, title="Standup", time_of_day="09:00", end_time="09:15")
+    an_appointment(client, title="Dentist")
+
+    message = body_of(rig, signed_in, monkeypatch, MORNING, moment())
+    assert message.body.endswith("First up, Standup at 9:00AM.")
+
+
+def test_the_morning_note_skips_an_appointment_already_under_way(
+    client, rig, signed_in, monkeypatch
+):
+    signed_in.timezone = "America/Phoenix"
+    device(rig, signed_in)
+    rig.commit()
+    an_appointment(client, title="Standup", time_of_day="07:30", end_time="09:30")
+    an_appointment(client, title="Dentist")
+
+    message = body_of(rig, signed_in, monkeypatch, MORNING, moment())
+    assert "Standup" not in message.body
+    assert message.body.endswith("First up, Dentist at 2:00PM.")
+
+
+def test_the_morning_note_says_nothing_of_a_day_with_nothing_in_it(
+    client, rig, signed_in, monkeypatch
+):
+    signed_in.timezone = "America/Phoenix"
+    device(rig, signed_in)
+    rig.commit()
+
+    message = body_of(rig, signed_in, monkeypatch, MORNING, moment())
+    assert "First up" not in message.body

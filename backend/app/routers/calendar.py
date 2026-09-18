@@ -724,6 +724,52 @@ def instants(
     )
 
 
+def shared_name(row: models.Appointment, sheet: Sheet) -> str:
+    """The calendar this member reads an appointment on, if they are on one.
+
+    A calendar somebody is not a member of is not theirs to be told about, so
+    an invitee who was only asked along gets nothing back.
+    """
+    for calendar_id in sorted(sheet.calendars.get(row.id, [])):
+        if calendar_id in sheet.accepted:
+            shelf = sheet.shelves.get(calendar_id)
+            if shelf is not None:
+                return shelf.name
+    return ""
+
+
+def timed_starts(
+    db: Session, user: models.User, first: dt.date, last: dt.date
+) -> list[tuple[models.Appointment, dt.date, dt.datetime, str]]:
+    """Every timed occurrence this member can see in a window, and when it begins.
+
+    The schedule's view of the calendar, in start order: the appointment, the
+    day of the occurrence, the moment it starts, and the shared calendar the
+    member reads it on. An all-day day has no moment to remind anybody about,
+    and a cancelled one is still on the grid but is not going to happen, so
+    neither is here. A day carved out of a series never reaches this at all,
+    because lands_on drops it.
+    """
+    rows = visible_appointments(db, user, first, last)
+    sheet = gather(db, user, rows)
+    found: list[tuple[models.Appointment, dt.date, dt.datetime, str]] = []
+    for row in rows:
+        skips = sheet.skips.get(row.id, set())
+        for day in occurrence_days(row, skips, first, last):
+            # A span that merely reaches into the window started before it,
+            # and something already under way is not worth a reminder.
+            if not first <= day <= last:
+                continue
+            if sheet.marks.get((row.id, day), False):
+                continue
+            moment = instants(row, day)
+            if moment is None:
+                continue
+            found.append((row, day, moment[0], shared_name(row, sheet)))
+    found.sort(key=lambda each: each[2])
+    return found
+
+
 def next_occurrence(row: models.Appointment, skips: set[dt.date], today: dt.date) -> dt.date:
     """The first day of this appointment on or after today, or else its last.
 

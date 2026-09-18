@@ -4,6 +4,20 @@ Notable changes to Tare, newest first. The format follows
 [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), and Tare uses
 [semantic versioning](https://semver.org/spec/v2.0.0.html).
 
+## Unreleased
+
+### Added
+
+- Notifications say more and ask less. The morning check-in now carries the
+  whole day ahead in one note: the weigh-in ask on the day it is owed, the
+  budget, and the first appointment still to come. A timed appointment reminds
+  you fifteen or thirty minutes before it starts, on a switch of its own, and a
+  day called off or carved out of a series never reminds anybody. The pause
+  after a quiet week became a switch, Weekly check-in, so the note asking how
+  it is going can be turned off without turning off the rest. Invitations and
+  the answers to them moved behind the calendar switch they always belonged
+  with, so there is one switch for everything that moves on a calendar.
+
 ## 0.7.0 - 2026-09-17
 
 ### Added

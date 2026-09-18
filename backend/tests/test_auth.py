@@ -238,9 +238,10 @@ def test_login_answers_with_the_me_payload(client, make_user):
         "notify": {
             "morning": {"on": True, "time": "08:00"},
             "evening": {"on": True, "time": "20:00"},
+            "weekly": {"on": True},
             "weigh_in": {"on": True, "weekday": 0},
+            "reminders": {"on": True, "minutes": 30},
             "calendar": True,
-            "invitations": True,
         },
         "share_age": False,
         "share_sex": False,

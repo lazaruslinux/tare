@@ -33,6 +33,10 @@ QUIET = "quiet"
 # And the one somebody asks for from the Notifications screen.
 TEST = "test"
 
+# The nudge a little before an appointment starts. Scheduled like the check-ins
+# but keyed to one occurrence rather than to an hour of the day.
+REMINDER = "reminder"
+
 # The calendar's, each raised by something another member did.
 APPOINTMENT_ADDED = "appointment_added"
 APPOINTMENT_CHANGED = "appointment_changed"
@@ -58,10 +62,11 @@ PREF_OF: dict[str, str | None] = {
     APPOINTMENT_DELETED: "calendar",
     OCCURRENCE_CANCELLED: "calendar",
     MEMBER_JOINED: "calendar",
-    INVITED: "invitations",
-    INVITATION_ACCEPTED: "invitations",
-    INVITATION_DECLINED: "invitations",
-    CALENDAR_OFFERED: "invitations",
+    INVITED: "calendar",
+    INVITATION_ACCEPTED: "calendar",
+    INVITATION_DECLINED: "calendar",
+    CALENDAR_OFFERED: "calendar",
+    REMINDER: None,
 }
 
 # How long the push service holds one for a phone that is off. A check-in is
@@ -73,6 +78,9 @@ TTL: dict[str, int] = {
     WEIGH_IN: 5400,
     QUIET: 86400,
     TEST: 300,
+    # Replaced at the send by the member's own lead time; this is the default
+    # so a lookup can never raise.
+    REMINDER: 1800,
     APPOINTMENT_ADDED: 86400,
     APPOINTMENT_CHANGED: 86400,
     APPOINTMENT_DELETED: 86400,
@@ -104,6 +112,8 @@ class Event:
     calendar: str = ""
     end_at: dt.time | None = None
     whole_series: bool = False
+    minutes: int = 0
+    location: str = ""
 
 
 @dataclass(frozen=True)
@@ -196,6 +206,7 @@ ON_A_DAY = (
     OCCURRENCE_CANCELLED,
     INVITATION_ACCEPTED,
     INVITATION_DECLINED,
+    REMINDER,
 )
 
 # And the ones that are about one appointment, whichever day that is.
@@ -228,12 +239,41 @@ def _stamp(event: Event, recipient: models.User) -> str:
     return when_text(recipient, event.day, event.at, event.zone, event.end_at)
 
 
-def _scheduled_body(kind: str, facts: dict[str, Any]) -> str:
+def _time_only(event: Event, recipient: models.User) -> str:
+    """The hour alone, moved into the zone the recipient reads."""
+    if event.day is None or event.at is None:
+        return ""
+    here = dt.datetime.combine(
+        event.day, event.at, clock.zone(event.zone or recipient.timezone)
+    ).astimezone(clock.user_tz(recipient))
+    return time_text(here.time(), recipient.clock)
+
+
+def _morning_body(facts: dict[str, Any], recipient: models.User) -> str:
+    """The day ahead in up to three sentences: what is owed, what there is to
+    spend, and what is first. A sentence whose fact is missing is left out
+    rather than written emptily."""
+    said: list[str] = []
+    if facts.get("weigh_ask"):
+        said.append("Weigh-in day: log it under Biometrics.")
+    budget = facts.get("budget")
+    # An account whose numbers are not set up has no figure of its own to
+    # quote, so the line says the day is open instead.
+    said.append(
+        "A new day in your journal."
+        if budget is None
+        else f"Your budget today is {budget:,.0f} cal."
+    )
+    first_up = facts.get("first_up")
+    if first_up:
+        at = time_text(first_up["at"], recipient.clock)
+        said.append(f"First up, {first_up['title']} at {at}.")
+    return " ".join(said)
+
+
+def _scheduled_body(kind: str, facts: dict[str, Any], recipient: models.User) -> str:
     if kind == MORNING:
-        budget = facts.get("budget")
-        if budget is None:
-            return "A new day in your journal. Log breakfast when you have it."
-        return f"Your budget today is {budget:,.0f} cal. Log breakfast when you have it."
+        return _morning_body(facts, recipient)
     if kind == WEIGH_IN:
         if facts.get("ever_weighed"):
             return (
@@ -263,13 +303,24 @@ def compose(
     title = ""
     body = ""
     if kind == MORNING:
-        title, body = "Good morning", _scheduled_body(MORNING, said)
+        title, body = "Good morning", _scheduled_body(MORNING, said, recipient)
     elif kind == WEIGH_IN:
-        title, body = "Weigh-in day", _scheduled_body(WEIGH_IN, said)
+        title, body = "Weigh-in day", _scheduled_body(WEIGH_IN, said, recipient)
     elif kind == EVENING:
-        title, body = "How did today go?", _scheduled_body(EVENING, said)
+        title, body = "How did today go?", _scheduled_body(EVENING, said, recipient)
     elif kind == QUIET:
-        title, body = "How's it going?", _scheduled_body(QUIET, said)
+        title, body = "How's it going?", _scheduled_body(QUIET, said, recipient)
+    elif kind == REMINDER:
+        title = f"{event.title} in {event.minutes} minutes"
+        when = _time_only(event, recipient)
+        # The calendar it is shared on says more than a place does, and a
+        # member only reads a calendar name they are on.
+        if event.calendar:
+            body = f"{when} \u00b7 {event.calendar}"
+        elif event.location:
+            body = f"{when} at {event.location}"
+        else:
+            body = when
     elif kind == TEST:
         title, body = "This is a test", "Notifications reach this device."
     elif kind == APPOINTMENT_ADDED:

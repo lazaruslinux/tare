@@ -395,19 +395,27 @@ def an_event(kind=APPOINTMENT_ADDED, **over):
 
 
 def test_a_switch_that_is_off_stops_the_kinds_behind_it(db_session, make_user, with_push):
+    """One switch covers the whole calendar now, invitations included."""
     user = make_user("member")
     device(db_session, user)
     user.notify = {
         "morning": {"on": True, "time": "08:00"},
         "evening": {"on": True, "time": "20:00"},
+        "weekly": {"on": True},
         "weigh_in": {"on": True, "weekday": 0},
+        "reminders": {"on": True, "minutes": 30},
         "calendar": False,
-        "invitations": True,
     }
     db_session.commit()
 
     notifications.notify([user.id], an_event())
     assert with_push == []
+    # What used to have a switch of its own is behind this one too.
+    notifications.notify([user.id], an_event(INVITED, calendar=""))
+    assert with_push == []
+
+    user.notify = {**user.notify, "calendar": True}
+    db_session.commit()
     notifications.notify([user.id], an_event(INVITED, calendar=""))
     assert len(with_push) == 1
 

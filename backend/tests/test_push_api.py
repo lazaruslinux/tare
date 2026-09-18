@@ -228,16 +228,19 @@ def test_a_fresh_account_is_handed_the_default_switches(client, signed_in):
     notify = client.get("/api/auth/me").json()["notify"]
     assert notify["morning"] == {"on": True, "time": "08:00"}
     assert notify["weigh_in"] == {"on": True, "weekday": 0}
-    assert notify["invitations"] is True
+    assert notify["weekly"] == {"on": True}
+    assert notify["reminders"] == {"on": True, "minutes": 30}
+    assert notify["calendar"] is True
 
 
 def test_the_switches_are_saved_whole_and_read_back(client, signed_in):
     asked = {
         "morning": {"on": False, "time": "07:00"},
         "evening": {"on": True, "time": "21:30"},
+        "weekly": {"on": False},
         "weigh_in": {"on": True, "weekday": 3},
+        "reminders": {"on": True, "minutes": 15},
         "calendar": False,
-        "invitations": True,
     }
     response = client.patch("/api/account", json={"notify": asked})
     assert response.status_code == 200
