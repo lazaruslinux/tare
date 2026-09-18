@@ -147,7 +147,7 @@ export function LogSheet({
             <button
               type="button"
               aria-pressed={byWeight}
-              className="t-chip aria-pressed:border-line-strong aria-pressed:text-text"
+              className="t-chip"
               onClick={() => choose(true)}
             >
               <Scale className="h-3.5 w-3.5" strokeWidth={2.5} />
@@ -156,7 +156,7 @@ export function LogSheet({
             <button
               type="button"
               aria-pressed={!byWeight}
-              className="t-chip aria-pressed:border-line-strong aria-pressed:text-text"
+              className="t-chip"
               onClick={() => choose(false)}
             >
               Servings
@@ -197,7 +197,7 @@ export function LogSheet({
                     key={option}
                     type="button"
                     aria-pressed={unit === option}
-                    className="t-chip aria-pressed:border-line-strong aria-pressed:text-text"
+                    className="t-chip"
                     onClick={() => setUnit(option)}
                   >
                     {UNIT_LABEL[option]}
@@ -224,7 +224,7 @@ export function LogSheet({
               key={option}
               type="button"
               aria-pressed={meal === option}
-              className="t-chip aria-pressed:border-line-strong aria-pressed:text-text"
+              className="t-chip"
               onClick={() => chooseMeal(option)}
             >
               {SLOT_LABEL[option]}

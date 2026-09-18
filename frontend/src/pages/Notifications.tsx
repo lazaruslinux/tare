@@ -24,6 +24,9 @@ import { currentSubscription, subscribe, support, unsubscribe, type PushSupport 
 // say what would be sent to any of them, and save themselves as they are
 // turned.
 
+// The two lead times the server will accept, and nothing between them.
+const MINUTES = [15, 30]
+
 // Monday first, and numbered the way the server counts a weekday.
 const WEEKDAYS = [
   'Monday',
@@ -210,6 +213,9 @@ export function Notifications({
   }
 
   const showMorningTime = prefs.morning.on || prefs.weigh_in.on
+  // This device has a card of its own above, so the list underneath is the
+  // rest of them. Listing it twice was the screen's one contradiction.
+  const others = devices.filter((row) => sub === null || row.endpoint !== sub.endpoint)
 
   return (
     <>
@@ -223,7 +229,7 @@ export function Notifications({
             <p className="text-sm text-muted">Nothing arrives on this device yet.</p>
             <button
               type="button"
-              className="t-btn t-btn-primary mt-3 w-full"
+              className="t-btn t-btn-primary mt-3 w-full sm:w-auto sm:min-w-[16rem]"
               disabled={busy}
               onClick={() => void turnOn()}
             >
@@ -237,10 +243,10 @@ export function Notifications({
         {can === 'off' && mine !== undefined && (
           <>
             <p className="text-sm">This device gets notifications.</p>
-            <div className="mt-3 flex gap-3">
+            <div className="mt-3 flex gap-3 sm:justify-start">
               <button
                 type="button"
-                className="t-btn flex-1"
+                className="t-btn flex-1 sm:max-w-[12rem] sm:flex-none"
                 disabled={busy}
                 onClick={() => void sendTest()}
               >
@@ -248,7 +254,7 @@ export function Notifications({
               </button>
               <button
                 type="button"
-                className="t-btn flex-1"
+                className="t-btn flex-1 sm:max-w-[12rem] sm:flex-none"
                 disabled={busy}
                 onClick={() => void turnOff()}
               >
@@ -261,21 +267,21 @@ export function Notifications({
         {deviceError !== '' && <p className="t-error mt-2">{deviceError}</p>}
       </div>
 
-      <p className="t-micro mb-1">Your devices</p>
+      <p className="t-micro mb-1">Other devices</p>
       <div className="t-card mb-3">
-        {devices.length === 0 ? (
-          <p className="text-sm text-muted">No device is turned on yet.</p>
+        {others.length === 0 ? (
+          <p className="text-sm text-muted">No other device is turned on.</p>
         ) : (
-          devices.map((row) => (
+          others.map((row) => (
             <div key={row.id} className="t-row">
+              {/* Two lines by design: the name on its own, and when it was
+                  added under it, so the row never wraps by accident. */}
               <span className="min-w-0 flex-1">
-                <span className="block text-sm">
-                  {row.label} · added {dateText(row.created_at)}
+                <span className="block truncate text-sm">{row.label}</span>
+                <span className="block text-xs text-muted">
+                  added {dateText(row.created_at)}
                 </span>
               </span>
-              {sub !== null && row.endpoint === sub.endpoint && (
-                <span className="t-chip shrink-0">this one</span>
-              )}
               <button
                 type="button"
                 className="shrink-0 text-sm font-semibold text-danger"
@@ -295,10 +301,10 @@ export function Notifications({
         <p className="t-micro flex-1">Check-ins</p>
         {checkinsSave.saved && <span className="t-chip text-accent">Saved.</span>}
       </div>
-      <div className="t-card mb-1">
+      <div className="t-card mb-3">
         <Switch
           label="Morning check-in"
-          note="A note to start the day, with your budget."
+          note="A note to start your day, and your first appointment. If it's your weigh-in day, you'll also be reminded here."
           checked={prefs.morning.on}
           onChange={(next) =>
             patch(checkinsSave.run, { ...prefs, morning: { ...prefs.morning, on: next } }, prefs)
@@ -310,13 +316,14 @@ export function Notifications({
           <TimeCombo
             id="notify-morning"
             label="Morning time"
+            beside
             value={prefs.morning.time}
             onChange={(next) => setTime('morning', next)}
           />
         </Fold>
         <Switch
           label="Evening check-in"
-          note="Only when something is missing from today's journal."
+          note="A reminder to finish your journal for the day."
           checked={prefs.evening.on}
           onChange={(next) =>
             patch(checkinsSave.run, { ...prefs, evening: { ...prefs.evening, on: next } }, prefs)
@@ -326,16 +333,21 @@ export function Notifications({
           <TimeCombo
             id="notify-evening"
             label="Evening time"
+            beside
             value={prefs.evening.time}
             onChange={(next) => setTime('evening', next)}
           />
         </Fold>
+        <Switch
+          label="Weekly check-in"
+          note="After 7 days of inactivity, daily notifications will pause."
+          checked={prefs.weekly.on}
+          onChange={(next) =>
+            patch(checkinsSave.run, { ...prefs, weekly: { on: next } }, prefs)
+          }
+        />
         {checkinsSave.error && <p className="t-error mt-2">{checkinsSave.error}</p>}
       </div>
-      <p className="mb-3 text-xs text-muted">
-        After a quiet week the check-ins pause, and one note a week asks how it is going until you
-        log again.
-      </p>
 
       <div className="mb-1 flex min-h-7 items-center gap-3">
         <p className="t-micro flex-1">Weekly weigh-in</p>
@@ -344,7 +356,7 @@ export function Notifications({
       <div className="t-card mb-3">
         <Switch
           label="Weekly weigh-in"
-          note="Instead of the morning check-in, on the day you choose."
+          note="Tare recommends weekly weigh-ins, not daily. Select this to get a reminder once a week."
           checked={prefs.weigh_in.on}
           onChange={(next) =>
             patch(weighSave.run, { ...prefs, weigh_in: { ...prefs.weigh_in, on: next } }, prefs)
@@ -386,17 +398,54 @@ export function Notifications({
         {calendarSave.saved && <span className="t-chip text-accent">Saved.</span>}
       </div>
       <div className="t-card mb-3">
+        {/* What this member arranged, and what other people did to it: two
+            different questions, so they are asked apart. */}
+        <p className="t-micro mb-1">Personal</p>
         <Switch
-          label="Calendar changes"
-          note="Added, changed or cancelled on a calendar you share."
+          label="Appointment reminders"
+          checked={prefs.reminders.on}
+          onChange={(next) =>
+            patch(
+              calendarSave.run,
+              { ...prefs, reminders: { ...prefs.reminders, on: next } },
+              prefs
+            )
+          }
+        />
+        <Fold shown={prefs.reminders.on}>
+          <div className="t-row">
+            <label className="flex-1 text-sm" htmlFor="notify-minutes">
+              Time before
+            </label>
+            <select
+              id="notify-minutes"
+              className="t-input max-w-[55%]"
+              value={prefs.reminders.minutes}
+              onChange={(event) =>
+                patch(
+                  calendarSave.run,
+                  {
+                    ...prefs,
+                    reminders: { ...prefs.reminders, minutes: Number(event.target.value) },
+                  },
+                  prefs
+                )
+              }
+            >
+              {MINUTES.map((each) => (
+                <option key={each} value={each}>
+                  {each} min
+                </option>
+              ))}
+            </select>
+          </div>
+        </Fold>
+        <p className="t-micro mt-3 mb-1">Shared</p>
+        <Switch
+          label="Calendar updates"
+          note="Changes on calendars you share, invitations, the answers to yours, and a calendar offered to you."
           checked={prefs.calendar}
           onChange={(next) => patch(calendarSave.run, { ...prefs, calendar: next }, prefs)}
-        />
-        <Switch
-          label="Invitations"
-          note="Invitations to appointments and calendars, and the answers to yours."
-          checked={prefs.invitations}
-          onChange={(next) => patch(calendarSave.run, { ...prefs, invitations: next }, prefs)}
         />
         {calendarSave.error && <p className="t-error mt-2">{calendarSave.error}</p>}
       </div>

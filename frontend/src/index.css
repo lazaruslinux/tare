@@ -235,6 +235,17 @@
     font-weight: 600;
   }
 
+  /* Chosen, and unmistakably so. A chip rests on --surface-2 already, so a
+     tint of it says nothing; the accent filled in is the only ground left
+     that reads as picked from across a room, with the page's own ground for
+     ink. Every chip that carries aria-pressed gets this, so a screen never
+     invents its own idea of what selected looks like. */
+  .t-chip[aria-pressed='true'] {
+    border-color: var(--accent);
+    background: var(--accent);
+    color: var(--bg);
+  }
+
   /* Where a picture would be. A camera rather than a letter, so the tile says
      what is missing and, where it is a button, what tapping it does. Sized by
      whatever it sits in: 40px beside a row, 96px in a form. */

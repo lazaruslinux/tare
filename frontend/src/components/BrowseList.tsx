@@ -119,7 +119,7 @@ export function BrowseList({
           <button
             key={option}
             type="button"
-            className="t-chip t-tap44 min-w-9 shrink-0 justify-center aria-pressed:border-line-strong aria-pressed:text-text"
+            className="t-chip t-tap44 min-w-9 shrink-0 justify-center"
             aria-pressed={letter === option}
             onClick={() => setLetter(letter === option ? '' : option)}
           >
@@ -133,7 +133,7 @@ export function BrowseList({
           <button
             key={option.slug || 'all'}
             type="button"
-            className="t-chip t-tap44 shrink-0 aria-pressed:border-line-strong aria-pressed:text-text"
+            className="t-chip t-tap44 shrink-0"
             aria-pressed={section === option.slug}
             onClick={() => setSection(option.slug)}
           >

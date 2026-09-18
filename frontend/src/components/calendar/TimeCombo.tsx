@@ -44,12 +44,17 @@ export function TimeCombo({
   label,
   value,
   anchor,
+  beside,
   onChange,
 }: {
   id: string
   label: string
   // "HH:MM", or empty for none.
   value: string
+  // A settings row rather than a form field: the label sits beside the field
+  // and the field stops at a readable width, the way a select row does. A
+  // sheet keeps the label above, where the field is one of several stacked.
+  beside?: boolean
   // Where the list opens when the field is empty: the Ends field takes the
   // Starts time, so a lunch at eleven opens its end list at eleven. It
   // positions the list and never picks anything.
@@ -127,11 +132,14 @@ export function TimeCombo({
   }
 
   return (
-    <div ref={box} className="min-w-0">
-      <label className="t-label" htmlFor={id}>
+    <div
+      ref={box}
+      className={beside === true ? 't-row min-w-0' : 'min-w-0'}
+    >
+      <label className={beside === true ? 'flex-1 text-sm' : 't-label'} htmlFor={id}>
         {label}
       </label>
-      <div className="relative">
+      <div className={beside === true ? 'relative w-[12rem] max-w-[55%]' : 'relative'}>
         <input
           id={id}
           className="t-input pr-12"
@@ -158,7 +166,7 @@ export function TimeCombo({
           type="button"
           aria-label={`Pick a time for ${label.toLowerCase()}`}
           aria-expanded={open}
-          className="absolute top-1/2 right-1 flex h-11 w-11 -translate-y-1/2 items-center justify-center rounded-[0.5rem] bg-surface text-muted"
+          className="absolute top-1/2 right-1 flex h-11 w-11 -translate-y-1/2 items-center justify-center text-muted"
           onClick={() => setOpen(!open)}
         >
           <Clock className="h-4 w-4" strokeWidth={2} />

@@ -480,7 +480,7 @@ export function AppointmentSheet({
                   <button
                     type="button"
                     aria-pressed={chosen.length === 0}
-                    className="t-chip t-tap44 aria-pressed:border-line-strong aria-pressed:text-text"
+                    className="t-chip t-tap44"
                     onClick={() => setChosen([])}
                   >
                     <Dot color={PERSONAL} /> Only mine
@@ -490,7 +490,7 @@ export function AppointmentSheet({
                       key={shelf.id}
                       type="button"
                       aria-pressed={chosen.includes(shelf.id)}
-                      className="t-chip t-tap44 aria-pressed:border-line-strong aria-pressed:text-text"
+                      className="t-chip t-tap44"
                       onClick={() => toggleCalendar(shelf.id)}
                     >
                       <Dot color={colorToken(shelf.color)} /> {shelf.name}
@@ -500,7 +500,7 @@ export function AppointmentSheet({
                     <button
                       type="button"
                       aria-pressed={chosen.length === shelves.length}
-                      className="t-chip t-tap44 aria-pressed:border-line-strong aria-pressed:text-text"
+                      className="t-chip t-tap44"
                       onClick={() => setChosen(shelves.map((shelf) => shelf.id))}
                     >
                       All

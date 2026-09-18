@@ -35,9 +35,12 @@ export type DashboardCard = { key: DashboardCardKey; shown: boolean }
 export type NotifyPrefs = {
   morning: { on: boolean; time: string }
   evening: { on: boolean; time: string }
+  weekly: { on: boolean }
   weigh_in: { on: boolean; weekday: number }
+  // Fifteen or thirty minutes before a timed appointment, and nothing else:
+  // the server refuses any other number.
+  reminders: { on: boolean; minutes: number }
   calendar: boolean
-  invitations: boolean
 }
 
 // One device notifications were turned on for. The endpoint is the address

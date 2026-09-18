@@ -238,7 +238,7 @@ export function RepeatSheet({
             key={one.value}
             type="button"
             aria-pressed={held.pattern === one.value}
-            className="t-chip t-tap44 aria-pressed:border-line-strong aria-pressed:text-text"
+            className="t-chip t-tap44"
             onClick={() => set('pattern', one.value)}
           >
             {one.label}
