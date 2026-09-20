@@ -4,6 +4,23 @@ Notable changes to Tare, newest first. The format follows
 [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), and Tare uses
 [semantic versioning](https://semver.org/spec/v2.0.0.html).
 
+## Unreleased
+
+### Changed
+
+- A chosen chip fills with a deeper green than the app writes in, so a row of
+  them reads as chosen in the dark theme without lighting up the page. A chip
+  that stands for a colour fills in that colour instead: the lines over the
+  Progress chart and the lanes on a workout each wear their own, and a shared
+  calendar keeps its dot and takes a ring so it still shows on the fill.
+
+### Fixed
+
+- Text on a chosen chip could be painted over by a colour of the chip's own,
+  which left the day's Complete mark, the range above the Progress chart and
+  the mealtimes on an auto-log unreadable, and drew the weight line's chip
+  green on green. A chip also lost its ink while the pointer was on it.
+
 ## 0.8.0 - 2026-09-18
 
 ### Added

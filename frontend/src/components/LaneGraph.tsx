@@ -3,7 +3,13 @@
 // because a beat and a pace are different measurements and share nothing but
 // the minutes underneath.
 
-import { useRef, useState, type PointerEvent, type RefObject } from 'react'
+import {
+  useRef,
+  useState,
+  type CSSProperties,
+  type PointerEvent,
+  type RefObject,
+} from 'react'
 
 import type { WorkoutSample } from '../api'
 import { distanceIn, elapsedText, paceFromUnit, paceText } from '../lib/units'
@@ -287,14 +293,10 @@ export function LaneGraph({
             <button
               key={lane.key}
               type="button"
-              className="t-chip"
+              className="t-chip t-chip-line"
               aria-pressed={shown[lane.key]}
               // The lane's own colour, so a chip wears the line it turns off.
-              style={
-                shown[lane.key]
-                  ? { borderColor: lane.colour, color: lane.colour }
-                  : undefined
-              }
+              style={{ '--line-colour': lane.colour } as CSSProperties}
               onClick={() => {
                 setShown({ ...shown, [lane.key]: !shown[lane.key] })
                 // A lane arriving or leaving would leave the rule half drawn

@@ -29,6 +29,14 @@
   --label: #c4c0ba;
   --accent: #93c29e;
   --accent-strong: #9dcba8;
+  /* The ground under something chosen. Always the darker side of the pair and
+     always the lighter side for its ink, whichever way the theme runs: on this
+     ground the accent itself is the lightest thing on the page, and a chip
+     filled with it reads as a lamp rather than as a choice. The value is the
+     accent at 32% over --bg, written out because a color-mix here compiles to
+     a fallback of the bare accent. */
+  --chosen: #3d4a3e;
+  --chosen-ink: var(--text);
   /* Waiting on somebody else. Amber rather than a third green, because the
      one thing this colour must not read as is done. */
   --pending: #d9a441;
@@ -77,6 +85,10 @@
   /* 4.9:1 on --surface-2, the darkest of the three light grounds. */
   --accent: #416f52;
   --accent-strong: #386649;
+  /* On oat the accent is already the darker side, so a chosen thing fills with
+     it and writes in the page's own ground, which is what shipped. */
+  --chosen: var(--accent);
+  --chosen-ink: var(--bg);
   /* Darkened from the dark theme's amber until it clears the 4.5:1 floor as
      text too, which is what it is on this ground: 4.6:1 on --surface-2. The
      hue is held where it was, so it stays amber rather than turning brown. */
@@ -236,14 +248,38 @@
   }
 
   /* Chosen, and unmistakably so. A chip rests on --surface-2 already, so a
-     tint of it says nothing; the accent filled in is the only ground left
-     that reads as picked from across a room, with the page's own ground for
-     ink. Every chip that carries aria-pressed gets this, so a screen never
-     invents its own idea of what selected looks like. */
+     tint of it says nothing; it fills instead, with the accent hairline still
+     drawn around it. The fill is --chosen rather than the accent itself, which
+     is what keeps the same rule calm on graphite and on oat. Every chip that
+     carries aria-pressed gets this, so a screen never invents its own idea of
+     what selected looks like. */
   .t-chip[aria-pressed='true'] {
     border-color: var(--accent);
-    background: var(--accent);
+    background: var(--chosen);
+    color: var(--chosen-ink);
+  }
+
+  /* A legend chip wears the line it turns off, so its chosen ground is its own
+     colour rather than the app's one green. The same principle as the chip
+     above: the ground is the dark side and the ink the light side, which on
+     graphite means a tint of the line and on oat means the line itself. The
+     colour arrives as --line-colour, set where the chip is written. */
+  .t-chip-line[aria-pressed='true'] {
+    border-color: var(--line-colour);
+    background: color-mix(in srgb, var(--line-colour) 22%, var(--bg));
+    color: var(--line-colour);
+  }
+  [data-theme='light'] .t-chip-line[aria-pressed='true'] {
+    background: var(--line-colour);
     color: var(--bg);
+  }
+
+  /* A colour standing for something, sitting on a chip. Its own colour is the
+     point, so it keeps it and takes a ring of the chip's ink instead: on oat
+     the calendar colours are as dark as the fill they land on, and a dot the
+     same weight as its ground is no mark at all. */
+  .t-chip[aria-pressed='true'] .t-dot {
+    box-shadow: 0 0 0 1px var(--chosen-ink);
   }
 
   /* Where a picture would be. A camera rather than a letter, so the tile says
@@ -1197,6 +1233,15 @@
     }
     .t-tap44:hover {
       color: var(--text);
+    }
+    /* A filled chip keeps its own ink under the pointer, the way the filled
+       buttons above do: the rule for .t-tap44 sits later in this layer and
+       would otherwise repaint the label to --text on the fill. */
+    .t-chip[aria-pressed='true']:hover {
+      color: var(--chosen-ink);
+    }
+    .t-chip-line[aria-pressed='true']:hover {
+      color: var(--line-colour);
     }
     /* A ring under the pointer: its track comes up one step, to the hairline
        the cards are drawn in and never to the accent, so a ring with nothing

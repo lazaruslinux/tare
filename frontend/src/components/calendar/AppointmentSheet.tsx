@@ -615,7 +615,7 @@ function Dot({ color }: { color: string }) {
   return (
     <span
       aria-hidden="true"
-      className="h-2 w-2 shrink-0 rounded-full"
+      className="t-dot h-2 w-2 shrink-0 rounded-full"
       style={{ background: color }}
     />
   )

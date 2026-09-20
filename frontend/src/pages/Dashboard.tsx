@@ -4,6 +4,7 @@ import {
   useEffect,
   useRef,
   useState,
+  type CSSProperties,
   type PointerEvent,
   type ReactNode,
 } from 'react'
@@ -494,10 +495,10 @@ function LineChips({ lines, onPick }: { lines: Lines; onPick: (next: Lines) => v
           key={spec.key}
           type="button"
           aria-pressed={lines[spec.key]}
-          className="t-chip"
+          className="t-chip t-chip-line"
           // The colours are chart tokens rather than palette ones, so a chip
           // wears its line's colour directly.
-          style={lines[spec.key] ? { borderColor: spec.colour, color: spec.colour } : undefined}
+          style={{ '--line-colour': spec.colour } as CSSProperties}
           onClick={() => {
             const next = { ...lines, [spec.key]: !lines[spec.key] }
             if (LINE_SPECS.some((one) => next[one.key])) onPick(next)
@@ -1656,7 +1657,7 @@ export function Dashboard({
           key={row.days}
           type="button"
           aria-pressed={span === row.days}
-          className={`t-chip ${span === row.days ? 'border-line-strong text-text' : ''}`}
+          className="t-chip"
           onClick={() => setSpan(row.days)}
         >
           {row.label}

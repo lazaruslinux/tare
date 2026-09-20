@@ -505,7 +505,7 @@ export function PortionSheet({
                 >
                   {/* A check, because several of these can be on at once. */}
                   {autoLog !== undefined && meals.includes(option) && (
-                    <Check className="h-3.5 w-3.5 text-accent" strokeWidth={2.5} />
+                    <Check className="h-3.5 w-3.5" strokeWidth={2.5} />
                   )}
                   {SLOT_LABEL[option]}
                 </button>

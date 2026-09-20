@@ -113,9 +113,7 @@ export function TopBar({
         {mark !== null && (
           <button
             type="button"
-            className={`t-chip t-tap44 shrink-0 ${
-              mark.done ? 'border-accent text-accent' : ''
-            }`}
+            className="t-chip t-tap44 shrink-0"
             aria-label={mark.label}
             aria-pressed={mark.done}
             onClick={onToggleMark}
@@ -128,7 +126,7 @@ export function TopBar({
                 className="h-4 w-4"
                 strokeWidth={2.5}
                 fill="currentColor"
-                stroke="var(--bg)"
+                stroke="var(--chosen)"
               />
             ) : (
               <CircleCheck className="h-4 w-4" strokeWidth={2.5} />
