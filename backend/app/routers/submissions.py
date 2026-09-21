@@ -62,6 +62,9 @@ MISSING_PHOTO = "That photo is not there to attach."
 # front alone is what can honestly be asked for.
 NO_FRONT = "Add a photo of the front of the pack."
 NO_LABEL = "Add a photo of the nutrition label."
+# The aisle a shared food is browsed by. Whoever is holding the packet knows
+# which one it came off, so they are the one asked.
+NO_SECTION = "Pick a section."
 
 def check_serving(servings: Sequence[object] | None) -> None:
     """Refuse a food nobody has said the size of.
@@ -235,11 +238,13 @@ def submit_new_food(
         if held is not None:
             raise HTTPException(status.HTTP_400_BAD_REQUEST, ALREADY_MINE)
 
-    # Both checks before anything is written, so a refusal leaves the upload
-    # exactly where it was and the form can be sent again. The aisle is not
-    # asked for: a reviewer picks it when the food is approved.
+    # All three checks before anything is written, so a refusal leaves the
+    # upload exactly where it was and the form can be sent again. The aisle is
+    # asked for here; a slug nothing browses by is refused further in.
     check_photos(body.photo_id is not None, body.label_photo_id is not None)
     check_serving(body.servings)
+    if not body.section.strip():
+        raise HTTPException(status.HTTP_400_BAD_REQUEST, NO_SECTION)
     food = models.Food(
         status="pending",
         owner_id=user.id,
@@ -297,6 +302,8 @@ def submit_own_food(
         body.label_photo_id is not None,
     )
     check_serving(food.servings)
+    # No aisle check here. A private food stores a blank section as "other", so
+    # a skipped one and a chosen Other read the same; the form asks before this.
     food.status = "pending"
     submission = offering(
         "new",

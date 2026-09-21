@@ -4,6 +4,14 @@ Notable changes to Tare, newest first. The format follows
 [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), and Tare uses
 [semantic versioning](https://semver.org/spec/v2.0.0.html).
 
+## Unreleased
+
+### Changed
+
+- Offering a food to everyone now asks for its section. The choice to leave it
+  to the reviewer is gone, and Other is still there for a food that fits
+  nowhere else.
+
 ## 0.8.1 - 2026-09-19
 
 ### Changed

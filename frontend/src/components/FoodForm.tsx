@@ -438,9 +438,9 @@ export function FoodForm({
       setError(NO_SERVING)
       return
     }
-    // Whoever offers a food may leave the aisle to the reviewer, and the
-    // reviewer is the one who cannot: it is what the approved food is browsed by.
-    if (review !== undefined && !section) {
+    // Whoever is asked the aisle answers it, the member offering the food and
+    // the reviewer alike: it is what the approved food is browsed by.
+    if (asksSection && !section) {
       setSectionError(NO_SECTION)
       return
     }
@@ -740,7 +740,7 @@ export function FoodForm({
           {asksSection && (
             <div className="mt-3">
               <label className="t-label" htmlFor="food-section">
-                {review !== undefined ? 'Section' : 'Section (optional)'}
+                Section
               </label>
               <select
                 id="food-section"
@@ -751,9 +751,7 @@ export function FoodForm({
                   setSectionError('')
                 }}
               >
-                <option value="">
-                  {review !== undefined ? 'Pick a section' : 'Let the reviewer pick'}
-                </option>
+                <option value="">Pick a section</option>
                 {SECTIONS.map((row) => (
                   <option key={row.slug} value={row.slug}>
                     {row.label}
