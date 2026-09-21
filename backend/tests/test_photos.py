@@ -153,6 +153,31 @@ def test_a_file_that_is_not_an_image_is_refused_in_one_sentence(client, signed_i
     assert response.json() == {"detail": "That file is not an image this server can read."}
 
 
+def test_an_image_in_a_format_no_phone_sends_is_refused_and_nothing_is_stored(
+    client, db_session, signed_in
+):
+    # Real pictures, every one. They are refused for the decoder they would
+    # wake, not for anything wrong with them.
+    for fmt in ("TIFF", "GIF", "BMP", "ICO"):
+        response = upload(client, picture(size=(64, 48), fmt=fmt))
+        assert response.status_code == 400, fmt
+        assert response.json() == {"detail": "That file is not an image this server can read."}
+    assert db_session.query(models.FoodPhoto).count() == 0
+
+
+def test_the_three_formats_a_phone_sends_are_all_taken(client, signed_in):
+    for fmt in ("JPEG", "PNG", "WEBP"):
+        assert upload(client, picture(fmt=fmt)).status_code == 201, fmt
+
+
+def test_a_jpeg_carrying_a_second_picture_is_still_a_jpeg(client, signed_in):
+    # What an iPhone writes for a portrait shot: one JPEG with another behind it.
+    out = io.BytesIO()
+    first = Image.new("RGB", (240, 180), (120, 160, 130))
+    first.save(out, format="MPO", save_all=True, append_images=[first.copy()])
+    assert upload(client, out.getvalue()).status_code == 201
+
+
 def test_a_canvas_bigger_than_this_server_will_decode_is_refused(
     client, signed_in, monkeypatch
 ):

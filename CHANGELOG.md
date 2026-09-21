@@ -24,6 +24,13 @@ Notable changes to Tare, newest first. The format follows
 - A sheet now stays above the phone keyboard, so the amount field is visible
   while logging a scanned food.
 
+### Security
+
+- A photo is read as a JPEG, a PNG or a WebP and as nothing else. The server
+  already rebuilt every picture it kept and refused anything that was not one;
+  it now also leaves alone the forty other formats it could open and no phone
+  sends.
+
 ## 0.8.1 - 2026-09-19
 
 ### Changed

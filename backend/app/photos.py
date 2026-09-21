@@ -32,6 +32,11 @@ MAX_UPLOAD_BYTES = 10 * 1024 * 1024
 MAX_PIXELS = 25_000_000
 Image.MAX_IMAGE_PIXELS = MAX_PIXELS
 
+# What a phone sends, and nothing else. Pillow will open some forty formats if
+# it is let, and every decoder it never needs is code a crafted file can reach.
+# A JPEG with a second picture behind it is opened by the JPEG reader too.
+FORMATS = ("JPEG", "PNG", "WEBP")
+
 # How large a stored picture is allowed to be, by what it is for. A label has
 # small print somebody has to read, so it keeps its detail; a front is a pack
 # on a shelf at thumbnail size and does not. A dish is looked at the way a
@@ -104,9 +109,9 @@ def _decoded(raw: bytes) -> Image.Image:
     try:
         # verify() leaves the object unusable, so it is opened twice: once to
         # check the file is whole, once to work with.
-        probe = Image.open(io.BytesIO(raw))
+        probe = Image.open(io.BytesIO(raw), formats=FORMATS)
         probe.verify()
-        image = Image.open(io.BytesIO(raw))
+        image = Image.open(io.BytesIO(raw), formats=FORMATS)
     except (
         Image.DecompressionBombError,
         UnidentifiedImageError,
