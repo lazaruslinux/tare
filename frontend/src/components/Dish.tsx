@@ -1,13 +1,13 @@
 import { CalendarSync } from 'lucide-react'
-import { useEffect, useState, type ChangeEvent } from 'react'
+import { useEffect, useState } from 'react'
 
 import { api, dishPhoto, errorText, upload, type AutoLog } from '../api'
-import { MAX_PHOTO_BYTES, PHOTO_TOO_LARGE } from '../lib/community'
 import { SLOT_LABEL, slotByTime, type Slot } from '../lib/day'
 import { ConfirmSheet } from './ConfirmSheet'
 import { DISH_ICON, DISH_LABEL } from './FoodRows'
 import { Lightbox } from './Lightbox'
 import { LogSheet } from './LogSheet'
+import { PhotoPick } from './PhotoPick'
 
 // The two things a recipe page and a meal page do the same way: the picture of
 // what was made, and the standing instruction to log it every day. They live
@@ -40,19 +40,11 @@ export function DishPhoto({
   const [asking, setAsking] = useState(false)
   const field = `dish-photo-${kind}-${id}`
 
-  const take = async (event: ChangeEvent<HTMLInputElement>) => {
-    const file = event.target.files?.[0]
-    // Cleared either way, so choosing the same file twice still fires.
-    event.target.value = ''
-    if (!file) return
+  const take = async (file: File, rotate: number) => {
     setError('')
-    if (file.size > MAX_PHOTO_BYTES) {
-      setError(PHOTO_TOO_LARGE)
-      return
-    }
     setSending(true)
     try {
-      const { photo_id } = await upload<{ photo_id: number }>('/photos', file, 'dish')
+      const { photo_id } = await upload<{ photo_id: number }>('/photos', file, 'dish', rotate)
       await dishPhoto(kind, id, photo_id)
       await onChanged()
     } catch (failure) {
@@ -94,14 +86,11 @@ export function DishPhoto({
           />
         </button>
       )}
-      <input
+      <PhotoPick
         id={field}
-        className="sr-only"
-        type="file"
-        accept="image/*"
-        capture="environment"
         disabled={sending}
-        onChange={(event) => void take(event)}
+        onPicked={(file, rotate) => void take(file, rotate)}
+        onRefused={setError}
       />
       {url !== null && (
         <div className="flex items-center gap-3">

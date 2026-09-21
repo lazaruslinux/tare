@@ -1,10 +1,10 @@
 import { Camera, X } from 'lucide-react'
-import { useId, useState, type ChangeEvent } from 'react'
+import { useId, useState } from 'react'
 
 import { errorText, upload, type PhotoPurpose } from '../api'
-import { MAX_PHOTO_BYTES, PHOTO_TOO_LARGE } from '../lib/community'
 import { ConfirmSheet } from './ConfirmSheet'
 import { Lightbox } from './Lightbox'
+import { PhotoPick } from './PhotoPick'
 
 // The two pictures a food submitted to everybody carries: the front of the
 // item, which is what somebody recognises it by, and the nutrition label,
@@ -57,18 +57,10 @@ function Tile({
   const [asking, setAsking] = useState(false)
   const shown = photoId === null ? (standing ?? null) : `/api/photos/${photoId}.webp`
 
-  const take = async (event: ChangeEvent<HTMLInputElement>) => {
-    const file = event.target.files?.[0]
-    // Cleared either way, so choosing the same file twice still fires.
-    event.target.value = ''
-    if (!file) return
-    if (file.size > MAX_PHOTO_BYTES) {
-      onFailed(PHOTO_TOO_LARGE)
-      return
-    }
+  const take = async (file: File, rotate: number) => {
     setUploading(true)
     try {
-      const { photo_id } = await upload<{ photo_id: number }>('/photos', file, purpose)
+      const { photo_id } = await upload<{ photo_id: number }>('/photos', file, purpose, rotate)
       onPicked(photo_id)
     } catch (failure) {
       onFailed(errorText(failure))
@@ -126,14 +118,11 @@ function Tile({
           />
         </div>
       )}
-      <input
+      <PhotoPick
         id={field}
-        className="sr-only"
-        type="file"
-        accept="image/*"
-        capture="environment"
         disabled={busy || uploading}
-        onChange={take}
+        onPicked={(file, rotate) => void take(file, rotate)}
+        onRefused={onFailed}
       />
       <p className="mt-2 text-sm">{title}</p>
       <p className="text-xs text-muted">{uploading ? 'Adding' : note}</p>

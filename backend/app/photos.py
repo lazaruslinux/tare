@@ -135,6 +135,25 @@ def _decoded(raw: bytes) -> Image.Image:
     return ImageOps.exif_transpose(image).convert("RGB")
 
 
+# The quarter turns a member may ask for, in degrees clockwise as they see the
+# picture. Pillow counts the other way round, so 90 clockwise is ROTATE_270.
+_TURNS = {
+    90: Image.Transpose.ROTATE_270,
+    180: Image.Transpose.ROTATE_180,
+    270: Image.Transpose.ROTATE_90,
+}
+
+
+def _turned(image: Image.Image, rotate: int) -> Image.Image:
+    """The picture the quarter turns the member asked for, or as it came.
+
+    Transposed rather than rotated: an exact quarter turn moves whole pixels,
+    and Image.rotate resamples them for no reason.
+    """
+    turn = _TURNS.get(rotate)
+    return image if turn is None else image.transpose(turn)
+
+
 def _fitted(image: Image.Image, max_edge: int) -> Image.Image:
     """Scaled so the longest edge is at most max_edge, never enlarged: growing a
     small picture invents detail and pays bytes for it."""
@@ -205,17 +224,21 @@ def write_thumb(raw: bytes, name: str) -> None:
     _write(thumb_name(name), encode(raw, THUMB_EDGE, square=True, quality=THUMB_QUALITY))
 
 
-def store(raw: bytes, purpose: str) -> str:
+def store(raw: bytes, purpose: str, rotate: int = 0) -> str:
     """Encode an upload, write it, and answer with the name it was given.
 
     The name is random rather than derived from a row id: the file is written
     before the row exists, so that an upload this server will not store never
     leaves an id behind.
+
+    rotate is the quarter turns the member asked for before it was sent, in
+    degrees clockwise. It is applied before anything is cut, so the small copy
+    is the same way up as the picture it stands for.
     """
     # Decoded once and used twice: the thumb is cut from the full-resolution
     # picture in memory, so it is the same square a second decode would give.
     with _encoding:
-        decoded = _decoded(raw)
+        decoded = _turned(_decoded(raw), rotate)
         encoded = _built(decoded, MAX_EDGES[purpose], purpose in SQUARE, QUALITY)
         small = (
             _built(decoded, THUMB_EDGE, True, THUMB_QUALITY) if purpose in THUMBED else None

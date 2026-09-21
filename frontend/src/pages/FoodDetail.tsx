@@ -8,7 +8,7 @@ import {
   Trash2,
   UserRound,
 } from 'lucide-react'
-import { useEffect, useState, type ChangeEvent } from 'react'
+import { useEffect, useState } from 'react'
 
 import { api, errorText, upload, type AutoLog, type Food, type Me } from '../api'
 import { ConfirmSheet } from '../components/ConfirmSheet'
@@ -22,13 +22,12 @@ import {
 } from '../components/NutritionLabel'
 import { PortionSheet } from '../components/PortionSheet'
 import { Lightbox } from '../components/Lightbox'
+import { PhotoPick } from '../components/PhotoPick'
 import { RoleMark } from '../components/RoleMark'
 import { Sheet } from '../components/Sheet'
 import { useTopBar } from '../hooks/useTopBar'
 import {
   KIND_LABEL,
-  MAX_PHOTO_BYTES,
-  PHOTO_TOO_LARGE,
   SENT_FOR_REVIEW,
   changeLine,
   sectionLabel,
@@ -196,19 +195,11 @@ export function FoodDetail({
   // Your own: the picture goes straight on it and rides along if you ever
   // submit it. Everybody's: a picture of a shared food is a proposal like any
   // other.
-  const takePhoto = async (event: ChangeEvent<HTMLInputElement>, current: Food) => {
-    const file = event.target.files?.[0]
-    // Cleared either way, so choosing the same file twice still fires.
-    event.target.value = ''
-    if (!file) return
+  const takePhoto = async (file: File, rotate: number, current: Food) => {
     setError('')
-    if (file.size > MAX_PHOTO_BYTES) {
-      setError(PHOTO_TOO_LARGE)
-      return
-    }
     setSending(true)
     try {
-      const { photo_id } = await upload<{ photo_id: number }>('/photos', file, 'front')
+      const { photo_id } = await upload<{ photo_id: number }>('/photos', file, 'front', rotate)
       if (current.mine) {
         await attachFront(current, photo_id)
         return
@@ -331,14 +322,11 @@ export function FoodDetail({
                           {food.mine ? 'Add a photo of the front' : 'Submit a photo of the front'}
                         </span>
                       </label>
-                      <input
+                      <PhotoPick
                         id="detail-photo"
-                        className="sr-only"
-                        type="file"
-                        accept="image/*"
-                        capture="environment"
                         disabled={sending}
-                        onChange={(event) => takePhoto(event, food)}
+                        onPicked={(file, rotate) => void takePhoto(file, rotate, food)}
+                        onRefused={setError}
                       />
                     </>
                   )}

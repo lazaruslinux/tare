@@ -30,6 +30,7 @@ MISSING_PHOTO = "There is no such photo."
 NO_FILE = "Choose a picture to attach."
 TOO_LARGE = "A photo must be at most 10 MB."
 BAD_PURPOSE = "A photo is of the front, of the label, or of a finished dish."
+BAD_ROTATE = "A photo turns a quarter at a time."
 # The same sentence the food router gives, for the same reason: an upload that
 # is not this member's, or is already on something, is simply absent.
 MISSING_PHOTO_TO_ATTACH = "That photo is not there to attach."
@@ -310,6 +311,7 @@ def _sweep(db: Session) -> None:
 def upload_photo(
     file: UploadFile = File(default=None),
     purpose: str = Form(default="front"),
+    rotate: int = Form(default=0),
     db: Session = Depends(get_db),
     user: models.User = Depends(require_user),
 ) -> dict[str, int]:
@@ -323,6 +325,10 @@ def upload_photo(
         raise HTTPException(status.HTTP_400_BAD_REQUEST, NO_FILE)
     if purpose not in models.PHOTO_PURPOSES:
         raise HTTPException(status.HTTP_400_BAD_REQUEST, BAD_PURPOSE)
+    # The turn the member made in the preview before they sent it. Anything but
+    # a quarter is a caller this screen did not write.
+    if rotate not in (0, 90, 180, 270):
+        raise HTTPException(status.HTTP_400_BAD_REQUEST, BAD_ROTATE)
     # One byte past the ceiling is enough to know it is over it, and is the
     # most this ever holds.
     raw = file.file.read(photos.MAX_UPLOAD_BYTES + 1)
@@ -332,7 +338,7 @@ def upload_photo(
         raise HTTPException(status.HTTP_413_CONTENT_TOO_LARGE, TOO_LARGE)
 
     try:
-        name = photos.store(raw, purpose)
+        name = photos.store(raw, purpose, rotate)
     except photos.RejectedImage as refused:
         raise HTTPException(status.HTTP_400_BAD_REQUEST, str(refused)) from None
 

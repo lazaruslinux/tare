@@ -9,7 +9,7 @@ import datetime as dt
 import io
 import os
 
-from PIL import Image
+from PIL import Image, ImageStat
 
 from app import caps, models, photos, thumbs
 from app.models import now_utc
@@ -32,11 +32,41 @@ def picture(size=(240, 180), colour=(120, 160, 130), exif=None, fmt="JPEG"):
     return out.getvalue()
 
 
-def upload(client, raw=None, name="label.jpg", kind="image/jpeg", purpose="front"):
+def marked(size=(200, 100)):
+    """A dark picture with one light corner, top left, which is how a turn is
+    read back off the stored file."""
+    out = io.BytesIO()
+    image = Image.new("RGB", size, (20, 20, 20))
+    image.paste((240, 240, 240), (0, 0, size[0] // 2, size[1] // 2))
+    image.save(out, format="PNG")
+    return out.getvalue()
+
+
+def light_corner(name):
+    """Which corner of a stored picture is the light one. The file is a lossy
+    webp, so the quarters are compared by their average rather than pixel by
+    pixel."""
+    with Image.open(photos.path_for(name)) as stored:
+        grey = stored.convert("L")
+    width, height = grey.size
+    quarters = {
+        "top left": (0, 0, width // 2, height // 2),
+        "top right": (width // 2, 0, width, height // 2),
+        "bottom right": (width // 2, height // 2, width, height),
+        "bottom left": (0, height // 2, width // 2, height),
+    }
+    means = {where: ImageStat.Stat(grey.crop(box)).mean[0] for where, box in quarters.items()}
+    return max(means, key=lambda where: means[where])
+
+
+def upload(client, raw=None, name="label.jpg", kind="image/jpeg", purpose="front", rotate=None):
+    data = {"purpose": purpose}
+    if rotate is not None:
+        data["rotate"] = rotate
     return client.post(
         "/api/photos",
         files={"file": (name, raw if raw is not None else picture(), kind)},
-        data={"purpose": purpose},
+        data=data,
     )
 
 
@@ -226,6 +256,69 @@ def test_a_purpose_that_is_not_one_of_the_three_is_refused(client, signed_in):
     assert response.json() == {
         "detail": "A photo is of the front, of the label, or of a finished dish."
     }
+
+
+def test_a_quarter_turn_clockwise_is_made_before_the_picture_is_stored(
+    client, db_session, signed_in
+):
+    response = upload(client, marked(), rotate=90)
+    row = db_session.get(models.FoodPhoto, response.json()["photo_id"])
+
+    with Image.open(photos.path_for(row.path)) as stored:
+        # Twice as wide as it was tall, and now the other way about.
+        assert stored.size == (100, 200)
+    assert light_corner(row.path) == "top right"
+
+
+def test_a_quarter_turn_the_other_way_goes_the_other_way(client, db_session, signed_in):
+    response = upload(client, marked(), rotate=270)
+    row = db_session.get(models.FoodPhoto, response.json()["photo_id"])
+
+    with Image.open(photos.path_for(row.path)) as stored:
+        assert stored.size == (100, 200)
+    assert light_corner(row.path) == "bottom left"
+
+
+def test_a_half_turn_keeps_the_shape_and_moves_the_picture(client, db_session, signed_in):
+    response = upload(client, marked(), rotate=180)
+    row = db_session.get(models.FoodPhoto, response.json()["photo_id"])
+
+    with Image.open(photos.path_for(row.path)) as stored:
+        assert stored.size == (200, 100)
+    assert light_corner(row.path) == "bottom right"
+
+
+def test_a_photo_nobody_turned_is_stored_exactly_as_it_always_was(
+    client, db_session, signed_in
+):
+    raw = marked()
+    absent = db_session.get(models.FoodPhoto, upload(client, raw).json()["photo_id"])
+    flat = db_session.get(models.FoodPhoto, upload(client, raw, rotate=0).json()["photo_id"])
+
+    kept = photos.path_for(absent.path)
+    assert open(kept, "rb").read() == open(photos.path_for(flat.path), "rb").read()
+    with Image.open(kept) as stored:
+        assert stored.size == (200, 100)
+    assert light_corner(absent.path) == "top left"
+
+
+def test_a_turn_that_is_not_a_quarter_is_refused_and_nothing_is_stored(
+    client, db_session, signed_in, media_dir
+):
+    response = upload(client, marked(), rotate=45)
+    assert response.status_code == 400
+    assert response.json() == {"detail": "A photo turns a quarter at a time."}
+    assert db_session.query(models.FoodPhoto).count() == 0
+    assert not (media_dir / "food-photos").exists()
+
+
+def test_a_turn_that_is_not_a_number_is_refused_and_nothing_is_stored(
+    client, db_session, signed_in, media_dir
+):
+    response = upload(client, marked(), rotate="abc")
+    assert response.status_code == 400
+    assert db_session.query(models.FoodPhoto).count() == 0
+    assert not (media_dir / "food-photos").exists()
 
 
 def test_a_label_photo_is_the_uploader_s_and_the_reviewer_s_and_nobody_else_s(

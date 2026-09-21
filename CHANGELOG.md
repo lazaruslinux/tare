@@ -6,6 +6,13 @@ Notable changes to Tare, newest first. The format follows
 
 ## Unreleased
 
+### Added
+
+- A photo can come from the camera roll as well as the camera. Tapping a photo
+  tile brings up the phone's own menu instead of opening the camera, and the
+  picture is shown first with Rotate left and Rotate right, so a label shot
+  sideways goes up the right way round.
+
 ### Changed
 
 - Offering a food to everyone now asks for its section. The choice to leave it

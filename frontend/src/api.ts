@@ -860,11 +860,15 @@ export type PhotoPurpose = 'front' | 'label' | 'dish'
 export async function upload<T>(
   path: string,
   file: File,
-  purpose: PhotoPurpose = 'front'
+  purpose: PhotoPurpose = 'front',
+  // Quarter turns clockwise, as the member turned the picture before sending
+  // it. The server makes the turn, so nothing is redrawn on a phone.
+  rotate = 0
 ): Promise<T> {
   const form = new FormData()
   form.append('file', file)
   form.append('purpose', purpose)
+  if (rotate !== 0) form.append('rotate', String(rotate))
   return send<T>(path, { method: 'POST', body: form })
 }
 

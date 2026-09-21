@@ -1,5 +1,5 @@
 import { ChevronRight } from 'lucide-react'
-import { useEffect, useId, useState, type ChangeEvent } from 'react'
+import { useEffect, useId, useState } from 'react'
 
 import {
   ApiError,
@@ -15,16 +15,11 @@ import {
 } from '../api'
 import { ConfirmSheet } from '../components/ConfirmSheet'
 import { Lightbox } from '../components/Lightbox'
+import { PhotoPick } from '../components/PhotoPick'
 import { Fold } from '../components/NutritionLabel'
 import { FoodForm } from '../components/FoodForm'
 import { useTopBar } from '../hooks/useTopBar'
-import {
-  KIND_LABEL,
-  MAX_PHOTO_BYTES,
-  PHOTO_TOO_LARGE,
-  SHARED_FACTS,
-  sectionLabel,
-} from '../lib/community'
+import { KIND_LABEL, SHARED_FACTS, sectionLabel } from '../lib/community'
 import { scale } from '../lib/units'
 
 // The queue, which is the only door into the shared database. It is read dense
@@ -99,6 +94,7 @@ function Evidence({
   name,
   busy,
   onLook,
+  onRefused,
   onReplace,
   onRemove,
 }: {
@@ -106,9 +102,12 @@ function Evidence({
   name: string
   busy: boolean
   onLook: (url: string) => void
+  // A picture the picker would not take, said where the page says everything
+  // else that went wrong.
+  onRefused: (message: string) => void
   // Given on the kinds a reviewer may change. A picture offered on its own is
   // kept or turned down as it is.
-  onReplace?: (purpose: PhotoPurpose, file: File) => void
+  onReplace?: (purpose: PhotoPurpose, file: File, rotate: number) => void
   onRemove?: (purpose: PhotoPurpose) => void
 }) {
   const field = useId()
@@ -129,13 +128,6 @@ function Evidence({
   const editable = onReplace !== undefined && onRemove !== undefined
   const shown = editable ? shots : shots.filter((shot) => shot.url !== null)
   if (shown.length === 0) return null
-
-  const take = (purpose: PhotoPurpose) => (event: ChangeEvent<HTMLInputElement>) => {
-    const file = event.target.files?.[0]
-    // Cleared either way, so choosing the same file twice still fires.
-    event.target.value = ''
-    if (file) onReplace?.(purpose, file)
-  }
 
   return (
     <div className="mt-3 flex gap-3">
@@ -166,13 +158,11 @@ function Evidence({
               >
                 Replace
               </label>
-              <input
+              <PhotoPick
                 id={`${field}-${shot.purpose}`}
-                className="sr-only"
-                type="file"
-                accept="image/*"
                 disabled={busy}
-                onChange={take(shot.purpose)}
+                onPicked={(file, rotate) => onReplace?.(shot.purpose, file, rotate)}
+                onRefused={onRefused}
               />
               {shot.url !== null && (
                 <button
@@ -430,15 +420,16 @@ export function AdminQueue({
       ? api(`/admin/queue/${id}/photo?purpose=${purpose}`, { method: 'DELETE' })
       : api(`/admin/queue/${id}/photo`, { method: 'POST', body: { photo_id: photoId, purpose } })
 
-  const replacePhoto = async (id: number, purpose: PhotoPurpose, file: File) => {
-    if (file.size > MAX_PHOTO_BYTES) {
-      setError(PHOTO_TOO_LARGE)
-      return
-    }
+  const replacePhoto = async (
+    id: number,
+    purpose: PhotoPurpose,
+    file: File,
+    rotate: number
+  ) => {
     setBusy(true)
     setError('')
     try {
-      const { photo_id } = await upload<{ photo_id: number }>('/photos', file, purpose)
+      const { photo_id } = await upload<{ photo_id: number }>('/photos', file, purpose, rotate)
       await setPhoto(id, purpose, photo_id)
       await load()
       onDecided()
@@ -610,7 +601,10 @@ export function AdminQueue({
                   name={proposal.name}
                   busy={busy}
                   onLook={setLooking}
-                  onReplace={(purpose, file) => void replacePhoto(item.id, purpose, file)}
+                  onRefused={setError}
+                  onReplace={(purpose, file, rotate) =>
+                    void replacePhoto(item.id, purpose, file, rotate)
+                  }
                   onRemove={(purpose) => setRemoving({ id: item.id, purpose })}
                 />
                 {item.kind === 'new' ? (
