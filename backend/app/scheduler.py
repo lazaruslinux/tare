@@ -260,7 +260,7 @@ def _facts_for(
     if kind == EVENING:
         return {"entries": facts.entries_today}
     since = facts.last_entry_day or facts.created_day
-    return {"quiet_days": (clock.user_today(user) - since).days}
+    return {"quiet_days": (local_now.date() - since).days}
 
 
 def send_scheduled(
