@@ -1,5 +1,5 @@
 import { AnimatePresence, motion, useReducedMotion } from 'framer-motion'
-import { useEffect, useRef, type ReactNode } from 'react'
+import { useEffect, useRef, useState, type CSSProperties, type ReactNode } from 'react'
 
 // How many sheets are up. The page behind them is held still while any is
 // open and let go when the last one closes, so a confirm over an edit sheet
@@ -68,6 +68,25 @@ export function Sheet({
 }) {
   const reduced = useReducedMotion()
   const box = useRef<HTMLDivElement>(null)
+  const [inset, setInset] = useState(0)
+  // A phone's keyboard slides over the page instead of shrinking it, so the
+  // bottom of the window is not the bottom of what anybody can see. The sheet
+  // measures the keyboard and stands on it.
+  useEffect(() => {
+    if (!open) return
+    const vv = window.visualViewport
+    if (vv === undefined || vv === null) return
+    const measure = () =>
+      setInset(Math.max(0, Math.round(window.innerHeight - vv.height - vv.offsetTop)))
+    measure()
+    vv.addEventListener('resize', measure)
+    vv.addEventListener('scroll', measure)
+    return () => {
+      vv.removeEventListener('resize', measure)
+      vv.removeEventListener('scroll', measure)
+      setInset(0)
+    }
+  }, [open])
   // Escape closes the sheet on top and only that one, so two layers peel one
   // at a time.
   // On a phone a finger on a sheet that cannot scroll, or on the dimmed page
@@ -142,9 +161,10 @@ export function Sheet({
     <AnimatePresence>
       {open && (
         <motion.div
-          className={`fixed inset-0 z-40 flex touch-none justify-center bg-black/50 ${
+          className={`fixed inset-0 z-40 flex touch-none justify-center bg-black/50 pb-[var(--kb)] ${
             center ? 'items-center px-4' : top ? 'items-start min-[900px]:items-center' : 'items-end min-[900px]:items-center'
           }`}
+          style={{ '--kb': `${inset}px` } as CSSProperties}
           initial={{ opacity: 0 }}
           animate={{ opacity: 1 }}
           exit={{ opacity: 0 }}
@@ -160,19 +180,19 @@ export function Sheet({
             // controls at the bottom off the screen.
             className={
               full
-                ? 'flex h-[100svh] w-full touch-pan-y flex-col overflow-hidden overscroll-contain border-t border-line bg-surface px-4 pt-4 pb-[calc(1rem+env(safe-area-inset-bottom))] min-[900px]:h-[86svh] min-[900px]:max-w-3xl min-[900px]:rounded-2xl min-[900px]:border min-[900px]:pb-4'
+                ? 'flex h-[calc(100svh-var(--kb,0px))] w-full touch-pan-y flex-col overflow-hidden overscroll-contain border-t border-line bg-surface px-4 pt-4 pb-[calc(1rem+env(safe-area-inset-bottom))] min-[900px]:h-[86svh] min-[900px]:max-w-3xl min-[900px]:rounded-2xl min-[900px]:border min-[900px]:pb-4'
                 : center
-                ? 'w-full max-w-sm touch-pan-y overflow-y-auto overscroll-contain rounded-2xl border border-line bg-surface p-4 max-h-[86svh]'
+                ? 'w-full max-w-sm touch-pan-y overflow-y-auto overscroll-contain rounded-2xl border border-line bg-surface p-4 max-h-[calc(86svh-var(--kb,0px))]'
                 : `w-full max-w-md touch-pan-y overflow-y-auto overscroll-contain border-line bg-surface px-4 min-[900px]:rounded-2xl min-[900px]:border min-[900px]:pt-4 min-[900px]:pb-4 ${
                     top
                       ? 'rounded-b-2xl border-b pt-[calc(1rem+env(safe-area-inset-top))] pb-4'
                       : 'rounded-t-2xl border-t pt-4 pb-[calc(1rem+env(safe-area-inset-bottom))]'
                   } ${
                     wide
-                      ? 'max-h-[94svh] min-[900px]:max-h-[86svh] min-[900px]:max-w-3xl'
+                      ? 'max-h-[calc(94svh-var(--kb,0px))] min-[900px]:max-h-[86svh] min-[900px]:max-w-3xl'
                       : tall
-                        ? 'max-h-[94svh] min-[900px]:max-w-md'
-                        : 'max-h-[86svh] min-[900px]:max-w-sm'
+                        ? 'max-h-[calc(94svh-var(--kb,0px))] min-[900px]:max-w-md'
+                        : 'max-h-[calc(86svh-var(--kb,0px))] min-[900px]:max-w-sm'
                   }`
             }
             initial={{ y: reduced ? 0 : top ? -24 : 24, opacity: 0 }}

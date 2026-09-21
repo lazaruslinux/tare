@@ -19,6 +19,11 @@ Notable changes to Tare, newest first. The format follows
   to the reviewer is gone, and Other is still there for a food that fits
   nowhere else.
 
+### Fixed
+
+- A sheet now stays above the phone keyboard, so the amount field is visible
+  while logging a scanned food.
+
 ## 0.8.1 - 2026-09-19
 
 ### Changed
