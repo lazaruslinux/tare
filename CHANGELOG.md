@@ -4,6 +4,13 @@ Notable changes to Tare, newest first. The format follows
 [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), and Tare uses
 [semantic versioning](https://semver.org/spec/v2.0.0.html).
 
+## Unreleased
+
+### Changed
+
+- The feedback form's sections now name every part of the app, in the words
+  the screens use.
+
 ## 0.8.2 - 2026-09-21
 
 ### Added

@@ -1,8 +1,12 @@
 """Sending feedback, and the one screen that reads it back."""
 
 import re
+from pathlib import Path
 
+from app.routers import feedback
 from app.routers.feedback import BAD_AREA, BAD_KIND, LONG_TEXT, NO_TEXT
+
+FRONTEND = Path(__file__).resolve().parents[2] / "frontend" / "src" / "pages" / "Feedback.tsx"
 
 HEADER = re.compile(
     r"^## \d{4}-\d{2}-\d{2} \d{2}:\d{2} \w+ \(\d{4}-\d{2}-\d{2} \d{2}:\d{2} UTC\) \| "
@@ -48,6 +52,14 @@ def test_an_area_tare_does_not_have_is_refused(client, signed_in):
     response = send(client, area="kitchen")
     assert response.status_code == 400
     assert response.json() == {"detail": BAD_AREA}
+
+
+def test_the_frontend_mirror_offers_the_same_sections():
+    """The chips on the form and the sections the server accepts have to be the
+    same list, in the same order."""
+    block = re.search(r"const AREAS[^[]*\[(.*?)\n\]", FRONTEND.read_text(encoding="utf-8"), re.S)
+    assert block
+    assert re.findall(r"value: '([a-z]+)'", block.group(1)) == list(feedback.AREAS)
 
 
 def test_a_kind_tare_does_not_have_is_refused(client, signed_in):
