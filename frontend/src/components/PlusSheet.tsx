@@ -54,7 +54,7 @@ export function PlusSheet({
     { label: 'Scan item', onPick: onScan },
     { label: 'Add to Journal', onPick: onAddFood },
     { label: 'Biometrics', onPick: onMeasure },
-    { label: 'Manual exercise', onPick: onExercise },
+    { label: 'Log exercise', onPick: onExercise },
     { label: 'New appointment', onPick: onAppointment },
   ]
   const popover = anchor !== null && window.matchMedia(WIDE).matches

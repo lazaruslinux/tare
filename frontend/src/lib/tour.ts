@@ -27,7 +27,7 @@ export const TOUR: TourStep[] = [
   {
     id: 'today',
     title: 'Today at a glance',
-    body: "Steps, calories left and exercise minutes. Tap a card's title to open it.",
+    body: "Calories left, exercise minutes, and steps once a phone is synced. Tap a card's title to open it.",
     target: { phone: 'dash-today', wide: 'dash-today' },
     go: 'dashboard',
     needs: 'numbers',
@@ -35,7 +35,7 @@ export const TOUR: TourStep[] = [
   {
     id: 'calendar',
     title: 'Your calendar',
-    body: 'Appointments you add show here with the time of day. Share a calendar with a friend under Calendar.',
+    body: "Today's appointments show here against the clock. The whole month is under Calendar, where you can share one with a friend.",
     target: { phone: 'dash-calendar', wide: 'dash-calendar' },
     go: 'dashboard',
     needs: 'calendar',
@@ -43,7 +43,7 @@ export const TOUR: TourStep[] = [
   {
     id: 'plus',
     title: 'Add anything here',
-    body: 'Scan a barcode, add a food, weigh in, or log exercise.',
+    body: 'Scan a barcode, add food to the Journal, weigh in, log exercise, or add an appointment.',
     target: { phone: 'tab-plus', wide: 'rail-plus' },
   },
   {
@@ -56,7 +56,7 @@ export const TOUR: TourStep[] = [
   {
     id: 'food',
     title: 'Find food',
-    body: 'Search the Tare database and your own foods. A barcode Tare does not know yet is looked up on Open Food Facts; you check the details and submit the food to Tare.',
+    body: 'Search the Tare database and your own foods. A barcode Tare does not know is looked up on Open Food Facts, and you check the details before submitting the food.',
     target: { phone: 'food-search', wide: 'food-search' },
     go: 'food',
   },
@@ -72,7 +72,7 @@ export const TOUR: TourStep[] = [
   {
     id: 'sync',
     title: 'Import your workouts & metrics',
-    body: 'Upload your workouts to Tare and receive insights and calorie adjustments',
+    body: 'Sync your phone and every workout arrives with its route, splits and heart rate, and your steps adjust your budget.',
     target: { phone: 'more-sync', wide: 'more-sync' },
     go: 'more',
   },

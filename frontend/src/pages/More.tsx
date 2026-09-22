@@ -1005,38 +1005,110 @@ export function More({
     )
   }
 
+  // The five groups, named once. The rail width packs them into two columns
+  // that fill independently; below it they are the one list in his order.
+  const account = (
+    <Group title="Your account">
+      <Row label="Account" icon={UserRound} onOpen={() => go('account')} />
+      <Row label="Profile" icon={IdCard} onOpen={() => go('profile')} />
+      <Row
+        label="Health data sync"
+        icon={Smartphone}
+        tour="more-sync"
+        note={syncNote(sync)}
+        onOpen={() => go('sync')}
+      />
+      <Row
+        label="Sharing"
+        icon={Eye}
+        note="What your friends can see"
+        onOpen={() => go('sharing')}
+      />
+      <Row label="Display" icon={Monitor} onOpen={() => go('display')} />
+      <Row
+        label="Notifications"
+        icon={Bell}
+        note={deviceOff ? 'Off on this device' : undefined}
+        onOpen={() => go('notifications')}
+      />
+    </Group>
+  )
+
+  const community = (
+    <Group title="Community">
+      <Row
+        label="Members"
+        icon={Users}
+        tour="more-members"
+        note={requests > 0 ? requestsNote(requests) : undefined}
+        onOpen={() => go('members')}
+      />
+      <Row label="My submissions" icon={Inbox} onOpen={() => go('submissions')} />
+      {/* Enough of this account's foods have been taken for them to put
+          their name forward. Never automatic: an administrator decides. */}
+      {me.reviewer_eligible &&
+        (applied ? (
+          <div className="t-row">
+            <ShieldCheck className="h-4 w-4 shrink-0 text-muted" strokeWidth={2} />
+            <span className="min-w-0 flex-1 text-sm text-muted">{APPLY_SENT}</span>
+          </div>
+        ) : (
+          <Row
+            label="Apply to be a reviewer"
+            icon={ShieldCheck}
+            onOpen={() => setApplying(true)}
+          />
+        ))}
+    </Group>
+  )
+
+  const help = (
+    <Group title="Help">
+      <Row label="Guide" icon={BookOpen} onOpen={() => go('guide')} />
+      <Row label="Send feedback" icon={MessageSquare} onOpen={() => go('feedback')} />
+      <Row label="About" icon={Info} onOpen={() => go('about')} />
+    </Group>
+  )
+
+  const administration = reviews(me) && (
+    <Group title={me.is_admin ? 'Administration' : 'Reviewing'}>
+      <Row label="Review queue" icon={ClipboardList} count={waiting} onOpen={() => go('queue')} />
+      {/* The rest of it is the instance's own business, which a reviewer
+          has nothing to do with. */}
+      {me.is_admin && (
+        <>
+          <Row label="Review log" icon={History} onOpen={() => go('reviewlog')} />
+          <Row label="Invites" icon={Mail} onOpen={() => go('invites')} />
+          <Row label="Roles" icon={ShieldCheck} onOpen={() => go('roles')} />
+          <Row label="Member accounts" icon={Users} onOpen={() => go('users')} />
+          <Row label="Uploads" icon={Upload} onOpen={() => go('uploads')} />
+          <Row label="Vitamin matches" icon={Pill} onOpen={() => go('micromatches')} />
+          <Row label="Feedback log" icon={ScrollText} onOpen={() => go('feedbacklog')} />
+        </>
+      )}
+    </Group>
+  )
+
   return (
     <>
       {/* Grouped under headings rather than one long list, and two columns
-          once the rail is there to give them room. */}
-      <div className={railed ? 'grid grid-cols-2 items-start gap-x-6' : undefined}>
-        <Group title="Your account">
-          <Row label="Account" icon={UserRound} onOpen={() => go('account')} />
-          <Row label="Profile" icon={IdCard} onOpen={() => go('profile')} />
-          <Row
-            label="Health data sync"
-            icon={Smartphone}
-            tour="more-sync"
-            note={syncNote(sync)}
-            onOpen={() => go('sync')}
-          />
-          <Row
-            label="Sharing"
-            icon={Eye}
-            note="What your friends can see"
-            onOpen={() => go('sharing')}
-          />
-          <Row label="Display" icon={Monitor} onOpen={() => go('display')} />
-          <Row
-            label="Notifications"
-            icon={Bell}
-            note={deviceOff ? 'Off on this device' : undefined}
-            onOpen={() => go('notifications')}
-          />
-        </Group>
-
-        {/* The rail lists all four itself, so this group is the phone's. */}
-        {!railed && (
+          once the rail is there to give them room. Each column packs on its
+          own, so a short group does not leave a hole beside a long one. */}
+      {railed ? (
+        <div className="grid grid-cols-2 items-start gap-x-6">
+          <div>
+            {account}
+            {help}
+          </div>
+          <div>
+            {community}
+            {administration}
+          </div>
+        </div>
+      ) : (
+        <>
+          {account}
+          {/* The rail lists all four itself, so this group is the phone's. */}
           <Group title="Tracking">
             <Row label="Targets" icon={Target} tour="more-targets" onOpen={() => go('targets')} />
             <Row label="Biometrics" icon={ScaleGlyph} onOpen={onOpenBiometrics} />
@@ -1048,68 +1120,11 @@ export function More({
               onOpen={() => go('calendar')}
             />
           </Group>
-        )}
-
-        <Group title="Community">
-          <Row
-            label="Members"
-            icon={Users}
-            tour="more-members"
-            note={requests > 0 ? requestsNote(requests) : undefined}
-            onOpen={() => go('members')}
-          />
-          <Row label="My submissions" icon={Inbox} onOpen={() => go('submissions')} />
-          {/* Enough of this account's foods have been taken for them to put
-              their name forward. Never automatic: an administrator decides. */}
-          {me.reviewer_eligible &&
-            (applied ? (
-              <div className="t-row">
-                <ShieldCheck className="h-4 w-4 shrink-0 text-muted" strokeWidth={2} />
-                <span className="min-w-0 flex-1 text-sm text-muted">{APPLY_SENT}</span>
-              </div>
-            ) : (
-              <Row
-                label="Apply to be a reviewer"
-                icon={ShieldCheck}
-                onOpen={() => setApplying(true)}
-              />
-            ))}
-        </Group>
-
-        <Group title="Help">
-          <Row label="Guide" icon={BookOpen} onOpen={() => go('guide')} />
-          <Row label="Send feedback" icon={MessageSquare} onOpen={() => go('feedback')} />
-          <Row label="About" icon={Info} onOpen={() => go('about')} />
-        </Group>
-
-        {reviews(me) && (
-          <Group title={me.is_admin ? 'Administration' : 'Reviewing'}>
-            <Row
-              label="Review queue"
-              icon={ClipboardList}
-              count={waiting}
-              onOpen={() => go('queue')}
-            />
-            {/* The rest of it is the instance's own business, which a reviewer
-                has nothing to do with. */}
-            {me.is_admin && (
-              <>
-                <Row label="Review log" icon={History} onOpen={() => go('reviewlog')} />
-                <Row label="Invites" icon={Mail} onOpen={() => go('invites')} />
-                <Row label="Roles" icon={ShieldCheck} onOpen={() => go('roles')} />
-                <Row label="Member accounts" icon={Users} onOpen={() => go('users')} />
-                <Row label="Uploads" icon={Upload} onOpen={() => go('uploads')} />
-                <Row
-                  label="Vitamin matches"
-                  icon={Pill}
-                  onOpen={() => go('micromatches')}
-                />
-                <Row label="Feedback log" icon={ScrollText} onOpen={() => go('feedbacklog')} />
-              </>
-            )}
-          </Group>
-        )}
-      </div>
+          {community}
+          {help}
+          {administration}
+        </>
+      )}
 
       <div className="t-card mb-3">
         <button className="t-btn w-full" type="button" onClick={() => setSigningOut(true)}>

@@ -76,8 +76,14 @@ export function Lightbox(props: Single | Many) {
       className="fixed inset-0 z-50 flex flex-col items-center justify-center gap-3 bg-black/90 p-4"
       onClick={onClose}
     >
+      {/* A desktop shot is wider than a phone: rather than shrink it to the
+          width of the screen, let it run at its own and scroll. */}
       <div
-        className="flex min-h-0 w-full flex-1 items-center justify-center"
+        className={`flex min-h-0 w-full flex-1 items-center ${
+          item.shape === 'desktop'
+            ? 'justify-start overflow-x-auto min-[900px]:justify-center min-[900px]:overflow-x-visible'
+            : 'justify-center'
+        }`}
         onPointerDown={(event) => {
           from.current = event.clientX
           swiped.current = false
@@ -109,7 +115,13 @@ export function Lightbox(props: Single | Many) {
             Put screenshot of {words} here
           </div>
         ) : (
-          <img src={item.src} alt={item.alt} className="max-h-full max-w-full rounded-xl" />
+          <img
+            src={item.src}
+            alt={item.alt}
+            className={`max-h-full rounded-xl ${
+              item.shape === 'desktop' ? 'max-w-none min-[900px]:max-w-full' : 'max-w-full'
+            }`}
+          />
         )}
       </div>
       <p className="text-center text-sm text-white/80">{words}</p>

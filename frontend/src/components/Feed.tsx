@@ -110,7 +110,7 @@ function JoinedRow({
         <Hand className="h-4 w-4 shrink-0 text-muted" strokeWidth={2} aria-hidden="true" />
         <span className="min-w-0 flex-1">
           <span className="block text-sm">
-            <Name row={row} onOpenMember={onOpenMember} /> joined Tare. Welcome!
+            <Name row={row} onOpenMember={onOpenMember} /> joined Tare.
           </span>
           {/* Arriving is a moment, not a day of theirs: the day is read in the
               reader's zone, the same one the clock beside it uses. */}

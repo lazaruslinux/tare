@@ -105,7 +105,10 @@ export function Calendar({
     title: 'Calendar',
     back:
       day === null
-        ? { label: 'More', onBack }
+        ? // The rail opens the month itself, so at rail width it wears no back.
+          wide
+          ? undefined
+          : { label: 'More', onBack }
         : { label: 'Month', onBack: () => setDay(null) },
     action: {
       label: 'New appointment',

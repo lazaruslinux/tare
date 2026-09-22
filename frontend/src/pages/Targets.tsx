@@ -3,6 +3,7 @@ import { useCallback, useEffect, useState } from 'react'
 
 import { api, errorText, type Me, type Profile as ProfileRow, type Targets as TargetsRow } from '../api'
 import { useTopBar } from '../hooks/useTopBar'
+import { useRailLayout } from '../hooks/useWideLayout'
 import { GOAL_LABEL, LEVEL_LABEL, calText, isoDayText } from '../lib/targets'
 import { ActivityLevels } from './ActivityLevels'
 import { DailyBudget } from './DailyBudget'
@@ -75,9 +76,13 @@ export function Targets({
     void reload()
   }, [reload])
 
+  // At rail width the rail is the way around, so a screen it opened wears no
+  // back control. One reached from the Journal keeps its way back at any width.
+  const railed = useRailLayout()
+
   useTopBar(
     view === null
-      ? { title: 'Targets', back }
+      ? { title: 'Targets', back: railed && back.label === 'More' ? undefined : back }
       : { title: TITLE[view], back: { label: 'Targets', onBack: () => setView(null) } }
   )
 

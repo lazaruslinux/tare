@@ -316,7 +316,8 @@ export function Setup({
           <p className="mb-4 text-sm text-muted">
             Tare reads the health data your phone exports: workouts, steps, active calories
             and more. A workout recorded on your phone lands in your Journal as calories you
-            used that day. None of this is needed for your weight goal, and you can set it
+            used that day. Open a workout for its route, splits and heart rate, and watch them
+            trend over time. None of this is needed for your weight goal, and you can set it
             up later under More, then Health data sync.
           </p>
           <SyncDevice folded />

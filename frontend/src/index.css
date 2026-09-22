@@ -612,7 +612,7 @@
   .t-cal-dow {
     padding: 0.5rem 0 0.375rem;
     color: var(--label);
-    font-size: 10px;
+    font-size: 11px;
     font-weight: 700;
     letter-spacing: 0.08em;
     text-align: center;
@@ -808,7 +808,7 @@
     top: 2px;
     left: 0.375rem;
     color: var(--muted);
-    font-size: 10px;
+    font-size: 11px;
     font-weight: 600;
   }
 
@@ -871,7 +871,7 @@
   .t-cal-mini-dow {
     padding-bottom: 0.25rem;
     color: var(--label);
-    font-size: 10px;
+    font-size: 11px;
     font-weight: 700;
     letter-spacing: 0.06em;
     text-align: center;
@@ -1060,7 +1060,7 @@
     border-radius: 999px;
     background: var(--pending);
     color: var(--bg);
-    font-size: 10px;
+    font-size: 11px;
     font-weight: 700;
     line-height: 16px;
     text-align: center;

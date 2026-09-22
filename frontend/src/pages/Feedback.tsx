@@ -121,7 +121,7 @@ export function Feedback({ onSent }: { onSent: () => void }) {
       </button>
 
       <Sheet center open={sent} label="Thanks for your feedback" onClose={onSent}>
-        <p className="text-base font-semibold tracking-tight">Thanks for your feedback!</p>
+        <p className="text-base font-semibold tracking-tight">Thanks for your feedback.</p>
         <p className="mt-2 text-sm text-muted">A member of the Tare administration team will review as soon as possible.</p>
         <button type="button" className="t-btn t-btn-primary mt-4 w-full" onClick={onSent}>
           Done

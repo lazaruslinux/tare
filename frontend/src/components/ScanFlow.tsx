@@ -129,7 +129,7 @@ export function ScanFlow({
     const sent = stage.food
     return (
       <Sheet open center label="Thanks for submitting" onClose={onClose}>
-        <p className="text-base font-semibold tracking-tight">Thanks for submitting!</p>
+        <p className="text-base font-semibold tracking-tight">Thanks for submitting.</p>
         <p className="mt-1 text-sm">{sent.name}</p>
         <p className="mt-2 text-sm text-muted">
           This item is still yours to log and track. It will be available for everyone on

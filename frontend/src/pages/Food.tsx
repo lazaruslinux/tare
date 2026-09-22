@@ -696,7 +696,7 @@ export function FoodTab({
         </p>
         {autos.length === 0 ? (
           <p className="text-sm text-muted">
-            Setup Auto-Log on an item's details page.
+            Set up Auto-log on a food's page.
           </p>
         ) : (
           autoGroups(autos).map((group) => {

@@ -88,10 +88,21 @@ export function Welcome({
     }
   }
 
+  // A spent or expired link is the front door's failure state, so it wears the
+  // wordmark, says what happened, and leaves two ways on from here.
   if (dead) {
     return (
-      <div className="t-center">
-        <p className="max-w-sm text-center text-muted">{dead}</p>
+      <div className="t-invite">
+        <main className="w-full max-w-sm">
+          <p className="mb-4 flex justify-center">
+            <TareWordmark size={32} />
+          </p>
+          <h1 className="text-center text-base font-semibold tracking-tight">{dead}</h1>
+          <p className="mt-2 text-center text-sm text-muted">
+            Ask whoever invited you for a new link.
+          </p>
+          <SignIn className="mt-4" />
+        </main>
       </div>
     )
   }
@@ -102,14 +113,16 @@ export function Welcome({
 
   return (
     <div className="t-invite">
-      <div className="w-full max-w-sm min-[900px]:max-w-none">
+      <main className="w-full max-w-sm min-[900px]:max-w-none">
         <p className="mb-2 flex justify-center">
           <TareWordmark size={32} />
         </p>
-        <p className="mx-auto mb-4 max-w-xl text-center text-sm text-muted">
-          {invite.inviter_display_name} has invited you to Tare: A free, community-managed
-          grocery database, nutrition &amp; fitness journal, custom weight goal builder and
-          more.
+        <h1 className="mx-auto max-w-xl text-center text-xl font-semibold tracking-tight min-[900px]:text-2xl">
+          {invite.inviter_display_name} has invited you to Tare.
+        </h1>
+        <p className="mx-auto mt-2 mb-4 max-w-xl text-center text-sm text-muted">
+          A free, community-managed grocery database, nutrition &amp; fitness journal, custom
+          weight goal builder and more.
         </p>
         {/* One column on a phone, where the story takes the form's place; two
             from 900px, where there is room for both and the form follows the
@@ -190,7 +203,7 @@ export function Welcome({
                   onChange={(event) => setEmail(event.target.value)}
                 />
                 <p className="mt-1 text-xs text-muted">
-                  Required for user verification; never sold or added to any lists
+                  Required for user verification; never sold or added to any lists.
                 </p>
               </div>
               <div>
@@ -208,14 +221,14 @@ export function Welcome({
               </div>
               {error && <p className="t-error">{error}</p>}
               <button className="t-btn t-btn-primary mt-1" type="submit" disabled={busy}>
-                Create account
+                Create an account
               </button>
             </form>
             <SignIn className="mt-4" />
             <Footer version={version} />
           </div>
         </div>
-      </div>
+      </main>
     </div>
   )
 }

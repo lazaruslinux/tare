@@ -42,7 +42,7 @@ import { Feed } from '../components/Feed'
 import { MemberView } from '../components/MemberView'
 import { WorkoutDetails } from '../components/WorkoutDetails'
 import { useTopBar } from '../hooks/useTopBar'
-import { useWideLayout } from '../hooks/useWideLayout'
+import { useRailLayout, useWideLayout } from '../hooks/useWideLayout'
 import { dateText as stampDate } from '../lib/clock'
 import { dayLabel, shiftDay, slotByTime, today, weekday } from '../lib/day'
 import { MACRO_BARS, MACRO_COLOR } from '../lib/macros'
@@ -224,7 +224,7 @@ function Rings({ rings }: { rings: RingSpec[] }) {
             >
               {ring.centre}
             </span>
-            <span className="max-w-[4rem] text-center text-[10px] leading-tight text-muted">
+            <span className="max-w-[4rem] text-center text-[11px] leading-tight text-muted">
               {ring.caption}
             </span>
           </div>
@@ -466,7 +466,7 @@ function Spark({ series, tall, axis, selected = null, onSelect }: {
           {dated.map((index) => (
             <span
               key={dates[index]}
-              className="absolute top-0.5 text-[10px] leading-none text-muted"
+              className="absolute top-0.5 text-[11px] leading-none text-muted"
               style={
                 index === dated[0]
                   ? { left: 0 }
@@ -749,6 +749,9 @@ export function Dashboard({
   // At the width the right-hand column appears, the feed lives there and this
   // tab does not draw a card for it as well.
   const wide = useWideLayout()
+  // The rail opens Progress itself under the name Biometrics, so at rail width
+  // that screen is a destination of its own and wears no back control.
+  const railed = useRailLayout()
   const [day, setDay] = useState<DiaryDay | null>(null)
   const [history, setHistory] = useState<Measurements | null>(null)
   const [run, setRun] = useState<DayRow[]>([])
@@ -803,7 +806,10 @@ export function Dashboard({
         ? { title: 'Dashboard', left: 'wordmark' }
         : {
             title: screen === 'community' ? 'Community' : 'Progress',
-            back: { label: 'Dashboard', onBack: () => setScreen(null) },
+            back:
+              railed && screen === 'progress'
+                ? undefined
+                : { label: 'Dashboard', onBack: () => setScreen(null) },
           }
   )
 
@@ -1535,7 +1541,7 @@ export function Dashboard({
               <p className="text-base font-semibold tracking-tight">
                 Active on {movedDays} of {dates.length} days
               </p>
-              <p className="text-xs text-muted">Sync a device to see steps here.</p>
+              <p className="text-xs text-muted">Sync a device to see steps and workouts here.</p>
             </>
           )}
         </div>
@@ -1552,7 +1558,7 @@ export function Dashboard({
             rides the line under it, so one card carries both without two big
             numbers on one screen. */}
         {latest === null ? (
-          <p className="text-sm text-muted">Nothing measured yet.</p>
+          <p className="text-sm text-muted">Weigh in to see your trend here.</p>
         ) : (
           <>
             {/* The newest weight there is, which is not always the newest day:

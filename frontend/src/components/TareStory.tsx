@@ -11,14 +11,15 @@ const LINES = [
   'Enter your bio markers (height, weight etc)',
   'Choose an activity level',
   'Get a customized weight loss/maintenance plan',
-  'Scan barcodes & track your calories & ingredients easily',
+  'Scan barcodes & track your calories & ingredients easily, with a check-in on your phone to remind you',
   'Build custom recipes & meals',
   'Upload/sync your Apple/Android workouts or health metrics for calorie adjustments & workout insights',
+  'Keep a calendar, share it with a friend & invite them to appointments',
   'Build your body & Tare from the ground up, with real humans.',
 ]
 
 // What Tare is, what is inside it, and what it does with your details, in one
-// place. About shows the story plainly; the invite shows the seven lines with
+// place. About shows the story plainly; the invite shows the eight lines with
 // their pictures first and keeps the rest folded away.
 export function TareStory({
   onBack,
@@ -115,6 +116,15 @@ export function TareStory({
       </div>
 
       {open && rest}
+      {/* The expanded story is long, so it ends on the same primary the form
+          carries rather than on a grey way back. */}
+      {open && (
+        <div className="mb-3">
+          <button className="t-btn t-btn-primary" type="button" onClick={create}>
+            Create an account
+          </button>
+        </div>
+      )}
       {back}
 
       {shot !== null && (

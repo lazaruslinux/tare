@@ -20,8 +20,8 @@ import { dateText, stampText, useClock } from '../lib/clock'
 // phone to anything.
 const WHAT_THIS_IS =
   'Tare takes the health data your phone exports and turns it into your ' +
-  'Dashboard and Fitness screens: steps, calories, workouts and more. Setup ' +
-  'is one time.'
+  'Dashboard and Fitness screens: steps, calories, and every workout with its ' +
+  'route, splits, heart rate and trends. Setup is one time.'
 
 // What the key card says, before there is a key and after there is one.
 const SHOWN_ONCE =

@@ -62,14 +62,14 @@ export const SHOTS: Shot[] = [
   { id: 'sync-setup', line: 6, shape: 'desktop', caption: 'Health data sync', src: '/screenshots/sync-setup.webp' },
   {
     id: 'feed-desktop',
-    line: 7,
+    line: 8,
     shape: 'desktop',
     caption: 'Dashboard on a desktop with the feed column',
     src: '/screenshots/feed-desktop.webp',
   },
   {
     id: 'member-page',
-    line: 7,
+    line: 8,
     shape: 'phone',
     caption: "A member's page with Contributions",
     src: '/screenshots/member-page.webp',

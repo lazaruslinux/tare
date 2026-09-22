@@ -4,6 +4,26 @@ Notable changes to Tare, newest first. The format follows
 [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), and Tare uses
 [semantic versioning](https://semver.org/spec/v2.0.0.html).
 
+## Unreleased
+
+### Added
+
+- Four Guide entries: how to log a meal, changing what the Dashboard shows,
+  what the calendar is for, and reminders. The Guide now reads in five groups,
+  with the tour in its own card.
+- The invite mentions the calendar and the phone check-ins, opens on a headline,
+  and a spent link says so with a way to sign in.
+
+### Changed
+
+- "At rest" replaces BMR on the Activity level screen and the Journal breakdown.
+- The tour, Setup and the sync screens say what arrives when a phone is synced.
+- The Add sheet says Log exercise; Auto-log is set up on a food's page.
+- More packs its groups into two even columns on a wide window.
+- No text smaller than 11px; the rail's waiting count sits at the end of its row.
+- At rail width, Targets, Fitness, Biometrics and Calendar wear no back control:
+  the rail is the way around.
+
 ## 0.8.3 - 2026-09-22
 
 ### Added

@@ -70,11 +70,12 @@ export function SideRail({
             aria-label={counted ? `${label}, ${waiting} waiting` : undefined}
             className="t-navitem"
           >
-            <span className="relative flex">
-              <Icon className="h-[18px] w-[18px]" strokeWidth={2} />
-              {counted && <span className="t-count t-nums -top-2 -right-2.5">{waiting}</span>}
-            </span>
+            <Icon className="h-[18px] w-[18px]" strokeWidth={2} />
             {label}
+            {/* At this width the row has room, so the count sits at its end
+                rather than over the icon. `static` beats .t-count's absolute:
+                utilities sort after components. */}
+            {counted && <span className="t-count t-nums static ml-auto">{waiting}</span>}
           </button>
         )
       })}

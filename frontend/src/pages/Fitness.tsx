@@ -602,7 +602,11 @@ export function Fitness({
     }
   }, [shown, refresh, again])
 
-  useTopBar(screen === null ? { title: 'Fitness', back: { label: 'More', onBack } } : null)
+  // The rail opens this screen, so at rail width it is a destination of its
+  // own and wears no back control.
+  useTopBar(
+    screen === null ? { title: 'Fitness', back: rail ? undefined : { label: 'More', onBack } } : null
+  )
 
   if (screen !== null && screen.kind === 'moves') {
     return <Moves onBack={() => setScreen(null)} />
@@ -674,7 +678,8 @@ export function Fitness({
         <div className="t-card mb-3">
           <p className="text-sm">Not connected.</p>
           <p className="mt-1 text-sm text-muted">
-            Connect your phone and Tare will fill this in on its own.
+            Connect your phone and your steps, workouts, routes and trends fill this in on
+            their own.
           </p>
           <button type="button" className="t-btn t-btn-primary mt-3" onClick={onOpenSync}>
             Sync a device
