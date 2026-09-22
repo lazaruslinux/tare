@@ -7,7 +7,7 @@ means the moment it was arranged for however far away it is read.
 
 from sqlalchemy import select
 
-from app import models, throttle
+from app import models, profiles, throttle
 from app.models import now_utc
 from tests.test_feed import befriend, sign_in
 
@@ -353,6 +353,28 @@ def test_a_calendar_member_sees_what_is_published_to_it(client, db_session, make
     assert item["invitation"] is None
 
 
+def test_an_occurrence_names_an_owner_who_has_no_picture(client, signed_in):
+    kept(client)
+
+    owner = items_on(client, TUESDAY)[0]["owner"]
+
+    assert owner["id"] == signed_in.id
+    assert owner["avatar_url"] is None
+
+
+def test_an_occurrence_carries_its_owners_picture_once_there_is_one(
+    client, db_session, signed_in
+):
+    kept(client)
+    signed_in.avatar_path = "abcdef0123456789.webp"
+    db_session.commit()
+
+    owner = items_on(client, TUESDAY)[0]["owner"]
+
+    assert owner["avatar_url"] == profiles.avatar_url(signed_in)
+    assert isinstance(owner["avatar_url"], str)
+
+
 def test_somebody_who_has_not_accepted_the_calendar_sees_nothing(
     client, db_session, make_user, signed_in
 ):
@@ -441,7 +463,9 @@ def test_an_accepted_guest_may_still_decline(client, db_session, make_user, sign
     # The organizer is told they backed out, rather than losing the name.
     sign_in(client, "member")
     listed = client.get(f"/api/calendar/appointments/{made['id']}").json()["invitees"]
-    assert listed == [{"id": other.id, "display_name": "other", "status": "declined"}]
+    assert listed == [
+        {"id": other.id, "display_name": "other", "avatar_url": None, "status": "declined"}
+    ]
 
 
 def test_the_organizer_sees_what_everybody_answered(client, db_session, make_user, signed_in):
@@ -451,7 +475,9 @@ def test_the_organizer_sees_what_everybody_answered(client, db_session, make_use
 
     listed = client.get(f"/api/calendar/appointments/{made['id']}").json()["invitees"]
 
-    assert listed == [{"id": other.id, "display_name": "other", "status": "pending"}]
+    assert listed == [
+        {"id": other.id, "display_name": "other", "avatar_url": None, "status": "pending"}
+    ]
 
 
 def test_a_guest_sees_the_names_and_not_the_answers(client, db_session, make_user, signed_in):
@@ -467,8 +493,8 @@ def test_a_guest_sees_the_names_and_not_the_answers(client, db_session, make_use
 
     listed = client.get(f"/api/calendar/appointments/{made['id']}").json()["invitees"]
     assert listed == [
-        {"id": other.id, "display_name": "other"},
-        {"id": third.id, "display_name": "third"},
+        {"id": other.id, "display_name": "other", "avatar_url": None},
+        {"id": third.id, "display_name": "third", "avatar_url": None},
     ]
     assert items_on(client, TUESDAY)[0]["invitees"] == []
 
@@ -650,7 +676,7 @@ def test_more_guests_can_be_asked_afterwards(client, db_session, make_user, sign
 
     assert response.status_code == 200
     assert response.json()["invitees"] == [
-        {"id": other.id, "display_name": "other", "status": "pending"}
+        {"id": other.id, "display_name": "other", "avatar_url": None, "status": "pending"}
     ]
 
 
@@ -987,7 +1013,7 @@ def test_one_day_can_be_moved_out_into_its_own_appointment(
     assert copy["repeat"] is None
     assert [shelf_row["id"] for shelf_row in copy["calendars"]] == [shelf.id]
     assert copy["invitees"] == [
-        {"id": other.id, "display_name": "other", "status": "accepted"}
+        {"id": other.id, "display_name": "other", "avatar_url": None, "status": "accepted"}
     ]
 
     moved = items_on(client, "2026-09-22")

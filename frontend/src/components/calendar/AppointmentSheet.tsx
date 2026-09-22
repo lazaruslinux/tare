@@ -475,6 +475,9 @@ export function AppointmentSheet({
           {shelves.length > 0 && (
             <div className="mb-3">
               <p className="t-label">Add to calendar</p>
+              <p className="mb-2 text-xs text-muted">
+                Everyone on a calendar you share sees what you add there.
+              </p>
               {owner ? (
                 <div className="flex flex-wrap gap-2">
                   <button
@@ -520,6 +523,9 @@ export function AppointmentSheet({
           {owner && (
             <div className="mb-3">
               <p className="t-label">Invite friends</p>
+              <p className="mb-2 text-xs text-muted">
+                Asks a friend to come. They accept or decline, and you see the answer here.
+              </p>
               <div className="flex flex-wrap items-center gap-2">
                 {invited.map((id) => (
                   <span key={id} className="t-chip">

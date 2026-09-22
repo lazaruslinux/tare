@@ -640,6 +640,27 @@ def test_a_reminder_prefers_the_calendar_it_is_shared_on(
     assert reminder_body(rig, monkeypatch).body == "2:00PM · Home"
 
 
+def test_a_reminder_about_a_co_members_entry_says_whose_it_is(
+    client, rig, db_session, make_user, diary, monkeypatch
+):
+    from tests.test_calendar import shelf_for
+    from tests.test_feed import befriend
+
+    other = make_user("other", timezone="America/Phoenix")
+    befriend(db_session, diary, other)
+    shelf = shelf_for(db_session, diary, other)
+    device(rig, other, endpoint="https://push.example.net/push/two")
+    # Only the other member is owed a reminder, so the one message that goes
+    # is theirs about somebody else's entry.
+    diary.notify = {**notify_prefs.default(), "reminders": {"on": False, "minutes": 30}}
+    rig.commit()
+    an_appointment(client, calendar_ids=[shelf.id])
+
+    body = reminder_body(rig, monkeypatch).body
+
+    assert body == f"2:00PM · Home · {diary.username}"
+
+
 def test_a_shorter_lead_time_says_so(client, rig, diary, monkeypatch):
     lead(rig, diary, 15)
     an_appointment(client)

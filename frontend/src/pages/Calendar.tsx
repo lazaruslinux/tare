@@ -12,7 +12,15 @@ import {
 import { AgendaList } from '../components/calendar/AgendaList'
 import { AppointmentDetail } from '../components/calendar/AppointmentDetail'
 import { AppointmentSheet } from '../components/calendar/AppointmentSheet'
-import { allDayItems, DayTimeline, tintOf, useNowMinutes } from '../components/calendar/DayTimeline'
+import { Avatar } from '../components/Avatar'
+import {
+  allDayItems,
+  DayTimeline,
+  markStyle,
+  theirs,
+  tintOf,
+  useNowMinutes,
+} from '../components/calendar/DayTimeline'
 import { InvitationsCard } from '../components/calendar/InvitationsCard'
 import { MiniMonth } from '../components/calendar/MiniMonth'
 import { useTopBar } from '../hooks/useTopBar'
@@ -356,9 +364,12 @@ function AllDayLane({
         >
           <span
             aria-hidden="true"
-            className="h-2 w-2 shrink-0 rounded-full"
-            style={{ background: tintOf(item) }}
+            className={`t-cal-dot h-2 w-2${theirs(item) ? ' t-cal-dot-theirs' : ''}`}
+            style={markStyle(item)}
           />
+          {theirs(item) && (
+            <Avatar size="mark" url={item.owner.avatar_url} name={item.owner.display_name} />
+          )}
           <span className={item.cancelled ? 'text-muted line-through' : ''}>{item.title}</span>
         </button>
       ))}
@@ -418,15 +429,14 @@ function Cell({
         {number}
       </button>
       {shown.map((item) => {
-        const tint = tintOf(item)
         const spans = item.all_day || item.date !== item.end_date
         if (!wide) {
           return (
             <button
               key={`${item.id}-${item.occurrence_date}`}
               type="button"
-              className="t-cal-bar"
-              style={{ background: tint, opacity: item.cancelled ? 0.5 : 1 }}
+              className={`t-cal-bar${theirs(item) ? ' t-cal-bar-theirs' : ''}`}
+              style={{ ...markStyle(item), opacity: item.cancelled ? 0.5 : 1 }}
               onClick={() => onOpenItem(item)}
             >
               {item.title}
@@ -442,12 +452,19 @@ function Cell({
             <button
               key={`${item.id}-${item.occurrence_date}`}
               type="button"
-              className={`t-cal-bar -mx-1 w-auto ${starts ? 'ml-0 rounded-l-[5px]' : ''} ${
-                ends ? 'mr-0 rounded-r-[5px]' : ''
-              }`}
-              style={{ background: tint, opacity: item.cancelled ? 0.5 : 1 }}
+              className={`t-cal-bar -mx-1 w-auto ${theirs(item) ? 't-cal-bar-theirs ' : ''}${
+                starts ? 'ml-0 rounded-l-[5px] ' : ''
+              }${ends ? 'mr-0 rounded-r-[5px]' : ''}`}
+              style={{ ...markStyle(item), opacity: item.cancelled ? 0.5 : 1 }}
               onClick={() => onOpenItem(item)}
             >
+              {/* A band is one line of text rather than a row of boxes, so the
+                  mark is set into the line instead of laid beside it. */}
+              {starts && theirs(item) && (
+                <span className="mr-1 inline-flex align-middle">
+                  <Avatar size="mark" url={item.owner.avatar_url} name={item.owner.display_name} />
+                </span>
+              )}
               <span className={starts ? '' : 'invisible'}>{item.title}</span>
             </button>
           )
@@ -461,8 +478,8 @@ function Cell({
           >
             <span
               aria-hidden="true"
-              className="h-1.5 w-1.5 shrink-0 rounded-full"
-              style={{ background: tint }}
+              className={`t-cal-dot h-1.5 w-1.5${theirs(item) ? ' t-cal-dot-theirs' : ''}`}
+              style={markStyle(item)}
             />
             <span className="t-cal-chip-time t-nums shrink-0 text-muted">
               {item.start === null ? '' : formatTime(item.start, clock)}
@@ -470,6 +487,11 @@ function Cell({
             <span className={`truncate ${item.cancelled ? 'text-muted line-through' : ''}`}>
               {item.title}
             </span>
+            {theirs(item) && (
+              <span className="ml-auto flex shrink-0">
+                <Avatar size="mark" url={item.owner.avatar_url} name={item.owner.display_name} />
+              </span>
+            )}
           </button>
         )
       })}

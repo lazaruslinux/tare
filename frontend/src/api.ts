@@ -1341,7 +1341,7 @@ export type Upload = {
 // the words are decided where a screen draws them, never in what is stored.
 
 // Who somebody is, wherever the calendar names one.
-export type Named = { id: number; display_name: string }
+export type Named = { id: number; display_name: string; avatar_url: string | null }
 
 // A shared calendar as an entry carries it: enough to draw its dot and say
 // its name, and nothing about who else is on it.

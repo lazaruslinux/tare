@@ -673,6 +673,23 @@
     box-shadow: inset 0 0 0 1px var(--accent);
   }
 
+  /* The round mark an entry is named beside, wherever a list or a chip has
+     room for one. Its size is a utility at the call site; the colour arrives
+     as --mark-tint, set where the mark is written. */
+  .t-cal-dot {
+    display: inline-block;
+    flex-shrink: 0;
+    border-radius: 999px;
+    background: var(--mark-tint);
+  }
+  /* Somebody else's, on a calendar shared with them: the same colour, drawn
+     as an outline, so one calendar keeps one colour and whose is whose still
+     reads at a glance. */
+  .t-cal-dot-theirs {
+    background: transparent;
+    box-shadow: inset 0 0 0 1.5px var(--mark-tint);
+  }
+
   /* One timed entry in a cell, where there is room to name it. */
   .t-cal-chip {
     position: relative;
@@ -711,8 +728,14 @@
     overflow: hidden;
     margin-top: 3px;
     border-radius: 999px;
+    background: var(--mark-tint);
     color: transparent;
     font-size: 0;
+  }
+  /* A thin line has no room for a picture, so the line itself says it: a
+     dashed one is somebody else's. */
+  .t-cal-bar-theirs {
+    background: repeating-linear-gradient(90deg, var(--mark-tint) 0 5px, transparent 5px 8px);
   }
   @media (min-width: 900px) {
     .t-cal-bar {
@@ -726,6 +749,12 @@
       text-align: left;
       white-space: nowrap;
       text-overflow: ellipsis;
+    }
+    /* A band wide enough to read is an outline with ordinary ink instead. */
+    .t-cal-bar-theirs {
+      background: transparent;
+      box-shadow: inset 0 0 0 1.5px var(--mark-tint);
+      color: var(--text);
     }
   }
 
@@ -792,10 +821,14 @@
     flex-direction: column;
     border: 1px solid var(--line);
     border-left-width: 3px;
+    border-left-color: var(--mark-tint);
     border-radius: 0.5rem;
     padding: 0.25rem 0.5rem;
     background: var(--surface-2);
     text-align: left;
+  }
+  .t-cal-block-theirs {
+    border-left-style: dashed;
   }
 
   /* What time it is, today only. Red, because it is the one line on the day

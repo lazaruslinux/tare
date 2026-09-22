@@ -20,7 +20,7 @@ from sqlalchemy import and_, delete, func, or_, select, update
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session
 
-from app import clock, models, notifications, recurrence, throttle
+from app import clock, models, notifications, profiles, recurrence, throttle
 from app.calendar_colors import PALETTE
 from app.db import get_db
 from app.deps import require_user
@@ -265,7 +265,11 @@ def display_name(member: models.User | None) -> str:
 
 
 def named_member(member: models.User | None) -> dict[str, object]:
-    return {"id": None if member is None else member.id, "display_name": display_name(member)}
+    return {
+        "id": None if member is None else member.id,
+        "display_name": display_name(member),
+        "avatar_url": None if member is None else profiles.avatar_url(member),
+    }
 
 
 def days_from_mask(mask: int | None) -> list[int]:

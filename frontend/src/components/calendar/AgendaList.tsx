@@ -1,7 +1,8 @@
 import type { Occurrence } from '../../api'
 import { dateText, type Clock } from '../../lib/clock'
 import { formatTime } from '../../lib/calendar'
-import { tintOf } from './DayTimeline'
+import { Avatar } from '../Avatar'
+import { markStyle, theirs } from './DayTimeline'
 
 // One day's entries as a list, under the month grid at any width the month
 // has the page to itself, and in the right-hand column where there is one.
@@ -36,9 +37,12 @@ export function AgendaList({
               </span>
               <span
                 aria-hidden="true"
-                className="h-2 w-2 shrink-0 rounded-full"
-                style={{ background: tintOf(item) }}
+                className={`t-cal-dot h-2 w-2${theirs(item) ? ' t-cal-dot-theirs' : ''}`}
+                style={markStyle(item)}
               />
+              {theirs(item) && (
+                <Avatar size="mark" url={item.owner.avatar_url} name={item.owner.display_name} />
+              )}
               <span className="min-w-0 flex-1">
                 <span
                   className={`block truncate text-sm ${

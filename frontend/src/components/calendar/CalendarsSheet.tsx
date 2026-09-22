@@ -27,7 +27,9 @@ import { Sheet } from '../Sheet'
 
 // The line under the list, which is the whole of what sharing means here.
 const PRIVACY =
-  'Your calendar is private. Only appointments you add to a shared calendar, or invite a friend to, are seen by anyone else.'
+  'Your calendar is private. Only appointments you add to a shared calendar, or invite a friend ' +
+  'to, are seen by anyone else. Your own entries are drawn solid. ' +
+  "A friend's are outlined, with their picture or initial beside the name."
 
 // The same sentences the server would answer with, said before it is asked.
 const NEEDS_NAME = 'Give it a name.'

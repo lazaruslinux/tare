@@ -314,7 +314,7 @@ def send_reminders(
     reminders = facts.prefs["reminders"]
     if not reminders["on"]:
         return 0
-    from app.routers.calendar import timed_starts
+    from app.routers.calendar import display_name, timed_starts
 
     minutes = int(reminders["minutes"])
     lead = dt.timedelta(minutes=minutes)
@@ -343,6 +343,9 @@ def send_reminders(
             db.expire_all()
             continue
         db.commit()
+        # Whose it is, but only when it is somebody else's: a shared calendar
+        # otherwise reminds about an entry with no hint of who wrote it.
+        owner = None if row.owner_id == user.id else db.get(models.User, row.owner_id)
         notifications.deliver(
             db,
             user,
@@ -350,6 +353,7 @@ def send_reminders(
                 notifications.Event(
                     REMINDER,
                     title=row.title,
+                    who=display_name(owner),
                     day=day,
                     at=row.time_of_day,
                     zone=row.timezone,

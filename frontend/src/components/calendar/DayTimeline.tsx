@@ -1,6 +1,7 @@
-import { useEffect, useRef, useState, type RefObject } from 'react'
+import { useEffect, useRef, useState, type CSSProperties, type RefObject } from 'react'
 
 import type { Occurrence } from '../../api'
+import { Avatar } from '../Avatar'
 import { useClock } from '../../lib/clock'
 import {
   colorToken,
@@ -109,6 +110,16 @@ export function pack(items: Occurrence[], perMinute: number): Placed[] {
 export const tintOf = (item: Occurrence): string =>
   item.calendars.length === 0 ? PERSONAL : colorToken(item.calendars[0].color)
 
+// The same colour, handed to the stylesheet as a property, so a rule decides
+// whether a mark is filled or outlined rather than the colour being painted on
+// here. One calendar keeps one colour either way.
+export const markStyle = (item: Occurrence): CSSProperties =>
+  ({ '--mark-tint': tintOf(item) }) as CSSProperties
+
+// Somebody else's: on a calendar shared with them, or theirs to begin with and
+// the reader was asked to it.
+export const theirs = (item: Occurrence): boolean => !item.mine
+
 export function DayTimeline({
   items,
   isToday,
@@ -204,29 +215,37 @@ export function DayTimeline({
             ))}
           {placed.map((one) => {
             const width = 100 / one.columns
-            const tint = tintOf(one.item)
             const roomy = one.height >= 56
             return (
               <button
                 key={`${one.item.id}-${one.item.occurrence_date}`}
                 type="button"
-                className="t-cal-block"
+                className={`t-cal-block${theirs(one.item) ? ' t-cal-block-theirs' : ''}`}
                 style={{
+                  ...markStyle(one.item),
                   top: one.top - top,
                   height: one.height - 3,
                   left: `calc(${one.column * width}% + ${one.column > 0 ? 3 : 0}px)`,
                   width: `calc(${width}% - ${one.column > 0 ? 3 : 0}px)`,
-                  borderLeftColor: tint,
                   opacity: one.item.cancelled ? 0.6 : 1,
                 }}
                 onClick={() => onOpen(one.item)}
               >
-                <span
-                  className={`truncate text-xs font-semibold ${
-                    one.item.cancelled ? 'text-muted line-through' : ''
-                  }`}
-                >
-                  {one.item.title}
+                <span className="flex items-center gap-1.5">
+                  {theirs(one.item) && (
+                    <Avatar
+                      size="mark"
+                      url={one.item.owner.avatar_url}
+                      name={one.item.owner.display_name}
+                    />
+                  )}
+                  <span
+                    className={`truncate text-xs font-semibold ${
+                      one.item.cancelled ? 'text-muted line-through' : ''
+                    }`}
+                  >
+                    {one.item.title}
+                  </span>
                 </span>
                 {roomy && (
                   <span className="t-nums truncate text-[11px] text-muted">

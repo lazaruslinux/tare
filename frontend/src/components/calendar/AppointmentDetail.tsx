@@ -11,6 +11,7 @@ import {
 } from '../../api'
 import { dateText, useClock } from '../../lib/clock'
 import { colorToken, formatTimeRange, PERSONAL } from '../../lib/calendar'
+import { Avatar } from '../Avatar'
 import { ConfirmSheet } from '../ConfirmSheet'
 import { Sheet } from '../Sheet'
 import { repeatSummary, draftOf } from './RepeatSheet'
@@ -184,7 +185,12 @@ export function AppointmentDetail({
             ))}
           </div>
         )}
-        {!owner && <p className="mt-3 text-sm text-muted">From {item.owner.display_name}</p>}
+        {!owner && (
+          <div className="mt-3 flex items-center gap-1.5 text-sm text-muted">
+            <Avatar size="mark" url={item.owner.avatar_url} name={item.owner.display_name} />
+            <span>From {item.owner.display_name}</span>
+          </div>
+        )}
 
         {error !== '' && <p className="t-error mt-3">{error}</p>}
 

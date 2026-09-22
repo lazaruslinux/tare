@@ -1,11 +1,14 @@
-// The picture a member is shown by, in the two sizes anything shows it at: the
-// row size the food thumbnails use, and the larger one a profile leads with.
+// The picture a member is shown by, in the sizes anything shows it at: the row
+// size the food thumbnails use, the larger one a profile leads with, and the
+// mark the calendar puts beside somebody else's entry.
 //
 // No picture is not a gap. It is the member's own initial in the same square,
 // so a list of members reads as a list either way and nobody is given a face
 // they did not choose.
 
 const SIZES = {
+  // Small enough to sit on a calendar chip beside a title without pushing it.
+  mark: 'h-4 w-4 rounded text-[9px]',
   row: 'h-10 w-10 rounded-lg text-sm',
   page: 'h-20 w-20 rounded-xl text-2xl',
 }
@@ -18,7 +21,7 @@ export function Avatar({
   url: string | null
   // What the initial is taken from, which is the name shown beside it.
   name: string
-  size?: 'row' | 'page'
+  size?: 'mark' | 'row' | 'page'
 }) {
   const box = SIZES[size]
   if (url !== null) {

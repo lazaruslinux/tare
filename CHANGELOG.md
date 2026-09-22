@@ -6,8 +6,16 @@ Notable changes to Tare, newest first. The format follows
 
 ## Unreleased
 
+### Added
+
+- On a shared calendar, a friend's entries are outlined in the calendar's
+  colour and carry their picture or initial, so whose is whose reads at a
+  glance, down to the month's thin lines. Your own entries are drawn as before.
+
 ### Changed
 
+- A reminder about a friend's appointment says whose it is.
+- The appointment sheet says what Add to calendar and Invite friends each do.
 - The feedback form's sections now name every part of the app, in the words
   the screens use.
 

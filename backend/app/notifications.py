@@ -321,6 +321,10 @@ def compose(
             body = f"{when} at {event.location}"
         else:
             body = when
+        # Somebody else's entry says whose, so a shared calendar's reminder is
+        # not read as one of the member's own.
+        if event.who:
+            body = f"{body} \u00b7 {event.who}"
     elif kind == TEST:
         title, body = "This is a test", "Notifications reach this device."
     elif kind == APPOINTMENT_ADDED:

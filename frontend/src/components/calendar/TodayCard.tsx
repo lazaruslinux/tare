@@ -14,9 +14,18 @@ import { dateText } from '../../lib/clock'
 import { minutesOf } from '../../lib/calendar'
 import { today } from '../../lib/day'
 import { useRailLayout } from '../../hooks/useWideLayout'
+import { Avatar } from '../Avatar'
 import { AppointmentDetail } from './AppointmentDetail'
 import { AppointmentSheet } from './AppointmentSheet'
-import { allDayItems, DayTimeline, pack, tintOf, useNowMinutes } from './DayTimeline'
+import {
+  allDayItems,
+  DayTimeline,
+  markStyle,
+  pack,
+  theirs,
+  tintOf,
+  useNowMinutes,
+} from './DayTimeline'
 
 // What is on today, at the top of the Dashboard: the hours around now and what
 // is in them, rather than a list that says nothing about when.
@@ -164,9 +173,16 @@ export function TodayCard({
                   >
                     <span
                       aria-hidden="true"
-                      className="h-2 w-2 shrink-0 rounded-full"
-                      style={{ background: tintOf(item) }}
+                      className={`t-cal-dot h-2 w-2${theirs(item) ? ' t-cal-dot-theirs' : ''}`}
+                      style={markStyle(item)}
                     />
+                    {theirs(item) && (
+                      <Avatar
+                        size="mark"
+                        url={item.owner.avatar_url}
+                        name={item.owner.display_name}
+                      />
+                    )}
                     <span className={item.cancelled ? 'text-muted line-through' : ''}>
                       {item.title}
                     </span>
