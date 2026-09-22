@@ -159,7 +159,8 @@ export default function App() {
   const railed = useRailLayout()
   const reduced = useReducedMotion()
   const bar = useTopBarState()
-  const { waiting, queue, requests, invitations, refresh: refreshWaiting } = useWaitingCount(me)
+  const { waiting, queue, requests, invitations, unread, refresh: refreshWaiting } =
+    useWaitingCount(me)
   const changed = useCallback(() => setLogged((n) => n + 1), [])
   // Every way the account arrives or changes goes through here, so the clock
   // preference the formatters read is never a save behind what was saved.
@@ -470,6 +471,7 @@ export default function App() {
           moreScreen={moreScreen}
           dashScreen={dashScreen}
           waiting={waiting}
+          invitations={invitations}
           onSelect={selectRail}
           onPlus={openAdd}
         />
@@ -531,6 +533,7 @@ export default function App() {
                       waiting={queue}
                       requests={requests}
                       invitations={invitations}
+                      unread={unread}
                       refresh={logged}
                       onReviewed={refreshWaiting}
                       onChanged={changed}

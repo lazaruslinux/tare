@@ -16,6 +16,7 @@ export function SideRail({
   moreScreen,
   dashScreen,
   waiting,
+  invitations,
   onSelect,
   onPlus,
 }: {
@@ -24,9 +25,12 @@ export function SideRail({
   // is really on screen rather than by which page holds it.
   moreScreen: Screen
   dashScreen: DashScreen
-  // Submissions waiting on an administrator, counted on the row that leads to
-  // them the same way the tab bar counts them.
+  // Everything waiting on this account, counted on the rows that lead to it
+  // the same way the tab bar counts it.
   waiting: number
+  // The share of that which is unanswered calendar invitations. Calendar is a
+  // row of its own at this width, so it carries them and More does not.
+  invitations: number
   onSelect: (target: RailTarget) => void
   // Where the button is, so the add menu can hang off it instead of rising
   // from the bottom of a window it is nowhere near.
@@ -60,14 +64,18 @@ export function SideRail({
       </button>
       {TABS.filter(({ id }) => id !== 'plus').map(({ id, label, Icon }) => {
         const target = id as RailTarget
-        const counted = id === 'more' && waiting > 0
+        // What this row is holding. More's number must be what the rows
+        // inside More add up to, and at this width the invitations are on the
+        // Calendar row instead of under More.
+        const count =
+          id === 'more' ? waiting - invitations : id === 'calendar' ? invitations : 0
         return (
           <button
             key={id}
             data-tour={id === 'targets' ? 'rail-targets' : undefined}
             onClick={() => onSelect(target)}
             aria-current={isCurrent(id) ? 'page' : undefined}
-            aria-label={counted ? `${label}, ${waiting} waiting` : undefined}
+            aria-label={count > 0 ? `${label}, ${count} waiting` : undefined}
             className="t-navitem"
           >
             <Icon className="h-[18px] w-[18px]" strokeWidth={2} />
@@ -75,7 +83,7 @@ export function SideRail({
             {/* At this width the row has room, so the count sits at its end
                 rather than over the icon. `static` beats .t-count's absolute:
                 utilities sort after components. */}
-            {counted && <span className="t-count t-nums static ml-auto">{waiting}</span>}
+            {count > 0 && <span className="t-count t-nums static ml-auto">{count}</span>}
           </button>
         )
       })}

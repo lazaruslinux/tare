@@ -147,6 +147,11 @@ function invitationsNote(count: number): string {
   return count === 1 ? '1 invitation' : `${count} invitations`
 }
 
+// The same, for the answers to this account's own submissions nobody has read.
+function answersNote(count: number): string {
+  return count === 1 ? '1 answer to read' : `${count} answers to read`
+}
+
 function Row({
   label,
   icon: Icon,
@@ -177,7 +182,12 @@ function Row({
         <span className="block text-sm">{label}</span>
         {note !== undefined && <span className="block text-xs text-muted">{note}</span>}
       </span>
-      {count !== undefined && count > 0 && <span className="t-chip t-nums">{count}</span>}
+      {/* The same amber bubble the More tab carries, so the number over More
+          decomposes into the rows it is made of. `static` beats .t-count's
+          absolute: utilities sort after components. */}
+      {count !== undefined && count > 0 && (
+        <span className="t-count t-nums static shrink-0">{count}</span>
+      )}
       <ChevronRight className="h-4 w-4 shrink-0 text-muted" strokeWidth={2} />
     </button>
   )
@@ -355,6 +365,7 @@ export function More({
   waiting,
   requests,
   invitations,
+  unread,
   refresh,
   onReviewed,
   onChanged,
@@ -385,6 +396,9 @@ export function More({
   // How many calendar and meeting invitations are unanswered, said under the
   // Calendar row.
   invitations: number
+  // How many answers to this account's own submissions have not been read,
+  // said under the My submissions row.
+  unread: number
   // The app-wide change tick. What this tab reads from the server is read
   // again on every bump, so a screen left open catches up on its own.
   refresh: number
@@ -1040,10 +1054,17 @@ export function More({
         label="Members"
         icon={Users}
         tour="more-members"
+        count={requests}
         note={requests > 0 ? requestsNote(requests) : undefined}
         onOpen={() => go('members')}
       />
-      <Row label="My submissions" icon={Inbox} onOpen={() => go('submissions')} />
+      <Row
+        label="My submissions"
+        icon={Inbox}
+        count={unread}
+        note={unread > 0 ? answersNote(unread) : undefined}
+        onOpen={() => go('submissions')}
+      />
       {/* Enough of this account's foods have been taken for them to put
           their name forward. Never automatic: an administrator decides. */}
       {me.reviewer_eligible &&
@@ -1116,6 +1137,7 @@ export function More({
             <Row
               label="Calendar"
               icon={CalendarDays}
+              count={invitations}
               note={invitations > 0 ? invitationsNote(invitations) : undefined}
               onOpen={() => go('calendar')}
             />

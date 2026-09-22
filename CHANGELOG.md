@@ -4,6 +4,16 @@ Notable changes to Tare, newest first. The format follows
 [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), and Tare uses
 [semantic versioning](https://semver.org/spec/v2.0.0.html).
 
+## Unreleased
+
+### Changed
+
+- The number over More is made of bubbles you can see: friend requests,
+  calendar invitations, the review queue and unread answers to your own
+  submissions each wear the same amber bubble on their row, and My submissions
+  says how many answers are waiting to be read. On a wide window the Calendar
+  row on the rail carries its own invitations.
+
 ## 0.8.4 - 2026-09-22
 
 ### Added

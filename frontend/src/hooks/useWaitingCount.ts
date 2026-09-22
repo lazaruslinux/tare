@@ -22,6 +22,7 @@ export function useWaitingCount(me: Me | null): {
   queue: number
   requests: number
   invitations: number
+  unread: number
   refresh: () => void
 } {
   const [waiting, setWaiting] = useState(0)
@@ -32,6 +33,9 @@ export function useWaitingCount(me: Me | null): {
   const [requests, setRequests] = useState(0)
   // And for the invitations, which the Calendar row says under itself.
   const [invitations, setInvitations] = useState(0)
+  // And for the answers this account has been given and not read, which the
+  // My submissions row says under itself.
+  const [unread, setUnread] = useState(0)
   const [again, setAgain] = useState(0)
 
   useEffect(() => {
@@ -58,6 +62,7 @@ export function useWaitingCount(me: Me | null): {
         setQueue(review)
         setRequests(asked)
         setInvitations(invited)
+        setUnread(unread)
       }
     )
     return () => {
@@ -66,5 +71,5 @@ export function useWaitingCount(me: Me | null): {
   }, [me, again])
 
   const refresh = useCallback(() => setAgain((count) => count + 1), [])
-  return { waiting, queue, requests, invitations, refresh }
+  return { waiting, queue, requests, invitations, unread, refresh }
 }
