@@ -115,7 +115,7 @@ cd frontend
 npm ci && npm run lint && npm run build && npm audit --omit=dev
 ```
 
-CI runs the same commands on every push, and again once a week so the audits still run when nobody has pushed. It also parses the compose file and builds both images.
+CI runs the same commands on every push. It also parses the compose file and builds both images. The weekly run, which kept the audits going when nobody had pushed, is paused while development is on hold.
 
 ## Docs
 

@@ -3,11 +3,6 @@ name: CI
 on:
   push:
   pull_request:
-  # The audits below only find something when somebody else publishes an
-  # advisory, which does not wait for a push. Sunday, early UTC, off the hour
-  # so it is not queued behind everybody else's midnight cron.
-  schedule:
-    - cron: '17 6 * * 0'
 
 # Nothing here writes anything back.
 permissions:
