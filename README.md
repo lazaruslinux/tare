@@ -14,6 +14,8 @@ This project was built with Claude Code, an agentic coding platform, through hun
 
 ## Status
 
+Development is on hold and the project is not being actively maintained. Dependency updates are paused, so check for security updates before you run it.
+
 Early development, and most of it is running. Accounts come from an invite link that carries one to ten seats, an emailed verification stands in front of the app until the address is confirmed, and a guided setup and a welcome tour start a member off.
 
 The journal takes private custom foods, meals, recipes, daily foods that log themselves, and a day that can be marked complete. The shared database is browsed by aisle or found by barcode with the camera, carries label photos, takes reports on anything wrong with a food, and everything joining it passes an approval queue worked by two roles, administrator and reviewer, whose every decision is written to a review log. Foods carry vitamins and minerals per serving, filled from an administrator's USDA match picker where a barcode did not supply them.
